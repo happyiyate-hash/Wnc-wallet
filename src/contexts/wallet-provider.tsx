@@ -66,6 +66,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         priceUsd: 10,
         pctChange24h: -1.2,
       },
+      {
+        chainId: 1,
+        address: '0xNotARealToken',
+        symbol: 'XYZ',
+        name: 'Imaginary Token',
+        balance: '1000',
+        fiatValueUsd: 100,
+        priceUsd: 0.1,
+        pctChange24h: 5.5,
+      }
     ];
 
     const assetsWithLogos = await Promise.all(
@@ -73,7 +83,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
         return {
           ...asset,
-          iconUrl: logoUrl || `https://picsum.photos/seed/${asset.symbol}/40/40`,
+          iconUrl: logoUrl || networkLogoUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`,
         };
       })
     );
