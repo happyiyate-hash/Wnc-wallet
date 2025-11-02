@@ -33,8 +33,8 @@ export default function Home() {
     <div className="flex flex-col h-screen">
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <main className="flex flex-col items-center p-4 sm:p-8 md:p-12">
-          <div className="w-full max-w-4xl mx-auto">
+        <main className="flex flex-col items-center">
+          <div className="w-full mx-auto">
             <WalletTab />
           </div>
         </main>

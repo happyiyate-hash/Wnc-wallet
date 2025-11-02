@@ -31,7 +31,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 
   return (
     <div
-      className="flex cursor-pointer items-center justify-between py-3 px-2"
+      className="flex cursor-pointer items-center justify-between py-2 px-4"
       onClick={handleRowClick}
       role="button"
       tabIndex={0}
@@ -41,14 +41,14 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
           <CachedImage
             src={token.iconUrl}
             alt={token.name}
-            width={40}
-            height={40}
+            width={32}
+            height={32}
             className="rounded-full"
             unoptimized
           />
         )}
         <div>
-          <p className="font-bold">{token.name}</p>
+          <p className="font-semibold">{token.name}</p>
           <p
             className={cn(
               'text-xs',
@@ -61,7 +61,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
         </div>
       </div>
       <div className="text-right">
-        <p className="font-bold">
+        <p className="font-semibold">
           {parseFloat(token.balance || '0').toLocaleString('en-US', {
             maximumFractionDigits: 6,
           })}{' '}
@@ -161,7 +161,7 @@ export default function WalletTab() {
 
   return (
     <div className="flex flex-col h-full mt-6">
-      <div className="bg-background pt-8 px-2">
+      <div className="bg-background pt-8 px-4">
         {/* Balance */}
         <div className="flex items-center justify-between">
             <div>
@@ -270,14 +270,14 @@ export default function WalletTab() {
                 </div>
 
                 {/* Scrollable Area */}
-                <div className="flex-1 overflow-y-auto px-2">
+                <div className="flex-1 overflow-y-auto">
                     {(isRefreshing && assets.length === 0) ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                         <Loader2 className="w-5 h-5 animate-spin mr-2"/>
                         <span>Loading balances...</span>
                     </div>
                     ) : assets.length > 0 ? (
-                    <div className="divide-y divide-border">
+                    <div>
                         {assets.map((token) => (
                         <TokenRow
                             key={`${token.chainId}-${token.address || token.symbol}`}
