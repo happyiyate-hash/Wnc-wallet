@@ -25,7 +25,8 @@ export default function TokenLogoDynamic({
   }
 
   // If logoUrl is null or an empty string, it means we tried fetching but found no logo.
-  if (logoUrl === null || logoUrl === '') {
+  // This correctly handles all falsy string values and prevents passing an invalid src to the Image component.
+  if (!logoUrl) {
       return FallbackComponent || <div className={`w-[${size}px] h-[${size}px] rounded-full bg-muted ${className}`} />;
   }
 
