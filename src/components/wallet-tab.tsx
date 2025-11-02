@@ -37,7 +37,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 
   return (
     <div
-      className="flex cursor-pointer items-center justify-between p-3"
+      className="flex cursor-pointer items-center justify-between px-4 py-3"
       onClick={handleRowClick}
       role="button"
       tabIndex={0}
@@ -229,9 +229,9 @@ export default function WalletTab() {
         </div>
         
         {/* Tabs */}
-        <div className="w-full px-4">
+        <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0">
+              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-4">
                 <TabsTrigger
                   value="tokens"
                   className="p-0 pb-2 data-[state=active]:text-foreground data-[state=active]:font-bold data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary"
@@ -255,7 +255,7 @@ export default function WalletTab() {
               </TabsList>
               <TabsContent value="tokens">
                  {/* Manage Section */}
-                <div className="flex items-center justify-between py-4">
+                <div className="flex items-center justify-between py-4 px-4">
                     <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
                         <Button
                             variant="outline"
@@ -290,7 +290,7 @@ export default function WalletTab() {
                 </div>
 
                 {/* Scrollable Area */}
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto thin-scrollbar">
                   {isRefreshing && assets.length === 0 ? (
                      <div className="flex items-center justify-center pt-10">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />

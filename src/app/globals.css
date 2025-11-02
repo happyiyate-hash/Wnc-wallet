@@ -139,3 +139,14 @@ body {
   transform: rotate(-90deg);
   transform-origin: 50% 50%;
 }
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 2px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 2px;
+}
