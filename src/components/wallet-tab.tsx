@@ -7,7 +7,10 @@ import {
   ArrowUpFromLine,
   ArrowDownToLine,
   Wallet,
-  Loader2
+  Loader2,
+  Repeat,
+  Sparkles,
+  MoreHorizontal
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -140,6 +143,20 @@ export default function WalletTab() {
     return 'text-4xl';
   };
 
+  const ActionButton = ({ icon: Icon, label, href }: { icon: React.ElementType, label: string, href: string }) => (
+    <div className="flex flex-col items-center gap-2">
+      <Button
+        variant="default"
+        size="icon"
+        className="bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl"
+        onClick={() => router.push(href)}
+      >
+        <Icon className="w-6 h-6 text-primary-foreground" />
+      </Button>
+      <span className="text-xs font-medium text-foreground">{label}</span>
+    </div>
+  );
+
   if (!wallets && isInitialized) {
     return (
       <>
@@ -197,17 +214,12 @@ export default function WalletTab() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between my-8 px-4">
-           <div className="p-[1px] bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-green-500/50 rounded-xl w-[calc(50%-0.5rem)]">
-              <Button className="w-full h-12 bg-background hover:bg-muted/50 rounded-xl" onClick={() => router.push('/send')}>
-                <ArrowUpFromLine className="w-5 h-5 mr-2" /> Send
-              </Button>
-            </div>
-            <div className="p-[1px] bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-green-500/50 rounded-xl w-[calc(50%-0.5rem)]">
-              <Button className="w-full h-12 bg-background hover:bg-muted/50 rounded-xl" onClick={() => router.push('/receive')}>
-                <ArrowDownToLine className="w-5 h-5 mr-2" /> Receive
-              </Button>
-            </div>
+        <div className="flex justify-around my-8 px-4">
+          <ActionButton icon={ArrowUpFromLine} label="Send" href="/send" />
+          <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
+          <ActionButton icon={Repeat} label="Swap" href="/swap" />
+          <ActionButton icon={Sparkles} label="Buy" href="/buy" />
+          <ActionButton icon={MoreHorizontal} label="More" href="/more" />
         </div>
         
         {/* Tabs */}
@@ -273,7 +285,7 @@ export default function WalletTab() {
 
                 {/* Scrollable Area */}
                 <div className="flex-1 overflow-y-auto">
-                    {assets.length > 0 ? (
+                  {assets.length > 0 ? (
                     <div>
                         {assets.map((token) => (
                         <TokenRow
@@ -282,13 +294,17 @@ export default function WalletTab() {
                         />
                         ))}
                     </div>
-                    ) : (
-                      !isRefreshing && (
-                        <div className="text-center text-muted-foreground p-4">
-                            No tokens to show.
+                  ) : (
+                    <div className="flex items-center justify-center pt-10">
+                      {isRefreshing ? (
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      ) : (
+                        <div className="text-center text-muted-foreground">
+                          No tokens to show.
                         </div>
-                      )
-                    )}
+                      )}
+                    </div>
+                  )}
                 </div>
               </TabsContent>
                <TabsContent value="defi">
