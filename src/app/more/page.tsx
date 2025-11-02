@@ -1,11 +1,33 @@
-import Link from "next/link";
+'use client';
+
+import { useState } from 'react';
+import ApiKeyManager from '@/components/wallet/api-key-manager';
+import { Button } from '@/components/ui/button';
+import { KeyRound } from 'lucide-react';
 
 export default function MorePage() {
+    const [isApiManagerOpen, setIsApiManagerOpen] = useState(false);
+
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-            <h1 className="text-4xl font-bold mb-4">More Options</h1>
-            <p className="text-muted-foreground mb-8">This is where more options will live.</p>
-            <Link href="/" className="text-primary hover:underline">Go back home</Link>
+        <div className="flex flex-col items-center justify-center min-h-screen p-4">
+            <div className="w-full max-w-md">
+                <h1 className="text-3xl font-bold mb-6 text-center">More Options</h1>
+                <div className="space-y-4">
+                    <Button 
+                        variant="outline" 
+                        className="w-full h-14 text-lg justify-start p-4"
+                        onClick={() => setIsApiManagerOpen(true)}
+                    >
+                        <KeyRound className="mr-3 h-5 w-5 text-primary" />
+                        <span>Manage API Keys</span>
+                    </Button>
+                    {/* Other "More" options can be added here */}
+                </div>
+            </div>
+            <ApiKeyManager 
+                isOpen={isApiManagerOpen} 
+                onOpenChange={setIsApiManagerOpen} 
+            />
         </div>
     );
 }

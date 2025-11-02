@@ -6,39 +6,49 @@ const ERC20_ABI = [
     "function decimals() view returns (uint8)"
 ];
 
-const getRpcUrl = (chain: ChainConfig): string => {
-    // In a real app, you would securely fetch the user's Infura API key
-    const infuraApiKey = process.env.NEXT_PUBLIC_INFURA_API_KEY || 'YOUR_INFURA_KEY_HERE';
-    if (infuraApiKey === 'YOUR_INFURA_KEY_HERE') {
-        console.warn(`Using default Infura RPC for ${chain.name}. Please provide an API key for production use.`);
+const getRpcUrl = (chain: ChainConfig, apiKey: string | null): string | null => {
+    const finalApiKey = apiKey || 'YOUR_INFURA_KEY_HERE';
+    if (finalApiKey === 'YOUR_INFURA_KEY_HERE') {
+        console.warn(`Using default/placeholder Infura RPC for ${chain.name}. Please provide an API key for production use.`);
     }
-    return `${chain.rpcBase}${infuraApiKey}`;
+    if (!chain.rpcBase) return null;
+    return `${chain.rpcBase}${finalApiKey}`;
 }
 
 class EvmAdapter implements IWalletAdapter {
-    private provider: ethers.JsonRpcProvider;
+    private provider: ethers.JsonRpcProvider | null;
 
-    constructor(chain: ChainConfig) {
-        const rpcUrl = getRpcUrl(chain);
-        this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    constructor(chain: ChainConfig, apiKey: string | null) {
+        const rpcUrl = getRpcUrl(chain, apiKey);
+        if (rpcUrl) {
+            this.provider = new ethers.JsonRpcProvider(rpcUrl);
+        } else {
+            this.provider = null;
+        }
     }
 
     async fetchBalances(
         ownerAddress: string,
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
+        if (!this.provider) {
+            console.error("EVM adapter is not initialized, provider is missing.");
+            return assets.map(asset => ({ ...asset, balance: '0' }));
+        }
+
+        const provider = this.provider;
+
         const balancePromises = assets.map(async (asset): Promise<AssetRow> => {
             let balanceBigInt: bigint;
             try {
                 if (asset.isNative) {
-                    balanceBigInt = await this.provider.getBalance(ownerAddress);
+                    balanceBigInt = await provider.getBalance(ownerAddress);
                     return {
                         ...asset,
                         balance: ethers.formatEther(balanceBigInt),
                     };
                 } else {
-                    const tokenContract = new ethers.Contract(asset.address, ERC20_ABI, this.provider);
-                    // Use Promise.all to fetch balance and decimals concurrently
+                    const tokenContract = new ethers.Contract(asset.address, ERC20_ABI, provider);
                     const [balance, decimals] = await Promise.all([
                         tokenContract.balanceOf(ownerAddress),
                         tokenContract.decimals()
@@ -62,6 +72,7 @@ class EvmAdapter implements IWalletAdapter {
     }
 }
 
-export const evmAdapterFactory = (chain: ChainConfig): IWalletAdapter => {
-    return new EvmAdapter(chain);
+export const evmAdapterFactory = (chain: ChainConfig, apiKey: string | null): IWalletAdapter | null => {
+    // This adapter is only for EVM chains. We can add checks here for chain type if needed later.
+    return new EvmAdapter(chain, apiKey);
 };

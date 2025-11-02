@@ -17,13 +17,15 @@ interface WalletContextType {
   setNetwork: (network: ChainConfig) => void;
   allAssets: AssetRow[];
   allChains: ChainConfig[];
-  allChainsMap: { [key: number]: ChainConfig };
+  allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
   refresh: () => void;
   createWalletWithMnemonic: (mnemonic: string) => void;
   importWalletWithMnemonic: (mnemonic: string) => void;
   profile: UserProfile | null;
-  user: any; 
+  user: any;
+  infuraApiKey: string | null;
+  setInfuraApiKey: (key: string) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -38,10 +40,8 @@ const deriveWalletFromMnemonic = (mnemonic: string): WalletWithMetadata => {
     };
 };
 
-const getAdapter: AdapterFactory = (chain) => {
-    // For now, we only support EVM. In the future, we can add more chain types.
-    // e.g., if (isSolana(chain)) return solanaAdapterFactory(chain);
-    return evmAdapterFactory(chain);
+const getAdapter: AdapterFactory = (chain, apiKey) => {
+    return evmAdapterFactory(chain, apiKey);
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -49,6 +49,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
   const [mnemonic, setMnemonic] = useState<string | null>(null);
+  const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
 
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
@@ -74,68 +75,72 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setViewingNetwork(network);
     setAllAssets([]); 
   };
+  
+  const setInfuraApiKey = (key: string) => {
+    localStorage.setItem('infuraApiKey', key);
+    setInfuraApiKeyInternal(key);
+  };
 
   const createWalletWithMnemonic = (mnemonic: string) => {
-      // NOTE: In a real app, mnemonic should be encrypted with a user password.
-      // Storing it in plaintext in localStorage is insecure and for demo purposes only.
-      const newWallet = deriveWalletFromMnemonic(mnemonic);
       localStorage.setItem('walletMnemonic', mnemonic); 
       setMnemonic(mnemonic);
+      const newWallet = deriveWalletFromMnemonic(mnemonic);
       setWallets([newWallet]);
       setProfile({ username: 'NewUser' });
   };
   
   const importWalletWithMnemonic = (mnemonic: string) => {
-      // Logic is the same as creating for this basic implementation
       createWalletWithMnemonic(mnemonic);
   };
 
   const refreshAssets = useCallback(async () => {
-      const wallet = wallets?.[0];
-      if (!wallet) return;
+    if (!wallets || !wallets.length || !infuraApiKey) {
+      console.log("Wallet or API key not ready for refresh.");
+      return;
+    }
+    const wallet = wallets[0];
+    if (!wallet) return;
+  
+    const adapter = getAdapter(viewingNetwork, infuraApiKey);
+    if (!adapter) {
+      console.warn(`No adapter found for network: ${viewingNetwork.name}`);
+      setAllAssets([]);
+      return;
+    }
+  
+    setIsRefreshing(true);
+    try {
+        const baseAssets = getInitialAssets(viewingNetwork.chainId);
+        if (baseAssets.length === 0) {
+            setAllAssets([]);
+            return;
+        }
 
-      const adapter = getAdapter(viewingNetwork);
-      if (!adapter) {
-        console.warn(`No adapter found for network: ${viewingNetwork.name}`);
-        setAllAssets([]);
-        return;
-      }
-  
-      setIsRefreshing(true);
-      try {
-          // 1. Get the initial list of assets for the current chain
-          const baseAssets = getInitialAssets(viewingNetwork.chainId);
-          if (baseAssets.length === 0) {
-              setAllAssets([]);
-              return;
-          }
+        const assetsWithBalances = await adapter.fetchBalances(wallet.address, baseAssets);
+        const assetsToPrice = assetsWithBalances.filter(a => parseFloat(a.balance) > 0);
+        
+        let assetsWithPrices = assetsWithBalances;
+        if (assetsToPrice.length > 0) {
+          assetsWithPrices = await fetchAssetPrices(assetsToPrice) as AssetRow[];
+        }
 
-          // 2. Fetch live balances using the appropriate adapter
-          const assetsWithBalances = await adapter.fetchBalances(wallet.address, baseAssets, viewingNetwork);
-          
-          // 3. Fetch prices for assets that have a balance
-          const assetsToPrice = assetsWithBalances.filter(a => parseFloat(a.balance) > 0);
-          const assetsWithPrices = await fetchAssetPrices(assetsToPrice);
+        const finalAssets = assetsWithPrices.map((asset) => {
+            const pricedAsset = assetsWithPrices.find(p => p.coingeckoId === asset.coingeckoId) || asset;
+            const networkInfo = allChainsMap[asset.chainId];
+            return {
+                ...pricedAsset,
+                iconUrl: asset.iconUrl,
+                ...(!asset.iconUrl && networkInfo && { iconUrl: networkInfo.iconUrl }),
+            };
+        });
+        setAllAssets(finalAssets as AssetRow[]);
   
-          // 4. Combine data and enrich with logos
-          const finalAssets = assetsWithBalances.map((asset) => {
-              const pricedAsset = assetsWithPrices.find(p => p.coingeckoId === asset.coingeckoId) || asset;
-              const networkInfo = allChainsMap[asset.chainId];
-              return {
-                  ...pricedAsset,
-                  iconUrl: asset.iconUrl,
-                  // If token icon is missing, fall back to network icon
-                  ...( !asset.iconUrl && { iconUrl: networkInfo?.iconUrl })
-              };
-          });
-          setAllAssets(finalAssets);
-  
-      } catch (error) {
-          console.error("Failed to refresh assets:", error);
-      } finally {
-          setIsRefreshing(false);
-      }
-  }, [wallets, viewingNetwork, allChainsMap]);
+    } catch (error) {
+        console.error("Failed to refresh assets:", error);
+    } finally {
+        setIsRefreshing(false);
+    }
+  }, [wallets, viewingNetwork, allChainsMap, infuraApiKey]);
   
 
   useEffect(() => {
@@ -147,6 +152,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             setWallets([mainWallet]);
             setProfile({ username: 'ReturningUser' });
         }
+        const savedApiKey = localStorage.getItem('infuraApiKey');
+        if (savedApiKey) {
+          setInfuraApiKeyInternal(savedApiKey);
+        }
     } catch (error) {
         console.error("Could not access localStorage or derive wallet:", error);
     }
@@ -154,10 +163,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isInitialized && wallets && !areLogosLoading && viewingNetwork) {
+    if (isInitialized && wallets && !areLogosLoading && viewingNetwork && infuraApiKey) {
       refreshAssets();
     }
-  }, [isInitialized, wallets, viewingNetwork, areLogosLoading, refreshAssets]);
+  }, [isInitialized, wallets, viewingNetwork, areLogosLoading, infuraApiKey, refreshAssets]);
 
   const value: WalletContextType = {
     wallets,
@@ -174,6 +183,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     importWalletWithMnemonic,
     profile,
     user: profile,
+    infuraApiKey,
+    setInfuraApiKey,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

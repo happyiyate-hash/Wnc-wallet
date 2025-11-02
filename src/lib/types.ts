@@ -44,10 +44,10 @@ export interface UserProfile {
 // Adapter Pattern Interfaces
 
 export interface IWalletAdapter {
-  fetchBalances(ownerAddress: string, assets: Omit<AssetRow, 'balance'>[], chain: ChainConfig): Promise<AssetRow[]>;
+  fetchBalances(ownerAddress: string, assets: Omit<AssetRow, 'balance'>[]): Promise<AssetRow[]>;
   // Future methods:
   // sendTransaction(tx: any): Promise<string>;
   // signMessage(message: string): Promise<string>;
 }
 
-export type AdapterFactory = (chain: ChainConfig) => IWalletAdapter | null;
+export type AdapterFactory = (chain: ChainConfig, apiKey: string | null) => IWalletAdapter | null;
