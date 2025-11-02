@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import type { AssetRow, Chain, WalletWithMetadata, UserProfile } from '@/lib/types';
+import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -35,9 +36,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => {
     setIsRefreshing(true);
-    // Simulate fetching assets
-    setTimeout(() => {
-      const mockAssets: AssetRow[] = [
+    
+    const fetchAssets = async () => {
+      // Simulate fetching assets
+      const mockAssets: Omit<AssetRow, 'iconUrl'>[] = [
         {
           chainId: 1,
           address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
@@ -47,7 +49,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           fiatValueUsd: 35000,
           priceUsd: 3500,
           pctChange24h: 2.5,
-          iconUrl: 'https://picsum.photos/seed/eth/40/40',
         },
         {
           chainId: 1,
@@ -58,13 +59,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           fiatValueUsd: 5000,
           priceUsd: 10,
           pctChange24h: -1.2,
-          iconUrl: 'https://picsum.photos/seed/uni/40/40',
         },
       ];
-      setAllAssets(mockAssets);
+
+      const assetsWithLogos = await Promise.all(
+        mockAssets.map(async (asset) => {
+          const logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+          return {
+            ...asset,
+            iconUrl: logoUrl || `https://picsum.photos/seed/${asset.symbol}/40/40`,
+          };
+        })
+      );
+      
+      setAllAssets(assetsWithLogos);
       setIsRefreshing(false);
-    }, 1500);
-  }, []);
+    };
+
+    fetchAssets();
+
+  }, [viewingNetwork.name]);
 
   useEffect(() => {
     // Simulate loading wallet from storage
