@@ -19,13 +19,15 @@ export default function WalletHeader({
 }) {
   const { toast } = useToast();
   const router = useRouter();
-  // Directly use the context here to get live updates
-  const { viewingNetwork, wallets, hasNewNotifications } = useWallet();
-  const { user } = useUser();
   const [isCopied, copy] = useCopyToClipboard();
 
+  // Directly use the context here to get live updates
+  const { viewingNetwork, wallets, profile, hasNewNotifications } = useWallet();
+  const { user } = useUser();
+
+
   const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
-  const username = user?.name || null;
+  const username = profile?.username || null;
 
   const handleCopyAddress = () => {
     if (address) {
