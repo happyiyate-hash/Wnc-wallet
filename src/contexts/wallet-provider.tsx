@@ -5,6 +5,7 @@ import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/l
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import { ALL_CHAINS_LIST } from '@/lib/user-networks';
 import { fetchAssetPrices } from '@/lib/coingecko';
+import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 
 // A mock list of user assets per chain. In a real app, this would come from a wallet connection.
 const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
@@ -26,7 +27,7 @@ const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatVa
     { chainId: 42161, address: '0x912ce59144191c1204e64559fe8253a0e49e6548', name: 'Arbitrum', symbol: 'ARB', balance: '3000', coingeckoId: 'arbitrum' },
   ],
   8453: [ // Base
-    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'base' },
+    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'ethereum' }, // Note: CoinGecko ID for ETH on Base might need adjustment
   ],
 }
 
@@ -37,6 +38,7 @@ interface WalletContextType {
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
   allAssets: AssetRow[];
+  allChains: ChainConfig[];
   allChainsMap: { [key: number]: ChainConfig };
   isRefreshing: boolean;
   refresh: () => void;
@@ -51,22 +53,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(ALL_CHAINS_LIST[0]);
+
+  // This state will now hold the chains with their fetched logo URLs
+  const { chainsWithLogos, areLogosLoading } = useNetworkLogos(ALL_CHAINS_LIST);
+
+  // The viewing network is derived from the chainsWithLogos, ensuring it has the logo URL.
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
+  
   const [allAssets, setAllAssets] = useState<AssetRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  // Update the viewingNetwork state when chainsWithLogos is populated
+  useEffect(() => {
+    if (!areLogosLoading && chainsWithLogos.length > 0) {
+      setViewingNetwork(prev => chainsWithLogos.find(c => c.chainId === prev.chainId) || chainsWithLogos[0]);
+    }
+  }, [chainsWithLogos, areLogosLoading]);
+
+
   const allChainsMap = useMemo(() => {
-    return ALL_CHAINS_LIST.reduce((acc, chain) => {
+    return chainsWithLogos.reduce((acc, chain) => {
       acc[chain.chainId] = chain;
       return acc;
     }, {} as { [key: number]: ChainConfig });
-  }, []);
+  }, [chainsWithLogos]);
 
   const setNetwork = (network: ChainConfig) => {
     setViewingNetwork(network);
-    // Clear assets immediately for a snappier feel
-    setAllAssets([]);
+    setAllAssets([]); // Clear assets immediately for a snappier feel
   };
 
   const refreshAssets = useCallback(async (network: ChainConfig) => {
@@ -81,16 +96,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      // Use the new centralized service to fetch prices
       const assetsWithPrices = await fetchAssetPrices(baseAssetsForChain);
       
-      // Fetch logos and combine data
       const assetsWithData = await Promise.all(
         assetsWithPrices.map(async (asset) => {
           const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
           return {
             ...asset,
-            iconUrl: iconUrl || undefined,
+            iconUrl: iconUrl,
           };
         })
       );
@@ -99,7 +112,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     } catch (error) {
       console.error("Failed to fetch asset prices:", error);
-      // On error, we still want to show balances, even without price data
       const assetsWithBalancesAndLogos = await Promise.all(
         baseAssetsForChain.map(async (asset) => {
             const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
@@ -108,7 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 priceUsd: 0,
                 fiatValueUsd: 0,
                 pctChange24h: 0,
-                iconUrl: iconUrl || undefined,
+                iconUrl: iconUrl,
             } as AssetRow;
         })
       );
@@ -120,7 +132,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 
   useEffect(() => {
-    // Simulate loading wallet from storage
     const storedWallet = { address: '0x1234567890123456789012345678901234567890' };
     setWallets([storedWallet]);
     setProfile({ username: 'TestUser' });
@@ -128,12 +139,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isInitialized && wallets) {
+    if (isInitialized && wallets && !areLogosLoading) {
       refreshAssets(viewingNetwork);
     }
-  // This dependency array is correct. We only want to re-run when these specific items change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized, wallets, viewingNetwork.chainId]);
+  }, [isInitialized, wallets, viewingNetwork.chainId, areLogosLoading, refreshAssets]);
 
   const value: WalletContextType = {
     wallets,
@@ -143,6 +152,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     viewingNetwork,
     setNetwork,
     allAssets,
+    allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
     refresh: () => refreshAssets(viewingNetwork),

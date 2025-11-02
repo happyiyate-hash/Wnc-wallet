@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/contexts/wallet-provider';
-import { ALL_CHAINS_LIST } from '@/lib/user-networks';
 import type { ChainConfig } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
@@ -89,7 +88,7 @@ const NetworkRow = ({
 };
 
 export default function NetworkSelector({ className }: NetworkSelectorProps) {
-  const { viewingNetwork, setNetwork, wallets, isInitialized } = useWallet();
+  const { viewingNetwork, setNetwork, wallets, isInitialized, allChains } = useWallet();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,11 +111,11 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
     });
   };
 
-  const filteredChains = ALL_CHAINS_LIST.filter((chain) =>
+  const filteredChains = allChains.filter((chain) =>
     chain.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  if (!isClient || !isInitialized) {
+  if (!isClient || !isInitialized || !viewingNetwork.iconUrl) {
     return (
       <Button
         variant="ghost"
