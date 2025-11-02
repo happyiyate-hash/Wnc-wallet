@@ -160,7 +160,7 @@ export default function WalletTab() {
   }
 
   return (
-    <div className="flex flex-col h-full mt-6">
+    <div className="flex flex-col h-full">
       <div className="bg-background pt-8 px-4">
         {/* Balance */}
         <div className="flex items-center justify-between">
@@ -270,9 +270,9 @@ export default function WalletTab() {
                 </div>
 
                 {/* Scrollable Area */}
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto -mx-4">
                     {(isRefreshing && assets.length === 0) ? (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <div className="flex items-center justify-center h-full text-muted-foreground px-4">
                         <Loader2 className="w-5 h-5 animate-spin mr-2"/>
                         <span>Loading balances...</span>
                     </div>
