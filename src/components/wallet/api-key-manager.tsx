@@ -37,16 +37,22 @@ export default function ApiKeyManager({ isOpen, onOpenChange }: ApiKeyManagerPro
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isInitialized && infuraApiKey) {
-      // Don't display the full key, just an indicator
-      setKeyInput(`••••••••${infuraApiKey.slice(-4)}`);
-    } else {
-      setKeyInput('');
+    if (isInitialized) {
+      if (infuraApiKey) {
+        // Show masked key if one is already set
+        setKeyInput(`••••••••${infuraApiKey.slice(-4)}`);
+      } else {
+        // Clear input if no key is set
+        setKeyInput('');
+      }
     }
-  }, [isInitialized, infuraApiKey]);
+  }, [isInitialized, infuraApiKey, isOpen]); // Rerun when sheet opens
 
   const handleSave = async () => {
-    if (!keyInput) return;
+    if (!keyInput || (infuraApiKey && keyInput === `••••••••${infuraApiKey.slice(-4)}`)) {
+      // Don't re-validate the masked key
+      return;
+    }
 
     setIsValidating(true);
     setError(null);
@@ -72,6 +78,16 @@ export default function ApiKeyManager({ isOpen, onOpenChange }: ApiKeyManagerPro
     setKeyInput('');
     setError(null);
   };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      // When user starts typing/pasting, clear any existing masked value
+      if (infuraApiKey && keyInput.startsWith('••••••••')) {
+        setKeyInput(e.target.value.slice(keyInput.length));
+      } else {
+        setKeyInput(e.target.value);
+      }
+  }
+
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -104,11 +120,10 @@ export default function ApiKeyManager({ isOpen, onOpenChange }: ApiKeyManagerPro
             <div className="relative">
                 <Input
                   id="infura-key"
-                  type={infuraApiKey ? "password" : "text"}
+                  type="text" // Always text to allow pasting and editing
                   placeholder="Paste your Infura API key here"
                   value={keyInput}
-                  onChange={(e) => setKeyInput(e.target.value)}
-                  readOnly={!!infuraApiKey}
+                  onChange={handleInputChange}
                   className={cn(error && "ring-2 ring-destructive ring-offset-2 ring-offset-background")}
                 />
                 {infuraApiKey && (
@@ -125,12 +140,10 @@ export default function ApiKeyManager({ isOpen, onOpenChange }: ApiKeyManagerPro
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           
-          {!infuraApiKey && (
-            <Button onClick={handleSave} className="w-full" disabled={isValidating || !keyInput}>
+            <Button onClick={handleSave} className="w-full" disabled={isValidating || !keyInput || (infuraApiKey && keyInput === `••••••••${infuraApiKey.slice(-4)}`)}>
               {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save and Use Key
             </Button>
-          )}
         </div>
       </SheetContent>
     </Sheet>
