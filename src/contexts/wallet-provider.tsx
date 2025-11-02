@@ -8,6 +8,7 @@ import { mnemonicToSeedSync } from 'bip39';
 import { HDNodeWallet } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
+import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -122,11 +123,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 const assetsWithPrices = await fetchAssetPrices(baseAssets);
                 // Fetch balances for the priced assets
                 const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
+                
+                // Fetch logos for the assets
+                const assetsWithLogos = await Promise.all(assetsWithBalances.map(async (asset) => {
+                    const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
+                    return { ...asset, iconUrl };
+                }));
+
                 // Final mapping
-                return assetsWithBalances.map((asset) => ({
+                return assetsWithLogos.map((asset) => ({
                     ...asset,
                     fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance),
-                    iconUrl: asset.iconUrl,
                 }));
             } catch (networkError) {
                 console.error(`Failed to refresh assets for ${network.name}:`, networkError);
