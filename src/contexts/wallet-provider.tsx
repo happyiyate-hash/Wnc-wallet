@@ -51,7 +51,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
   
-  // This state now holds assets for ALL chains, keyed by chainId
   const [allAssetsCache, setAllAssetsCache] = useState<{ [chainId: number]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -60,12 +59,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!areLogosLoading && chainsWithLogos.length > 0) {
       setViewingNetwork(prev => chainsWithLogos.find(c => c.chainId === prev.chainId) || chainsWithLogos[0]);
       
-      // Pre-populate the cache with the structure of assets for each chain
-      const initialCache: { [chainId: number]: AssetRow[] } = {};
-      for (const chain of chainsWithLogos) {
-          initialCache[chain.chainId] = getInitialAssets(chain.chainId).map(asset => ({...asset, balance: '0'}));
-      }
-      setAllAssetsCache(initialCache);
+      const initializeAssetCache = async () => {
+        const initialCache: { [chainId: number]: AssetRow[] } = {};
+        for (const chain of chainsWithLogos) {
+            const baseAssets = getInitialAssets(chain.chainId);
+            const assetsWithLogos = await Promise.all(baseAssets.map(async (asset) => ({
+                ...asset,
+                balance: '0',
+                iconUrl: await getTokenLogoUrl(asset.symbol, chain.name)
+            })));
+            initialCache[chain.chainId] = assetsWithLogos;
+        }
+        setAllAssetsCache(initialCache);
+      };
+
+      initializeAssetCache();
     }
   }, [chainsWithLogos, areLogosLoading]);
 
@@ -108,45 +116,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const wallet = wallets[0];
     if (!wallet) return;
 
+    // Use the cached assets (with logos) as the base, so logos don't disappear
+    const baseAssets = allAssetsCache[networkToRefresh.chainId] || getInitialAssets(networkToRefresh.chainId);
+    if (baseAssets.length === 0) return;
+
     setIsRefreshing(true);
     try {
-        const baseAssets = getInitialAssets(networkToRefresh.chainId);
-        if (baseAssets.length === 0) {
-            setAllAssetsCache(prev => ({...prev, [networkToRefresh.chainId]: []}));
-            return;
-        };
-
         const adapter = evmAdapterFactory(networkToRefresh, infuraApiKey);
         if (!adapter) {
             console.warn(`No adapter found for network: ${networkToRefresh.name}`);
-            setAllAssetsCache(prev => ({...prev, [networkToRefresh.chainId]: []}));
             return;
         }
 
         const assetsWithPrices = await fetchAssetPrices(baseAssets);
         const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
         
-        const assetsWithLogos = await Promise.all(assetsWithBalances.map(async (asset) => {
-            const iconUrl = await getTokenLogoUrl(asset.symbol, networkToRefresh.name);
-            return { 
-                ...asset, 
-                iconUrl,
-                fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance),
-            };
+        const finalAssets = assetsWithBalances.map(asset => ({
+            ...asset,
+            fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance),
         }));
         
         setAllAssetsCache(prev => ({
             ...prev,
-            [networkToRefresh.chainId]: assetsWithLogos as AssetRow[],
+            [networkToRefresh.chainId]: finalAssets,
         }));
 
     } catch (error) {
         console.error(`Failed to refresh assets for ${networkToRefresh.name}:`, error);
-        // Don't wipe out assets on error, keep stale data
     } finally {
         setIsRefreshing(false);
     }
-  }, [wallets, infuraApiKey]);
+  }, [wallets, infuraApiKey, allAssetsCache]);
   
 
   useEffect(() => {
@@ -168,16 +168,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsInitialized(true);
   }, []);
 
-  // Effect to fetch data for the current network when it changes or on initial load
   useEffect(() => {
-    if (isInitialized && wallets && !areLogosLoading && infuraApiKey && viewingNetwork) {
+    if (isInitialized && wallets && !areLogosLoading && infuraApiKey && viewingNetwork && allAssetsCache[viewingNetwork.chainId]) {
       refreshAssets(viewingNetwork);
     }
-    // Intentionally not including refreshAssets in dependencies to avoid re-triggering
-  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork]);
+  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork, allAssetsCache, refreshAssets]);
 
 
-  // The `allAssets` exposed to the context is now just the filtered slice for the current network
   const assetsForCurrentNetwork = allAssetsCache[viewingNetwork?.chainId] || [];
 
   const value: WalletContextType = {
@@ -190,7 +187,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    refresh: () => refreshAssets(viewingNetwork), // Refresh button refreshes current network
+    refresh: () => refreshAssets(viewingNetwork),
     createWalletWithMnemonic,
     importWalletWithMnemonic,
     profile,
