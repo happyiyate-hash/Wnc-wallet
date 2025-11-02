@@ -24,7 +24,7 @@ import { useUser } from '@/contexts/user-provider';
 import CachedImage from '@/components/CachedImage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
-import GenericCoinIcon from './icons/GenericCoinIcon';
+import ApiKeyManager from './wallet/api-key-manager';
 
 const TokenRow = ({ token }: { token: AssetRow }) => {
   const router = useRouter();
@@ -81,11 +81,12 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, viewingNetwork, allAssets, isRefreshing, refresh } = useWallet();
+  const { wallets, isInitialized, viewingNetwork, allAssets, isRefreshing, refresh, infuraApiKey } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isApiManagerOpen, setIsApiManagerOpen] = useState(false);
   const router = useRouter();
 
   const assets = useMemo(() => {
@@ -93,10 +94,14 @@ export default function WalletTab() {
   }, [allAssets, viewingNetwork.chainId]);
   
   useEffect(() => {
-    if (isInitialized && !wallets) {
-      setIsWalletSheetOpen(true);
+    if (isInitialized) {
+        if (!wallets) {
+          setIsWalletSheetOpen(true);
+        } else if (!infuraApiKey) {
+          setIsApiManagerOpen(true);
+        }
     }
-  }, [isInitialized, wallets]);
+  }, [isInitialized, wallets, infuraApiKey]);
   
   const totalFiatValue = useMemo(() => {
     return assets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
@@ -139,13 +144,16 @@ export default function WalletTab() {
     return 'text-4xl';
   };
 
-  const ActionButton = ({ icon: Icon, label, href }: { icon: React.ElementType, label: string, href: string }) => (
+  const ActionButton = ({ icon: Icon, label, href, onClick }: { icon: React.ElementType, label: string, href?: string, onClick?: () => void }) => (
     <div className="flex flex-col items-center gap-2">
       <Button
         variant="default"
         size="icon"
         className="bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl"
-        onClick={() => router.push(href)}
+        onClick={() => {
+            if (href) router.push(href);
+            if (onClick) onClick();
+        }}
       >
         <Icon className="w-6 h-6 text-primary-foreground" />
       </Button>
@@ -215,7 +223,7 @@ export default function WalletTab() {
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
           <ActionButton icon={Repeat} label="Swap" href="/swap" />
           <ActionButton icon={Sparkles} label="Buy" href="/buy" />
-          <ActionButton icon={MoreHorizontal} label="More" href="/more" />
+          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsApiManagerOpen(true)} />
         </div>
         
         {/* Tabs */}
@@ -321,6 +329,7 @@ export default function WalletTab() {
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
       <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
+      <ApiKeyManager isOpen={isApiManagerOpen} onOpenChange={setIsApiManagerOpen} />
     </div>
   );
 }
