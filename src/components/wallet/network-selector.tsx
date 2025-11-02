@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
+import { Skeleton } from '../ui/skeleton';
 
 interface NetworkSelectorProps {
   className?: string;
@@ -41,20 +42,19 @@ const NetworkRow = ({
     ? `${address.slice(0, 8)}...${address.slice(-8)}`
     : 'Connecting...';
 
-  // The user provided code expects a themeColor, we'll use a default since it's removed
-  const themeColor = '#8A2BE2'; // A default purple color
-
   const cardStyle = {
-    backgroundColor: themeColor ? `${themeColor}30` : 'hsl(var(--muted))',
-    borderColor: themeColor || 'hsl(var(--border))',
+    backgroundColor: chain.themeColor ? `${chain.themeColor}20` : 'hsl(var(--muted))',
+    borderColor: chain.themeColor || 'hsl(var(--border))',
   };
   
   return (
     <div
       style={cardStyle}
       className={cn(
-        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border'
+        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border transition-colors hover:bg-muted/50'
       )}
+      onClick={() => onSelect(chain)}
+      role="button"
     >
       <div className="flex-shrink-0 h-10 w-10 rounded-full bg-background/50 flex items-center justify-center">
             <TokenLogoDynamic 
@@ -65,7 +65,7 @@ const NetworkRow = ({
                 FallbackComponent={<GenericCoinIcon />}
             />
         </div>
-      <div className="flex-1 cursor-pointer" onClick={() => onSelect(chain)}>
+      <div className="flex-1">
         <div className="flex items-center gap-2">
           <p className="font-semibold text-base text-foreground">{chain.name}</p>
           {isSelected && <CheckCircle className="w-4 h-4 text-green-400" />}
@@ -119,14 +119,14 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
     chain.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  if (!isClient || !isInitialized) {
+  if (!isClient || !isInitialized || !viewingNetwork) {
     return (
       <Button
         variant="ghost"
         className={cn('flex items-center gap-1 p-1 h-auto', className)}
         disabled
       >
-        <div className="w-6 h-6 bg-muted rounded-full animate-pulse" />
+        <Skeleton className="w-6 h-6 rounded-full" />
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </Button>
     );

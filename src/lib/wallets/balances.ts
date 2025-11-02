@@ -1,9 +1,8 @@
-import { ethers } from 'ethers';
-import type { AssetRow, ChainConfig } from '@/lib/types';
-import evmNetworks from '@/lib/evmNetworks.json';
+import type { AssetRow } from '@/lib/types';
 
-// In a real app, this would likely be a user-specific, stored list of tokens.
-// For this example, we'll use a hardcoded list of common tokens per chain.
+// In a real app, this would likely be a user-specific, stored list of tokens,
+// perhaps fetched from a database or a token list service.
+// For this demo, we'll use a hardcoded list of common tokens per chain.
 const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
   1: [ // Ethereum
     { chainId: 1, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', isNative: true, coingeckoId: 'ethereum' },
@@ -25,73 +24,20 @@ const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' |
   8453: [ // Base
     { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', isNative: true, coingeckoId: 'ethereum' },
   ],
+  // Add other chains as needed...
+  56: [ // BSC
+    { chainId: 56, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'BNB', symbol: 'BNB', isNative: true, coingeckoId: 'binancecoin' },
+    { chainId: 56, address: '0xe9e7cea3dedca5984780bafc599bd69add087d56', name: 'Binance USD', symbol: 'BUSD', coingeckoId: 'binance-usd' },
+  ],
+  43114: [ // Avalanche
+    { chainId: 43114, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Avalanche', symbol: 'AVAX', isNative: true, coingeckoId: 'avalanche-2' },
+    { chainId: 43114, address: '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7', name: 'Wrapped AVAX', symbol: 'WAVAX', coingeckoId: 'wrapped-avax' },
+  ],
 };
 
-const ERC20_ABI = [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)"
-];
 
 // Helper to get the initial list of assets for a chain
 export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance'>[] {
+    // In a real app, this would be a more sophisticated system for managing user tokens.
     return MOCK_USER_ASSETS[chainId] || [];
-}
-
-const getRpcUrl = (chain: ChainConfig) => {
-    // In a real app, you would securely fetch the user's Infura API key
-    const infuraApiKey = process.env.NEXT_PUBLIC_INFURA_API_KEY || 'YOUR_INFURA_KEY_HERE';
-    if (infuraApiKey === 'YOUR_INFURA_KEY_HERE') {
-        console.warn("Using default Infura RPC. Please provide an API key for production use.");
-    }
-    return `${chain.rpcBase}${infuraApiKey}`;
-}
-
-/**
- * Fetches the balances for a list of assets on a specific chain.
- * @param ownerAddress The address to check balances for.
- * @param assets The list of assets to check.
- * @param chain The configuration of the chain to connect to.
- * @returns A promise that resolves to an array of assets with their live balances.
- */
-export async function fetchBalances(
-    ownerAddress: string,
-    assets: Omit<AssetRow, 'balance'>[],
-    chain: ChainConfig
-): Promise<AssetRow[]> {
-    const rpcUrl = getRpcUrl(chain);
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-
-    const balancePromises = assets.map(async (asset) => {
-        let balanceBigInt: bigint;
-        try {
-            if (asset.isNative) {
-                balanceBigInt = await provider.getBalance(ownerAddress);
-            } else {
-                const tokenContract = new ethers.Contract(asset.address, ERC20_ABI, provider);
-                const [balance, decimals] = await Promise.all([
-                    tokenContract.balanceOf(ownerAddress),
-                    tokenContract.decimals()
-                ]);
-                // We return the formatted balance directly for ERC20 tokens
-                return {
-                    ...asset,
-                    balance: ethers.formatUnits(balance, decimals),
-                };
-            }
-            // For native assets, we format it here
-            return {
-                ...asset,
-                balance: ethers.formatEther(balanceBigInt),
-            };
-
-        } catch (error) {
-            console.error(`Failed to fetch balance for ${asset.symbol} on ${chain.name}`, error);
-            return {
-                ...asset,
-                balance: '0', // Return zero balance on error
-            };
-        }
-    });
-
-    return Promise.all(balancePromises);
 }
