@@ -73,7 +73,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const setNetwork = (network: ChainConfig) => {
     setViewingNetwork(network);
-    setAllAssets([]); 
   };
   
   const setInfuraApiKey = (key: string | null) => {
@@ -98,53 +97,54 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshAssets = useCallback(async () => {
-    if (!wallets || !wallets.length || !infuraApiKey) {
-      console.log("Wallet or API key not ready for refresh.");
+    if (!wallets || !wallets.length || !infuraApiKey || chainsWithLogos.length === 0) {
+      console.log("Wallet, API key, or chains not ready for refresh.");
       setAllAssets([]);
       return;
     }
     const wallet = wallets[0];
     if (!wallet) return;
 
-    const baseAssets = getInitialAssets(viewingNetwork.chainId);
-    if (baseAssets.length === 0) {
-        setAllAssets([]);
-        return;
-    }
-  
-    const adapter = getAdapter(viewingNetwork, infuraApiKey);
-    if (!adapter) {
-      console.warn(`No adapter found for network: ${viewingNetwork.name}`);
-      setAllAssets([]);
-      return;
-    }
-  
     setIsRefreshing(true);
     try {
-        // Step 1: Fetch prices for all base assets first.
-        const assetsWithPrices = await fetchAssetPrices(baseAssets);
+        const allNetworkPromises = chainsWithLogos.map(async (network) => {
+            const baseAssets = getInitialAssets(network.chainId);
+            if (baseAssets.length === 0) return [];
 
-        // Step 2: Fetch balances for the assets that now have price info.
-        const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
-        
-        // Step 3: Final mapping to combine all data and ensure icons are set.
-        const finalAssets = assetsWithBalances.map((asset) => {
-            const networkInfo = allChainsMap[asset.chainId];
-            return {
-                ...asset,
-                fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance), // Recalculate fiat value
-                iconUrl: asset.iconUrl,
-                ...(!asset.iconUrl && networkInfo && { iconUrl: networkInfo.iconUrl }),
-            };
+            const adapter = getAdapter(network, infuraApiKey);
+            if (!adapter) {
+                console.warn(`No adapter found for network: ${network.name}`);
+                return [];
+            }
+            
+            try {
+                 // Fetch prices for this network's assets
+                const assetsWithPrices = await fetchAssetPrices(baseAssets);
+                // Fetch balances for the priced assets
+                const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
+                // Final mapping
+                return assetsWithBalances.map((asset) => ({
+                    ...asset,
+                    fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance),
+                    iconUrl: asset.iconUrl,
+                }));
+            } catch (networkError) {
+                console.error(`Failed to refresh assets for ${network.name}:`, networkError);
+                return []; // Return empty array for this network on error
+            }
         });
-        setAllAssets(finalAssets as AssetRow[]);
-  
+
+        const allNetworksAssetsNested = await Promise.all(allNetworkPromises);
+        const flattenedAssets = allNetworksAssetsNested.flat() as AssetRow[];
+        
+        setAllAssets(flattenedAssets);
+
     } catch (error) {
         console.error("Failed to refresh assets:", error);
     } finally {
         setIsRefreshing(false);
     }
-  }, [wallets, viewingNetwork, allChainsMap, infuraApiKey]);
+  }, [wallets, chainsWithLogos, infuraApiKey]);
   
 
   useEffect(() => {
@@ -167,10 +167,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isInitialized && wallets && !areLogosLoading && viewingNetwork && infuraApiKey) {
+    if (isInitialized && wallets && !areLogosLoading && chainsWithLogos.length > 0 && infuraApiKey) {
       refreshAssets();
     }
-  }, [isInitialized, wallets, viewingNetwork, areLogosLoading, infuraApiKey, refreshAssets]);
+  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, chainsWithLogos.length]); // Removed refreshAssets from dependency array to prevent re-runs
 
   const value: WalletContextType = {
     wallets,
