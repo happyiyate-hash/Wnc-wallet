@@ -32,7 +32,7 @@ export default function MobileNav() {
   const pathname = usePathname();
 
   const navItems: NavItem[] = [
-    { href: '/tokens', label: 'Wallet', icon: GradientWalletIcon },
+    { href: '/', label: 'Wallet', icon: GradientWalletIcon },
     { href: '/browse', label: 'Browse', icon: GradientGlobeIcon },
     { href: '/swap', label: 'Swap', icon: GradientSwapIcon },
     { href: '/profile', label: 'Profile', icon: GradientUserIcon },
@@ -40,7 +40,7 @@ export default function MobileNav() {
   ];
   
   const NavLink = ({ item }: { item: NavItem; }) => {
-    const isActive = pathname === item.href || (item.href === '/tokens' && pathname === '/');
+    const isActive = pathname === item.href;
     const Icon = item.icon;
     
     // All navigation items now use a consistent Link component.
