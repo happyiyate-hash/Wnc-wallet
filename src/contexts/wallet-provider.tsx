@@ -110,7 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
         const allNetworkPromises = chainsWithLogos.map(async (network) => {
             const baseAssets = getInitialAssets(network.chainId);
-            if (baseAssets.length === 0) return [];
+            if (baseAssets.length === 0) return []; // <-- FIX IS HERE
 
             const adapter = getAdapter(network, infuraApiKey);
             if (!adapter) {
@@ -177,7 +177,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isInitialized && wallets && !areLogosLoading && chainsWithLogos.length > 0 && infuraApiKey) {
       refreshAssets();
     }
-  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, chainsWithLogos.length]); // Removed refreshAssets from dependency array to prevent re-runs
+  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, chainsWithLogos.length, refreshAssets]);
 
   const value: WalletContextType = {
     wallets,
