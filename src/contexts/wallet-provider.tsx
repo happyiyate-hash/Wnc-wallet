@@ -121,19 +121,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   
     setIsRefreshing(true);
     try {
-        const assetsWithBalances = await adapter.fetchBalances(wallet.address, baseAssets);
-        const assetsToPrice = assetsWithBalances.filter(a => parseFloat(a.balance) > 0);
-        
-        let assetsWithPrices = assetsWithBalances;
-        if (assetsToPrice.length > 0) {
-          assetsWithPrices = await fetchAssetPrices(assetsToPrice) as AssetRow[];
-        }
+        // Step 1: Fetch prices for all base assets first.
+        const assetsWithPrices = await fetchAssetPrices(baseAssets);
 
-        const finalAssets = assetsWithPrices.map((asset) => {
-            const pricedAsset = assetsWithPrices.find(p => p.coingeckoId === asset.coingeckoId) || asset;
+        // Step 2: Fetch balances for the assets that now have price info.
+        const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
+        
+        // Step 3: Final mapping to combine all data and ensure icons are set.
+        const finalAssets = assetsWithBalances.map((asset) => {
             const networkInfo = allChainsMap[asset.chainId];
             return {
-                ...pricedAsset,
+                ...asset,
+                fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance), // Recalculate fiat value
                 iconUrl: asset.iconUrl,
                 ...(!asset.iconUrl && networkInfo && { iconUrl: networkInfo.iconUrl }),
             };
