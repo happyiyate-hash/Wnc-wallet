@@ -1,14 +1,16 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import type { AssetRow, Chain, WalletWithMetadata, UserProfile } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
+import { ALL_CHAINS_LIST } from '@/lib/user-networks';
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
   isInitialized: boolean;
   hasNewNotifications: boolean;
-  viewingNetwork: Chain;
+  viewingNetwork: ChainConfig;
+  setNetwork: (network: ChainConfig) => void;
   allAssets: AssetRow[];
   isRefreshing: boolean;
   refresh: () => void;
@@ -16,29 +18,27 @@ interface WalletContextType {
   profile: UserProfile | null;
 }
 
-const mockEthChain: Chain = {
-  chainId: 1,
-  name: 'Ethereum',
-  iconUrl: `https://picsum.photos/seed/eth_chain/32/32`, // Initial placeholder
-};
-
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
-  const [viewingNetwork, setViewingNetwork] = useState<Chain>(mockEthChain);
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(ALL_CHAINS_LIST[0]);
   const [allAssets, setAllAssets] = useState<AssetRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  const setNetwork = (network: ChainConfig) => {
+    setViewingNetwork(network);
+  };
 
   const refresh = useCallback(async () => {
+    if (!viewingNetwork) return;
     setIsRefreshing(true);
     
     // Fetch network logo
-    const networkLogoUrl = await getTokenLogoUrl(viewingNetwork.name, viewingNetwork.name);
+    const networkLogoUrl = await getTokenLogoUrl(viewingNetwork.currencySymbol, viewingNetwork.name);
     setViewingNetwork(currentNetwork => ({
         ...currentNetwork,
         iconUrl: networkLogoUrl || currentNetwork.iconUrl,
@@ -80,10 +80,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const assetsWithLogos = await Promise.all(
       mockAssets.map(async (asset) => {
-        const logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+        let logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+        // Fallback to network logo if token logo is not found
+        if (!logoUrl) {
+            logoUrl = viewingNetwork.iconUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`;
+        }
         return {
           ...asset,
-          iconUrl: logoUrl || networkLogoUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`,
+          iconUrl: logoUrl,
         };
       })
     );
@@ -91,7 +95,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAllAssets(assetsWithLogos);
     setIsRefreshing(false);
 
-  }, [viewingNetwork.name]);
+  }, [viewingNetwork]);
 
   useEffect(() => {
     // Simulate loading wallet from storage
@@ -102,10 +106,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (wallets) {
+    if (wallets && viewingNetwork) {
         refresh();
     }
-  }, [wallets, refresh]);
+  }, [wallets, viewingNetwork, refresh]);
 
   const value = {
     wallets,
@@ -113,6 +117,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized,
     hasNewNotifications,
     viewingNetwork,
+    setNetwork,
     allAssets,
     isRefreshing,
     refresh,

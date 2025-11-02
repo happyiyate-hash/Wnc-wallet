@@ -20,6 +20,11 @@ export interface Chain {
   chainId: number;
   name: string;
   iconUrl?: string;
+  currencySymbol: string;
+}
+
+export interface ChainConfig extends Chain {
+    themeColor: string;
 }
 
 export interface UserProfile {
