@@ -25,6 +25,7 @@ import CachedImage from '@/components/CachedImage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import ApiKeyManager from './wallet/api-key-manager';
+import MoreActionsSheet from './wallet/more-actions-sheet';
 
 const TokenRow = ({ token }: { token: AssetRow }) => {
   const router = useRouter();
@@ -87,6 +88,7 @@ export default function WalletTab() {
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isApiManagerOpen, setIsApiManagerOpen] = useState(false);
+  const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const router = useRouter();
 
   const assets = useMemo(() => {
@@ -223,7 +225,7 @@ export default function WalletTab() {
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
           <ActionButton icon={Repeat} label="Swap" href="/swap" />
           <ActionButton icon={Sparkles} label="Buy" href="/buy" />
-          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsApiManagerOpen(true)} />
+          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
         
         {/* Tabs */}
@@ -330,6 +332,7 @@ export default function WalletTab() {
       <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <ApiKeyManager isOpen={isApiManagerOpen} onOpenChange={setIsApiManagerOpen} />
+      <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
     </div>
   );
 }
