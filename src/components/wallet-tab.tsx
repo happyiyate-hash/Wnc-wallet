@@ -179,7 +179,7 @@ export default function WalletTab() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full px-4">
       <div className="bg-background pt-8">
         {/* Balance */}
         <div className="flex items-center justify-between">
