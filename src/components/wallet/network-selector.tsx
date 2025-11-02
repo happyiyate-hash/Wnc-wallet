@@ -16,7 +16,6 @@ export default function NetworkSelector({ className }: { className?: string }) {
             <SelectTrigger className={cn("w-auto h-auto p-0 bg-transparent border-none text-white focus:ring-0 focus:ring-offset-0", className)}>
                 <div className="flex items-center gap-1">
                     <CachedImage src={viewingNetwork.iconUrl!} alt={viewingNetwork.name} width={24} height={24} className="rounded-full" />
-                    <ChevronDown className="h-4 w-4 opacity-50" />
                 </div>
             </SelectTrigger>
             <SelectContent>
