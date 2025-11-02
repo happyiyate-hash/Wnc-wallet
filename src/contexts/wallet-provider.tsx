@@ -25,7 +25,7 @@ interface WalletContextType {
   profile: UserProfile | null;
   user: any;
   infuraApiKey: string | null;
-  setInfuraApiKey: (key: string) => void;
+  setInfuraApiKey: (key: string | null) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -76,8 +76,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAllAssets([]); 
   };
   
-  const setInfuraApiKey = (key: string) => {
-    localStorage.setItem('infuraApiKey', key);
+  const setInfuraApiKey = (key: string | null) => {
+    if (key) {
+        localStorage.setItem('infuraApiKey', key);
+    } else {
+        localStorage.removeItem('infuraApiKey');
+    }
     setInfuraApiKeyInternal(key);
   };
 
