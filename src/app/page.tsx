@@ -30,15 +30,13 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen">
-      <WalletHeader isCollapsed={isHeaderCollapsed} />
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <WalletHeader isCollapsed={isHeaderCollapsed} />
         <main className="flex flex-col items-center">
           <div className="w-full mx-auto max-w-4xl">
             <WalletTab />
           </div>
         </main>
       </div>
-    </div>
   );
 }

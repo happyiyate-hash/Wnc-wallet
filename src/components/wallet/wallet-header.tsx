@@ -42,7 +42,7 @@ export default function WalletHeader({
   return (
     <div
       className={cn(
-        'sticky z-20 mx-auto w-full max-w-4xl transition-transform duration-300 ease-in-out top-4',
+        'sticky z-20 mx-auto w-full max-w-4xl transition-transform duration-300 ease-in-out top-4 px-4',
         isCollapsed ? '-translate-y-[150%]' : 'translate-y-0'
       )}
     >
