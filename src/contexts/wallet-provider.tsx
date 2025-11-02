@@ -64,15 +64,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const initialCache: { [chainId: number]: AssetRow[] } = {};
         for (const chain of chainsWithLogos) {
             const baseAssets = getInitialAssets(chain.chainId);
-            // Pre-populate with base info, logos will be fetched on demand.
-            const assetsWithPlaceholders = baseAssets.map(asset => ({
+            const assetsWithPlaceholders = await Promise.all(baseAssets.map(async (asset) => ({
                 ...asset,
                 balance: '0',
                 fiatValueUsd: 0,
                 priceUsd: 0,
                 pctChange24h: 0,
-                iconUrl: null, 
-            }));
+                iconUrl: await getTokenLogoUrl(asset.symbol, chain.name),
+            })));
             initialCache[chain.chainId] = assetsWithPlaceholders;
         }
         setAllAssetsCache(initialCache);
@@ -115,7 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       createWalletWithMnemonic(mnemonic);
   };
 
-  const refreshAssets = useCallback(async (networkToRefresh: ChainConfig, forceLogos = false) => {
+  const refreshAssets = useCallback(async (networkToRefresh: ChainConfig) => {
     if (!wallets || !wallets.length || !infuraApiKey || !networkToRefresh) {
       return;
     }
@@ -123,22 +122,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallet) return;
 
     let baseAssets = allAssetsCache[networkToRefresh.chainId] || getInitialAssets(networkToRefresh.chainId);
-    if (!baseAssets || baseAssets.length === 0) return;
-
-    // Check if logos need to be fetched (e.g., first time or on force refresh)
-    const needsLogoFetch = forceLogos || baseAssets.some(a => a.iconUrl === null);
+    
+    // Crucial Guard: If there are no assets for this chain, do not proceed.
+    if (!baseAssets || baseAssets.length === 0) {
+        console.log(`No assets to refresh for network: ${networkToRefresh.name}`);
+        return;
+    }
 
     setIsRefreshing(true);
     try {
-        // Fetch logos if needed
-        if (needsLogoFetch) {
-            baseAssets = await Promise.all(baseAssets.map(async asset => ({
-                ...asset,
-                iconUrl: await getTokenLogoUrl(asset.symbol, networkToRefresh.name),
-            })));
-        }
-
-        // Instantly update cache with logos so they appear right away
+        // We assume logos are already in the cache from the initial load
         setAllAssetsCache(prev => ({
             ...prev,
             [networkToRefresh.chainId]: baseAssets,
@@ -147,7 +140,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const adapter = evmAdapterFactory(networkToRefresh, infuraApiKey);
         if (!adapter) {
             console.warn(`No adapter found for network: ${networkToRefresh.name}`);
-            // Still update cache with what we have (logos)
             setAllAssetsCache(prev => ({ ...prev, [networkToRefresh.chainId]: baseAssets }));
             return;
         }
@@ -170,7 +162,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
         setIsRefreshing(false);
     }
-  }, [wallets, infuraApiKey, allAssetsCache]); // allAssetsCache is needed to get the base assets
+  }, [wallets, infuraApiKey, allAssetsCache]);
   
 
   useEffect(() => {
@@ -196,14 +188,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // It does NOT depend on allAssetsCache, which prevents the infinite loop.
   useEffect(() => {
     if (isInitialized && wallets && !areLogosLoading && infuraApiKey && viewingNetwork?.chainId) {
-      // Check if cache for the current network is empty or just has placeholders
-      const currentCache = allAssetsCache[viewingNetwork.chainId];
-      if (!currentCache || currentCache.length === 0) return;
-      
-      refreshAssets(viewingNetwork, true); // Force logo fetch on first view
+      refreshAssets(viewingNetwork);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork, refreshAssets]);
+  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork]);
 
 
   const assetsForCurrentNetwork = allAssetsCache[viewingNetwork?.chainId] || [];
@@ -218,7 +206,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    refresh: () => refreshAssets(viewingNetwork, true), // Manual refresh should force everything
+    refresh: () => refreshAssets(viewingNetwork),
     createWalletWithMnemonic,
     importWalletWithMnemonic,
     profile,
