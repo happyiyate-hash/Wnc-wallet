@@ -44,11 +44,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
       <div className="flex items-center gap-3">
         <TokenLogoDynamic 
             alt={token.name} 
-            symbol={token.symbol}
-            name={token.name}
-            chainKey={token.chainId}
-            address={token.address}
-            isNative={token.address === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
+            logoUrl={token.iconUrl}
             size={28}
             FallbackComponent={<GenericCoinIcon size={28} />}
         />
@@ -179,8 +175,8 @@ export default function WalletTab() {
   }
 
   return (
-    <div className="flex flex-col h-full px-4">
-      <div className="bg-background pt-8">
+    <div className="flex flex-col h-full">
+      <div className="bg-background pt-8 px-4">
         {/* Balance */}
         <div className="flex items-center justify-between">
             <div>
@@ -285,7 +281,11 @@ export default function WalletTab() {
 
                 {/* Scrollable Area */}
                 <div className="flex-1 overflow-y-auto">
-                  {assets.length > 0 ? (
+                  {isRefreshing && assets.length === 0 ? (
+                     <div className="flex items-center justify-center pt-10">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                     </div>
+                  ) : assets.length > 0 ? (
                     <div>
                         {assets.map((token) => (
                         <TokenRow
@@ -296,13 +296,9 @@ export default function WalletTab() {
                     </div>
                   ) : (
                     <div className="flex items-center justify-center pt-10">
-                      {isRefreshing ? (
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      ) : (
                         <div className="text-center text-muted-foreground">
                           No tokens to show.
                         </div>
-                      )}
                     </div>
                   )}
                 </div>

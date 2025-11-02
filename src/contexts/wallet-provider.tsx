@@ -65,30 +65,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const setNetwork = (network: ChainConfig) => {
     setViewingNetwork(network);
-    // Clear assets for the old network immediately for a snappier feel
+    // Clear assets immediately for a snappier feel
     setAllAssets([]);
   };
 
   const refreshAssets = useCallback(async (network: ChainConfig) => {
     if (isRefreshing) return;
     setIsRefreshing(true);
+    setAllAssets([]); // Clear assets to show loading state
 
     const baseAssetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
     if (baseAssetsForChain.length === 0) {
-      setAllAssets([]);
       setIsRefreshing(false);
       return;
     }
-    
-    // Set skeleton assets immediately
-    const skeletonAssets: AssetRow[] = baseAssetsForChain.map(asset => ({
-        ...asset,
-        priceUsd: 0,
-        fiatValueUsd: 0,
-        pctChange24h: 0,
-        iconUrl: '',
-    }));
-    setAllAssets(skeletonAssets);
     
     try {
       // Use the new centralized service to fetch prices
@@ -109,9 +99,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     } catch (error) {
       console.error("Failed to fetch asset prices:", error);
-      // Even if fetching fails, we keep the skeleton with balances
-      const assetsWithBalances = baseAssetsForChain.map(asset => ({...asset}));
-      setAllAssets(assetsWithBalances as AssetRow[]);
+      // On error, we still want to show balances, even without price data
+      const assetsWithBalancesAndLogos = await Promise.all(
+        baseAssetsForChain.map(async (asset) => {
+            const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
+            return {
+                ...asset,
+                priceUsd: 0,
+                fiatValueUsd: 0,
+                pctChange24h: 0,
+                iconUrl: iconUrl || undefined,
+            } as AssetRow;
+        })
+      );
+      setAllAssets(assetsWithBalancesAndLogos);
     } finally {
       setIsRefreshing(false);
     }

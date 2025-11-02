@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
+import { Skeleton } from '../ui/skeleton';
 
 interface NetworkSelectorProps {
   className?: string;
@@ -56,11 +57,7 @@ const NetworkRow = ({
       <div className="flex-shrink-0 h-10 w-10 rounded-full bg-background/50 flex items-center justify-center">
             <TokenLogoDynamic 
                 alt={chain.name} 
-                symbol={chain.currencySymbol}
-                name={chain.name}
-                chainKey={chain.chainId}
-                address={null}
-                isNative={true}
+                logoUrl={chain.iconUrl}
                 size={32}
                 FallbackComponent={<GenericCoinIcon />}
             />
@@ -126,7 +123,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         className={cn('flex items-center gap-1 p-1 h-auto', className)}
         disabled
       >
-        <div className="w-6 h-6 bg-muted rounded-full" />
+        <Skeleton className="w-6 h-6 rounded-full" />
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </Button>
     );
@@ -142,11 +139,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         >
           <TokenLogoDynamic 
             alt={viewingNetwork.name} 
-            symbol={viewingNetwork.currencySymbol}
-            name={viewingNetwork.name}
-            chainKey={viewingNetwork.chainId}
-            address={null}
-            isNative={true}
+            logoUrl={viewingNetwork.iconUrl}
             size={24}
             FallbackComponent={<GenericCoinIcon />}
           />
