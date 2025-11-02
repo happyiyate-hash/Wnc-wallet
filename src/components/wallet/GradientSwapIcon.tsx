@@ -10,25 +10,11 @@ const GradientSwapIcon = ({ className }: { className?: string }) => (
     className={className}
   >
     <path
-      d="M7 20L17 4"
-      stroke="url(#nav-icon-gradient)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M7 4H17V10"
-      stroke="url(#nav-icon-gradient)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-     <path
-      d="M17 14V20H11"
-      stroke="url(#nav-icon-gradient)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+        d="M4 7h13M17 7l-3-3m3 3l-3 3M20 17H7m0 0l3 3m-3-3l3-3"
+        stroke="url(#nav-icon-gradient)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
     />
   </svg>
 );
