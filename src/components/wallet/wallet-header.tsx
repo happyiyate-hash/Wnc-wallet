@@ -4,7 +4,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Copy, Bell, Expand, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import NetworkSelector from './network-selector';
 import { cn } from '@/lib/utils';
 import { useWallet } from '@/contexts/wallet-provider';
 import { getAddressForChain } from '@/lib/wallets/utils';
@@ -49,8 +48,7 @@ export default function WalletHeader({
       <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-2xl">
         <header className="flex h-10 shrink-0 items-center justify-between rounded-2xl bg-black px-2">
           <div className="flex items-center">
-            {/* NetworkSelector now correctly reflects the live viewingNetwork from the context */}
-            <NetworkSelector className="h-6" />
+            {/* NetworkSelector has been removed */}
           </div>
 
           <div className="flex items-center gap-1">
