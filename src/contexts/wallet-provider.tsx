@@ -33,17 +33,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setViewingNetwork(network);
   };
 
-  const refresh = useCallback(async () => {
-    if (!viewingNetwork) return;
+  const refreshAssets = useCallback(async (network: ChainConfig) => {
+    if (isRefreshing) return;
     setIsRefreshing(true);
     
-    // Fetch network logo
-    const networkLogoUrl = await getTokenLogoUrl(viewingNetwork.currencySymbol, viewingNetwork.name);
-    setViewingNetwork(currentNetwork => ({
-        ...currentNetwork,
-        iconUrl: networkLogoUrl || currentNetwork.iconUrl,
-    }));
-
     // Simulate fetching assets
     const mockAssets: Omit<AssetRow, 'iconUrl'>[] = [
       {
@@ -80,10 +73,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const assetsWithLogos = await Promise.all(
       mockAssets.map(async (asset) => {
-        let logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+        let logoUrl = await getTokenLogoUrl(asset.symbol, network.name);
         // Fallback to network logo if token logo is not found
         if (!logoUrl) {
-            logoUrl = viewingNetwork.iconUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`;
+            logoUrl = network.iconUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`;
         }
         return {
           ...asset,
@@ -95,7 +88,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAllAssets(assetsWithLogos);
     setIsRefreshing(false);
 
-  }, [viewingNetwork]);
+  }, [isRefreshing]);
+
+  const refreshNetworkLogo = useCallback(async (network: ChainConfig) => {
+    const networkLogoUrl = await getTokenLogoUrl(network.currencySymbol, network.name);
+    setViewingNetwork(currentNetwork => {
+        if (currentNetwork.chainId === network.chainId) {
+            return { ...currentNetwork, iconUrl: networkLogoUrl || currentNetwork.iconUrl };
+        }
+        return currentNetwork;
+    });
+  }, []);
 
   useEffect(() => {
     // Simulate loading wallet from storage
@@ -107,9 +110,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (wallets && viewingNetwork) {
-        refresh();
+        refreshNetworkLogo(viewingNetwork);
+        refreshAssets(viewingNetwork);
     }
-  }, [wallets, viewingNetwork, refresh]);
+  }, [wallets, viewingNetwork.chainId]);
 
   const value = {
     wallets,
@@ -120,7 +124,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetwork,
     allAssets,
     isRefreshing,
-    refresh,
+    refresh: () => refreshAssets(viewingNetwork),
     profile
   };
 

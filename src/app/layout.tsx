@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
+import MobileNav from '@/components/wallet/mobile-nav';
 
 export const metadata: Metadata = {
   title: 'Wevina v2 - Your Secure Crypto Wallet',
@@ -25,6 +26,7 @@ export default function RootLayout({
         <UserProvider>
           <WalletProvider>
             {children}
+            <MobileNav />
           </WalletProvider>
         </UserProvider>
         <Toaster />
