@@ -1,163 +1,306 @@
-"use client";
+'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Copy, Check, RefreshCw, AlertTriangle, Send } from 'lucide-react';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect, useMemo } from 'react';
+import {
+  RefreshCw,
+  Plus,
+  ArrowUpFromLine,
+  ArrowDownToLine,
+  Wallet,
+  Loader2
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useWallet } from '@/contexts/wallet-provider';
+import type { AssetRow } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import TokenManager from '@/components/wallet/tokens/token-manager';
+import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
+import NotificationCenter from '@/components/notifications/notification-center';
+import { useUser } from '@/contexts/user-provider';
+import { getAddressForChain } from '@/lib/wallets/utils';
+import CachedImage from '@/components/CachedImage';
 
-// Helper function to generate a mock address/key
-const generateRandomString = (length = 42) => {
-  const chars = '0123456789abcdef';
-  let result = '0x';
-  for (let i = length - 2; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
-  return result;
+const TokenRow = ({ token }: { token: AssetRow }) => {
+  const router = useRouter();
+  const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
+
+  const handleRowClick = () => {
+    router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
+  };
+
+  return (
+    <div
+      className="flex cursor-pointer items-center justify-between py-3 px-2"
+      onClick={handleRowClick}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="flex items-center gap-3">
+        {token.iconUrl && (
+          <CachedImage
+            src={token.iconUrl}
+            alt={token.name}
+            width={40}
+            height={40}
+            className="rounded-full"
+          />
+        )}
+        <div>
+          <p className="font-bold">{token.name}</p>
+          <p
+            className={cn(
+              'text-xs',
+              isPositiveChange ? 'text-green-500' : 'text-red-400'
+            )}
+          >
+            {isPositiveChange ? '+' : ''}
+            {(token.pctChange24h ?? 0).toFixed(2)}%
+          </p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="font-bold">
+          {parseFloat(token.balance || '0').toLocaleString('en-US', {
+            maximumFractionDigits: 6,
+          })}{' '}
+          {token.symbol}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          $
+          {(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </p>
+      </div>
+    </div>
+  );
 };
 
-interface WalletState {
-  address: string | null;
-  privateKey: string | null;
-  balance: number;
-}
-
 export default function WalletTab() {
-  const [wallet, setWallet] = useState<WalletState>({
-    address: null,
-    privateKey: null,
-    balance: 0,
-  });
-  const [isAddressCopied, copyAddress] = useCopyToClipboard();
-  const [isKeyCopied, copyKey] = useCopyToClipboard();
-  const { toast } = useToast();
+  const { wallets, isInitialized, viewingNetwork, allAssets, isRefreshing, refresh } = useWallet();
+  const { user } = useUser();
+  const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
+  const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const router = useRouter();
 
-  const handleGenerateWallet = () => {
-    setWallet({
-      address: generateRandomString(),
-      privateKey: generateRandomString(64),
-      balance: 10, // Give some mock balance
-    });
-    toast({
-      title: "Wallet Generated",
-      description: "Your new wallet is ready. Secure your private key!",
-    });
-  };
-
-  const handleSend = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const amount = parseFloat(formData.get('amount') as string);
-    const recipient = formData.get('recipient') as string;
-
-    if (isNaN(amount) || amount <= 0) {
-        toast({
-            title: "Invalid Amount",
-            description: "Please enter a valid amount to send.",
-            variant: "destructive",
-        });
-        return;
+  const currentAddress = getAddressForChain(viewingNetwork, wallets!);
+  
+  const assets = useMemo(() => {
+    return allAssets.filter(asset => asset.chainId === viewingNetwork.chainId);
+  }, [allAssets, viewingNetwork.chainId]);
+  
+  useEffect(() => {
+    if (isInitialized && !wallets) {
+      setIsWalletSheetOpen(true);
+    }
+  }, [isInitialized, wallets]);
+  
+  const totalFiatValue = useMemo(() => {
+    return assets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
+  }, [assets]);
+  
+  const total24hChange = useMemo(() => {
+    if (!assets || assets.length === 0 || totalFiatValue === 0) return 0;
+    
+    let totalValueYesterday = 0;
+    for (const asset of assets) {
+      const price = asset.priceUsd ?? 0;
+      const change = asset.pctChange24h ?? 0;
+      const balance = parseFloat(asset.balance || '0') || 0;
+      if (!price || !balance) continue;
+      
+      const denom = 1 + change / 100;
+      if (!isFinite(denom) || denom === 0) continue;
+      
+      const priceYesterday = price / denom;
+      totalValueYesterday += priceYesterday * balance;
     }
 
-    if (!wallet.address || wallet.balance < amount) {
-        toast({
-            title: "Transaction Failed",
-            description: "Insufficient funds.",
-            variant: "destructive",
-        });
-        return;
-    }
+    if (totalValueYesterday === 0) return 0;
     
-    setWallet(prev => ({ ...prev, balance: prev.balance - amount }));
-    
-    toast({
-        title: "Transaction Sent!",
-        description: `Successfully sent ${amount} ETH to ${recipient.slice(0,10)}...`,
+    const changeValue = totalFiatValue - totalValueYesterday;
+    return (changeValue / totalValueYesterday) * 100;
+  }, [assets, totalFiatValue]);
+
+  const getBalanceFontSize = (balance: number) => {
+    const safeBalance = Number.isFinite(balance) ? balance : 0;
+    const balanceString = safeBalance.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
-    (e.target as HTMLFormElement).reset();
+    const length = balanceString.length;
+
+    if (length > 16) return 'text-xl';
+    if (length > 12) return 'text-2xl';
+    if (length > 9) return 'text-3xl';
+    return 'text-4xl';
   };
 
-  if (!wallet.address) {
+  if (!wallets && isInitialized) {
     return (
-      <Card className="mt-6 shadow-lg border-none">
-        <CardContent className="pt-6 flex flex-col items-center justify-center text-center h-80">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-              <RefreshCw className="h-8 w-8 text-primary" />
-          </div>
-          <CardTitle className="text-2xl mb-4">Create Your Wallet</CardTitle>
-          <CardDescription className="mb-6 max-w-sm">
-            Generate a new secure wallet to start managing your crypto assets. Your keys stay on your device.
-          </CardDescription>
-          <Button size="lg" onClick={handleGenerateWallet} className="bg-accent text-accent-foreground hover:bg-accent/90">
-            Generate New Wallet
+      <>
+        <div className="flex h-full flex-col items-center justify-center text-center p-4 mt-6">
+          <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-bold">Welcome to Your Wallet</h2>
+          <p className="text-muted-foreground mt-2 mb-6">
+            Create or import a wallet to get started.
+          </p>
+          <Button size="lg" onClick={() => setIsWalletSheetOpen(true)}>
+            Get Started
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+        <WalletManagementSheet
+          isOpen={isWalletSheetOpen}
+          onOpenChange={setIsWalletSheetOpen}
+        />
+      </>
     );
   }
 
   return (
-    <div className="space-y-6 mt-6">
-      <Card className="shadow-lg border-none">
-        <CardHeader>
-          <CardTitle>My Wallet</CardTitle>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground font-mono">{wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}</p>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyAddress(wallet.address || '')}>
-                {isAddressCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-             <Label className="text-muted-foreground">Balance</Label>
-             <p className="text-4xl font-bold tracking-tight">{wallet.balance.toFixed(4)} ETH</p>
-          </div>
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Important: Secure Your Private Key!</AlertTitle>
-            <AlertDescription>
-              Store this key in a safe, offline location. Anyone with this key can access your funds. We cannot recover it for you.
-            </AlertDescription>
-          </Alert>
-          <div className="space-y-2">
-            <Label htmlFor="privateKey">Private Key</Label>
-            <div className="flex items-center gap-2">
-              <Input id="privateKey" readOnly value={wallet.privateKey} type="password" className="font-mono text-sm" />
-              <Button variant="outline" size="icon" onClick={() => copyKey(wallet.privateKey || '')}>
-                 {isKeyCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+    <div className="flex flex-col h-full mt-6">
+      <div className="sticky top-0 z-10 bg-transparent pt-8 px-2">
+        {/* Balance */}
+        <div className="flex items-center justify-between">
+            <div>
+              <h2 className={cn(
+                'font-bold',
+                getBalanceFontSize(Number(totalFiatValue ?? 0))
+              )}>
+                US$
+                {(totalFiatValue || 0).toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </h2>
+              <p
+                className={cn(
+                  'text-sm mt-1 text-muted-foreground',
+                  total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
+                )}
+              >
+                {total24hChange >= 0 ? '+' : ''}$
+                {(
+                  totalFiatValue -
+                  (totalFiatValue / (1 + total24hChange / 100 || 1))
+                ).toFixed(2)}
+                <span className="text-gray-400 ml-2">
+                  ({total24hChange >= 0 ? '+' : ''}
+                  {total24hChange.toFixed(2)}%)
+                </span>
+              </p>
+            </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-between my-8">
+           <div className="p-[1px] bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-green-500/50 rounded-xl w-[calc(50%-0.5rem)]">
+              <Button className="w-full h-12 bg-background hover:bg-muted/50 rounded-xl" onClick={() => router.push('/send')}>
+                <ArrowUpFromLine className="w-5 h-5 mr-2" /> Send
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="p-[1px] bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-green-500/50 rounded-xl w-[calc(50%-0.5rem)]">
+              <Button className="w-full h-12 bg-background hover:bg-muted/50 rounded-xl" onClick={() => router.push('/receive')}>
+                <ArrowDownToLine className="w-5 h-5 mr-2" /> Receive
+              </Button>
+            </div>
+        </div>
+        
+        {/* Tabs */}
+        <div className="w-full">
+            <Tabs defaultValue="tokens" className="w-full">
+              <TabsList className="flex w-full justify-between bg-transparent p-0">
+                <TabsTrigger
+                  value="tokens"
+                  className="p-0 pb-2 data-[state=active]:text-foreground data-[state=active]:font-bold data-[state=active]:bg-transparent rounded-none flex-1"
+                >
+                  Tokens
+                </TabsTrigger>
+                <TabsTrigger
+                  value="defi"
+                  disabled
+                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
+                >
+                  DeFi
+                </TabsTrigger>
+                <TabsTrigger
+                  value="nfts"
+                  disabled
+                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
+                >
+                  NFTs
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+        </div>
 
-      <Card className="shadow-lg border-none">
-        <CardHeader>
-          <CardTitle>Send Crypto</CardTitle>
-          <CardDescription>Transfer funds to another wallet.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSend}>
-            <CardContent className="space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="recipient">Recipient Address</Label>
-                <Input id="recipient" name="recipient" placeholder="0x..." required />
+        {/* Manage Section */}
+        <div className="flex items-center justify-between py-4">
+            <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                <Button
+                    variant="outline"
+                    className="h-10 px-4 bg-background hover:bg-muted/50 rounded-full border-none"
+                    onClick={() => setIsTokenManagerOpen(true)}
+                >
+                    <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-semibold">Manage Tokens</span>
+                </Button>
             </div>
-            <div className="space-y-2">
-                <Label htmlFor="amount">Amount (ETH)</Label>
-                <Input id="amount" name="amount" type="number" step="0.0001" placeholder="0.0" required />
+            <div className="flex items-center gap-2">
+                <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
+                        onClick={() => refresh()}
+                        disabled={isRefreshing}
+                    >
+                    {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
+                    </Button>
+                </div>
+                 <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                    <Button
+                    size="icon"
+                    className="h-9 w-9 rounded-full bg-background hover:bg-muted/50"
+                    onClick={() => router.push('/tokens/add')}
+                    >
+                    <Plus className="h-5 w-5 text-primary" />
+                    </Button>
+                </div>
             </div>
-            </CardContent>
-            <CardFooter>
-            <Button type="submit" className="w-full sm:w-auto ml-auto">
-                <Send className="mr-2 h-4 w-4" />
-                Send
-            </Button>
-            </CardFooter>
-        </form>
-      </Card>
+        </div>
+      </div>
+
+      {/* Scrollable Area */}
+      <div className="flex-1 overflow-y-auto px-2">
+        {(isRefreshing && assets.length === 0) ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mr-2"/>
+            <span>Loading balances...</span>
+          </div>
+        ) : assets.length > 0 ? (
+          <div className="divide-y divide-border">
+            {assets.map((token) => (
+              <TokenRow
+                key={`${token.chainId}-${token.address || token.symbol}`}
+                token={token}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center text-muted-foreground p-4">
+            No tokens to show.
+          </div>
+        )}
+      </div>
+
+      {/* Sheets */}
+      <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
+      <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
+      {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
     </div>
   );
 }

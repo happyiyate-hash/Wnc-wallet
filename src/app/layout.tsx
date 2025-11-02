@@ -1,6 +1,8 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import { WalletProvider } from '@/contexts/wallet-provider';
+import { UserProvider } from '@/contexts/user-provider';
 
 export const metadata: Metadata = {
   title: 'Wevina v2 - Your Secure Crypto Wallet',
@@ -20,7 +22,11 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen bg-background">
-        {children}
+        <UserProvider>
+          <WalletProvider>
+            {children}
+          </WalletProvider>
+        </UserProvider>
         <Toaster />
       </body>
     </html>
