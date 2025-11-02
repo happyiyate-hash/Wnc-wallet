@@ -28,11 +28,19 @@ async function fetcher(url: string) {
  * @returns A promise that resolves to an array of assets with price data.
  */
 export async function fetchAssetPrices(
-    baseAssets: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[]
+    baseAssets: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h'>[]
 ): Promise<AssetRow[]> {
     const coingeckoIds = baseAssets.map(a => a.coingeckoId).filter(Boolean) as string[];
+    
+    // Guard against making a request with no IDs.
     if (coingeckoIds.length === 0) {
-        return baseAssets as AssetRow[];
+        // Return assets with default zero values if no price data can be fetched.
+        return baseAssets.map(asset => ({
+            ...asset,
+            priceUsd: 0,
+            fiatValueUsd: 0,
+            pctChange24h: 0,
+        })) as AssetRow[];
     }
 
     const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${coingeckoIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
