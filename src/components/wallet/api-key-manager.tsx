@@ -32,7 +32,11 @@ export default function ApiKeyManager({ isOpen, onOpenChange }: ApiKeyManagerPro
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent>
+      <SheetContent 
+        side="bottom"
+        className="rounded-t-2xl max-h-[90vh] bg-background"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <SheetHeader>
           <SheetTitle>Manage API Keys</SheetTitle>
           <SheetDescription>

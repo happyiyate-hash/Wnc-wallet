@@ -96,10 +96,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const refreshAssets = useCallback(async () => {
     if (!wallets || !wallets.length || !infuraApiKey) {
       console.log("Wallet or API key not ready for refresh.");
+      setAllAssets([]);
       return;
     }
     const wallet = wallets[0];
     if (!wallet) return;
+
+    const baseAssets = getInitialAssets(viewingNetwork.chainId);
+    if (baseAssets.length === 0) {
+        setAllAssets([]);
+        return;
+    }
   
     const adapter = getAdapter(viewingNetwork, infuraApiKey);
     if (!adapter) {
@@ -110,12 +117,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   
     setIsRefreshing(true);
     try {
-        const baseAssets = getInitialAssets(viewingNetwork.chainId);
-        if (baseAssets.length === 0) {
-            setAllAssets([]);
-            return;
-        }
-
         const assetsWithBalances = await adapter.fetchBalances(wallet.address, baseAssets);
         const assetsToPrice = assetsWithBalances.filter(a => parseFloat(a.balance) > 0);
         
