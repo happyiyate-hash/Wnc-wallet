@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react';
 import type { ChainConfig } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
-import { ALL_CHAINS_LIST } from '@/lib/user-networks';
+import evmNetworks from '@/lib/evmNetworks.json';
+
+const ALL_CHAINS_LIST: Omit<ChainConfig, 'iconUrl'>[] = Object.values(evmNetworks).map(n => ({ ...n, currencySymbol: n.symbol }));
+
 
 export function useNetworkLogos() {
-    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST);
+    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
     const [areLogosLoading, setAreLogosLoading] = useState(true);
 
     useEffect(() => {
@@ -17,7 +20,7 @@ export function useNetworkLogos() {
                 const chainsWithFetchedLogos = await Promise.all(
                     ALL_CHAINS_LIST.map(async (chain) => {
                         // For networks, the most reliable symbol is often their native currency symbol.
-                        const logoUrl = await getTokenLogoUrl(chain.currencySymbol, chain.name);
+                        const logoUrl = await getTokenLogoUrl(chain.symbol, chain.name);
                         return {
                             ...chain,
                             iconUrl: logoUrl ?? undefined,
@@ -32,7 +35,7 @@ export function useNetworkLogos() {
                 console.error("Failed to fetch network logos:", error);
                 if (isMounted) {
                     // On error, proceed with the initial list (which has empty iconUrl strings)
-                    setChainsWithLogos(ALL_CHAINS_LIST);
+                    setChainsWithLogos(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
                 }
             } finally {
                 if (isMounted) {

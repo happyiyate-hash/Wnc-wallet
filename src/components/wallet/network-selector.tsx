@@ -41,16 +41,11 @@ const NetworkRow = ({
   const shortAddress = address
     ? `${address.slice(0, 8)}...${address.slice(-8)}`
     : 'Connecting...';
-  const cardStyle = {
-    backgroundColor: chain.themeColor ? `${chain.themeColor}30` : 'hsl(var(--muted))',
-    borderColor: chain.themeColor || 'hsl(var(--border))',
-  };
-  
+
   return (
     <div
-      style={cardStyle}
       className={cn(
-        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border'
+        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border bg-muted'
       )}
     >
       <div className="flex-shrink-0 h-10 w-10 rounded-full bg-background/50 flex items-center justify-center">

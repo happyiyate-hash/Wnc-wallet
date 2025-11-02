@@ -1,0 +1,142 @@
+{
+  "ethereum": {
+    "chainId": 1,
+    "name": "Ethereum",
+    "symbol": "ETH",
+    "rpcBase": "https://mainnet.infura.io/v3/",
+    "explorer": "https://etherscan.io/"
+  },
+  "linea": {
+    "chainId": 59144,
+    "name": "Linea",
+    "symbol": "ETH",
+    "rpcBase": "https://linea-mainnet.infura.io/v3/",
+    "explorer": "https://lineascan.build/"
+  },
+  "polygon": {
+    "chainId": 137,
+    "name": "Polygon",
+    "symbol": "MATIC",
+    "rpcBase": "https://polygon-mainnet.infura.io/v3/",
+    "explorer": "https://polygonscan.com/"
+  },
+  "base": {
+    "chainId": 8453,
+    "name": "Base",
+    "symbol": "ETH",
+    "rpcBase": "https://base-mainnet.infura.io/v3/",
+    "explorer": "https://basescan.org/"
+  },
+  "blast": {
+    "chainId": 81457,
+    "name": "Blast",
+    "symbol": "ETH",
+    "rpcBase": "https://blast-mainnet.infura.io/v3/",
+    "explorer": "https://blastscan.io/"
+  },
+  "optimism": {
+    "chainId": 10,
+    "name": "Optimism",
+    "symbol": "ETH",
+    "rpcBase": "https://optimism-mainnet.infura.io/v3/",
+    "explorer": "https://optimistic.etherscan.io/"
+  },
+  "arbitrum": {
+    "chainId": 42161,
+    "name": "Arbitrum",
+    "symbol": "ETH",
+    "rpcBase": "https://arbitrum-mainnet.infura.io/v3/",
+    "explorer": "https://arbiscan.io/"
+  },
+  "palm": {
+    "chainId": 11297108109,
+    "name": "Palm",
+    "symbol": "PALM",
+    "rpcBase": "https://palm-mainnet.infura.io/v3/",
+    "explorer": "https://explorer.palm.io/"
+  },
+  "avalanche": {
+    "chainId": 43114,
+    "name": "Avalanche C-Chain",
+    "symbol": "AVAX",
+    "rpcBase": "https://avalanche-mainnet.infura.io/v3/",
+    "explorer": "https://snowtrace.io/"
+  },
+  "starknet": {
+    "chainId": 23448594291968334,
+    "name": "Starknet",
+    "symbol": "ETH",
+    "rpcBase": "https://starknet-mainnet.infura.io/v3/",
+    "explorer": "https://starkscan.co/"
+  },
+  "celo": {
+    "chainId": 42220,
+    "name": "Celo",
+    "symbol": "CELO",
+    "rpcBase": "https://celo-mainnet.infura.io/v3/",
+    "explorer": "https://celoscan.io/"
+  },
+  "zksync": {
+    "chainId": 324,
+    "name": "ZKsync",
+    "symbol": "ETH",
+    "rpcBase": "https://zksync-mainnet.infura.io/v3/",
+    "explorer": "https://explorer.zksync.io/"
+  },
+  "bsc": {
+    "chainId": 56,
+    "name": "BNB Smart Chain",
+    "symbol": "BNB",
+    "rpcBase": "https://bsc-mainnet.infura.io/v3/",
+    "explorer": "https://bscscan.com/"
+  },
+  "hemi": {
+    "chainId": 1313161554,
+    "name": "Hemi",
+    "symbol": "HEMI",
+    "rpcBase": "https://hemi-mainnet.infura.io/v3/",
+    "explorer": "https://hemi.explorer.io/"
+  },
+  "mantle": {
+    "chainId": 5000,
+    "name": "Mantle",
+    "symbol": "MNT",
+    "rpcBase": "https://mantle-mainnet.infura.io/v3/",
+    "explorer": "https://mantlescan.info/"
+  },
+  "opbnb": {
+    "chainId": 204,
+    "name": "opBNB",
+    "symbol": "BNB",
+    "rpcBase": "https://opbnb-mainnet.infura.io/v3/",
+    "explorer": "https://opbnbscan.com/"
+  },
+  "scroll": {
+    "chainId": 534352,
+    "name": "Scroll",
+    "symbol": "ETH",
+    "rpcBase": "https://scroll-mainnet.infura.io/v3/",
+    "explorer": "https://scrollscan.com/"
+  },
+  "sei": {
+    "chainId": 1329,
+    "name": "Sei",
+    "symbol": "SEI",
+    "rpcBase": "https://sei-mainnet.infura.io/v3/",
+    "explorer": "https://seiscan.io/"
+  },
+  "swellchain": {
+    "chainId": 1750,
+    "name": "Swellchain",
+    "symbol": "SWELL",
+    "rpcBase": "https://swellchain-mainnet.infura.io/v3/",
+    "explorer": "https://swellscan.io/"
+  },
+  "unichain": {
+    "chainId": 130,
+    "name": "Unichain",
+    "symbol": "UNI",
+    "rpcBase": "https://unichain-mainnet.infura.io/v3/",
+    "explorer": "https://uniscan.io/"
+  }
+}

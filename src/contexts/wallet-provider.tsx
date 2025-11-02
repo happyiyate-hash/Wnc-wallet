@@ -83,10 +83,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAllAssets([]); // Clear assets immediately for a snappier feel
   };
 
-  const refreshAssets = useCallback(async (network: ChainConfig) => {
+  const refreshAssets = useCallback(async () => {
     if (isRefreshing) return;
 
-    const baseAssetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
+    const baseAssetsForChain = USER_ASSETS_BY_CHAIN[viewingNetwork.chainId] || [];
     if (baseAssetsForChain.length === 0) {
         setAllAssets([]);
         return;
@@ -99,7 +99,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       const assetsWithData = await Promise.all(
         assetsWithPrices.map(async (asset) => {
-          const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
+          const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
           return {
             ...asset,
             iconUrl: iconUrl,
@@ -113,7 +113,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error("Failed to fetch asset prices:", error);
       const assetsWithBalancesAndLogos = await Promise.all(
         baseAssetsForChain.map(async (asset) => {
-            const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
+            const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
             return {
                 ...asset,
                 priceUsd: 0,
@@ -127,7 +127,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing]);
+  }, [isRefreshing, viewingNetwork]);
 
 
   useEffect(() => {
@@ -139,9 +139,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isInitialized && wallets && !areLogosLoading) {
-      refreshAssets(viewingNetwork);
+      refreshAssets();
     }
-  }, [isInitialized, wallets, viewingNetwork.chainId, areLogosLoading]);
+  }, [isInitialized, wallets, viewingNetwork.chainId, areLogosLoading, refreshAssets]);
 
   const value: WalletContextType = {
     wallets,
@@ -154,7 +154,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    refresh: () => refreshAssets(viewingNetwork),
+    refresh: refreshAssets,
     profile,
     user: profile,
   };

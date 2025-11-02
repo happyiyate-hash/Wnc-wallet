@@ -25,8 +25,13 @@ export interface Chain {
   currencySymbol: string;
 }
 
-export interface ChainConfig extends Chain {
-    themeColor: string;
+export interface ChainConfig {
+    chainId: number;
+    name: string;
+    symbol: string;
+    rpcBase: string;
+    explorer: string;
+    iconUrl?: string;
     coingeckoId?: string;
 }
 
