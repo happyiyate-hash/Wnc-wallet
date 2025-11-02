@@ -9,7 +9,7 @@ interface MarketStatsProps {
 }
 
 const StatRow = ({ label, value }: { label: string; value: string | number | React.ReactNode }) => (
-  <div className="flex justify-between items-baseline py-2">
+  <div className="flex justify-between items-baseline py-3 border-b border-white/5">
     <p className="text-sm text-muted-foreground">{label}</p>
     <p className="text-sm font-semibold text-foreground text-right">{value}</p>
   </div>
@@ -25,6 +25,10 @@ const formatNumber = (num: number | undefined | null, isCurrency = true) => {
     }
     if (num > 1000) {
          return `${isCurrency ? '$' : ''}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    }
+    // Format small numbers with more precision
+    if (num < 0.01 && num > 0) {
+        return `${isCurrency ? '$' : ''}${num.toPrecision(2)}`;
     }
     return `${isCurrency ? '$' : ''}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: num > 1 ? 2 : 6 })}`;
 };
@@ -49,22 +53,22 @@ export default function MarketStats({ stats, tokenSymbol }: MarketStatsProps) {
              <h3 className="text-lg font-bold">Statistics</h3>
              
              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium">
+                <div className="flex justify-between text-xs font-medium text-muted-foreground">
                     <span>Low: {formatNumber(low_24h)}</span>
                     <span>24h Range</span>
                     <span>High: {formatNumber(high_24h)}</span>
                 </div>
-                <Progress value={priceRangePercentage} className="h-1" />
+                <Progress value={priceRangePercentage} className="h-1 bg-muted/20" />
              </div>
 
-             <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+             <div className="grid grid-cols-2 gap-x-8">
                  <StatRow label="Market Cap" value={formatNumber(marketData?.market_cap?.usd)} />
                  <StatRow label="Fully Diluted MCap" value={formatNumber(marketData?.fully_diluted_valuation?.usd)} />
                  <StatRow label="Volume 24h" value={formatNumber(marketData?.total_volume?.usd)} />
                  <StatRow label="Circulating Supply" value={
                      <span>{formatNumber(marketData?.circulating_supply, false)} <span className="text-muted-foreground">{tokenSymbol}</span></span>
                  } />
-                 <StatRow label="Max Supply" value={formatNumber(marketData?.max_supply, false)} />
+                 <StatRow label="Max Supply" value={marketData?.max_supply ? formatNumber(marketData?.max_supply, false) : '--'} />
                  <StatRow label="Total Supply" value={formatNumber(marketData?.total_supply, false)} />
                  <StatRow label="All Time High" value={formatNumber(marketData?.ath?.usd)} />
                  <StatRow label="Rank" value={stats.market_cap_rank ? `#${stats.market_cap_rank}` : '--'} />

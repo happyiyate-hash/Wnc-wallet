@@ -146,7 +146,7 @@ export default function TokenDetailsClientPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <TokenDetailHeader onBack={() => router.back()} onInfo={handleInfoClick} token={token} network={viewingNetwork} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-4">
           <div className="flex items-center justify-center gap-2">
             <h2 className={`text-4xl font-bold transition-all duration-500 ${priceChanged ? 'animate-glow' : ''}`}>
@@ -164,7 +164,7 @@ export default function TokenDetailsClientPage() {
           </div>
         </div>
 
-        <div className="h-96 relative">
+        <div className="h-64 relative">
           <RechartsChart coingeckoId={coingeckoId} days={chartRange} isNegative={isNegativeChange}/>
         </div>
 
@@ -187,7 +187,7 @@ export default function TokenDetailsClientPage() {
           ))}
         </div>
 
-        <div className="flex items-center justify-around my-6 px-4">
+        <div className="flex items-center justify-around my-8 px-4">
             <ActionButton icon={<DollarSign className="w-7 h-7 text-primary" />} label="Buy" onClick={() => router.push('/buy')} />
             <ActionButton icon={<Landmark className="w-7 h-7 text-primary" />} label="Sell" onClick={() => router.push('/sell')} />
             <ActionButton icon={<ArrowLeftRight className="w-7 h-7 text-primary" />} label="Swap" onClick={() => router.push(`/swap?fromSymbol=${token.symbol}`)} />
@@ -195,18 +195,12 @@ export default function TokenDetailsClientPage() {
             <ActionButton icon={<ArrowUpRight className="w-7 h-7 text-primary" />} label="Send" onClick={() => router.push(`/send/details?chainId=${token.chainId}&tokenAddress=${token.address || 'native'}`)} />
             <ActionButton icon={<QrCode className="w-7 h-7 text-primary" />} label="Receive" onClick={() => alert("Receive sheet opened")} />
         </div>
-
-        <div className="pb-4 px-4 space-y-6">
-            <button
-                onClick={handleInfoClick}
-                className="flex items-center justify-between w-full text-left p-2 -mx-2 rounded-lg transition-colors hover:bg-muted/50"
-            >
+        
+        <div className="px-4 pb-4 space-y-8">
+            <div className="flex items-center justify-between w-full text-left p-2 -mx-2">
                 <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
                         <TokenLogoDynamic logoUrl={token.iconUrl} size={40} alt={token.name} chainId={token.chainId} />
-                        {token.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' && viewingNetwork?.iconUrl && (
-                          <Image src={viewingNetwork.iconUrl} alt={viewingNetwork.name} width={14} height={14} className="absolute -bottom-0.5 -right-0.5 rounded-full" unoptimized />
-                        )}
                     </div>
                     <div>
                         <p className="font-semibold text-lg">{token.name}</p>
@@ -218,13 +212,13 @@ export default function TokenDetailsClientPage() {
                 <div className="text-right">
                     <p className="font-semibold text-lg">
                         {displayBalance}{" "}
-                        {token.symbol}
+                        <span className="text-muted-foreground">{token.symbol}</span>
                     </p>
                     <p className="text-sm text-muted-foreground">
                         {displayFiat}
                     </p>
                 </div>
-            </button>
+            </div>
             
             <div className="pt-4">
                 <MarketStats stats={marketStats} tokenSymbol={token.symbol} />
