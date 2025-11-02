@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   RefreshCw,
   Plus,
@@ -10,7 +10,6 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/contexts/wallet-provider';
 import type { AssetRow } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -45,6 +44,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
             width={40}
             height={40}
             className="rounded-full"
+            unoptimized
           />
         )}
         <div>
@@ -87,8 +87,6 @@ export default function WalletTab() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const router = useRouter();
 
-  const currentAddress = getAddressForChain(viewingNetwork, wallets!);
-  
   const assets = useMemo(() => {
     return allAssets.filter(asset => asset.chainId === viewingNetwork.chainId);
   }, [allAssets, viewingNetwork.chainId]);
