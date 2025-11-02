@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile, IWalletAdapter, AdapterFactory } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { mnemonicToSeedSync } from 'bip39';
@@ -16,7 +16,7 @@ interface WalletContextType {
   hasNewNotifications: boolean;
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
-  allAssets: AssetRow[];
+  allAssets: AssetRow[]; // This will be the filtered list for the current network
   allChains: ChainConfig[];
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
@@ -41,10 +41,6 @@ const deriveWalletFromMnemonic = (mnemonic: string): WalletWithMetadata => {
     };
 };
 
-const getAdapter: AdapterFactory = (chain, apiKey) => {
-    return evmAdapterFactory(chain, apiKey);
-}
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -55,13 +51,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
   
-  const [allAssets, setAllAssets] = useState<AssetRow[]>([]);
+  // This state now holds assets for ALL chains, keyed by chainId
+  const [allAssetsCache, setAllAssetsCache] = useState<{ [chainId: number]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (!areLogosLoading && chainsWithLogos.length > 0) {
       setViewingNetwork(prev => chainsWithLogos.find(c => c.chainId === prev.chainId) || chainsWithLogos[0]);
+      
+      // Pre-populate the cache with the structure of assets for each chain
+      const initialCache: { [chainId: number]: AssetRow[] } = {};
+      for (const chain of chainsWithLogos) {
+          initialCache[chain.chainId] = getInitialAssets(chain.chainId).map(asset => ({...asset, balance: '0'}));
+      }
+      setAllAssetsCache(initialCache);
     }
   }, [chainsWithLogos, areLogosLoading]);
 
@@ -97,10 +101,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       createWalletWithMnemonic(mnemonic);
   };
 
-  const refreshAssets = useCallback(async () => {
-    if (!wallets || !wallets.length || !infuraApiKey || !viewingNetwork) {
-      console.log("Wallet, API key, or viewing network not ready for refresh.");
-      setAllAssets([]);
+  const refreshAssets = useCallback(async (networkToRefresh: ChainConfig) => {
+    if (!wallets || !wallets.length || !infuraApiKey) {
       return;
     }
     const wallet = wallets[0];
@@ -108,16 +110,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     setIsRefreshing(true);
     try {
-        const baseAssets = getInitialAssets(viewingNetwork.chainId);
+        const baseAssets = getInitialAssets(networkToRefresh.chainId);
         if (baseAssets.length === 0) {
-            setAllAssets([]);
+            setAllAssetsCache(prev => ({...prev, [networkToRefresh.chainId]: []}));
             return;
         };
 
-        const adapter = getAdapter(viewingNetwork, infuraApiKey);
+        const adapter = evmAdapterFactory(networkToRefresh, infuraApiKey);
         if (!adapter) {
-            console.warn(`No adapter found for network: ${viewingNetwork.name}`);
-            setAllAssets([]);
+            console.warn(`No adapter found for network: ${networkToRefresh.name}`);
+            setAllAssetsCache(prev => ({...prev, [networkToRefresh.chainId]: []}));
             return;
         }
 
@@ -125,7 +127,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
         
         const assetsWithLogos = await Promise.all(assetsWithBalances.map(async (asset) => {
-            const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+            const iconUrl = await getTokenLogoUrl(asset.symbol, networkToRefresh.name);
             return { 
                 ...asset, 
                 iconUrl,
@@ -133,15 +135,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             };
         }));
         
-        setAllAssets(assetsWithLogos as AssetRow[]);
+        setAllAssetsCache(prev => ({
+            ...prev,
+            [networkToRefresh.chainId]: assetsWithLogos as AssetRow[],
+        }));
 
     } catch (error) {
-        console.error("Failed to refresh assets:", error);
-        setAllAssets([]);
+        console.error(`Failed to refresh assets for ${networkToRefresh.name}:`, error);
+        // Don't wipe out assets on error, keep stale data
     } finally {
         setIsRefreshing(false);
     }
-  }, [wallets, viewingNetwork, infuraApiKey]);
+  }, [wallets, infuraApiKey]);
   
 
   useEffect(() => {
@@ -163,11 +168,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsInitialized(true);
   }, []);
 
+  // Effect to fetch data for the current network when it changes or on initial load
   useEffect(() => {
-    if (isInitialized && wallets && !areLogosLoading && infuraApiKey) {
-      refreshAssets();
+    if (isInitialized && wallets && !areLogosLoading && infuraApiKey && viewingNetwork) {
+      refreshAssets(viewingNetwork);
     }
-  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork, refreshAssets]);
+    // Intentionally not including refreshAssets in dependencies to avoid re-triggering
+  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork]);
+
+
+  // The `allAssets` exposed to the context is now just the filtered slice for the current network
+  const assetsForCurrentNetwork = allAssetsCache[viewingNetwork?.chainId] || [];
 
   const value: WalletContextType = {
     wallets,
@@ -175,11 +186,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hasNewNotifications,
     viewingNetwork,
     setNetwork,
-    allAssets,
+    allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    refresh: refreshAssets,
+    refresh: () => refreshAssets(viewingNetwork), // Refresh button refreshes current network
     createWalletWithMnemonic,
     importWalletWithMnemonic,
     profile,

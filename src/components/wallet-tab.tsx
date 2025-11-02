@@ -21,7 +21,6 @@ import TokenManager from '@/components/wallet/tokens/token-manager';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
-import CachedImage from '@/components/CachedImage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import ApiKeyManager from './wallet/api-key-manager';
@@ -82,7 +81,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, viewingNetwork, allAssets, isRefreshing, refresh, infuraApiKey } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, refresh, infuraApiKey } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
@@ -91,9 +90,7 @@ export default function WalletTab() {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const router = useRouter();
 
-  const assets = useMemo(() => {
-    return allAssets.filter(asset => asset.chainId === viewingNetwork.chainId);
-  }, [allAssets, viewingNetwork.chainId]);
+  const assets = allAssets; // Directly use assets from context
   
   useEffect(() => {
     if (isInitialized) {
@@ -220,7 +217,7 @@ export default function WalletTab() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-center gap-x-4 my-8">
+        <div className="flex justify-center gap-4 my-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" href="/send" />
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
           <ActionButton icon={Repeat} label="Swap" href="/swap" />
@@ -253,7 +250,7 @@ export default function WalletTab() {
                   NFTs
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="tokens">
+              <TabsContent value="tokens" className="px-0">
                  {/* Manage Section */}
                 <div className="flex items-center justify-between py-4 px-4">
                     <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
