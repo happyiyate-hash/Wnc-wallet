@@ -9,6 +9,7 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useUser } from '@/contexts/user-provider';
+import NetworkSelector from './network-selector';
 
 // The header now uses the useWallet hook directly to ensure it always has the freshest state.
 export default function WalletHeader({ 
@@ -48,7 +49,7 @@ export default function WalletHeader({
       <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-2xl">
         <header className="flex h-10 shrink-0 items-center justify-between rounded-2xl bg-black px-2">
           <div className="flex items-center">
-            {/* NetworkSelector has been removed */}
+            <NetworkSelector />
           </div>
 
           <div className="flex items-center gap-1">
