@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import { ALL_CHAINS_LIST } from '@/lib/user-networks';
+import { fetchAssetPrices } from '@/lib/coingecko';
 
 // A mock list of user assets per chain. In a real app, this would come from a wallet connection.
 const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
@@ -25,12 +26,9 @@ const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatVa
     { chainId: 42161, address: '0x912ce59144191c1204e64559fe8253a0e49e6548', name: 'Arbitrum', symbol: 'ARB', balance: '3000', coingeckoId: 'arbitrum' },
   ],
   8453: [ // Base
-    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'ethereum' },
+    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'base' },
   ],
 }
-
-const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
-
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -75,15 +73,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isRefreshing) return;
     setIsRefreshing(true);
 
-    const assetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
-    if (assetsForChain.length === 0) {
+    const baseAssetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
+    if (baseAssetsForChain.length === 0) {
       setAllAssets([]);
       setIsRefreshing(false);
       return;
     }
     
     // Set skeleton assets immediately
-    const skeletonAssets = assetsForChain.map(asset => ({
+    const skeletonAssets: AssetRow[] = baseAssetsForChain.map(asset => ({
         ...asset,
         priceUsd: 0,
         fiatValueUsd: 0,
@@ -91,28 +89,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         iconUrl: '',
     }));
     setAllAssets(skeletonAssets);
-
-    const coingeckoIds = assetsForChain.map(a => a.coingeckoId).filter(Boolean) as string[];
     
     try {
-      // Fetch prices from CoinGecko
-      const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${coingeckoIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
-      const pricesData = await (await fetch(priceUrl)).json();
+      // Use the new centralized service to fetch prices
+      const assetsWithPrices = await fetchAssetPrices(baseAssetsForChain);
       
       // Fetch logos and combine data
       const assetsWithData = await Promise.all(
-        assetsForChain.map(async (asset) => {
-          const priceInfo = asset.coingeckoId ? pricesData[asset.coingeckoId] : null;
-          const priceUsd = priceInfo?.usd ?? 0;
-          const balance = parseFloat(asset.balance);
-
+        assetsWithPrices.map(async (asset) => {
           const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
-          
           return {
             ...asset,
-            priceUsd: priceUsd,
-            fiatValueUsd: balance * priceUsd,
-            pctChange24h: priceInfo?.usd_24h_change ?? 0,
             iconUrl: iconUrl || undefined,
           };
         })
@@ -123,7 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Failed to fetch asset prices:", error);
       // Even if fetching fails, we keep the skeleton with balances
-      const assetsWithBalances = assetsForChain.map(asset => ({...asset}));
+      const assetsWithBalances = baseAssetsForChain.map(asset => ({...asset}));
       setAllAssets(assetsWithBalances as AssetRow[]);
     } finally {
       setIsRefreshing(false);
@@ -139,11 +126,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsInitialized(true);
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
     if (isInitialized && wallets) {
       refreshAssets(viewingNetwork);
     }
+  // This dependency array is correct. We only want to re-run when these specific items change.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInitialized, wallets, viewingNetwork.chainId]);
 

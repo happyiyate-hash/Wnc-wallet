@@ -1,24 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
-
-async function fetcher(url: string) {
-    const res = await fetch(url);
-    if (!res.ok) {
-        const error = new Error('An error occurred while fetching the data.');
-        // Attach extra info to the error object.
-        try {
-          const info = await res.json();
-          console.error('API Error:', info);
-        } catch (e) {
-          console.error('Could not parse error JSON');
-        }
-        throw error;
-    }
-    return res.json();
-}
+import { fetchSingleTokenDetails } from '@/lib/coingecko';
 
 export function useSingleTokenDetails(coingeckoId: string | null | undefined) {
     const [data, setData] = useState<any>(null);
@@ -35,8 +18,7 @@ export function useSingleTokenDetails(coingeckoId: string | null | undefined) {
             setIsLoading(true);
             setError(null);
             try {
-                const url = `${COINGECKO_API_URL}/coins/${coingeckoId}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
-                const result = await fetcher(url);
+                const result = await fetchSingleTokenDetails(coingeckoId);
                 setData(result);
             } catch (e: any) {
                 setError(e);

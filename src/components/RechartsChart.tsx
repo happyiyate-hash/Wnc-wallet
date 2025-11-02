@@ -1,23 +1,7 @@
 'use client';
 import React from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
-const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
-
-const fetchChartData = async (coingeckoId: string, days: string) => {
-    const response = await fetch(
-        `${COINGECKO_API_URL}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days === '1D' ? '1' : days.slice(0, -1)}`
-    );
-    if (!response.ok) {
-        return [];
-    }
-    const data = await response.json();
-    return data.prices.map(([timestamp, price]: [number, number]) => ({
-        time: timestamp,
-        price: price,
-    }));
-};
-
+import { fetchChartData } from '@/lib/coingecko';
 
 const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string | null, days: string, isNegative: boolean }) => {
     const [data, setData] = React.useState([]);
