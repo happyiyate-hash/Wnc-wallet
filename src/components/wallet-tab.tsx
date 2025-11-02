@@ -20,6 +20,8 @@ import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
 import CachedImage from '@/components/CachedImage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TokenLogoDynamic from './shared/TokenLogoDynamic';
+import GenericCoinIcon from './icons/GenericCoinIcon';
 
 const TokenRow = ({ token }: { token: AssetRow }) => {
   const router = useRouter();
@@ -31,24 +33,24 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 
   return (
     <div
-      className="flex cursor-pointer items-center justify-between py-2 px-4"
+      className="flex cursor-pointer items-center justify-between p-3"
       onClick={handleRowClick}
       role="button"
       tabIndex={0}
     >
       <div className="flex items-center gap-3">
-        {token.iconUrl && (
-          <CachedImage
-            src={token.iconUrl}
-            alt={token.name}
-            width={32}
-            height={32}
-            className="rounded-full"
-            unoptimized
-          />
-        )}
+        <TokenLogoDynamic 
+            alt={token.name} 
+            symbol={token.symbol}
+            name={token.name}
+            chainKey={token.chainId}
+            address={token.address}
+            isNative={token.address === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'}
+            size={28}
+            FallbackComponent={<GenericCoinIcon size={28} />}
+        />
         <div>
-          <p className="font-semibold">{token.name}</p>
+          <p className="font-semibold text-sm">{token.name}</p>
           <p
             className={cn(
               'text-xs',
@@ -61,7 +63,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
         </div>
       </div>
       <div className="text-right">
-        <p className="font-semibold">
+        <p className="font-semibold text-sm">
           {parseFloat(token.balance || '0').toLocaleString('en-US', {
             maximumFractionDigits: 6,
           })}{' '}
@@ -161,9 +163,9 @@ export default function WalletTab() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-background pt-8 px-4">
+      <div className="bg-background pt-8">
         {/* Balance */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-4">
             <div>
               <h2 className={cn(
                 'font-bold',
@@ -195,7 +197,7 @@ export default function WalletTab() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between my-8">
+        <div className="flex justify-between my-8 px-4">
            <div className="p-[1px] bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-green-500/50 rounded-xl w-[calc(50%-0.5rem)]">
               <Button className="w-full h-12 bg-background hover:bg-muted/50 rounded-xl" onClick={() => router.push('/send')}>
                 <ArrowUpFromLine className="w-5 h-5 mr-2" /> Send
@@ -209,7 +211,7 @@ export default function WalletTab() {
         </div>
         
         {/* Tabs */}
-        <div className="w-full">
+        <div className="w-full px-4">
             <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-transparent p-0">
                 <TabsTrigger
@@ -270,13 +272,8 @@ export default function WalletTab() {
                 </div>
 
                 {/* Scrollable Area */}
-                <div className="flex-1 overflow-y-auto -mx-4">
-                    {(isRefreshing && assets.length === 0) ? (
-                    <div className="flex items-center justify-center h-full text-muted-foreground px-4">
-                        <Loader2 className="w-5 h-5 animate-spin mr-2"/>
-                        <span>Loading balances...</span>
-                    </div>
-                    ) : assets.length > 0 ? (
+                <div className="flex-1 overflow-y-auto">
+                    {assets.length > 0 ? (
                     <div>
                         {assets.map((token) => (
                         <TokenRow
@@ -286,9 +283,11 @@ export default function WalletTab() {
                         ))}
                     </div>
                     ) : (
-                    <div className="text-center text-muted-foreground p-4">
-                        No tokens to show.
-                    </div>
+                      !isRefreshing && (
+                        <div className="text-center text-muted-foreground p-4">
+                            No tokens to show.
+                        </div>
+                      )
                     )}
                 </div>
               </TabsContent>
