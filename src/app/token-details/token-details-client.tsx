@@ -102,7 +102,7 @@ export default function TokenDetailsClientPage() {
   }, [tokenSymbol, allAssets, viewingNetwork.chainId, isInitialized]);
 
 
-  const coingeckoId = token?.symbol.toLowerCase(); // simplified for now
+  const coingeckoId = token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
   const isEvmChain = typeof token?.chainId === 'number' && token?.chainId > 0;
 

@@ -1,9 +1,36 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
 import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import { ALL_CHAINS_LIST } from '@/lib/user-networks';
+
+// A mock list of user assets per chain. In a real app, this would come from a wallet connection.
+const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
+  1: [ // Ethereum
+    { chainId: 1, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '10.5', isNative: true, coingeckoId: 'ethereum' },
+    { chainId: 1, address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', name: 'Uniswap', symbol: 'UNI', balance: '500', coingeckoId: 'uniswap' },
+    { chainId: 1, address: '0xdac17f958d2ee523a2206206994597c13d831ec7', name: 'Tether', symbol: 'USDT', balance: '10000', coingeckoId: 'tether' },
+  ],
+  137: [ // Polygon
+    { chainId: 137, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Matic', symbol: 'MATIC', balance: '2500', isNative: true, coingeckoId: 'matic-network' },
+    { chainId: 137, address: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', name: 'Wrapped Ether', symbol: 'WETH', balance: '5', coingeckoId: 'weth' },
+  ],
+  10: [ // Optimism
+    { chainId: 10, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '8', isNative: true, coingeckoId: 'ethereum' },
+    { chainId: 10, address: '0x4200000000000000000000000000000000000042', name: 'Optimism', symbol: 'OP', balance: '1200', coingeckoId: 'optimism' },
+  ],
+  42161: [ // Arbitrum
+    { chainId: 42161, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '12', isNative: true, coingeckoId: 'ethereum' },
+    { chainId: 42161, address: '0x912ce59144191c1204e64559fe8253a0e49e6548', name: 'Arbitrum', symbol: 'ARB', balance: '3000', coingeckoId: 'arbitrum' },
+  ],
+  8453: [ // Base
+    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'ethereum' },
+  ],
+}
+
+const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
+
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -12,10 +39,12 @@ interface WalletContextType {
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
   allAssets: AssetRow[];
+  allChainsMap: { [key: number]: ChainConfig };
   isRefreshing: boolean;
   refresh: () => void;
   setWallets: (wallets: WalletWithMetadata[] | null) => void;
   profile: UserProfile | null;
+  user: any; // Keeping for compatibility with TokenDetailCard
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -29,76 +58,78 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
+  const allChainsMap = useMemo(() => {
+    return ALL_CHAINS_LIST.reduce((acc, chain) => {
+      acc[chain.chainId] = chain;
+      return acc;
+    }, {} as { [key: number]: ChainConfig });
+  }, []);
+
   const setNetwork = (network: ChainConfig) => {
     setViewingNetwork(network);
+    // Clear assets for the old network immediately for a snappier feel
+    setAllAssets([]);
   };
 
   const refreshAssets = useCallback(async (network: ChainConfig) => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    
-    // Simulate fetching assets
-    const mockAssets: Omit<AssetRow, 'iconUrl'>[] = [
-      {
-        chainId: 1,
-        address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-        symbol: 'ETH',
-        name: 'Ethereum',
-        balance: '10.5',
-        fiatValueUsd: 35000,
-        priceUsd: 3500,
-        pctChange24h: 2.5,
-      },
-      {
-        chainId: 1,
-        address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
-        symbol: 'UNI',
-        name: 'Uniswap',
-        balance: '500',
-        fiatValueUsd: 5000,
-        priceUsd: 10,
-        pctChange24h: -1.2,
-      },
-      {
-        chainId: 1,
-        address: '0xNotARealToken',
-        symbol: 'XYZ',
-        name: 'Imaginary Token',
-        balance: '1000',
-        fiatValueUsd: 100,
-        priceUsd: 0.1,
-        pctChange24h: 5.5,
-      }
-    ];
 
-    const assetsWithLogos = await Promise.all(
-      mockAssets.map(async (asset) => {
-        let logoUrl = await getTokenLogoUrl(asset.symbol, network.name);
-        // Fallback to network logo if token logo is not found
-        if (!logoUrl) {
-            logoUrl = network.iconUrl || `https://picsum.photos/seed/${asset.symbol}/32/32`;
-        }
-        return {
-          ...asset,
-          iconUrl: logoUrl,
-        };
-      })
-    );
+    const assetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
+    if (assetsForChain.length === 0) {
+      setAllAssets([]);
+      setIsRefreshing(false);
+      return;
+    }
     
-    setAllAssets(assetsWithLogos);
-    setIsRefreshing(false);
+    // Set skeleton assets immediately
+    const skeletonAssets = assetsForChain.map(asset => ({
+        ...asset,
+        priceUsd: 0,
+        fiatValueUsd: 0,
+        pctChange24h: 0,
+        iconUrl: '',
+    }));
+    setAllAssets(skeletonAssets);
 
+    const coingeckoIds = assetsForChain.map(a => a.coingeckoId).filter(Boolean) as string[];
+    
+    try {
+      // Fetch prices from CoinGecko
+      const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${coingeckoIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
+      const pricesData = await (await fetch(priceUrl)).json();
+      
+      // Fetch logos and combine data
+      const assetsWithData = await Promise.all(
+        assetsForChain.map(async (asset) => {
+          const priceInfo = asset.coingeckoId ? pricesData[asset.coingeckoId] : null;
+          const priceUsd = priceInfo?.usd ?? 0;
+          const balance = parseFloat(asset.balance);
+
+          const iconUrl = await getTokenLogoUrl(asset.symbol, network.name);
+          
+          return {
+            ...asset,
+            priceUsd: priceUsd,
+            fiatValueUsd: balance * priceUsd,
+            pctChange24h: priceInfo?.usd_24h_change ?? 0,
+            iconUrl: iconUrl || undefined,
+          };
+        })
+      );
+      
+      setAllAssets(assetsWithData);
+
+    } catch (error) {
+      console.error("Failed to fetch asset prices:", error);
+      // Even if fetching fails, we keep the skeleton with balances
+      const assetsWithBalances = assetsForChain.map(asset => ({...asset}));
+      setAllAssets(assetsWithBalances as AssetRow[]);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [isRefreshing]);
 
-  const refreshNetworkLogo = useCallback(async (network: ChainConfig) => {
-    const networkLogoUrl = await getTokenLogoUrl(network.currencySymbol, network.name);
-    setViewingNetwork(currentNetwork => {
-        if (currentNetwork.chainId === network.chainId) {
-            return { ...currentNetwork, iconUrl: networkLogoUrl || currentNetwork.iconUrl };
-        }
-        return currentNetwork;
-    });
-  }, []);
 
   useEffect(() => {
     // Simulate loading wallet from storage
@@ -108,14 +139,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsInitialized(true);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
-    if (wallets && viewingNetwork) {
-        refreshNetworkLogo(viewingNetwork);
-        refreshAssets(viewingNetwork);
+    if (isInitialized && wallets) {
+      refreshAssets(viewingNetwork);
     }
-  }, [wallets, viewingNetwork.chainId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitialized, wallets, viewingNetwork.chainId]);
 
-  const value = {
+  const value: WalletContextType = {
     wallets,
     setWallets,
     isInitialized,
@@ -123,9 +155,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     viewingNetwork,
     setNetwork,
     allAssets,
+    allChainsMap,
     isRefreshing,
     refresh: () => refreshAssets(viewingNetwork),
-    profile
+    profile,
+    user: profile,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

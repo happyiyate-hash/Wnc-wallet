@@ -8,6 +8,7 @@ export const ALL_CHAINS_LIST: ChainConfig[] = [
     currencySymbol: 'ETH',
     themeColor: '#627EEA',
     iconUrl: '', // Will be fetched dynamically
+    coingeckoId: 'ethereum',
   },
   {
     chainId: 137,
@@ -15,6 +16,7 @@ export const ALL_CHAINS_LIST: ChainConfig[] = [
     currencySymbol: 'MATIC',
     themeColor: '#8247E5',
     iconUrl: '',
+    coingeckoId: 'matic-network',
   },
   {
     chainId: 10,
@@ -22,6 +24,7 @@ export const ALL_CHAINS_LIST: ChainConfig[] = [
     currencySymbol: 'ETH',
     themeColor: '#FF0420',
     iconUrl: '',
+    coingeckoId: 'optimism',
   },
   {
     chainId: 42161,
@@ -29,6 +32,7 @@ export const ALL_CHAINS_LIST: ChainConfig[] = [
     currencySymbol: 'ETH',
     themeColor: '#28A0F0',
     iconUrl: '',
+    coingeckoId: 'arbitrum',
   },
   {
     chainId: 8453,
@@ -36,5 +40,6 @@ export const ALL_CHAINS_LIST: ChainConfig[] = [
     currencySymbol: 'ETH',
     themeColor: '#0052FF',
     iconUrl: '',
+    coingeckoId: 'base',
   },
 ];

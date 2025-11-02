@@ -8,6 +8,8 @@ export interface AssetRow {
   priceUsd?: number;
   pctChange24h?: number;
   iconUrl?: string;
+  isNative?: boolean;
+  coingeckoId?: string;
 }
 
 export interface WalletWithMetadata {
@@ -25,6 +27,7 @@ export interface Chain {
 
 export interface ChainConfig extends Chain {
     themeColor: string;
+    coingeckoId?: string;
 }
 
 export interface UserProfile {
