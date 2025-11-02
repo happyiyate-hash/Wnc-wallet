@@ -220,7 +220,7 @@ export default function WalletTab() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-center gap-x-6 my-8 px-4">
+        <div className="flex justify-center gap-x-4 my-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" href="/send" />
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
           <ActionButton icon={Repeat} label="Swap" href="/swap" />
