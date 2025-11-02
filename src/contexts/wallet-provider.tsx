@@ -19,7 +19,7 @@ interface WalletContextType {
 const mockEthChain: Chain = {
   chainId: 1,
   name: 'Ethereum',
-  iconUrl: 'https://picsum.photos/seed/ethchain/32/32',
+  iconUrl: `https://picsum.photos/seed/eth_chain/32/32`, // Initial placeholder
 };
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -34,49 +34,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     setIsRefreshing(true);
     
-    const fetchAssets = async () => {
-      // Simulate fetching assets
-      const mockAssets: Omit<AssetRow, 'iconUrl'>[] = [
-        {
-          chainId: 1,
-          address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-          symbol: 'ETH',
-          name: 'Ethereum',
-          balance: '10.5',
-          fiatValueUsd: 35000,
-          priceUsd: 3500,
-          pctChange24h: 2.5,
-        },
-        {
-          chainId: 1,
-          address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
-          symbol: 'UNI',
-          name: 'Uniswap',
-          balance: '500',
-          fiatValueUsd: 5000,
-          priceUsd: 10,
-          pctChange24h: -1.2,
-        },
-      ];
+    // Fetch network logo
+    const networkLogoUrl = await getTokenLogoUrl(viewingNetwork.name, viewingNetwork.name);
+    setViewingNetwork(currentNetwork => ({
+        ...currentNetwork,
+        iconUrl: networkLogoUrl || currentNetwork.iconUrl,
+    }));
 
-      const assetsWithLogos = await Promise.all(
-        mockAssets.map(async (asset) => {
-          const logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
-          return {
-            ...asset,
-            iconUrl: logoUrl || `https://picsum.photos/seed/${asset.symbol}/40/40`,
-          };
-        })
-      );
-      
-      setAllAssets(assetsWithLogos);
-      setIsRefreshing(false);
-    };
+    // Simulate fetching assets
+    const mockAssets: Omit<AssetRow, 'iconUrl'>[] = [
+      {
+        chainId: 1,
+        address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        symbol: 'ETH',
+        name: 'Ethereum',
+        balance: '10.5',
+        fiatValueUsd: 35000,
+        priceUsd: 3500,
+        pctChange24h: 2.5,
+      },
+      {
+        chainId: 1,
+        address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
+        symbol: 'UNI',
+        name: 'Uniswap',
+        balance: '500',
+        fiatValueUsd: 5000,
+        priceUsd: 10,
+        pctChange24h: -1.2,
+      },
+    ];
 
-    fetchAssets();
+    const assetsWithLogos = await Promise.all(
+      mockAssets.map(async (asset) => {
+        const logoUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+        return {
+          ...asset,
+          iconUrl: logoUrl || `https://picsum.photos/seed/${asset.symbol}/40/40`,
+        };
+      })
+    );
+    
+    setAllAssets(assetsWithLogos);
+    setIsRefreshing(false);
 
   }, [viewingNetwork.name]);
 
