@@ -10,7 +10,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/contexts/wallet-provider';
 import type { AssetRow } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -163,7 +163,7 @@ export default function WalletTab() {
 
   return (
     <div className="flex flex-col h-full mt-6">
-      <div className="sticky top-0 z-10 bg-transparent pt-8 px-2">
+      <div className="sticky top-0 z-10 bg-background pt-8 px-2">
         {/* Balance */}
         <div className="flex items-center justify-between">
             <div>
@@ -179,7 +179,7 @@ export default function WalletTab() {
               </h2>
               <p
                 className={cn(
-                  'text-sm mt-1 text-muted-foreground',
+                  'text-sm mt-1',
                   total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
                 )}
               >
@@ -210,34 +210,6 @@ export default function WalletTab() {
             </div>
         </div>
         
-        {/* Tabs */}
-        <div className="w-full">
-            <Tabs defaultValue="tokens" className="w-full">
-              <TabsList className="flex w-full justify-between bg-transparent p-0">
-                <TabsTrigger
-                  value="tokens"
-                  className="p-0 pb-2 data-[state=active]:text-foreground data-[state=active]:font-bold data-[state=active]:bg-transparent rounded-none flex-1"
-                >
-                  Tokens
-                </TabsTrigger>
-                <TabsTrigger
-                  value="defi"
-                  disabled
-                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
-                >
-                  DeFi
-                </TabsTrigger>
-                <TabsTrigger
-                  value="nfts"
-                  disabled
-                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
-                >
-                  NFTs
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-        </div>
-
         {/* Manage Section */}
         <div className="flex items-center justify-between py-4">
             <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">

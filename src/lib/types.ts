@@ -21,3 +21,7 @@ export interface Chain {
   name: string;
   iconUrl?: string;
 }
+
+export interface UserProfile {
+    username: string;
+}

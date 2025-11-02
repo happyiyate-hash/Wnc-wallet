@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import type { AssetRow, Chain, WalletWithMetadata } from '@/lib/types';
+import type { AssetRow, Chain, WalletWithMetadata, UserProfile } from '@/lib/types';
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -12,12 +12,13 @@ interface WalletContextType {
   isRefreshing: boolean;
   refresh: () => void;
   setWallets: (wallets: WalletWithMetadata[] | null) => void;
+  profile: UserProfile | null;
 }
 
 const mockEthChain: Chain = {
   chainId: 1,
   name: 'Ethereum',
-  iconUrl: '/eth.png',
+  iconUrl: 'https://picsum.photos/seed/ethchain/32/32',
 };
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -25,10 +26,12 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [hasNewNotifications, setHasNewNotifications] = useState(false);
+  const [hasNewNotifications, setHasNewNotifications] = useState(true);
   const [viewingNetwork, setViewingNetwork] = useState<Chain>(mockEthChain);
   const [allAssets, setAllAssets] = useState<AssetRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
 
   const refresh = useCallback(() => {
     setIsRefreshing(true);
@@ -64,7 +67,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Simulate loading wallet from storage
+    const storedWallet = { address: '0x1234567890123456789012345678901234567890' };
+    setWallets([storedWallet]);
+    setProfile({ username: 'TestUser' });
     setIsInitialized(true);
+  }, []);
+
+  useEffect(() => {
     if (wallets) {
         refresh();
     }
@@ -79,6 +89,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allAssets,
     isRefreshing,
     refresh,
+    profile
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

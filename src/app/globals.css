@@ -94,23 +94,42 @@
   }
 }
 
+@layer utilities {
+    @keyframes gradient-flow {
+        0% {
+            background-position: 0% 50%;
+        }
+        50% {
+            background-position: 100% 50%;
+        }
+        100% {
+            background-position: 0% 50%;
+        }
+    }
+
+    .animate-gradient-flow {
+        animation: gradient-flow 15s ease infinite;
+    }
+}
+
+
 body {
-  font-family: 'PT Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Custom scrollbar for better aesthetics */
-.overflow-auto::-webkit-scrollbar {
+::-webkit-scrollbar {
   width: 8px;
 }
-.overflow-auto::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: hsl(var(--background));
   border-radius: 10px;
 }
-.overflow-auto::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: hsl(var(--muted));
   border-radius: 10px;
 }
-.overflow-auto::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--secondary));
 }
 
