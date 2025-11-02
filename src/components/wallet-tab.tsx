@@ -46,7 +46,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
             alt={token.name} 
             logoUrl={token.iconUrl}
             size={28}
-            FallbackComponent={<GenericCoinIcon size={28} />}
+            chainId={token.chainId}
         />
         <div>
           <p className="font-semibold text-sm">{token.name}</p>
@@ -176,9 +176,9 @@ export default function WalletTab() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-background pt-8 px-4">
+      <div className="bg-background pt-8">
         {/* Balance */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-4">
             <div>
               <h2 className={cn(
                 'font-bold',
@@ -219,7 +219,7 @@ export default function WalletTab() {
         </div>
         
         {/* Tabs */}
-        <div className="w-full">
+        <div className="w-full px-4">
             <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-transparent p-0">
                 <TabsTrigger

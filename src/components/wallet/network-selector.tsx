@@ -58,7 +58,7 @@ const NetworkRow = ({
                 alt={chain.name} 
                 logoUrl={chain.iconUrl}
                 size={32}
-                FallbackComponent={<GenericCoinIcon />}
+                chainId={chain.chainId}
             />
         </div>
       <div className="flex-1 cursor-pointer" onClick={() => onSelect(chain)}>
@@ -140,7 +140,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             alt={viewingNetwork.name} 
             logoUrl={viewingNetwork.iconUrl}
             size={24}
-            FallbackComponent={<GenericCoinIcon />}
+            chainId={viewingNetwork.chainId}
           />
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </Button>

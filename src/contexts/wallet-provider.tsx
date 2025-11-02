@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
 import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
-import { ALL_CHAINS_LIST } from '@/lib/user-networks';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 
@@ -86,14 +85,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const refreshAssets = useCallback(async (network: ChainConfig) => {
     if (isRefreshing) return;
-    setIsRefreshing(true);
-    
+
     const baseAssetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
     if (baseAssetsForChain.length === 0) {
-      setAllAssets([]);
-      setIsRefreshing(false);
-      return;
+        setAllAssets([]);
+        return;
     }
+
+    setIsRefreshing(true);
     
     try {
       const assetsWithPrices = await fetchAssetPrices(baseAssetsForChain);
@@ -142,7 +141,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isInitialized && wallets && !areLogosLoading) {
       refreshAssets(viewingNetwork);
     }
-  }, [isInitialized, wallets, viewingNetwork.chainId, areLogosLoading, refreshAssets]);
+  }, [isInitialized, wallets, viewingNetwork.chainId, areLogosLoading]);
 
   const value: WalletContextType = {
     wallets,
