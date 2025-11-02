@@ -1,0 +1,67 @@
+'use client';
+import React from 'react';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
+
+const fetchChartData = async (coingeckoId: string, days: string) => {
+    const response = await fetch(
+        `${COINGECKO_API_URL}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days === '1D' ? '1' : days.slice(0, -1)}`
+    );
+    if (!response.ok) {
+        return [];
+    }
+    const data = await response.json();
+    return data.prices.map(([timestamp, price]: [number, number]) => ({
+        time: timestamp,
+        price: price,
+    }));
+};
+
+
+const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string | null, days: string, isNegative: boolean }) => {
+    const [data, setData] = React.useState([]);
+
+    React.useEffect(() => {
+        if (coingeckoId) {
+            fetchChartData(coingeckoId, days).then(setData);
+        }
+    }, [coingeckoId, days]);
+
+    const linecolor = isNegative ? '#f87171' : '#4ade80';
+    const fillcolor = isNegative ? '#f87171' : '#4ade80';
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                <defs>
+                    <linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={fillcolor} stopOpacity={0.2} />
+                        <stop offset="95%" stopColor={fillcolor} stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+                <Tooltip 
+                    contentStyle={{ 
+                        backgroundColor: 'rgba(20, 20, 20, 0.8)', 
+                        border: '1px solid #444', 
+                        borderRadius: '0.5rem'
+                    }}
+                    labelFormatter={(label) => new Date(label).toLocaleString()}
+                    formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
+                />
+                <Area
+                    type="monotone"
+                    dataKey="price"
+                    stroke={linecolor}
+                    fill="url(#chart-fill)"
+                    strokeWidth={2}
+                    dot={false}
+                />
+                <XAxis dataKey="time" hide />
+                <YAxis domain={['dataMin', 'dataMax']} hide />
+            </AreaChart>
+        </ResponsiveContainer>
+    );
+};
+
+export default RechartsChart;

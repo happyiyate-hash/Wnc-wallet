@@ -1,16 +1,16 @@
-'use client';
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { Suspense } from 'react';
+import TokenDetailsClientPage from './token-details-client';
+import { Loader2 } from 'lucide-react';
 
+// This is now a SERVER component. Its only job is to provide a Suspense boundary.
 export default function TokenDetailsPage() {
-    const searchParams = useSearchParams();
-    const tokenSymbol = searchParams.get('symbol');
-
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-            <h1 className="text-4xl font-bold mb-4">Token Details</h1>
-            <p className="text-muted-foreground mb-8">Details for token: {tokenSymbol}</p>
-            <Link href="/" className="text-primary hover:underline">Go back home</Link>
-        </div>
-    );
+        <Suspense fallback={
+            <div className="flex h-screen w-full items-center justify-center bg-transparent">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        }>
+            <TokenDetailsClientPage />
+        </Suspense>
+    )
 }
