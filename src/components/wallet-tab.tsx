@@ -18,8 +18,8 @@ import TokenManager from '@/components/wallet/tokens/token-manager';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
-import { getAddressForChain } from '@/lib/wallets/utils';
 import CachedImage from '@/components/CachedImage';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TokenRow = ({ token }: { token: AssetRow }) => {
   const router = useRouter();
@@ -208,63 +208,102 @@ export default function WalletTab() {
             </div>
         </div>
         
-        {/* Manage Section */}
-        <div className="flex items-center justify-between py-4">
-            <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                <Button
-                    variant="outline"
-                    className="h-10 px-4 bg-background hover:bg-muted/50 rounded-full border-none"
-                    onClick={() => setIsTokenManagerOpen(true)}
+        {/* Tabs */}
+        <div className="w-full">
+            <Tabs defaultValue="tokens" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0">
+                <TabsTrigger
+                  value="tokens"
+                  className="p-0 pb-2 data-[state=active]:text-foreground data-[state=active]:font-bold data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
-                    <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-semibold">Manage Tokens</span>
-                </Button>
-            </div>
-            <div className="flex items-center gap-2">
-                <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
-                        onClick={() => refresh()}
-                        disabled={isRefreshing}
-                    >
-                    {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
-                    </Button>
+                  Tokens
+                </TabsTrigger>
+                <TabsTrigger
+                  value="defi"
+                  disabled
+                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
+                >
+                  DeFi
+                </TabsTrigger>
+                <TabsTrigger
+                  value="nfts"
+                  disabled
+                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
+                >
+                  NFTs
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="tokens">
+                 {/* Manage Section */}
+                <div className="flex items-center justify-between py-4">
+                    <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                        <Button
+                            variant="outline"
+                            className="h-10 px-4 bg-background hover:bg-muted/50 rounded-full border-none"
+                            onClick={() => setIsTokenManagerOpen(true)}
+                        >
+                            <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-semibold">Manage Tokens</span>
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
+                                onClick={() => refresh()}
+                                disabled={isRefreshing}
+                            >
+                            {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
+                            </Button>
+                        </div>
+                         <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
+                            <Button
+                            size="icon"
+                            className="h-9 w-9 rounded-full bg-background hover:bg-muted/50"
+                            onClick={() => router.push('/tokens/add')}
+                            >
+                            <Plus className="h-5 w-5 text-primary" />
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-                 <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                    <Button
-                    size="icon"
-                    className="h-9 w-9 rounded-full bg-background hover:bg-muted/50"
-                    onClick={() => router.push('/tokens/add')}
-                    >
-                    <Plus className="h-5 w-5 text-primary" />
-                    </Button>
-                </div>
-            </div>
-        </div>
-      </div>
 
-      {/* Scrollable Area */}
-      <div className="flex-1 overflow-y-auto px-2">
-        {(isRefreshing && assets.length === 0) ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin mr-2"/>
-            <span>Loading balances...</span>
-          </div>
-        ) : assets.length > 0 ? (
-          <div className="divide-y divide-border">
-            {assets.map((token) => (
-              <TokenRow
-                key={`${token.chainId}-${token.address || token.symbol}`}
-                token={token}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center text-muted-foreground p-4">
-            No tokens to show.
-          </div>
-        )}
+                {/* Scrollable Area */}
+                <div className="flex-1 overflow-y-auto px-2">
+                    {(isRefreshing && assets.length === 0) ? (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                        <Loader2 className="w-5 h-5 animate-spin mr-2"/>
+                        <span>Loading balances...</span>
+                    </div>
+                    ) : assets.length > 0 ? (
+                    <div className="divide-y divide-border">
+                        {assets.map((token) => (
+                        <TokenRow
+                            key={`${token.chainId}-${token.address || token.symbol}`}
+                            token={token}
+                        />
+                        ))}
+                    </div>
+                    ) : (
+                    <div className="text-center text-muted-foreground p-4">
+                        No tokens to show.
+                    </div>
+                    )}
+                </div>
+              </TabsContent>
+               <TabsContent value="defi">
+                    <div className="text-center text-muted-foreground p-8">
+                        DeFi features are coming soon!
+                    </div>
+                </TabsContent>
+                <TabsContent value="nfts">
+                    <div className="text-center text-muted-foreground p-8">
+                        NFTs are coming soon!
+                    </div>
+                </TabsContent>
+            </Tabs>
+        </div>
       </div>
 
       {/* Sheets */}
