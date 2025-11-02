@@ -16,6 +16,7 @@ export interface WalletWithMetadata {
   address: string;
   ensName?: string;
   avatarUrl?: string;
+  privateKey?: string; // Should be handled with extreme care
 }
 
 export interface Chain {

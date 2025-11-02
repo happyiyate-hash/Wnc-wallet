@@ -5,30 +5,9 @@ import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/l
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
-
-// A mock list of user assets per chain. In a real app, this would come from a wallet connection.
-const USER_ASSETS_BY_CHAIN: { [key: number]: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
-  1: [ // Ethereum
-    { chainId: 1, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '10.5', isNative: true, coingeckoId: 'ethereum' },
-    { chainId: 1, address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', name: 'Uniswap', symbol: 'UNI', balance: '500', coingeckoId: 'uniswap' },
-    { chainId: 1, address: '0xdac17f958d2ee523a2206206994597c13d831ec7', name: 'Tether', symbol: 'USDT', balance: '10000', coingeckoId: 'tether' },
-  ],
-  137: [ // Polygon
-    { chainId: 137, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Matic', symbol: 'MATIC', balance: '2500', isNative: true, coingeckoId: 'matic-network' },
-    { chainId: 137, address: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', name: 'Wrapped Ether', symbol: 'WETH', balance: '5', coingeckoId: 'weth' },
-  ],
-  10: [ // Optimism
-    { chainId: 10, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '8', isNative: true, coingeckoId: 'ethereum' },
-    { chainId: 10, address: '0x4200000000000000000000000000000000000042', name: 'Optimism', symbol: 'OP', balance: '1200', coingeckoId: 'optimism' },
-  ],
-  42161: [ // Arbitrum
-    { chainId: 42161, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '12', isNative: true, coingeckoId: 'ethereum' },
-    { chainId: 42161, address: '0x912ce59144191c1204e64559fe8253a0e49e6548', name: 'Arbitrum', symbol: 'ARB', balance: '3000', coingeckoId: 'arbitrum' },
-  ],
-  8453: [ // Base
-    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', balance: '15', isNative: true, coingeckoId: 'ethereum' }, // Note: CoinGecko ID for ETH on Base might need adjustment
-  ],
-}
+import { mnemonicToSeedSync } from 'bip39';
+import { HDNodeWallet, Wallet } from 'ethers';
+import { getInitialAssets, fetchBalances } from '@/lib/wallets/balances';
 
 interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
@@ -41,35 +20,42 @@ interface WalletContextType {
   allChainsMap: { [key: number]: ChainConfig };
   isRefreshing: boolean;
   refresh: () => void;
-  setWallets: (wallets: WalletWithMetadata[] | null) => void;
+  createWalletWithMnemonic: (mnemonic: string) => void;
+  importWalletWithMnemonic: (mnemonic: string) => void;
   profile: UserProfile | null;
-  user: any; // Keeping for compatibility with TokenDetailCard
+  user: any; 
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
+
+const deriveWalletFromMnemonic = (mnemonic: string): WalletWithMetadata => {
+    const seed = mnemonicToSeedSync(mnemonic);
+    const hdNode = HDNodeWallet.fromSeed(seed);
+    const wallet = hdNode.derivePath("m/44'/60'/0'/0/0");
+    return {
+        address: wallet.address,
+        privateKey: wallet.privateKey
+    };
+};
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
+  const [mnemonic, setMnemonic] = useState<string | null>(null);
 
-  // This state will now hold the chains with their fetched logo URLs
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-
-  // The viewing network is derived from the chainsWithLogos, ensuring it has the logo URL.
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
   
   const [allAssets, setAllAssets] = useState<AssetRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  // Update the viewingNetwork state when chainsWithLogos is populated
   useEffect(() => {
     if (!areLogosLoading && chainsWithLogos.length > 0) {
       setViewingNetwork(prev => chainsWithLogos.find(c => c.chainId === prev.chainId) || chainsWithLogos[0]);
     }
   }, [chainsWithLogos, areLogosLoading]);
-
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -80,60 +66,76 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const setNetwork = (network: ChainConfig) => {
     setViewingNetwork(network);
-    setAllAssets([]); // Clear assets immediately for a snappier feel
+    setAllAssets([]); 
+  };
+
+  const createWalletWithMnemonic = (mnemonic: string) => {
+      const newWallet = deriveWalletFromMnemonic(mnemonic);
+      localStorage.setItem('walletMnemonic', mnemonic); // WARNING: Insecure, for demo purposes only
+      setMnemonic(mnemonic);
+      setWallets([newWallet]);
+      setProfile({ username: 'NewUser' });
+  };
+  
+  const importWalletWithMnemonic = (mnemonic: string) => {
+      // Logic is the same as creating for this basic implementation
+      createWalletWithMnemonic(mnemonic);
   };
 
   const refreshAssets = useCallback(async () => {
-    if (isRefreshing) return;
+      const wallet = wallets?.[0];
+      if (isRefreshing || !wallet) return;
+  
+      setIsRefreshing(true);
+      try {
+          // 1. Get the initial list of assets for the current chain
+          const baseAssets = getInitialAssets(viewingNetwork.chainId);
+          if (baseAssets.length === 0) {
+              setAllAssets([]);
+              return;
+          }
 
-    const baseAssetsForChain = USER_ASSETS_BY_CHAIN[viewingNetwork.chainId] || [];
-    if (baseAssetsForChain.length === 0) {
-        setAllAssets([]);
-        return;
-    }
-
-    setIsRefreshing(true);
-    
-    try {
-      const assetsWithPrices = await fetchAssetPrices(baseAssetsForChain);
-      
-      const assetsWithData = await Promise.all(
-        assetsWithPrices.map(async (asset) => {
-          const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
-          return {
-            ...asset,
-            iconUrl: iconUrl,
-          };
-        })
-      );
-      
-      setAllAssets(assetsWithData);
-
-    } catch (error) {
-      console.error("Failed to fetch asset prices:", error);
-      const assetsWithBalancesAndLogos = await Promise.all(
-        baseAssetsForChain.map(async (asset) => {
-            const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
-            return {
-                ...asset,
-                priceUsd: 0,
-                fiatValueUsd: 0,
-                pctChange24h: 0,
-                iconUrl: iconUrl,
-            } as AssetRow;
-        })
-      );
-      setAllAssets(assetsWithBalancesAndLogos);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [isRefreshing, viewingNetwork]);
-
+          // 2. Fetch live balances for these assets
+          const assetsWithBalances = await fetchBalances(wallet.address, baseAssets, viewingNetwork);
+          
+          // 3. Fetch prices for assets that have a balance
+          const assetsToPrice = assetsWithBalances.filter(a => parseFloat(a.balance) > 0);
+          const assetsWithPrices = await fetchAssetPrices(assetsToPrice);
+  
+          // 4. Fetch logos for all assets (even those with no balance)
+          const assetsWithLogos = await Promise.all(
+              assetsWithBalances.map(async (asset) => {
+                  const pricedAsset = assetsWithPrices.find(p => p.address === asset.address) || asset;
+                  const iconUrl = await getTokenLogoUrl(asset.symbol, viewingNetwork.name);
+                  return {
+                      ...pricedAsset,
+                      iconUrl: iconUrl,
+                  };
+              })
+          );
+          setAllAssets(assetsWithLogos);
+  
+      } catch (error) {
+          console.error("Failed to refresh assets:", error);
+          // Optionally set assets to a state indicating an error
+      } finally {
+          setIsRefreshing(false);
+      }
+  }, [isRefreshing, viewingNetwork, wallets]);
+  
 
   useEffect(() => {
-    const storedWallet = { address: '0x1234567890123456789012345678901234567890' };
-    setWallets([storedWallet]);
-    setProfile({ username: 'TestUser' });
+    try {
+        const savedMnemonic = localStorage.getItem('walletMnemonic');
+        if (savedMnemonic) {
+            setMnemonic(savedMnemonic);
+            const mainWallet = deriveWalletFromMnemonic(savedMnemonic);
+            setWallets([mainWallet]);
+            setProfile({ username: 'ReturningUser' });
+        }
+    } catch (error) {
+        console.error("Could not access localStorage or derive wallet:", error);
+    }
     setIsInitialized(true);
   }, []);
 
@@ -145,7 +147,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const value: WalletContextType = {
     wallets,
-    setWallets,
     isInitialized,
     hasNewNotifications,
     viewingNetwork,
@@ -155,6 +156,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChainsMap,
     isRefreshing,
     refresh: refreshAssets,
+    createWalletWithMnemonic,
+    importWalletWithMnemonic,
     profile,
     user: profile,
   };
