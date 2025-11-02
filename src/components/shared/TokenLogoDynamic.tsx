@@ -19,17 +19,17 @@ export default function TokenLogoDynamic({
   FallbackComponent,
 }: TokenLogoDynamicProps) {
   
-  // If logoUrl is explicitly null, it means we tried fetching but found no logo.
-  if (logoUrl === null) {
-      return FallbackComponent || <div className={`w-[${size}px] h-[${size}px] rounded-full bg-muted ${className}`} />;
-  }
-
   // If logoUrl is undefined, it means we are still in a loading state.
   if (logoUrl === undefined) {
     return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
   }
 
-  // If we have a logoUrl, display the image.
+  // If logoUrl is null or an empty string, it means we tried fetching but found no logo.
+  if (logoUrl === null || logoUrl === '') {
+      return FallbackComponent || <div className={`w-[${size}px] h-[${size}px] rounded-full bg-muted ${className}`} />;
+  }
+
+  // If we have a valid logoUrl, display the image.
   return (
     <CachedImage
       src={logoUrl}
