@@ -87,10 +87,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const refreshAssets = useCallback(async (network: ChainConfig) => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    setAllAssets([]); // Clear assets to show loading state
+    
+    // Don't clear assets here to prevent UI flicker. The loading state is handled by isRefreshing.
+    // setAllAssets([]); 
 
     const baseAssetsForChain = USER_ASSETS_BY_CHAIN[network.chainId] || [];
     if (baseAssetsForChain.length === 0) {
+      setAllAssets([]); // Set to empty if there are no assets for this chain.
       setIsRefreshing(false);
       return;
     }
@@ -128,7 +131,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing]);
+  }, [isRefreshing]); // Dependency array is correct with just isRefreshing.
 
 
   useEffect(() => {
