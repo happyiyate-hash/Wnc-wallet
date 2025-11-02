@@ -3,19 +3,19 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import CachedImage from '../CachedImage';
-import { ChevronDown } from 'lucide-react';
 
 export default function NetworkSelector({ className }: { className?: string }) {
     const { viewingNetwork } = useWallet();
     
     // In a real app, you'd get a list of available networks.
     const availableNetworks = [viewingNetwork];
+    const iconUrl = viewingNetwork.iconUrl || `https://picsum.photos/seed/${viewingNetwork.name}/32/32`;
 
     return (
         <Select defaultValue={viewingNetwork.chainId.toString()}>
             <SelectTrigger className={cn("w-auto h-auto p-0 bg-transparent border-none text-white focus:ring-0 focus:ring-offset-0", className)}>
                 <div className="flex items-center gap-1">
-                    <CachedImage src={viewingNetwork.iconUrl!} alt={viewingNetwork.name} width={24} height={24} className="rounded-full" />
+                    <CachedImage src={iconUrl} alt={viewingNetwork.name} width={24} height={24} className="rounded-full" />
                 </div>
             </SelectTrigger>
             <SelectContent>
