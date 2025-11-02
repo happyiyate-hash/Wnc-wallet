@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { ChainConfig } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
+import { ALL_CHAINS_LIST } from '@/lib/user-networks';
 
-export function useNetworkLogos(initialChains: ChainConfig[]) {
-    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(initialChains);
+export function useNetworkLogos() {
+    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST);
     const [areLogosLoading, setAreLogosLoading] = useState(true);
 
     useEffect(() => {
@@ -14,7 +15,7 @@ export function useNetworkLogos(initialChains: ChainConfig[]) {
             setAreLogosLoading(true);
             try {
                 const chainsWithFetchedLogos = await Promise.all(
-                    initialChains.map(async (chain) => {
+                    ALL_CHAINS_LIST.map(async (chain) => {
                         // For networks, the most reliable symbol is often their native currency symbol.
                         const logoUrl = await getTokenLogoUrl(chain.currencySymbol, chain.name);
                         return {
@@ -31,7 +32,7 @@ export function useNetworkLogos(initialChains: ChainConfig[]) {
                 console.error("Failed to fetch network logos:", error);
                 if (isMounted) {
                     // On error, proceed with the initial list (which has empty iconUrl strings)
-                    setChainsWithLogos(initialChains);
+                    setChainsWithLogos(ALL_CHAINS_LIST);
                 }
             } finally {
                 if (isMounted) {
@@ -46,7 +47,7 @@ export function useNetworkLogos(initialChains: ChainConfig[]) {
             isMounted = false;
         };
 
-    }, [initialChains]);
+    }, []); // Empty dependency array ensures this runs only once.
 
     return { chainsWithLogos, areLogosLoading };
 }

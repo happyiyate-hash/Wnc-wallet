@@ -55,7 +55,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
 
   // This state will now hold the chains with their fetched logo URLs
-  const { chainsWithLogos, areLogosLoading } = useNetworkLogos(ALL_CHAINS_LIST);
+  const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
 
   // The viewing network is derived from the chainsWithLogos, ensuring it has the logo URL.
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
