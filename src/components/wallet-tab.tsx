@@ -182,7 +182,7 @@ export default function WalletTab() {
     <div className="flex flex-col h-full">
       <div className="bg-background pt-8">
         {/* Balance */}
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center justify-between">
             <div>
               <h2 className={cn(
                 'font-bold',
@@ -214,7 +214,7 @@ export default function WalletTab() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-around my-8 px-4">
+        <div className="flex justify-around my-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" href="/send" />
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
           <ActionButton icon={Repeat} label="Swap" href="/swap" />
@@ -223,7 +223,7 @@ export default function WalletTab() {
         </div>
         
         {/* Tabs */}
-        <div className="w-full px-4">
+        <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-transparent p-0">
                 <TabsTrigger
