@@ -18,7 +18,7 @@
   "polygon": {
     "chainId": 137,
     "name": "Polygon",
-    "symbol": "MATIC",
+    "symbol": "POL",
     "rpcBase": "https://polygon-mainnet.infura.io/v3/",
     "explorer": "https://polygonscan.com/",
     "themeColor": "#8247E5"
