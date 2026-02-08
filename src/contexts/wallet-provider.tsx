@@ -5,6 +5,7 @@ import type { AssetRow, ChainConfig, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser, useCollection, useFirestore, useDoc } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
+import { getInitialAssets } from '@/lib/wallets/balances';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -29,7 +30,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const db = useFirestore();
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
-  // Real-time User Profile from Firestore
+  // Real-time User Profile from Firestore (Custodial Source)
   const userRef = useMemo(() => {
     if (!db || !user) return null;
     return doc(db, 'users', user.uid);
@@ -51,7 +52,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const { data: userData } = useDoc<any>(userRef);
 
-  // Real-time Balances from Firestore
+  // Real-time Balances from Firestore (Ledger Source)
   const balancesQuery = useMemo(() => {
     if (!db || !user) return null;
     return collection(db, 'users', user.uid, 'balances');
@@ -74,20 +75,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setInfuraApiKeyInternal(key);
   };
 
+  // Merge initial assets with real-time Firestore balances
   const assetsForCurrentNetwork = useMemo(() => {
-    if (!firestoreBalances) return [];
-    return firestoreBalances
-      .filter((b) => b.chainId === viewingNetwork?.chainId)
-      .map((b) => ({
-        ...b,
-        balance: b.amount || '0',
-        fiatValueUsd: Number(b.amount || 0) * (b.priceUsd || 0),
-        iconUrl: b.iconUrl || null,
-      }));
+    if (!viewingNetwork) return [];
+    
+    // Start with the standard tokens we expect for this network
+    const baseAssets = getInitialAssets(viewingNetwork.chainId);
+    
+    return baseAssets.map((base) => {
+      // Find the balance in the custodial ledger
+      const firestoreRecord = firestoreBalances?.find(
+        (b) => b.symbol === base.symbol && b.chainId === viewingNetwork.chainId
+      );
+
+      return {
+        ...base,
+        balance: firestoreRecord?.amount || '0',
+        fiatValueUsd: Number(firestoreRecord?.amount || 0) * (firestoreRecord?.priceUsd || 0),
+        priceUsd: firestoreRecord?.priceUsd || 0,
+        pctChange24h: firestoreRecord?.pctChange24h || 0,
+        iconUrl: base.iconUrl || firestoreRecord?.iconUrl || null,
+      } as AssetRow;
+    });
   }, [firestoreBalances, viewingNetwork]);
 
   const value: WalletContextType = {
-    isInitialized: !authLoading && !areLogosLoading,
+    isInitialized: !authLoading && !areLogosLoading && !!viewingNetwork,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork,
@@ -95,7 +108,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing: balancesLoading,
-    refresh: () => {},
+    refresh: () => {
+      // In a custodial app, "refresh" might trigger a backend check, 
+      // but Firestore is real-time so we don't need much client-side logic here.
+    },
     profile: userData ? { username: userData.username || user?.displayName || user?.email || 'User' } : null,
     custodialAddress: userData?.custodialAddress || null,
     infuraApiKey,
