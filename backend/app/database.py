@@ -1,8 +1,13 @@
-# Database connection and session management
-from sqlalchemy import create_client
-from app.config import DATABASE_URL
 
-# This is where production DB logic (SQLAlchemy) lives.
-# For now, it's a placeholder for the dev team.
+import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") # Service role for admin bypass
+supabase: Client = create_client(url, key)
+
 def get_db():
-    pass
+    return supabase

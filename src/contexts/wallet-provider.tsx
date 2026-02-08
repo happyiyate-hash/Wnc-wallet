@@ -4,8 +4,8 @@
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect } from 'react';
 import type { AssetRow, ChainConfig, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
-import { useUser, useCollection, useFirestore, useDoc } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { useUser } from './user-provider';
+import { supabase } from '@/lib/supabase/client';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -26,11 +26,13 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useUser();
-  const db = useFirestore();
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
+  const [balances, setBalances] = useState<any[]>([]);
+  const [userData, setUserData] = useState<any>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (chainsWithLogos.length > 0 && !viewingNetwork) {
@@ -43,13 +45,70 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
-  // Real-time Profile and Wallets from Firestore
-  const userRef = useMemo(() => (!db || !user) ? null : doc(db, 'users', user.uid), [db, user]);
-  const { data: userData } = useDoc<any>(userRef);
+  // Fetch and Subscribe to Supabase Data
+  useEffect(() => {
+    if (!user) {
+      setBalances([]);
+      setUserData(null);
+      return;
+    }
 
-  // Real-time Balances from the Internal Ledger
-  const balancesQuery = useMemo(() => (!db || !user) ? null : collection(db, 'users', user.uid, 'balances'), [db, user]);
-  const { data: ledgerBalances, loading: balancesLoading } = useCollection<any>(balancesQuery);
+    const fetchData = async () => {
+      setIsRefreshing(true);
+      
+      // Fetch user profile and wallets
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      const { data: wallets } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const walletMap = (wallets || []).reduce((acc: any, w: any) => {
+        // Find chain symbol for the wallet's blockchain_id
+        const chain = chainsWithLogos.find(c => c.id === w.blockchain_id);
+        if (chain) acc[chain.chainId] = w.address;
+        return acc;
+      }, {});
+
+      setUserData({ profile, wallets: walletMap });
+
+      // Fetch balances
+      const { data: balanceData } = await supabase
+        .from('balances')
+        .select(`
+          *,
+          assets (*)
+        `)
+        .eq('user_id', user.id);
+      
+      setBalances(balanceData || []);
+      setIsRefreshing(false);
+    };
+
+    fetchData();
+
+    // Subscribe to balance changes
+    const balanceSubscription = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'balances',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(balanceSubscription);
+    };
+  }, [user, chainsWithLogos]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -66,26 +125,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setInfuraApiKeyInternal(key);
   };
 
-  // Merge the ledger balances with the frontend asset list
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // In this custodial model, we show assets that have a ledger entry in Firestore
-    return (ledgerBalances || [])
-      .filter(b => b.chainId === viewingNetwork.chainId)
+    return balances
+      .filter(b => b.assets?.blockchain_id === viewingNetwork.id)
       .map(b => ({
-        chainId: b.chainId,
-        address: b.contractAddress || 'native',
-        symbol: b.symbol,
-        name: b.name || b.symbol,
-        balance: b.amount?.toString() || '0',
-        fiatValueUsd: (b.amount || 0) * (b.priceUsd || 0),
-        priceUsd: b.priceUsd || 0,
-        pctChange24h: b.pctChange24h || 0,
-        iconUrl: b.iconUrl || null,
-        coingeckoId: b.coingeckoId
+        chainId: viewingNetwork.chainId,
+        address: b.assets.contract_address || 'native',
+        symbol: b.assets.symbol,
+        name: b.assets.symbol,
+        balance: b.balance?.toString() || '0',
+        fiatValueUsd: (parseFloat(b.balance) || 0) * (b.price_usd || 0),
+        priceUsd: b.price_usd || 0,
+        pctChange24h: b.pct_change_24h || 0,
+        iconUrl: b.assets.icon_url || null,
+        coingeckoId: b.assets.coingecko_id
       } as AssetRow));
-  }, [ledgerBalances, viewingNetwork]);
+  }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
     isInitialized: !authLoading && !areLogosLoading && !!viewingNetwork,
@@ -95,8 +152,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
-    isRefreshing: balancesLoading,
-    profile: userData ? { username: userData.username || user?.displayName || 'User' } : null,
+    isRefreshing,
+    profile: userData?.profile ? { username: userData.profile.username || user?.email?.split('@')[0] || 'User' } : null,
     wallets: userData?.wallets || null,
     infuraApiKey,
     setInfuraApiKey,

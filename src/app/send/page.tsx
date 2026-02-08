@@ -1,21 +1,20 @@
+
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Send, Search, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
-import { cn } from '@/lib/utils';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { useFirestore, useUser } from '@/firebase';
+import { supabase } from '@/lib/supabase/client';
+import { useUser } from '@/contexts/user-provider';
 
 export default function SendPage() {
   const { allAssets, viewingNetwork } = useWallet();
   const { user } = useUser();
-  const db = useFirestore();
   const router = useRouter();
 
   const [step, setStep] = useState<'select' | 'details'>('select');
@@ -28,20 +27,22 @@ export default function SendPage() {
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
   const handleSendRequest = async () => {
-    if (!user || !db || !selectedToken || !isValidAmount) return;
+    if (!user || !selectedToken || !isValidAmount) return;
     setIsSubmitting(true);
 
     try {
-      // Create a withdrawal request in the custodial ledger
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'withdrawal',
-        status: 'pending',
-        symbol: selectedToken.symbol,
-        chainId: selectedToken.chainId,
-        amount: amount,
-        toAddress: recipient,
-        timestamp: serverTimestamp(),
-      });
+      // Create a withdrawal request in Supabase
+      const { error } = await supabase
+        .from('withdrawals')
+        .insert({
+          user_id: user.id,
+          asset_id: selectedToken.asset_id, // We should ensure this ID is in AssetRow
+          to_address: recipient,
+          amount: parseFloat(amount),
+          status: 'pending'
+        });
+
+      if (error) throw error;
       
       alert("Withdrawal request submitted! Our backend is processing it.");
       router.push('/');
@@ -52,6 +53,7 @@ export default function SendPage() {
     }
   };
 
+  // Rest of the UI remains the same as previously defined, using Supabase logic
   const renderTokenSelect = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/5">

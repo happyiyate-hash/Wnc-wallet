@@ -1,8 +1,8 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
-import { FirebaseProvider } from '@/firebase';
 import { UserProvider } from '@/contexts/user-provider';
 import MobileNav from '@/components/wallet/mobile-nav';
 
@@ -24,14 +24,12 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen bg-background flex flex-col">
-        <FirebaseProvider>
-          <UserProvider>
-            <WalletProvider>
-              {children}
-              <MobileNav />
-            </WalletProvider>
-          </UserProvider>
-        </FirebaseProvider>
+        <UserProvider>
+          <WalletProvider>
+            {children}
+            <MobileNav />
+          </WalletProvider>
+        </UserProvider>
         <Toaster />
       </body>
     </html>
