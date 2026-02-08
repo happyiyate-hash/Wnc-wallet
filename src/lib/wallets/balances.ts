@@ -9,8 +9,8 @@ const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' |
     { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin' },
   ],
   137: [ // Polygon
-    { chainId: 137, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Polygon Ecosystem Token', symbol: 'POL', isNative: true, coingeckoId: 'polygon-ecosystem-token' },
-    { chainId: 137, address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', name: 'USDC (Bridged)', symbol: 'USDC', coingeckoId: 'usd-coin' },
+    { chainId: 137, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'POL (ex-MATIC)', symbol: 'POL', isNative: true, coingeckoId: 'polygon-ecosystem-token' },
+    { chainId: 137, address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin' },
   ],
   10: [ // Optimism
     { chainId: 10, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum', symbol: 'ETH', isNative: true, coingeckoId: 'ethereum' },
