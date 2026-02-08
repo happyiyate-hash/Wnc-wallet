@@ -4,101 +4,94 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
-import { generateMnemonic, validateMnemonic } from 'bip39';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { Textarea } from '../ui/textarea';
-import { ArrowRight } from 'lucide-react';
+import { useUser } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
+import { Loader2, ShieldCheck, Zap } from 'lucide-react';
 
 interface WalletManagementSheetProps {
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
 }
 
-enum Step {
-    Initial,
-    Import,
-}
-
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
-  const { createWalletWithMnemonic, importWalletWithMnemonic } = useWallet();
-  const [step, setStep] = useState<Step>(Step.Initial);
-  const [importMnemonic, setImportMnemonic] = useState('');
-  const [importError, setImportError] = useState('');
+  const { isInitialized, custodialAddress } = useWallet();
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isProvisioning, setIsProvisioning] = useState(false);
 
-  const handleCreateWallet = () => {
-    const mnemonic = generateMnemonic();
-    createWalletWithMnemonic(mnemonic);
-    resetStateAndClose();
-  };
-  
-  const handleImport = () => {
-    const isValid = validateMnemonic(importMnemonic);
-    if (isValid) {
-      importWalletWithMnemonic(importMnemonic);
-      resetStateAndClose();
-    } else {
-      setImportError("Invalid mnemonic phrase. Please check your words and try again.");
+  const handleCreateCustodialAccount = async () => {
+    if (!user || !db) return;
+    setIsProvisioning(true);
+    
+    // In a custodial model, we signal the backend to create the wallet.
+    // The backend monitors this collection/flag and updates 'custodialAddress' when ready.
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        username: user.displayName || user.email?.split('@')[0] || 'User',
+        status: 'provisioning',
+        createdAt: new Date().toISOString(),
+      }, { merge: true });
+      
+      // We don't close the sheet yet, we show a loading state until custodialAddress appears in context
+    } catch (e) {
+      console.error("Failed to request account provisioning", e);
+    } finally {
+      setIsProvisioning(false);
     }
   };
 
-  const resetStateAndClose = () => {
-    setStep(Step.Initial);
-    setImportMnemonic('');
-    setImportError('');
-    onOpenChange(false);
-  }
-
-  const renderInitialStep = () => (
-    <div className="py-4 flex flex-col gap-4">
-        <Button size="lg" onClick={handleCreateWallet} className="h-12 text-base">Create New Wallet</Button>
-        <Button size="lg" variant="outline" onClick={() => setStep(Step.Import)} className="h-12 text-base">Import Wallet</Button>
-    </div>
-  );
-
-  const renderImportStep = () => (
-     <div className="py-4 flex flex-col gap-4">
-        <Alert variant="default">
-            <AlertTitle>Import Wallet</AlertTitle>
-            <AlertDescription>
-                Enter your 12-word secret recovery phrase to restore your wallet.
-            </AlertDescription>
-        </Alert>
-        <Textarea 
-            placeholder="Enter your secret recovery phrase here..."
-            value={importMnemonic}
-            onChange={(e) => {
-                setImportMnemonic(e.target.value);
-                if (importError) setImportError('');
-            }}
-            className="min-h-[100px] text-base"
-        />
-        {importError && <p className="text-sm text-destructive">{importError}</p>}
-         <Button onClick={handleImport} disabled={!importMnemonic.trim()}>
-            Import Wallet <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
-        <Button variant="ghost" onClick={() => setStep(Step.Initial)}>Back</Button>
-     </div>
-  );
-
-
   return (
-    <Sheet open={isOpen} onOpenChange={resetStateAndClose}>
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom"
-        className="rounded-t-2xl max-h-[90vh] bg-background"
-        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus on first input
+        className="rounded-t-2xl max-h-[90vh] bg-background p-6"
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <SheetHeader>
-          <SheetTitle>Wallet Management</SheetTitle>
-          <SheetDescription>
-            {step === Step.Initial 
-                ? "Create a new wallet or import an existing one."
-                : "Restore your wallet using your secret phrase."
-            }
+        <SheetHeader className="text-left">
+          <SheetTitle className="text-2xl font-bold flex items-center gap-2">
+            <Zap className="w-6 h-6 text-primary" />
+            Welcome to Wevina
+          </SheetTitle>
+          <SheetDescription className="text-base">
+            Your secure, programmable custodial wallet is ready to be provisioned.
           </SheetDescription>
         </SheetHeader>
-        {step === Step.Initial && renderInitialStep()}
-        {step === Step.Import && renderImportStep()}
+
+        <div className="py-8 space-y-6">
+          <div className="grid gap-4">
+            <div className="flex items-start gap-4 p-4 rounded-xl bg-secondary/30">
+              <ShieldCheck className="w-6 h-6 text-primary shrink-0 mt-1" />
+              <div>
+                <p className="font-semibold text-sm">Institutional-Grade Security</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Private keys are stored in high-security backend vaults. You never have to worry about losing a seed phrase.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <Button 
+              size="lg" 
+              onClick={handleCreateCustodialAccount} 
+              className="h-14 text-lg font-bold rounded-2xl shadow-lg shadow-primary/20"
+              disabled={isProvisioning || !!custodialAddress}
+            >
+              {isProvisioning ? (
+                <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Provisioning Account...</>
+              ) : custodialAddress ? (
+                "Account Active"
+              ) : (
+                "Create My Wallet"
+              )}
+            </Button>
+            <p className="text-[10px] text-center text-muted-foreground px-8">
+              By creating a wallet, you agree to our Terms of Service and Privacy Policy.
+            </p>
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );
