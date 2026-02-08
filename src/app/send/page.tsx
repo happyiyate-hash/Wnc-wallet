@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -31,20 +30,19 @@ export default function SendPage() {
     setIsSubmitting(true);
 
     try {
-      // Create a withdrawal request in Supabase
       const { error } = await supabase
-        .from('withdrawals')
+        .from('transactions')
         .insert({
           user_id: user.id,
-          asset_id: selectedToken.asset_id, // We should ensure this ID is in AssetRow
-          to_address: recipient,
+          asset_id: selectedToken.address === 'native' ? null : selectedToken.address, // In actual schema we use asset UUIDs
+          type: 'withdrawal',
           amount: parseFloat(amount),
-          status: 'pending'
+          status: 'pending',
+          timestamp: new Date().toISOString()
         });
 
       if (error) throw error;
       
-      alert("Withdrawal request submitted! Our backend is processing it.");
       router.push('/');
     } catch (e) {
       console.error("Failed to submit withdrawal", e);
@@ -53,7 +51,6 @@ export default function SendPage() {
     }
   };
 
-  // Rest of the UI remains the same as previously defined, using Supabase logic
   const renderTokenSelect = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/5">

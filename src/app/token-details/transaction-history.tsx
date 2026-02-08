@@ -1,27 +1,35 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useCollection, useUser, useFirestore } from '@/firebase';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { useUser } from '@/contexts/user-provider';
+import { supabase } from '@/lib/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowUpRight, ArrowDownLeft, RefreshCw, Loader2 } from 'lucide-react';
 import type { AssetRow } from "@/lib/types";
 
 export default function TransactionHistory({ token }: { token: AssetRow }) {
   const { user } = useUser();
-  const db = useFirestore();
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const historyQuery = useMemo(() => {
-    if (!db || !user || !token) return null;
-    return query(
-      collection(db, 'users', user.uid, 'transactions'),
-      where('symbol', '==', token.symbol),
-      orderBy('timestamp', 'desc'),
-      limit(10)
-    );
-  }, [db, user, token]);
+  useEffect(() => {
+    if (!user || !token) return;
 
-  const { data: transactions, loading } = useCollection<any>(historyQuery);
+    const fetchTransactions = async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false })
+        .limit(10);
+      
+      setTransactions(data || []);
+      setLoading(false);
+    };
+
+    fetchTransactions();
+  }, [user, token]);
 
   if (loading) {
     return (
@@ -56,7 +64,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
             <div>
               <p className="font-bold text-sm capitalize">{tx.type}</p>
               <p className="text-xs text-muted-foreground">
-                {tx.timestamp?.toDate ? formatDistanceToNow(tx.timestamp.toDate(), { addSuffix: true }) : 'Pending...'}
+                {tx.timestamp ? formatDistanceToNow(new Date(tx.timestamp), { addSuffix: true }) : 'Just now'}
               </p>
             </div>
           </div>

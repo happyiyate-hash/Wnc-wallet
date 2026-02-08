@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,14 +8,13 @@ import { ArrowLeft, ArrowUpDown, Loader2, AlertTriangle, CheckCircle2 } from 'lu
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { currencyConversionWithLLMValidation } from '@/app/actions';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { useFirestore, useUser } from '@/firebase';
+import { supabase } from '@/lib/supabase/client';
+import { useUser } from '@/contexts/user-provider';
 import { cn } from '@/lib/utils';
 
 export default function SwapPage() {
   const { allAssets, viewingNetwork } = useWallet();
   const { user } = useUser();
-  const db = useFirestore();
   const router = useRouter();
 
   const [fromToken, setFromToken] = useState(allAssets[0] || null);
@@ -48,22 +47,21 @@ export default function SwapPage() {
   };
 
   const handleConfirmSwap = async () => {
-    if (!user || !db || !validationResult?.isValid) return;
+    if (!user || !validationResult?.isValid) return;
     setIsSubmitting(true);
 
     try {
-      // Create an internal swap request for the Python backend to execute
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-        type: 'swap',
-        status: 'pending',
-        fromSymbol: fromToken.symbol,
-        toSymbol: toToken.symbol,
-        fromAmount: amount,
-        toAmount: validationResult.convertedAmount,
-        chainId: viewingNetwork.chainId,
-        timestamp: serverTimestamp(),
-      });
+      const { error } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: user.id,
+          type: 'swap',
+          amount: parseFloat(amount),
+          status: 'pending',
+          timestamp: new Date().toISOString()
+        });
       
+      if (error) throw error;
       router.push('/');
     } catch (e) {
       console.error("Swap submission failed", e);
@@ -82,7 +80,6 @@ export default function SwapPage() {
       </header>
 
       <main className="flex-1 p-6 space-y-4 overflow-y-auto">
-        {/* From Section */}
         <div className="p-6 rounded-3xl bg-secondary/40 border border-white/5 space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-muted-foreground uppercase">From</span>
@@ -118,7 +115,6 @@ export default function SwapPage() {
           </Button>
         </div>
 
-        {/* To Section */}
         <div className="p-6 rounded-3xl bg-secondary/40 border border-white/5 space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-muted-foreground uppercase">To (Estimated)</span>
@@ -134,7 +130,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* AI Validation Feedback */}
         {validationResult && (
           <div className={cn(
             "p-4 rounded-2xl flex items-start gap-3 border animate-in fade-in slide-in-from-top-2",

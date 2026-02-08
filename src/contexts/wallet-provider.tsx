@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect } from 'react';
@@ -20,6 +19,7 @@ interface WalletContextType {
   wallets: { [chainId: number]: string } | null;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
+  refresh: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -45,7 +45,50 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
-  // Fetch and Subscribe to Supabase Data
+  const fetchData = async () => {
+    if (!user) return;
+    setIsRefreshing(true);
+    
+    try {
+      // 1. Fetch user profile and wallets from public schemas
+      const { data: wallets } = await supabase
+        .from('wallets')
+        .select(`
+          *,
+          blockchains (*)
+        `)
+        .eq('user_id', user.id);
+
+      const walletMap = (wallets || []).reduce((acc: any, w: any) => {
+        if (w.blockchains) acc[w.blockchains.chain_id] = w.address;
+        return acc;
+      }, {});
+
+      setUserData({ 
+        profile: { username: user.email?.split('@')[0] || 'User' }, 
+        wallets: walletMap 
+      });
+
+      // 2. Fetch balances with asset info
+      const { data: balanceData } = await supabase
+        .from('balances')
+        .select(`
+          *,
+          assets (
+            *,
+            blockchains (*)
+          )
+        `)
+        .eq('user_id', user.id);
+      
+      setBalances(balanceData || []);
+    } catch (e) {
+      console.error("Error fetching wallet data:", e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       setBalances([]);
@@ -53,48 +96,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const fetchData = async () => {
-      setIsRefreshing(true);
-      
-      // Fetch user profile and wallets
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      const { data: wallets } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id);
-
-      const walletMap = (wallets || []).reduce((acc: any, w: any) => {
-        // Find chain symbol for the wallet's blockchain_id
-        const chain = chainsWithLogos.find(c => c.id === w.blockchain_id);
-        if (chain) acc[chain.chainId] = w.address;
-        return acc;
-      }, {});
-
-      setUserData({ profile, wallets: walletMap });
-
-      // Fetch balances
-      const { data: balanceData } = await supabase
-        .from('balances')
-        .select(`
-          *,
-          assets (*)
-        `)
-        .eq('user_id', user.id);
-      
-      setBalances(balanceData || []);
-      setIsRefreshing(false);
-    };
-
     fetchData();
 
     // Subscribe to balance changes
     const balanceSubscription = supabase
-      .channel('schema-db-changes')
+      .channel('ledger-updates')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -108,7 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(balanceSubscription);
     };
-  }, [user, chainsWithLogos]);
+  }, [user]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -129,16 +135,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!viewingNetwork) return [];
     
     return balances
-      .filter(b => b.assets?.blockchain_id === viewingNetwork.id)
+      .filter(b => b.assets?.blockchains?.chain_id === viewingNetwork.chainId)
       .map(b => ({
         chainId: viewingNetwork.chainId,
         address: b.assets.contract_address || 'native',
         symbol: b.assets.symbol,
         name: b.assets.symbol,
         balance: b.balance?.toString() || '0',
-        fiatValueUsd: (parseFloat(b.balance) || 0) * (b.price_usd || 0),
-        priceUsd: b.price_usd || 0,
-        pctChange24h: b.pct_change_24h || 0,
+        fiatValueUsd: (parseFloat(b.balance) || 0) * (parseFloat(b.price_usd) || 0),
+        priceUsd: parseFloat(b.price_usd) || 0,
+        pctChange24h: parseFloat(b.pct_change_24h) || 0,
         iconUrl: b.assets.icon_url || null,
         coingeckoId: b.assets.coingecko_id
       } as AssetRow));
@@ -153,10 +159,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    profile: userData?.profile ? { username: userData.profile.username || user?.email?.split('@')[0] || 'User' } : null,
+    profile: userData?.profile || null,
     wallets: userData?.wallets || null,
     infuraApiKey,
     setInfuraApiKey,
+    refresh: fetchData,
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
