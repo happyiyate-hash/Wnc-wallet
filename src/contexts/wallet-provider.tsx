@@ -1,86 +1,63 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
-import { fetchAssetPrices } from '@/lib/coingecko';
+import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect } from 'react';
+import type { AssetRow, ChainConfig, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
-import { mnemonicToSeedSync } from 'bip39';
-import { HDNodeWallet } from 'ethers';
-import { getInitialAssets } from '@/lib/wallets/balances';
-import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
-import { getTokenLogoUrl } from '@/lib/getTokenLogo';
+import { useUser, useCollection, useFirestore, useDoc } from '@/firebase';
+import { collection, doc } from 'firebase/firestore';
 
 interface WalletContextType {
-  wallets: WalletWithMetadata[] | null;
   isInitialized: boolean;
   hasNewNotifications: boolean;
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
-  allAssets: AssetRow[]; // This will be the filtered list for the current network
+  allAssets: AssetRow[];
   allChains: ChainConfig[];
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
   refresh: () => void;
-  createWalletWithMnemonic: (mnemonic: string) => void;
-  importWalletWithMnemonic: (mnemonic: string) => void;
   profile: UserProfile | null;
-  user: any;
+  custodialAddress: string | null;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-const deriveWalletFromMnemonic = (mnemonic: string): WalletWithMetadata => {
-    const seed = mnemonicToSeedSync(mnemonic);
-    const hdNode = HDNodeWallet.fromSeed(seed);
-    const wallet = hdNode.derivePath("m/44'/60'/0'/0/0");
-    return {
-        address: wallet.address,
-        privateKey: wallet.privateKey
-    };
-};
-
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [hasNewNotifications, setHasNewNotifications] = useState(true);
-  const [mnemonic, setMnemonic] = useState<string | null>(null);
+  const { user, loading: authLoading } = useUser();
+  const db = useFirestore();
+  const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
+  
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
   const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
 
-  const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig>(chainsWithLogos[0]);
-  
-  const [allAssetsCache, setAllAssetsCache] = useState<{ [chainId: number]: AssetRow[] }>({});
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-
-  // This effect initializes the asset cache with base assets and logos.
   useEffect(() => {
-    if (!areLogosLoading && chainsWithLogos.length > 0) {
-      setViewingNetwork(prev => chainsWithLogos.find(c => c.chainId === prev.chainId) || chainsWithLogos[0]);
-      
-      const initializeAssetCache = async () => {
-        const initialCache: { [chainId: number]: AssetRow[] } = {};
-        for (const chain of chainsWithLogos) {
-            const baseAssets = getInitialAssets(chain.chainId);
-            const assetsWithPlaceholders = await Promise.all(baseAssets.map(async (asset) => ({
-                ...asset,
-                balance: '0',
-                fiatValueUsd: 0,
-                priceUsd: 0,
-                pctChange24h: 0,
-                iconUrl: await getTokenLogoUrl(asset.symbol, chain.name),
-            })));
-            initialCache[chain.chainId] = assetsWithPlaceholders;
-        }
-        setAllAssetsCache(initialCache);
-      };
-
-      initializeAssetCache();
+    if (chainsWithLogos.length > 0 && !viewingNetwork) {
+      setViewingNetwork(chainsWithLogos[0]);
     }
-  }, [chainsWithLogos, areLogosLoading]);
+  }, [chainsWithLogos, viewingNetwork]);
 
+  useEffect(() => {
+    const savedKey = localStorage.getItem('infuraApiKey');
+    if (savedKey) setInfuraApiKeyInternal(savedKey);
+  }, []);
+
+  // Real-time User Profile from Firestore
+  const userRef = useMemo(() => {
+    if (!db || !user) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user]);
+
+  const { data: userData } = useDoc<any>(userRef);
+
+  // Real-time Balances from Firestore
+  const balancesQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return collection(db, 'users', user.uid, 'balances');
+  }, [db, user]);
+
+  const { data: firestoreBalances, loading: balancesLoading } = useCollection<any>(balancesQuery);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -89,128 +66,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, {} as { [key: number]: ChainConfig });
   }, [chainsWithLogos]);
 
-  const setNetwork = (network: ChainConfig) => {
-    setViewingNetwork(network);
-  };
-  
+  const setNetwork = (network: ChainConfig) => setViewingNetwork(network);
+
   const setInfuraApiKey = (key: string | null) => {
-    if (key) {
-        localStorage.setItem('infuraApiKey', key);
-    } else {
-        localStorage.removeItem('infuraApiKey');
-    }
+    if (key) localStorage.setItem('infuraApiKey', key);
+    else localStorage.removeItem('infuraApiKey');
     setInfuraApiKeyInternal(key);
   };
 
-  const createWalletWithMnemonic = (mnemonic: string) => {
-      localStorage.setItem('walletMnemonic', mnemonic); 
-      setMnemonic(mnemonic);
-      const newWallet = deriveWalletFromMnemonic(mnemonic);
-      setWallets([newWallet]);
-      setProfile({ username: 'NewUser' });
-  };
-  
-  const importWalletWithMnemonic = (mnemonic: string) => {
-      createWalletWithMnemonic(mnemonic);
-  };
-
-  const refreshAssets = useCallback(async (networkToRefresh: ChainConfig) => {
-    if (!wallets || !wallets.length || !infuraApiKey || !networkToRefresh) {
-      return;
-    }
-    const wallet = wallets[0];
-    if (!wallet) return;
-
-    let baseAssets = allAssetsCache[networkToRefresh.chainId] || getInitialAssets(networkToRefresh.chainId);
-    
-    // Crucial Guard: If there are no assets for this chain, do not proceed.
-    if (!baseAssets || baseAssets.length === 0) {
-        console.log(`No assets to refresh for network: ${networkToRefresh.name}`);
-        return;
-    }
-
-    setIsRefreshing(true);
-    try {
-        // We assume logos are already in the cache from the initial load
-        setAllAssetsCache(prev => ({
-            ...prev,
-            [networkToRefresh.chainId]: baseAssets,
-        }));
-        
-        const adapter = evmAdapterFactory(networkToRefresh, infuraApiKey);
-        if (!adapter) {
-            console.warn(`No adapter found for network: ${networkToRefresh.name}`);
-            setAllAssetsCache(prev => ({ ...prev, [networkToRefresh.chainId]: baseAssets }));
-            return;
-        }
-
-        const assetsWithPrices = await fetchAssetPrices(baseAssets);
-        const assetsWithBalances = await adapter.fetchBalances(wallet.address, assetsWithPrices);
-        
-        const finalAssets = assetsWithBalances.map(asset => ({
-            ...asset,
-            fiatValueUsd: (asset.priceUsd ?? 0) * parseFloat(asset.balance),
-        }));
-        
-        setAllAssetsCache(prev => ({
-            ...prev,
-            [networkToRefresh.chainId]: finalAssets,
-        }));
-
-    } catch (error) {
-        console.error(`Failed to refresh assets for ${networkToRefresh.name}:`, error);
-    } finally {
-        setIsRefreshing(false);
-    }
-  }, [wallets, infuraApiKey, allAssetsCache]);
-  
-
-  useEffect(() => {
-    try {
-        const savedMnemonic = localStorage.getItem('walletMnemonic');
-        if (savedMnemonic) {
-            setMnemonic(savedMnemonic);
-            const mainWallet = deriveWalletFromMnemonic(savedMnemonic);
-            setWallets([mainWallet]);
-            setProfile({ username: 'ReturningUser' });
-        }
-        const savedApiKey = localStorage.getItem('infuraApiKey');
-        if (savedApiKey) {
-          setInfuraApiKeyInternal(savedApiKey);
-        }
-    } catch (error) {
-        console.error("Could not access localStorage or derive wallet:", error);
-    }
-    setIsInitialized(true);
-  }, []);
-
-  // This is the key change: This useEffect now only triggers a refresh when the network changes.
-  // It does NOT depend on allAssetsCache, which prevents the infinite loop.
-  useEffect(() => {
-    if (isInitialized && wallets && !areLogosLoading && infuraApiKey && viewingNetwork?.chainId) {
-      refreshAssets(viewingNetwork);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized, wallets, areLogosLoading, infuraApiKey, viewingNetwork]);
-
-
-  const assetsForCurrentNetwork = allAssetsCache[viewingNetwork?.chainId] || [];
+  const assetsForCurrentNetwork = useMemo(() => {
+    if (!firestoreBalances) return [];
+    return firestoreBalances
+      .filter((b) => b.chainId === viewingNetwork?.chainId)
+      .map((b) => ({
+        ...b,
+        balance: b.amount || '0',
+        fiatValueUsd: Number(b.amount || 0) * (b.priceUsd || 0),
+        iconUrl: b.iconUrl || null,
+      }));
+  }, [firestoreBalances, viewingNetwork]);
 
   const value: WalletContextType = {
-    wallets,
-    isInitialized,
-    hasNewNotifications,
-    viewingNetwork,
+    isInitialized: !authLoading && !areLogosLoading,
+    hasNewNotifications: false,
+    viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork,
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
-    isRefreshing,
-    refresh: () => refreshAssets(viewingNetwork),
-    createWalletWithMnemonic,
-    importWalletWithMnemonic,
-    profile,
-    user: profile,
+    isRefreshing: balancesLoading,
+    refresh: () => {},
+    profile: userData ? { username: userData.username || user?.displayName || user?.email || 'User' } : null,
+    custodialAddress: userData?.custodialAddress || null,
     infuraApiKey,
     setInfuraApiKey,
   };
@@ -220,8 +107,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 export function useWallet() {
   const context = useContext(WalletContext);
-  if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
-  }
+  if (context === undefined) throw new Error('useWallet must be used within a WalletProvider');
   return context;
 }

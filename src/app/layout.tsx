@@ -1,13 +1,14 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
+import { FirebaseProvider } from '@/firebase';
 import { UserProvider } from '@/contexts/user-provider';
 import MobileNav from '@/components/wallet/mobile-nav';
 
 export const metadata: Metadata = {
-  title: 'Wevina v2 - Your Secure Crypto Wallet',
-  description: 'Generate a new crypto wallet, manage transactions, and convert currencies securely.',
+  title: 'Wevina v2 - Your Secure Custodial Wallet',
+  description: 'A programmable custodial wallet platform.',
 };
 
 export default function RootLayout({
@@ -23,12 +24,14 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen bg-background flex flex-col">
-        <UserProvider>
-          <WalletProvider>
-            {children}
-            <MobileNav />
-          </WalletProvider>
-        </UserProvider>
+        <FirebaseProvider>
+          <UserProvider>
+            <WalletProvider>
+              {children}
+              <MobileNav />
+            </WalletProvider>
+          </UserProvider>
+        </FirebaseProvider>
         <Toaster />
       </body>
     </html>
