@@ -1,17 +1,16 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 interface MarketStatsProps {
-  stats: any; // Now accepting stats as a prop
+  stats: any;
   tokenSymbol: string;
 }
 
 const StatRow = ({ label, value }: { label: string; value: string | number | React.ReactNode }) => (
   <div className="flex justify-between items-baseline py-3 border-b border-white/5">
     <p className="text-sm text-muted-foreground">{label}</p>
-    <p className="text-sm font-semibold text-foreground text-right">{value}</p>
+    <div className="text-sm font-semibold text-foreground text-right">{value}</div>
   </div>
 );
 
@@ -26,7 +25,6 @@ const formatNumber = (num: number | undefined | null, isCurrency = true) => {
     if (num > 1000) {
          return `${isCurrency ? '$' : ''}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     }
-    // Format small numbers with more precision
     if (num < 0.01 && num > 0) {
         return `${isCurrency ? '$' : ''}${num.toPrecision(2)}`;
     }

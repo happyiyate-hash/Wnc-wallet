@@ -20,12 +20,9 @@ import MarketStats from "./market-stats";
 import { useSingleTokenDetails } from "@/hooks/useTokenDetails";
 import RechartsChart from "@/components/RechartsChart";
 import { cn } from "@/lib/utils";
-import Image from 'next/image';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import TransactionHistory from "./transaction-history";
-import { useUser } from "@/contexts/user-provider";
 import { Skeleton } from "@/components/ui/skeleton";
-import GenericCoinIcon from "@/components/icons/GenericCoinIcon";
 
 const ActionButton = ({
   icon,
@@ -41,9 +38,9 @@ const ActionButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className="flex flex-col items-center justify-center gap-1.5 text-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-foreground"
+    className="flex flex-col items-center justify-center gap-1.5 text-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-foreground group"
   >
-    <div className="w-14 h-14 bg-primary/10 group-disabled:bg-zinc-800 group-disabled:hover:bg-zinc-800 hover:bg-primary/20 rounded-2xl flex items-center justify-center">
+    <div className="w-14 h-14 bg-primary/10 group-disabled:bg-zinc-800 group-disabled:hover:bg-zinc-800 hover:bg-primary/20 rounded-2xl flex items-center justify-center transition-colors">
       {icon}
     </div>
     <span className="text-xs font-medium">{label}</span>
