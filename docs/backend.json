@@ -1,0 +1,90 @@
+
+{
+  "entities": {
+    "Blockchain": {
+      "title": "Blockchain",
+      "description": "Configuration for supported blockchain networks.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "symbol": { "type": "string" },
+        "type": { "enum": ["evm", "btc", "solana"], "type": "string" },
+        "chainId": { "type": "number" },
+        "rpcUrl": { "type": "string" }
+      }
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "A token or native coin supported by the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "blockchainId": { "type": "string" },
+        "symbol": { "type": "string" },
+        "decimals": { "type": "number" },
+        "contractAddress": { "type": "string" }
+      }
+    },
+    "Wallet": {
+      "title": "Wallet",
+      "description": "A custodial address derived for a user on a specific chain.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "blockchainId": { "type": "string" },
+        "address": { "type": "string" },
+        "derivationPath": { "type": "string" }
+      }
+    },
+    "Balance": {
+      "title": "Balance",
+      "description": "User's internal ledger balance for a specific asset.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "assetId": { "type": "string" },
+        "amount": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "LedgerEntry": {
+      "title": "LedgerEntry",
+      "description": "Audit trail for every balance change.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "assetId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "enum": ["deposit", "withdrawal", "swap", "fee"], "type": "string" },
+        "txHash": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["google.com", "password"]
+  },
+  "firestore": {
+    "/blockchains/{chainId}": {
+      "schema": "Blockchain",
+      "description": "Global config for supported chains."
+    },
+    "/assets/{assetId}": {
+      "schema": "Asset",
+      "description": "Global config for supported tokens."
+    },
+    "/users/{userId}/wallets/{chainId}": {
+      "schema": "Wallet",
+      "description": "User's custodial addresses per chain."
+    },
+    "/users/{userId}/balances/{assetId}": {
+      "schema": "Balance",
+      "description": "User's internal ledger balances."
+    },
+    "/users/{userId}/ledger/{entryId}": {
+      "schema": "LedgerEntry",
+      "description": "Full audit history for the user."
+    }
+  }
+}
