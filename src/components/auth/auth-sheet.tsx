@@ -60,23 +60,20 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
-        className="rounded-t-[2rem] bg-[#121218] border-t border-white/10 p-6 max-h-[80vh] overflow-y-auto"
+        className="rounded-t-[2rem] bg-[#121218] border-t border-white/10 p-6 pt-4 pb-10 max-h-[450px] overflow-y-auto"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="flex flex-col items-center text-center space-y-1 mb-6">
-          <h2 className="text-2xl font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-            Welcome to Wevina v2
+        <div className="flex flex-col items-center text-center space-y-1 mb-4">
+          <h2 className="text-xl font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+            {mode === 'login' ? 'Welcome Back' : 'Get Started'}
           </h2>
-          <p className="text-muted-foreground text-xs">
-            Join the programmable custodial wallet platform.
-          </p>
         </div>
 
-        <div className="bg-[#1c1c24] p-1 rounded-2xl flex mb-6">
+        <div className="bg-[#1c1c24] p-1 rounded-2xl flex mb-4">
           <button 
             onClick={() => setMode('login')}
             className={cn(
-                "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all",
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-all",
                 mode === 'login' ? "bg-black text-white shadow-lg" : "text-muted-foreground"
             )}
           >
@@ -85,7 +82,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
           <button 
             onClick={() => setMode('signup')}
             className={cn(
-                "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all",
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-all",
                 mode === 'signup' ? "bg-black text-white shadow-lg" : "text-muted-foreground"
             )}
           >
@@ -97,7 +94,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
           <div className="space-y-1">
             <Input 
               type="email" 
-              placeholder="email@example.com" 
+              placeholder="Email address" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-12 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"
@@ -107,7 +104,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
           <div className="space-y-1">
             <Input 
               type="password" 
-              placeholder="••••••••" 
+              placeholder="Password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-12 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"

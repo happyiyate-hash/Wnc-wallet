@@ -83,7 +83,7 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* This is the fix: Remove the focus ring from all elements */
+  /* Remove focus rings from all elements */
   *:focus {
     outline: none !important;
     box-shadow: none !important;
@@ -92,6 +92,11 @@
     outline: none !important;
     box-shadow: none !important;
   }
+}
+
+/* Hide Next.js dev badge and portals that clutter the UI */
+#nextjs-portal, [data-nextjs-toast-wrapper], .nextjs-static-indicator-root {
+  display: none !important;
 }
 
 @layer utilities {
