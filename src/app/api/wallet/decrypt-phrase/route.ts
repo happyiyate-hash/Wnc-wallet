@@ -21,12 +21,13 @@ export async function POST(req: NextRequest) {
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
+        // Ensure user is authenticated using the provided token or session
         const { data: { user } } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+            return NextResponse.json({ message: 'Unauthorized: No valid session found' }, { status: 401 });
         }
 
         const { encrypted, iv } = await req.json();
@@ -40,6 +41,6 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Decryption failed. Please check your encryption key.' }, { status: 500 });
+        return NextResponse.json({ message: 'Decryption failed. Ensure your encryption key is correct.' }, { status: 500 });
     }
 }

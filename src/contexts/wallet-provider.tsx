@@ -160,10 +160,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user, getAuthToken]);
 
   const restoreFromCloud = async () => {
-    if (!user || !supabase) return;
+    if (!user || !supabase) {
+        toast({ variant: "destructive", title: "Restore Failed", description: "Login required to access cloud vault." });
+        return;
+    }
     
     setIsRefreshing(true);
     try {
+      // Step 1: Force profile refresh to get latest vault data
       await refreshProfile();
       
       const { data: latestProfile, error: fetchError } = await supabase
@@ -176,14 +180,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error("No cloud backup found for this account.");
       }
 
+      // Step 2: Get Auth Token for Production Vault Architecture
       const token = await getAuthToken();
       if (!token) throw new Error("Unauthorized: Please log in again.");
 
+      // Step 3: Decrypt via secure API
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({ 
           encrypted: latestProfile.vault_phrase, 
