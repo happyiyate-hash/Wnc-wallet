@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
-import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download } from 'lucide-react';
+import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download, Timer } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 
 interface WalletManagementSheetProps {
@@ -19,35 +19,101 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
   const [step, setStep] = useState<'start' | 'import'>('start');
   const [importInput, setImportInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Real-time feedback states
+  const [status, setStatus] = useState<string>('');
+  const [timer, setTimer] = useState<number>(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+
+  const startTimer = () => {
+    setTimer(0);
+    startTimeRef.current = Date.now();
+    timerRef.current = setInterval(() => {
+      setTimer(Date.now() - startTimeRef.current);
+    }, 10);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => stopTimer();
+  }, []);
 
   const handleCreate = async () => {
     setIsProcessing(true);
+    setStatus('Generating Keypair...');
+    startTimer();
     try {
       await generateWallet();
+      setStatus('Complete!');
+    } catch (e: any) {
+      setStatus('Failed');
     } finally {
-      setIsProcessing(false);
+      setTimeout(() => {
+        setIsProcessing(false);
+        stopTimer();
+        setStatus('');
+      }, 1000);
     }
   };
 
   const handleImport = async () => {
     setIsProcessing(true);
+    setStatus('Verifying Phrase...');
+    startTimer();
     try {
       await importWallet(importInput);
       setStep('start');
       setImportInput('');
+      setStatus('Complete!');
     } catch (e: any) {
+      setStatus('Invalid Phrase');
       alert(e.message);
     } finally {
-      setIsProcessing(false);
+      setTimeout(() => {
+        setIsProcessing(false);
+        stopTimer();
+        setStatus('');
+      }, 1000);
     }
   };
 
   const handleRestore = async () => {
     setIsProcessing(true);
+    setStatus('Fetching Vault...');
+    startTimer();
+    
+    // Simulate status changes for better UX during the async pipe
+    const statusSequence = [
+        { msg: 'Connecting to Supabase...', delay: 200 },
+        { msg: 'Retrieving Encrypted Vault...', delay: 800 },
+        { msg: 'Decrypting with AES-256...', delay: 1500 },
+        { msg: 'Finalizing Identity...', delay: 2200 }
+    ];
+
+    statusSequence.forEach(({ msg, delay }) => {
+        setTimeout(() => {
+            if (isProcessing) setStatus(msg);
+        }, delay);
+    });
+
     try {
       await restoreFromCloud();
+      setStatus('Access Restored!');
+    } catch (e: any) {
+      setStatus('Restore Failed');
     } finally {
-      setIsProcessing(false);
+      setTimeout(() => {
+        setIsProcessing(false);
+        stopTimer();
+        setStatus('');
+      }, 1000);
     }
   };
 
@@ -66,7 +132,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           </div>
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
-            {step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}
+            {isProcessing ? (
+                <div className="flex items-center justify-center gap-2 text-primary font-mono">
+                    <Timer className="w-3 h-3 animate-pulse" />
+                    {(timer / 1000).toFixed(3)}s
+                </div>
+            ) : (
+                step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'
+            )}
           </SheetDescription>
         </SheetHeader>
 
@@ -74,12 +147,18 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           {step === 'start' && (
             <>
               <Button 
-                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90" 
+                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90 relative overflow-hidden" 
                 onClick={handleCreate}
                 disabled={isProcessing}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Create New Wallet
+                {isProcessing && status.includes('Generating') ? (
+                    <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="animate-pulse">{status}</span>
+                    </div>
+                ) : (
+                    <><Plus className="w-4 h-4" /> Create New Wallet</>
+                )}
               </Button>
 
               <Button 
@@ -95,12 +174,18 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
               {hasCloudBackup && (
                 <Button 
                   variant="outline"
-                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5" 
+                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5 min-w-[200px]" 
                   onClick={handleRestore}
                   disabled={isProcessing}
                 >
-                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
-                  Restore from Cloud Vault
+                  {isProcessing && !status.includes('Generating') ? (
+                    <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-xs font-mono">{status}</span>
+                    </div>
+                  ) : (
+                    <><CloudDownload className="w-4 h-4" /> Restore from Cloud Vault</>
+                  )}
                 </Button>
               )}
             </>
