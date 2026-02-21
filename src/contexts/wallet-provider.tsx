@@ -7,9 +7,11 @@ import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { fetchAssetPrices } from '@/lib/coingecko';
+import { supabase } from '@/lib/supabase/client';
 
 interface WalletContextType {
   isInitialized: boolean;
+  isAssetsLoading: boolean;
   hasNewNotifications: boolean;
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
@@ -37,11 +39,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize viewing network
+  // Initialize viewing network and basic state
   useEffect(() => {
-    if (chainsWithLogos.length > 0 && !viewingNetwork) {
-      setViewingNetwork(chainsWithLogos[0]);
+    if (chainsWithLogos.length > 0) {
+      if (!viewingNetwork) {
+        setViewingNetwork(chainsWithLogos[0]);
+      }
+      setIsInitialized(true);
     }
   }, [chainsWithLogos, viewingNetwork]);
 
@@ -108,9 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!adapter) throw new Error("Adapter not supported");
 
       const baseAssets = getInitialAssets(viewingNetwork.chainId);
-      // Fetch raw on-chain balances
       const rawBalances = await adapter.fetchBalances(wallets[0].address, baseAssets);
-      // Hydrate with prices from CoinGecko
       const assetsWithPrices = await fetchAssetPrices(rawBalances);
 
       setBalances(prev => ({
@@ -124,7 +128,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets, viewingNetwork, infuraApiKey]);
 
-  // Refresh balances whenever dependencies change
   useEffect(() => {
     fetchBalances();
   }, [fetchBalances]);
@@ -142,7 +145,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
-    isInitialized: !areLogosLoading && !!viewingNetwork,
+    isInitialized,
+    isAssetsLoading: areLogosLoading,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork: setViewingNetwork,

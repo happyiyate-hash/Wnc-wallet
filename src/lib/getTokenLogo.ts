@@ -15,6 +15,7 @@ export async function getTokenLogoUrl(
     symbol?: string | null,
     networkName?: string | null,
 ): Promise<string | null> {
+    // If supabase is not configured, we can't fetch logos from it.
     if (!supabase || !symbol) return null;
 
     try {

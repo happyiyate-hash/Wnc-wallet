@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw,
   Plus,
@@ -90,27 +90,29 @@ export default function WalletTab() {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const router = useRouter();
 
-  const assets = allAssets; // Directly use assets from context
-  
+  // Show the management sheet if no wallet exists once initialized
   useEffect(() => {
-    if (isInitialized) {
-        if (!wallets) {
-          setIsWalletSheetOpen(true);
-        } else if (!infuraApiKey) {
-          setIsApiManagerOpen(true);
-        }
+    if (isInitialized && !wallets) {
+      setIsWalletSheetOpen(true);
+    }
+  }, [isInitialized, wallets]);
+
+  // Show API manager if wallet exists but no key is provided
+  useEffect(() => {
+    if (isInitialized && wallets && !infuraApiKey) {
+      setIsApiManagerOpen(true);
     }
   }, [isInitialized, wallets, infuraApiKey]);
   
   const totalFiatValue = useMemo(() => {
-    return assets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
-  }, [assets]);
+    return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
+  }, [allAssets]);
   
   const total24hChange = useMemo(() => {
-    if (!assets || assets.length === 0 || totalFiatValue === 0) return 0;
+    if (!allAssets || allAssets.length === 0 || totalFiatValue === 0) return 0;
     
     let totalValueYesterday = 0;
-    for (const asset of assets) {
+    for (const asset of allAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
@@ -127,7 +129,7 @@ export default function WalletTab() {
     
     const changeValue = totalFiatValue - totalValueYesterday;
     return (changeValue / totalValueYesterday) * 100;
-  }, [assets, totalFiatValue]);
+  }, [allAssets, totalFiatValue]);
 
   const getBalanceFontSize = (balance: number) => {
     const safeBalance = Number.isFinite(balance) ? balance : 0;
@@ -160,16 +162,25 @@ export default function WalletTab() {
     </div>
   );
 
-  if (!wallets && isInitialized) {
+  if (!isInitialized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground mt-4">Initializing Wallet...</p>
+      </div>
+    );
+  }
+
+  if (!wallets) {
     return (
       <>
         <div className="flex h-full flex-col items-center justify-center text-center p-4 mt-6">
           <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
           <h2 className="text-xl font-bold">Welcome to Your Wallet</h2>
           <p className="text-muted-foreground mt-2 mb-6">
-            Create or import a wallet to get started.
+            Create or import a wallet to get started with non-custodial security.
           </p>
-          <Button size="lg" onClick={() => setIsWalletSheetOpen(true)}>
+          <Button size="lg" onClick={() => setIsWalletSheetOpen(true)} className="rounded-xl px-8 h-12">
             Get Started
           </Button>
         </div>
@@ -184,7 +195,6 @@ export default function WalletTab() {
   return (
     <div className="flex flex-col h-full">
       <div className="bg-background pt-8">
-        {/* Balance */}
         <div className="flex items-center justify-between px-4">
             <div>
               <h2 className={cn(
@@ -216,7 +226,6 @@ export default function WalletTab() {
             </div>
         </div>
 
-        {/* Actions */}
         <div className="flex justify-center gap-4 my-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" href="/send" />
           <ActionButton icon={ArrowDownToLine} label="Receive" href="/receive" />
@@ -225,7 +234,6 @@ export default function WalletTab() {
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
         
-        {/* Tabs */}
         <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-4">
@@ -235,23 +243,10 @@ export default function WalletTab() {
                 >
                   Tokens
                 </TabsTrigger>
-                <TabsTrigger
-                  value="defi"
-                  disabled
-                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
-                >
-                  DeFi
-                </TabsTrigger>
-                <TabsTrigger
-                  value="nfts"
-                  disabled
-                  className="p-0 pb-2 text-muted-foreground/50 flex-1"
-                >
-                  NFTs
-                </TabsTrigger>
+                <TabsTrigger value="defi" disabled className="p-0 pb-2 text-muted-foreground/50 flex-1">DeFi</TabsTrigger>
+                <TabsTrigger value="nfts" disabled className="p-0 pb-2 text-muted-foreground/50 flex-1">NFTs</TabsTrigger>
               </TabsList>
               <TabsContent value="tokens" className="px-0">
-                 {/* Manage Section */}
                 <div className="flex items-center justify-between py-4 px-4">
                     <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
                         <Button
@@ -274,27 +269,17 @@ export default function WalletTab() {
                             {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
                             </Button>
                         </div>
-                         <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                            <Button
-                            size="icon"
-                            className="h-9 w-9 rounded-full bg-background hover:bg-muted/50"
-                            onClick={() => router.push('/tokens/add')}
-                            >
-                            <Plus className="h-5 w-5 text-primary" />
-                            </Button>
-                        </div>
                     </div>
                 </div>
 
-                {/* Scrollable Area */}
                 <div className="flex-1 overflow-y-auto thin-scrollbar">
-                  {isRefreshing && assets.length === 0 ? (
+                  {isRefreshing && allAssets.length === 0 ? (
                      <div className="flex items-center justify-center pt-10">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                      </div>
-                  ) : assets.length > 0 ? (
+                  ) : allAssets.length > 0 ? (
                     <div>
-                        {assets.map((token) => (
+                        {allAssets.map((token) => (
                         <TokenRow
                             key={`${token.chainId}-${token.address || token.symbol}`}
                             token={token}
@@ -304,27 +289,16 @@ export default function WalletTab() {
                   ) : (
                     <div className="flex items-center justify-center pt-10">
                         <div className="text-center text-muted-foreground">
-                          No tokens to show.
+                          No tokens found. Ensure you have an Infura key set.
                         </div>
                     </div>
                   )}
                 </div>
               </TabsContent>
-               <TabsContent value="defi">
-                    <div className="text-center text-muted-foreground p-8">
-                        DeFi features are coming soon!
-                    </div>
-                </TabsContent>
-                <TabsContent value="nfts">
-                    <div className="text-center text-muted-foreground p-8">
-                        NFTs are coming soon!
-                    </div>
-                </TabsContent>
             </Tabs>
         </div>
       </div>
 
-      {/* Sheets */}
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
       <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}

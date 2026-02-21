@@ -8,6 +8,7 @@ interface UserContextType {
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  isSupabaseConfigured: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -16,11 +17,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Use this to show a friendly UI when Supabase keys are missing
+  const isSupabaseConfigured = !!supabase;
+
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+    // If Supabase isn't configured, we stop loading and don't try to use auth.
+    if (!supabase) {
       setLoading(false);
+      return;
+    }
+
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+      } catch (e) {
+        console.error("Supabase session check failed", e);
+      } finally {
+        setLoading(false);
+      }
     };
 
     checkSession();
@@ -36,11 +51,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, signOut }}>
+    <UserContext.Provider value={{ user, loading, signOut, isSupabaseConfigured }}>
       {children}
     </UserContext.Provider>
   );
