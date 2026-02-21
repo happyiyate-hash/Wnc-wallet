@@ -52,7 +52,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     try {
       const cleanMnemonic = mnemonic.trim();
-      // Validate BIP-39 mnemonic
       if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) {
         throw new Error("Invalid mnemonic phrase structure.");
       }
@@ -102,11 +101,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
+  const getAuthToken = async () => {
+    if (!supabase) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
+  };
+
   const saveToVaultInternal = async (mnemonic: string) => {
     if (!user || !supabase) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = await getAuthToken();
+      if (!token) throw new Error("No active session");
 
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
@@ -155,14 +160,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user]);
 
   const restoreFromCloud = async () => {
-    if (!user || !profile?.vault_phrase || !profile.iv || !supabase) {
+    if (!user || !supabase) return;
+    
+    // Refresh profile to get latest vault data
+    await refreshProfile();
+    
+    // Access profile from the updated state or the already available one
+    // Note: React state updates might not be immediate, so we re-fetch if needed
+    const { data: latestProfile } = await supabase.from('profiles').select('vault_phrase, iv').eq('id', user.id).single();
+
+    if (!latestProfile?.vault_phrase || !latestProfile?.iv) {
       toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found for this account." });
       return;
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = await getAuthToken();
+      if (!token) throw new Error("Unauthorized: Please log in again.");
 
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
@@ -170,7 +184,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+        body: JSON.stringify({ 
+          encrypted: latestProfile.vault_phrase, 
+          iv: latestProfile.iv 
+        })
       });
       
       const data = await response.json();

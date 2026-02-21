@@ -60,12 +60,12 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
-        className="rounded-t-[2rem] bg-[#121218] border-t border-white/10 p-6 pt-4 pb-10 max-h-[450px] overflow-y-auto"
+        className="rounded-t-[2rem] bg-[#121218] border-t border-white/10 p-6 pt-4 pb-8 max-h-[380px] overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="flex flex-col items-center text-center space-y-1 mb-4">
-          <h2 className="text-xl font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-            {mode === 'login' ? 'Welcome Back' : 'Get Started'}
+          <h2 className="text-lg font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+            {mode === 'login' ? 'Login' : 'Join Wevina'}
           </h2>
         </div>
 
@@ -117,7 +117,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
             className="w-full h-12 rounded-xl text-base font-bold bg-primary hover:bg-primary/90 transition-transform active:scale-[0.98] mt-2"
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : (mode === 'login' ? 'Login' : 'Create Account')}
+            {isLoading ? <Loader2 className="animate-spin" /> : (mode === 'login' ? 'Login' : 'Get Started')}
           </Button>
         </form>
       </SheetContent>

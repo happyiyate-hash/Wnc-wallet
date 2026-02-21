@@ -95,7 +95,10 @@
 }
 
 /* Hide Next.js dev badge and portals that clutter the UI */
-#nextjs-portal, [data-nextjs-toast-wrapper], .nextjs-static-indicator-root {
+#nextjs-portal, 
+[data-nextjs-toast-wrapper], 
+.nextjs-static-indicator-root,
+nextjs-portal {
   display: none !important;
 }
 
