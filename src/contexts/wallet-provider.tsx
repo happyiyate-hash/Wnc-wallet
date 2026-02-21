@@ -48,17 +48,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
 
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
-    if (!user) return;
+    if (!user || !mnemonic) return;
     
     try {
-      const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
+      const cleanMnemonic = mnemonic.trim();
+      const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
+      
       setWallets([{ 
         address: wallet.address, 
         privateKey: wallet.privateKey,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
-      localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
+      
+      localStorage.setItem(`wallet_mnemonic_${user.id}`, cleanMnemonic);
     } catch (e) {
+      console.error("Mnemonic load error:", e);
       throw new Error("Invalid mnemonic phrase.");
     }
   }, [user]);
@@ -67,7 +71,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!authLoading && user) {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        loadWalletFromMnemonic(savedMnemonic);
+        try {
+          loadWalletFromMnemonic(savedMnemonic);
+        } catch (e) {
+          localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+        }
       }
     } else if (!authLoading && !user) {
       setWallets(null);
@@ -103,6 +111,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({ phrase: mnemonic })
       });
+      
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Encryption failed');
       
@@ -111,6 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await refreshProfile();
     } catch (e) {
       console.error("Cloud backup failed", e);
+      toast({ variant: "destructive", title: "Backup Failed", description: "Could not sync keys to Cloud Vault." });
     }
   };
 
@@ -139,7 +149,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const restoreFromCloud = async () => {
     if (!user || !profile?.vault_phrase || !profile.iv || !supabase) {
-      toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found." });
+      toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found for this account." });
       return;
     }
 
@@ -155,14 +165,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
       });
+      
       const data = await response.json();
-      if (response.ok) {
+      
+      if (response.ok && data.phrase) {
         loadWalletFromMnemonic(data.phrase);
-        toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored." });
+        toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored from vault." });
       } else {
         throw new Error(data.message || "Decryption failed");
       }
     } catch (e: any) {
+      console.error("Restore error:", e);
       toast({ variant: "destructive", title: "Restore Failed", description: e.message });
     }
   };

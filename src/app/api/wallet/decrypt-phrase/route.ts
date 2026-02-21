@@ -36,14 +36,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Encrypted phrase and IV are required.' }, { status: 400 });
         }
 
-        // The `decryptPhrase` function is now a server-only function
+        // Decrypt the phrase on the server using the master ENCRYPTION_KEY
         const phrase = decryptPhrase(encrypted, iv);
 
+        // Return the decrypted plaintext mnemonic to the client
         return NextResponse.json({ phrase });
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error);
-        // Do not leak specific crypto errors to the client
         return NextResponse.json({ message: 'Decryption failed on the server.' }, { status: 500 });
     }
 }
