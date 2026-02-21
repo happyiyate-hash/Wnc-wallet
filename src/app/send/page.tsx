@@ -5,47 +5,53 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Search, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
-import { supabase } from '@/lib/supabase/client';
-import { useUser } from '@/contexts/user-provider';
+import { ethers } from 'ethers';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SendPage() {
-  const { allAssets, viewingNetwork } = useWallet();
-  const { user } = useUser();
+  const { allAssets, viewingNetwork, wallets, infuraApiKey } = useWallet();
+  const { toast } = useToast();
   const router = useRouter();
 
-  const [step, setStep] = useState<'select' | 'details'>('select');
+  const [step, setStep] = useState<'select' | 'details' | 'success'>('select');
   const [selectedToken, setSelectedToken] = useState(allAssets[0] || null);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txHash, setTxHash] = useState('');
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
   const handleSendRequest = async () => {
-    if (!user || !selectedToken || !isValidAmount) return;
+    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) return;
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: user.id,
-          asset_id: selectedToken.address === 'native' ? null : selectedToken.address, // In actual schema we use asset UUIDs
-          type: 'withdrawal',
-          amount: parseFloat(amount),
-          status: 'pending',
-          timestamp: new Date().toISOString()
-        });
-
-      if (error) throw error;
+      const provider = new ethers.JsonRpcProvider(`${viewingNetwork.rpcBase}${infuraApiKey}`);
+      const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
       
-      router.push('/');
-    } catch (e) {
-      console.error("Failed to submit withdrawal", e);
+      let tx;
+      if (selectedToken.isNative) {
+        tx = await wallet.sendTransaction({
+          to: recipient,
+          value: ethers.parseEther(amount)
+        });
+      } else {
+        const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
+        const contract = new ethers.Contract(selectedToken.address, abi, wallet);
+        tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18)); // Mocked 18 decimals
+      }
+
+      setTxHash(tx.hash);
+      setStep('success');
+      toast({ title: "Transaction Sent", description: tx.hash });
+    } catch (e: any) {
+      console.error("Failed to send transaction", e);
+      toast({ title: "Transaction Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -140,9 +146,24 @@ export default function SendPage() {
           disabled={!recipient || !isValidAmount || isSubmitting}
           onClick={handleSendRequest}
         >
-          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Review & Send"}
+          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Review & Sign"}
         </Button>
       </div>
+    </div>
+  );
+
+  const renderSuccess = () => (
+    <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
+      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center">
+        <CheckCircle2 className="w-12 h-12 text-green-500" />
+      </div>
+      <div>
+        <h2 className="text-2xl font-bold">Transaction Sent!</h2>
+        <p className="text-muted-foreground mt-2 font-mono text-xs break-all px-4">{txHash}</p>
+      </div>
+      <Button className="w-full h-14 rounded-xl" onClick={() => router.push('/')}>
+        Done
+      </Button>
     </div>
   );
 
@@ -153,12 +174,12 @@ export default function SendPage() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-lg font-bold">
-          {step === 'select' ? 'Select Token' : `Send ${selectedToken?.symbol}`}
+          {step === 'select' ? 'Select Token' : step === 'details' ? `Send ${selectedToken?.symbol}` : 'Success'}
         </h1>
       </header>
       
       <main className="flex-1 overflow-hidden">
-        {step === 'select' ? renderTokenSelect() : renderDetails()}
+        {step === 'select' ? renderTokenSelect() : step === 'details' ? renderDetails() : renderSuccess()}
       </main>
     </div>
   );

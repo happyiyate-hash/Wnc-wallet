@@ -1,10 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect } from 'react';
-import type { AssetRow, ChainConfig, UserProfile } from '@/lib/types';
+import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
+import type { AssetRow, ChainConfig, UserProfile, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
-import { useUser } from './user-provider';
-import { supabase } from '@/lib/supabase/client';
+import { ethers } from 'ethers';
+import { getInitialAssets } from '@/lib/wallets/balances';
+import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
+import { fetchAssetPrices } from '@/lib/coingecko';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -16,105 +18,101 @@ interface WalletContextType {
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
   profile: UserProfile | null;
-  wallets: { [chainId: number]: string } | null;
+  wallets: WalletWithMetadata[] | null;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
   refresh: () => Promise<void>;
+  importWallet: (mnemonic: string) => void;
+  generateWallet: () => string;
+  logout: () => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { user, loading: authLoading } = useUser();
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
-  const [balances, setBalances] = useState<any[]>([]);
-  const [userData, setUserData] = useState<any>(null);
+  const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
+  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Initialize viewing network
   useEffect(() => {
     if (chainsWithLogos.length > 0 && !viewingNetwork) {
       setViewingNetwork(chainsWithLogos[0]);
     }
   }, [chainsWithLogos, viewingNetwork]);
 
+  // Load persistence
   useEffect(() => {
     const savedKey = localStorage.getItem('infuraApiKey');
     if (savedKey) setInfuraApiKeyInternal(savedKey);
+
+    const savedMnemonic = localStorage.getItem('wallet_mnemonic');
+    if (savedMnemonic) {
+      try {
+        const wallet = ethers.Wallet.fromPhrase(savedMnemonic);
+        setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
+      } catch (e) {
+        console.error("Failed to load saved wallet", e);
+      }
+    }
   }, []);
 
-  const fetchData = async () => {
-    if (!user) return;
-    setIsRefreshing(true);
-    
+  const generateWallet = useCallback(() => {
+    const wallet = ethers.Wallet.createRandom();
+    const mnemonic = wallet.mnemonic?.phrase || '';
+    if (mnemonic) {
+      localStorage.setItem('wallet_mnemonic', mnemonic);
+      setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
+    }
+    return mnemonic;
+  }, []);
+
+  const importWallet = useCallback((mnemonic: string) => {
     try {
-      // 1. Fetch user profile and wallets from public schemas
-      const { data: wallets } = await supabase
-        .from('wallets')
-        .select(`
-          *,
-          blockchains (*)
-        `)
-        .eq('user_id', user.id);
-
-      const walletMap = (wallets || []).reduce((acc: any, w: any) => {
-        if (w.blockchains) acc[w.blockchains.chain_id] = w.address;
-        return acc;
-      }, {});
-
-      setUserData({ 
-        profile: { username: user.email?.split('@')[0] || 'User' }, 
-        wallets: walletMap 
-      });
-
-      // 2. Fetch balances with asset info
-      const { data: balanceData } = await supabase
-        .from('balances')
-        .select(`
-          *,
-          assets (
-            *,
-            blockchains (*)
-          )
-        `)
-        .eq('user_id', user.id);
-      
-      setBalances(balanceData || []);
+      const wallet = ethers.Wallet.fromPhrase(mnemonic);
+      localStorage.setItem('wallet_mnemonic', mnemonic);
+      setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
     } catch (e) {
-      console.error("Error fetching wallet data:", e);
+      throw new Error("Invalid mnemonic phrase");
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('wallet_mnemonic');
+    setWallets(null);
+    setBalances({});
+  }, []);
+
+  const fetchBalances = useCallback(async () => {
+    if (!wallets || wallets.length === 0 || !viewingNetwork || !infuraApiKey) return;
+    setIsRefreshing(true);
+
+    try {
+      const adapter = evmAdapterFactory(viewingNetwork, infuraApiKey);
+      if (!adapter) throw new Error("Adapter not supported");
+
+      const baseAssets = getInitialAssets(viewingNetwork.chainId);
+      const rawBalances = await adapter.fetchBalances(wallets[0].address, baseAssets);
+      const assetsWithPrices = await fetchAssetPrices(rawBalances);
+
+      setBalances(prev => ({
+        ...prev,
+        [viewingNetwork.chainId]: assetsWithPrices
+      }));
+    } catch (e) {
+      console.error("Fetch balances failed", e);
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [wallets, viewingNetwork, infuraApiKey]);
 
   useEffect(() => {
-    if (!user) {
-      setBalances([]);
-      setUserData(null);
-      return;
-    }
-
-    fetchData();
-
-    // Subscribe to balance changes
-    const balanceSubscription = supabase
-      .channel('ledger-updates')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'balances',
-        filter: `user_id=eq.${user.id}`
-      }, () => {
-        fetchData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(balanceSubscription);
-    };
-  }, [user]);
+    fetchBalances();
+  }, [fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -123,47 +121,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, {} as { [key: number]: ChainConfig });
   }, [chainsWithLogos]);
 
-  const setNetwork = (network: ChainConfig) => setViewingNetwork(network);
-
-  const setInfuraApiKey = (key: string | null) => {
-    if (key) localStorage.setItem('infuraApiKey', key);
-    else localStorage.removeItem('infuraApiKey');
-    setInfuraApiKeyInternal(key);
-  };
-
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    
-    return balances
-      .filter(b => b.assets?.blockchains?.chain_id === viewingNetwork.chainId)
-      .map(b => ({
-        chainId: viewingNetwork.chainId,
-        address: b.assets.contract_address || 'native',
-        symbol: b.assets.symbol,
-        name: b.assets.symbol,
-        balance: b.balance?.toString() || '0',
-        fiatValueUsd: (parseFloat(b.balance) || 0) * (parseFloat(b.price_usd) || 0),
-        priceUsd: parseFloat(b.price_usd) || 0,
-        pctChange24h: parseFloat(b.pct_change_24h) || 0,
-        iconUrl: b.assets.icon_url || null,
-        coingeckoId: b.assets.coingecko_id
-      } as AssetRow));
+    return balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
-    isInitialized: !authLoading && !areLogosLoading && !!viewingNetwork,
+    isInitialized: !areLogosLoading && !!viewingNetwork,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
-    setNetwork,
+    setNetwork: setViewingNetwork,
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    profile: userData?.profile || null,
-    wallets: userData?.wallets || null,
+    profile: wallets ? { username: 'My Wallet' } : null,
+    wallets,
     infuraApiKey,
-    setInfuraApiKey,
-    refresh: fetchData,
+    setInfuraApiKey: (key) => {
+      if (key) localStorage.setItem('infuraApiKey', key);
+      else localStorage.removeItem('infuraApiKey');
+      setInfuraApiKeyInternal(key);
+    },
+    refresh: fetchBalances,
+    generateWallet,
+    importWallet,
+    logout
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
