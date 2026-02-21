@@ -3,10 +3,20 @@
 import { useState, useRef, useEffect } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
+import { useUser } from '@/contexts/user-provider';
+import AuthSheet from '@/components/auth/auth-sheet';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const { user, loading } = useUser();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      setIsAuthOpen(true);
+    }
+  }, [user, loading]);
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;
@@ -16,7 +26,6 @@ export default function Home() {
 
     const handleScroll = () => {
       const currentScrollY = scrollDiv.scrollTop;
-      // Collapse header when scrolling down, show when scrolling up
       if (currentScrollY > lastScrollY && currentScrollY > 50) {
         setIsHeaderCollapsed(true);
       } else {
@@ -37,6 +46,8 @@ export default function Home() {
             <WalletTab />
           </div>
         </main>
+        
+        <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
       </div>
   );
 }
