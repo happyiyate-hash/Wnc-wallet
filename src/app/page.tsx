@@ -4,19 +4,19 @@ import { useState, useRef, useEffect } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
+import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
+import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const { user, loading } = useUser();
+  const { wallets, isInitialized } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      setIsAuthOpen(true);
-    }
-  }, [user, loading]);
+  // Determine which sheet should be open
+  const isAuthOpen = !loading && !user;
+  const isWalletSetupOpen = !loading && !!user && isInitialized && !wallets;
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;
@@ -47,7 +47,11 @@ export default function Home() {
           </div>
         </main>
         
-        <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
+        {/* Priority 1: Auth */}
+        <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
+        
+        {/* Priority 2: Wallet Setup (Only if Auth is done) */}
+        <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
       </div>
   );
 }

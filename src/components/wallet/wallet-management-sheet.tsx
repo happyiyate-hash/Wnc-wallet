@@ -5,9 +5,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
-import { Loader2, ShieldCheck, Lock, Copy, CheckCircle2, CloudUpload } from 'lucide-react';
+import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 interface WalletManagementSheetProps {
     isOpen: boolean;
@@ -15,25 +14,27 @@ interface WalletManagementSheetProps {
 }
 
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
-  const { generateWallet, importWallet, wallets, backupToCloud } = useWallet();
-  const { user, profile } = useUser();
-  const [step, setStep] = useState<'start' | 'generate' | 'import'>('start');
-  const [mnemonic, setMnemonic] = useState('');
+  const { generateWallet, importWallet, restoreFromCloud, wallets } = useWallet();
+  const { profile } = useUser();
+  const [step, setStep] = useState<'start' | 'import'>('start');
   const [importInput, setImportInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isCopied, copy] = useCopyToClipboard();
 
-  const handleGenerate = () => {
-    const m = generateWallet();
-    setMnemonic(m);
-    setStep('generate');
+  const handleCreate = async () => {
+    setIsProcessing(true);
+    try {
+      generateWallet();
+      // Provider handles the auto-backup to cloud inside generateWallet if it wants, 
+      // or we can call backupToCloud here if needed.
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleImport = () => {
     setIsProcessing(true);
     try {
       importWallet(importInput);
-      onOpenChange(false);
       setStep('start');
       setImportInput('');
     } catch (e: any) {
@@ -43,137 +44,94 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     }
   };
 
-  const handleCloudBackup = async () => {
+  const handleRestore = async () => {
     setIsProcessing(true);
-    await backupToCloud();
+    await restoreFromCloud();
     setIsProcessing(false);
   };
 
-  const hasWallet = wallets && wallets.length > 0;
-  const isCloudBackedUp = !!profile?.vault_phrase;
+  const hasCloudBackup = !!profile?.vault_phrase;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom"
-        className="rounded-t-3xl max-h-[95vh] bg-background p-8 border-t border-white/10 overflow-y-auto"
+        className="rounded-t-[2rem] bg-[#0a0a0c] p-6 border-t border-white/5"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <SheetHeader className="text-left space-y-4">
-          <div className="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center">
-            <Lock className="w-6 h-6 text-primary" />
+        <SheetHeader className="text-center space-y-2 mb-6">
+          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-2">
+            <Lock className="w-5 h-5 text-primary" />
           </div>
-          <SheetTitle className="text-3xl font-bold">
-            {step === 'generate' ? 'Backup Seed Phrase' : step === 'import' ? 'Import Wallet' : 'Your Keys, Your Crypto'}
-          </SheetTitle>
-          <SheetDescription className="text-lg text-muted-foreground">
-            {step === 'generate' ? 'Write down these 12 words in order. Never share them with anyone.' : 
-             step === 'import' ? 'Paste your 12 or 24 word mnemonic phrase to restore your wallet.' :
-             'In a non-custodial wallet, you are the only one in control of your funds.'}
+          <SheetTitle className="text-xl font-bold">Secure Your Assets</SheetTitle>
+          <SheetDescription className="text-sm text-muted-foreground">
+            {step === 'import' ? 'Enter your secret phrase' : 'Choose how you want to set up your wallet.'}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="py-8 space-y-6">
+        <div className="space-y-3">
           {step === 'start' && (
-            <div className="grid gap-4">
-              {hasWallet ? (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
-                    <p className="font-bold text-green-400">Wallet Active</p>
-                    <p className="text-sm opacity-80">{wallets[0].address}</p>
-                  </div>
-                  
-                  {user && !isCloudBackedUp && (
-                    <Button 
-                      className="w-full h-16 text-lg font-bold rounded-2xl gap-3" 
-                      onClick={handleCloudBackup}
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? <Loader2 className="animate-spin" /> : <CloudUpload className="w-6 h-6" />}
-                      Sync to Secure Vault
-                    </Button>
-                  )}
-                  
-                  {isCloudBackedUp && (
-                    <div className="flex items-center justify-center gap-2 text-primary font-semibold">
-                      <CheckCircle2 className="w-5 h-5" /> Secured in Cloud Vault
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <Button 
-                    size="lg" 
-                    onClick={handleGenerate} 
-                    className="h-16 text-xl font-bold rounded-2xl"
-                  >
-                    Create New Wallet
-                  </Button>
-                  <Button 
-                    size="lg" 
-                    variant="outline"
-                    onClick={() => setStep('import')} 
-                    className="h-16 text-xl font-bold rounded-2xl"
-                  >
-                    Import Existing Wallet
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+            <>
+              <Button 
+                className="w-full h-14 text-base font-bold rounded-2xl gap-3 bg-primary hover:bg-primary/90" 
+                onClick={handleCreate}
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 className="animate-spin" /> : <Plus className="w-5 h-5" />}
+                Create New Wallet
+              </Button>
 
-          {step === 'generate' && (
-            <div className="space-y-6">
-              <div className="p-6 rounded-2xl bg-secondary/30 border border-white/10 grid grid-cols-3 gap-2">
-                {mnemonic.split(' ').map((word, i) => (
-                  <div key={i} className="flex gap-2 text-sm">
-                    <span className="text-muted-foreground">{i + 1}.</span>
-                    <span className="font-bold">{word}</span>
-                  </div>
-                ))}
-              </div>
-              <Button variant="outline" className="w-full h-12 gap-2" onClick={() => copy(mnemonic)}>
-                {isCopied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                Copy Phrase
+              <Button 
+                variant="secondary"
+                className="w-full h-14 text-base font-bold rounded-2xl gap-3 bg-white/5 hover:bg-white/10" 
+                onClick={() => setStep('import')}
+                disabled={isProcessing}
+              >
+                <Download className="w-5 h-5" />
+                Import Existing Wallet
               </Button>
-              <Button className="w-full h-16 text-lg font-bold" onClick={() => setStep('start')}>
-                I've Saved It
-              </Button>
-            </div>
+
+              {hasCloudBackup && (
+                <Button 
+                  variant="outline"
+                  className="w-full h-14 text-base font-bold rounded-2xl gap-3 border-primary/20 text-primary hover:bg-primary/5" 
+                  onClick={handleRestore}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? <Loader2 className="animate-spin" /> : <CloudDownload className="w-5 h-5" />}
+                  Restore from Cloud Vault
+                </Button>
+              )}
+            </>
           )}
 
           {step === 'import' && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <Textarea 
-                placeholder="word1 word2 word3..." 
-                className="min-h-[120px] rounded-2xl p-4 bg-secondary/20"
+                placeholder="Enter 12 or 24 words separated by spaces..." 
+                className="min-h-[100px] rounded-xl p-4 bg-white/5 border-white/10 focus:border-primary/50"
                 value={importInput}
                 onChange={(e) => setImportInput(e.target.value)}
               />
-              <Button 
-                className="w-full h-16 text-lg font-bold" 
-                onClick={handleImport}
-                disabled={!importInput || isProcessing}
-              >
-                {isProcessing ? <Loader2 className="animate-spin" /> : 'Restore Wallet'}
-              </Button>
-              <Button variant="ghost" className="w-full" onClick={() => setStep('start')}>
-                Go Back
-              </Button>
-            </div>
-          )}
-
-          <div className="grid gap-6 opacity-60">
-            <div className="flex items-start gap-4 p-4 rounded-xl bg-secondary/10 border border-white/5">
-              <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-sm">Military-Grade Encryption</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Your keys are encrypted on the server and only you can unlock them.
-                </p>
+              <div className="flex gap-3">
+                <Button variant="ghost" className="flex-1 h-12 rounded-xl" onClick={() => setStep('start')}>
+                  Back
+                </Button>
+                <Button 
+                  className="flex-[2] h-12 rounded-xl font-bold" 
+                  onClick={handleImport}
+                  disabled={!importInput || isProcessing}
+                >
+                  {isProcessing ? <Loader2 className="animate-spin" /> : 'Restore Access'}
+                </Button>
               </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-center gap-2 text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+          <ShieldCheck className="w-3 h-3 text-green-500" />
+          Bank-Grade Encryption Active
         </div>
       </SheetContent>
     </Sheet>

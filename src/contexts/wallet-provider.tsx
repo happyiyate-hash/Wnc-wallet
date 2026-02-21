@@ -28,6 +28,7 @@ interface WalletContextType {
   importWallet: (mnemonic: string) => void;
   generateWallet: () => string;
   backupToCloud: () => Promise<void>;
+  restoreFromCloud: () => Promise<void>;
   logout: () => void;
 }
 
@@ -45,28 +46,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Recovery logic: Try to decrypt cloud mnemonic if local is missing
+  // Helper to load wallet into state
+  const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
+    try {
+      const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
+      setWallets([{ 
+        address: wallet.address, 
+        privateKey: wallet.privateKey,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
+      }]);
+      localStorage.setItem('wallet_mnemonic', mnemonic.trim());
+    } catch (e) {
+      throw new Error("Invalid mnemonic phrase.");
+    }
+  }, []);
+
+  // Recovery logic: Silent recovery if possible
   useEffect(() => {
-    const checkCloudRecovery = async () => {
-      if (user && profile?.vault_phrase && profile.iv && !localStorage.getItem('wallet_mnemonic')) {
-        try {
-          const response = await fetch('/api/wallet/decrypt-phrase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
-          });
-          if (response.ok) {
-            const { phrase } = await response.json();
-            importWallet(phrase);
-            toast({ title: "Wallet Recovered", description: "Your wallet was restored from your secure cloud vault." });
-          }
-        } catch (e) {
-          console.error("Cloud recovery failed", e);
-        }
-      }
-    };
-    checkCloudRecovery();
-  }, [user, profile, toast]);
+    const savedMnemonic = localStorage.getItem('wallet_mnemonic');
+    if (savedMnemonic) {
+      loadWalletFromMnemonic(savedMnemonic);
+    }
+  }, [loadWalletFromMnemonic]);
 
   useEffect(() => {
     if (chainsWithLogos.length > 0) {
@@ -80,54 +81,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const savedKey = localStorage.getItem('infuraApiKey');
     if (savedKey) setInfuraApiKeyInternal(savedKey);
-
-    const savedMnemonic = localStorage.getItem('wallet_mnemonic');
-    if (savedMnemonic) {
-      try {
-        const wallet = ethers.Wallet.fromPhrase(savedMnemonic);
-        setWallets([{ 
-          address: wallet.address, 
-          privateKey: wallet.privateKey,
-          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
-        }]);
-      } catch (e) {
-        console.error("Failed to load saved wallet", e);
-      }
-    }
   }, []);
 
-  const generateWallet = useCallback(() => {
-    const wallet = ethers.Wallet.createRandom();
-    const mnemonic = wallet.mnemonic?.phrase || '';
-    if (mnemonic) {
-      localStorage.setItem('wallet_mnemonic', mnemonic);
-      setWallets([{ 
-        address: wallet.address, 
-        privateKey: wallet.privateKey,
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
-      }]);
-    }
-    return mnemonic;
-  }, []);
-
-  const importWallet = useCallback((mnemonic: string) => {
-    try {
-      const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
-      localStorage.setItem('wallet_mnemonic', mnemonic.trim());
-      setWallets([{ 
-        address: wallet.address, 
-        privateKey: wallet.privateKey,
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
-      }]);
-    } catch (e) {
-      throw new Error("Invalid mnemonic phrase. Please ensure it is 12 or 24 words.");
-    }
-  }, []);
-
-  const backupToCloud = async () => {
-    const mnemonic = localStorage.getItem('wallet_mnemonic');
-    if (!user || !mnemonic || !supabase) return;
-
+  const backupToCloudInternal = async (mnemonic: string) => {
+    if (!user || !supabase) return;
     try {
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
@@ -135,18 +92,58 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ phrase: mnemonic })
       });
       const { encrypted, iv } = await response.json();
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ vault_phrase: encrypted, iv: iv })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await supabase.from('profiles').update({ vault_phrase: encrypted, iv: iv }).eq('id', user.id);
       await refreshProfile();
-      toast({ title: "Backup Successful", description: "Your wallet is now secured in your cloud vault." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Backup Failed", description: e.message });
+    } catch (e) {
+      console.error("Cloud backup failed", e);
     }
+  };
+
+  const generateWallet = useCallback(() => {
+    const wallet = ethers.Wallet.createRandom();
+    const mnemonic = wallet.mnemonic?.phrase || '';
+    if (mnemonic) {
+      loadWalletFromMnemonic(mnemonic);
+      backupToCloudInternal(mnemonic); // Auto-backup on creation
+      toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
+    }
+    return mnemonic;
+  }, [loadWalletFromMnemonic, toast]);
+
+  const importWallet = useCallback((mnemonic: string) => {
+    loadWalletFromMnemonic(mnemonic);
+    backupToCloudInternal(mnemonic); // Sync imported wallet to vault
+    toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
+  }, [loadWalletFromMnemonic, toast]);
+
+  const restoreFromCloud = async () => {
+    if (!user || !profile?.vault_phrase || !profile.iv) {
+      toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found." });
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+      });
+      if (response.ok) {
+        const { phrase } = await response.json();
+        loadWalletFromMnemonic(phrase);
+        toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored." });
+      } else {
+        throw new Error("Decryption failed");
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: "Restore Failed", description: "Could not decrypt vault phrase." });
+    }
+  };
+
+  const backupToCloud = async () => {
+    const mnemonic = localStorage.getItem('wallet_mnemonic');
+    if (mnemonic) await backupToCloudInternal(mnemonic);
+    toast({ title: "Vault Synced", description: "Your backup is up to date." });
   };
 
   const logout = useCallback(() => {
@@ -217,6 +214,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     generateWallet,
     importWallet,
     backupToCloud,
+    restoreFromCloud,
     logout
   };
 
