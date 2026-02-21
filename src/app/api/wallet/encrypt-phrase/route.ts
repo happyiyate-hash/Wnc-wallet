@@ -3,6 +3,12 @@ import { encryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+/**
+ * SECURE ENCRYPTION ENDPOINT
+ * 
+ * Next.js 15 Compatibility: Uses awaited cookies and authenticated session validation.
+ */
+
 export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -26,20 +32,21 @@ export async function POST(req: NextRequest) {
             : await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+            return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
         }
 
         const { phrase } = await req.json();
-        if (!phrase || typeof phrase !== 'string') {
-            return NextResponse.json({ message: 'Plaintext phrase is required.' }, { status: 400 });
+        if (!phrase) {
+            return NextResponse.json({ message: 'Plaintext phrase required.' }, { status: 400 });
         }
 
+        // Canonical encryption
         const { encrypted, iv } = encryptPhrase(phrase);
 
         return NextResponse.json({ encrypted, iv });
 
     } catch (error: any) {
         console.error('[API_ENCRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Encryption failed on the server.' }, { status: 500 });
+        return NextResponse.json({ message: 'Encryption failed.' }, { status: 500 });
     }
 }

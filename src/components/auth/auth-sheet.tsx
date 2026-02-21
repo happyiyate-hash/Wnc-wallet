@@ -30,7 +30,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        toast({ title: "Welcome back!", description: "Successfully logged in." });
+        toast({ title: "Welcome back!" });
       } else {
         const { error } = await supabase.auth.signUp({ 
             email, 
@@ -42,7 +42,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
             }
         });
         if (error) throw error;
-        toast({ title: "Account created!", description: "Please check your email for a verification link." });
+        toast({ title: "Account created!", description: "Please verify your email." });
       }
       onOpenChange(false);
     } catch (error: any) {
@@ -60,7 +60,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom" 
-        className="rounded-t-[2rem] bg-[#121218] border-t border-white/10 p-6 pt-4 pb-8 max-h-[380px] overflow-hidden"
+        className="rounded-t-[2.5rem] bg-[#121218] border-t border-white/10 p-5 pb-8 max-h-[340px] overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="flex flex-col items-center text-center space-y-1 mb-4">
@@ -69,7 +69,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
           </h2>
         </div>
 
-        <div className="bg-[#1c1c24] p-1 rounded-2xl flex mb-4">
+        <div className="bg-[#1c1c24] p-1 rounded-2xl flex mb-4 max-w-[280px] mx-auto">
           <button 
             onClick={() => setMode('login')}
             className={cn(
@@ -90,34 +90,30 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
           </button>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-3">
-          <div className="space-y-1">
-            <Input 
-              type="email" 
-              placeholder="Email address" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-12 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Input 
-              type="password" 
-              placeholder="Password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-12 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"
-              required
-            />
-          </div>
+        <form onSubmit={handleAuth} className="space-y-3 max-w-[320px] mx-auto">
+          <Input 
+            type="email" 
+            placeholder="Email address" 
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-11 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"
+            required
+          />
+          <Input 
+            type="password" 
+            placeholder="Password" 
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-11 bg-[#1c1c24] border-none rounded-xl text-white placeholder:text-zinc-600 focus-visible:ring-primary text-sm"
+            required
+          />
 
           <Button 
             type="submit"
-            className="w-full h-12 rounded-xl text-base font-bold bg-primary hover:bg-primary/90 transition-transform active:scale-[0.98] mt-2"
+            className="w-full h-12 rounded-xl text-sm font-bold bg-primary hover:bg-primary/90 transition-transform active:scale-[0.98] mt-2"
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : (mode === 'login' ? 'Login' : 'Get Started')}
+            {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : (mode === 'login' ? 'Login' : 'Get Started')}
           </Button>
         </form>
       </SheetContent>

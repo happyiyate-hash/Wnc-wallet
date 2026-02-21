@@ -3,6 +3,12 @@ import { decryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+/**
+ * SECURE DECRYPTION ENDPOINT
+ * 
+ * Next.js 15 Compatibility: Uses awaited cookies and authenticated session validation.
+ */
+
 export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -21,26 +27,27 @@ export async function POST(req: NextRequest) {
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        // Ensure user is authenticated using the provided token or session
+        // Server-side identity verification
         const { data: { user } } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ message: 'Unauthorized: No valid session found' }, { status: 401 });
+            return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
         }
 
         const { encrypted, iv } = await req.json();
         if (!encrypted || !iv) {
-            return NextResponse.json({ message: 'Encrypted phrase and IV are required.' }, { status: 400 });
+            return NextResponse.json({ message: 'Missing vault parameters.' }, { status: 400 });
         }
 
+        // Canonical decryption
         const phrase = decryptPhrase(encrypted, iv);
 
         return NextResponse.json({ phrase });
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Decryption failed. Ensure your encryption key is correct.' }, { status: 500 });
+        return NextResponse.json({ message: 'Decryption failed. Check your ENCRYPTION_KEY.' }, { status: 500 });
     }
 }

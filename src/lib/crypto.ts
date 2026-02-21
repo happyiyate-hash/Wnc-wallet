@@ -1,13 +1,10 @@
 import crypto from 'crypto';
 
 /**
- * UNIVERSAL ENCRYPTION SYSTEM (AES-256-CBC)
+ * CANONICAL UNIVERSAL ENCRYPTION SYSTEM (AES-256-CBC)
  * 
- * Standards used:
- * - Algorithm: aes-256-cbc
- * - Key: 32-byte Buffer derived from hex ENCRYPTION_KEY
- * - IV: 16-byte random Buffer per encryption
- * - Encoding: Hex for ciphertext and IV
+ * This utility ensures perfect compatibility across all applications
+ * sharing the SmarterSeller vault.
  */
 
 const ALGORITHM = 'aes-256-cbc';
@@ -19,13 +16,13 @@ function getEncryptionKey(): Buffer {
     throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is not set.");
   }
 
-  // Handle 64-character hex keys (32 bytes)
+  // Interpret the 64-character hex string as a raw 32-byte Buffer
   const buffer = Buffer.from(key, 'hex');
   if (buffer.length === 32) {
     return buffer;
   }
 
-  // Fallback: If not a 32-byte hex string, use SHA-256 to derive a 32-byte key
+  // Fallback: SHA-256 derivation to ensure an exact 32-byte key
   return crypto.createHash('sha256').update(key).digest();
 }
 

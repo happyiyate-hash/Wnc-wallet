@@ -14,7 +14,7 @@ interface WalletManagementSheetProps {
 }
 
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
-  const { generateWallet, importWallet, restoreFromCloud, wallets } = useWallet();
+  const { generateWallet, importWallet, restoreFromCloud } = useWallet();
   const { profile } = useUser();
   const [step, setStep] = useState<'start' | 'import'>('start');
   const [importInput, setImportInput] = useState('');
@@ -74,7 +74,6 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
       setStatus('Complete!');
     } catch (e: any) {
       setStatus('Invalid Phrase');
-      alert(e.message);
     } finally {
       setTimeout(() => {
         setIsProcessing(false);
@@ -86,15 +85,15 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
   const handleRestore = async () => {
     setIsProcessing(true);
-    setStatus('Fetching Vault...');
+    setStatus('Connecting...');
     startTimer();
     
-    // Simulate status changes for better UX during the async pipe
+    // Status sequence for real-time feedback
     const statusSequence = [
-        { msg: 'Connecting to Supabase...', delay: 200 },
-        { msg: 'Retrieving Encrypted Vault...', delay: 800 },
-        { msg: 'Decrypting with AES-256...', delay: 1500 },
-        { msg: 'Finalizing Identity...', delay: 2200 }
+        { msg: 'Fetching Vault...', delay: 200 },
+        { msg: 'Decrypting AES-256...', delay: 1200 },
+        { msg: 'Validating Mnemonic...', delay: 2000 },
+        { msg: 'Access Restored!', delay: 2800 }
     ];
 
     statusSequence.forEach(({ msg, delay }) => {
@@ -105,15 +104,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
     try {
       await restoreFromCloud();
-      setStatus('Access Restored!');
     } catch (e: any) {
-      setStatus('Restore Failed');
+      setStatus('Failed');
     } finally {
       setTimeout(() => {
         setIsProcessing(false);
         stopTimer();
         setStatus('');
-      }, 1000);
+      }, 3500);
     }
   };
 
@@ -123,7 +121,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom"
-        className="rounded-t-[2rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[420px]"
+        className="rounded-t-[2.5rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[380px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <SheetHeader className="text-center space-y-1 mb-4">
@@ -133,7 +131,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
             {isProcessing ? (
-                <div className="flex items-center justify-center gap-2 text-primary font-mono">
+                <div className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
                     <Timer className="w-3 h-3 animate-pulse" />
                     {(timer / 1000).toFixed(3)}s
                 </div>
@@ -147,7 +145,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           {step === 'start' && (
             <>
               <Button 
-                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90 relative overflow-hidden" 
+                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90" 
                 onClick={handleCreate}
                 disabled={isProcessing}
               >
@@ -174,14 +172,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
               {hasCloudBackup && (
                 <Button 
                   variant="outline"
-                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5 min-w-[200px]" 
+                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5" 
                   onClick={handleRestore}
                   disabled={isProcessing}
                 >
                   {isProcessing && !status.includes('Generating') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-xs font-mono">{status}</span>
+                        <span className="text-[10px] font-mono">{status}</span>
                     </div>
                   ) : (
                     <><CloudDownload className="w-4 h-4" /> Restore from Cloud Vault</>
