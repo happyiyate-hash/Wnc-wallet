@@ -7,7 +7,10 @@ import evmNetworks from '@/lib/evmNetworks.json';
 
 const ALL_CHAINS_LIST: Omit<ChainConfig, 'iconUrl'>[] = Object.values(evmNetworks).map(n => ({ ...n, currencySymbol: n.symbol }));
 
-
+/**
+ * Hook to resolve network logos using public CDNs.
+ * Since Supabase project might be paused, we rely on TrustWallet and Spothq GitHub assets.
+ */
 export function useNetworkLogos() {
     const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
     const [areLogosLoading, setAreLogosLoading] = useState(true);
@@ -19,7 +22,7 @@ export function useNetworkLogos() {
             try {
                 const chainsWithFetchedLogos = await Promise.all(
                     ALL_CHAINS_LIST.map(async (chain) => {
-                        // For networks, the most reliable symbol is often their native currency symbol.
+                        // Use the new CDN-based logo fetcher
                         const logoUrl = await getTokenLogoUrl(chain.symbol, chain.name);
                         return {
                             ...chain,
@@ -32,9 +35,8 @@ export function useNetworkLogos() {
                     setChainsWithLogos(chainsWithFetchedLogos);
                 }
             } catch (error) {
-                console.error("Failed to fetch network logos:", error);
+                console.warn("Error resolving network logos, using fallbacks:", error);
                 if (isMounted) {
-                    // On error, proceed with the initial list (which has empty iconUrl strings)
                     setChainsWithLogos(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
                 }
             } finally {
@@ -50,7 +52,7 @@ export function useNetworkLogos() {
             isMounted = false;
         };
 
-    }, []); // Empty dependency array ensures this runs only once.
+    }, []);
 
     return { chainsWithLogos, areLogosLoading };
 }

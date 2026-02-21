@@ -7,7 +7,6 @@ import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { fetchAssetPrices } from '@/lib/coingecko';
-import { supabase } from '@/lib/supabase/client';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -41,7 +40,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize viewing network and basic state
+  // Initialize viewing network once logos are resolved (now from public CDN)
   useEffect(() => {
     if (chainsWithLogos.length > 0) {
       if (!viewingNetwork) {
@@ -129,8 +128,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [wallets, viewingNetwork, infuraApiKey]);
 
   useEffect(() => {
-    fetchBalances();
-  }, [fetchBalances]);
+    if (isInitialized && wallets && infuraApiKey) {
+        fetchBalances();
+    }
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
