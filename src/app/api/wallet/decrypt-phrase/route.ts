@@ -18,11 +18,9 @@ export async function POST(req: NextRequest) {
     );
 
     try {
-        // Handle Authorization header
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        // Ensure user is authenticated before allowing decryption
         const { data: { user } } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
@@ -36,14 +34,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Encrypted phrase and IV are required.' }, { status: 400 });
         }
 
-        // Decrypt the phrase on the server using the master ENCRYPTION_KEY
-        // This explicitly returns the plaintext phrase to the client
         const phrase = decryptPhrase(encrypted, iv);
 
         return NextResponse.json({ phrase });
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Decryption failed. Please ensure your encryption key is correct.' }, { status: 500 });
+        return NextResponse.json({ message: 'Decryption failed. Please check your encryption key.' }, { status: 500 });
     }
 }

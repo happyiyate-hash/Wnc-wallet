@@ -23,20 +23,7 @@
     --border: 220 9% 25%; /* #3a3b45 */
     --input: 240 9% 11%;
     --ring: 262 70% 45%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
     --radius: 1rem;
-    --sidebar-background: 240 10% 4%;
-    --sidebar-foreground: 0 0% 88%;
-    --sidebar-primary: 262 70% 45%;
-    --sidebar-primary-foreground: 262 80% 95%;
-    --sidebar-accent: 220 10% 21%;
-    --sidebar-accent-foreground: 0 0% 88%;
-    --sidebar-border: 220 9% 25%;
-    --sidebar-ring: 262 70% 45%;
   }
 
   .dark {
@@ -59,19 +46,6 @@
     --border: 220 9% 25%;
     --input: 240 9% 11%;
     --ring: 262 70% 45%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 10% 4%;
-    --sidebar-foreground: 0 0% 88%;
-    --sidebar-primary: 262 70% 45%;
-    --sidebar-primary-foreground: 262 80% 95%;
-    --sidebar-accent: 220 10% 21%;
-    --sidebar-accent-foreground: 0 0% 88%;
-    --sidebar-border: 220 9% 25%;
-    --sidebar-ring: 262 70% 45%;
   }
 }
 
@@ -82,15 +56,6 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-  /* Remove focus rings from all elements */
-  *:focus {
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  *:focus-visible {
-    outline: none !important;
-    box-shadow: none !important;
   }
 }
 
@@ -104,48 +69,17 @@ nextjs-portal {
 
 @layer utilities {
     @keyframes gradient-flow {
-        0% {
-            background-position: 0% 50%;
-        }
-        50% {
-            background-position: 100% 50%;
-        }
-        100% {
-            background-position: 0% 50%;
-        }
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
-
     .animate-gradient-flow {
         animation: gradient-flow 15s ease infinite;
     }
 }
 
-
 body {
   font-family: 'Inter', sans-serif;
-}
-
-/* Custom scrollbar for better aesthetics */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: hsl(var(--background));
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--secondary));
-}
-
-/* For the progress ring in Dashboard */
-.progress-ring__circle {
-  transition: stroke-dashoffset 0.35s;
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
 }
 
 .thin-scrollbar::-webkit-scrollbar {

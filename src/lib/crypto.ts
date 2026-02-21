@@ -3,26 +3,17 @@ import crypto from 'crypto'
 const ALGORITHM = 'aes-256-cbc'
 
 /**
- * Securely retrieves the ENCRYPTION_KEY from environment variables.
- * This handles the 64-character hex string by converting it to a 32-byte buffer.
+ * Securely retrieves the ENCRYPTION_KEY and derives a 32-byte key using SHA-256.
+ * This ensures the key is always the correct length for AES-256-CBC.
  */
 function getEncryptionKey(): Buffer {
   const keyString = process.env.ENCRYPTION_KEY?.trim()
 
   if (!keyString) {
-    throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is not set on the server.")
+    throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is not set.")
   }
 
-  // Handle hex string (64 chars = 32 bytes)
-  try {
-    const key = Buffer.from(keyString, 'hex')
-    if (key.length === 32) return key
-  } catch (e) {
-    // Not valid hex or wrong length, proceed to hash derivation
-  }
-
-  // Fallback: If not exactly 32 bytes of hex, derive it via SHA-256 to ensure consistency
-  // This handles any string key robustly.
+  // Use SHA-256 to ensure we always have a 32-byte (256-bit) buffer
   return crypto.createHash('sha256').update(keyString).digest()
 }
 

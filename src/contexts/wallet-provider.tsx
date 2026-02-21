@@ -47,6 +47,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const getAuthToken = useCallback(async () => {
+    if (!supabase) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
+  }, []);
+
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
     if (!user || !mnemonic) return;
     
@@ -101,12 +107,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
-  const getAuthToken = async () => {
-    if (!supabase) return null;
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
-
   const saveToVaultInternal = async (mnemonic: string) => {
     if (!user || !supabase) return;
     try {
@@ -146,7 +146,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
     }
     return mnemonic;
-  }, [loadWalletFromMnemonic, toast, user]);
+  }, [loadWalletFromMnemonic, toast, user, getAuthToken]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) return;
@@ -157,24 +157,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) {
       toast({ variant: "destructive", title: "Import Error", description: e.message });
     }
-  }, [loadWalletFromMnemonic, toast, user]);
+  }, [loadWalletFromMnemonic, toast, user, getAuthToken]);
 
   const restoreFromCloud = async () => {
     if (!user || !supabase) return;
     
-    // Refresh profile to get latest vault data
-    await refreshProfile();
-    
-    // Access profile from the updated state or the already available one
-    // Note: React state updates might not be immediate, so we re-fetch if needed
-    const { data: latestProfile } = await supabase.from('profiles').select('vault_phrase, iv').eq('id', user.id).single();
-
-    if (!latestProfile?.vault_phrase || !latestProfile?.iv) {
-      toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found for this account." });
-      return;
-    }
-
+    setIsRefreshing(true);
     try {
+      await refreshProfile();
+      
+      const { data: latestProfile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('vault_phrase, iv')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchError || !latestProfile?.vault_phrase || !latestProfile?.iv) {
+        throw new Error("No cloud backup found for this account.");
+      }
+
       const token = await getAuthToken();
       if (!token) throw new Error("Unauthorized: Please log in again.");
 
@@ -201,6 +202,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) {
       console.error("Restore error:", e);
       toast({ variant: "destructive", title: "Restore Failed", description: e.message });
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
