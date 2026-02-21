@@ -29,7 +29,7 @@ interface WalletContextType {
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
-  recoverFromVault: () => Promise<void>;
+  restoreFromCloud: () => Promise<void>;
   logout: () => void;
   deleteWallet: () => void;
 }
@@ -132,7 +132,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [loadWalletFromMnemonic, toast, user]);
 
-  const recoverFromVault = async () => {
+  const restoreFromCloud = async () => {
     if (!user || !profile?.vault_phrase || !profile.iv) {
       toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found." });
       return;
@@ -243,7 +243,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     generateWallet,
     importWallet,
     saveToVault,
-    recoverFromVault,
+    restoreFromCloud,
     logout,
     deleteWallet
   };
