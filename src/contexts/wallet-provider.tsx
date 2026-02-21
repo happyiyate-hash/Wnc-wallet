@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
-import type { AssetRow, ChainConfig, UserProfile, WalletWithMetadata } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
@@ -30,6 +30,7 @@ interface WalletContextType {
   backupToCloud: () => Promise<void>;
   restoreFromCloud: () => Promise<void>;
   logout: () => void;
+  deleteWallet: () => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -46,9 +47,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Helper to load wallet into state
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
-    if (!user) return; // STRICT GUARD: No wallet loading without a user context
+    if (!user) return;
     
     try {
       const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
@@ -63,7 +63,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  // Recovery logic: Silent recovery ONLY if authenticated
   useEffect(() => {
     if (!authLoading && user) {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
@@ -71,7 +70,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         loadWalletFromMnemonic(savedMnemonic);
       }
     } else if (!authLoading && !user) {
-      // Clear wallets if user logged out
       setWallets(null);
       setBalances({});
     }
@@ -99,7 +97,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phrase: mnemonic })
       });
-      const { encrypted, iv } = await response.json();
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Encryption failed');
+      
+      const { encrypted, iv } = data;
       await supabase.from('profiles').update({ vault_phrase: encrypted, iv: iv }).eq('id', user.id);
       await refreshProfile();
     } catch (e) {
@@ -113,7 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
       loadWalletFromMnemonic(mnemonic);
-      backupToCloudInternal(mnemonic); // Auto-backup on creation
+      backupToCloudInternal(mnemonic);
       toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
     }
     return mnemonic;
@@ -121,9 +122,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const importWallet = useCallback((mnemonic: string) => {
     if (!user) return;
-    loadWalletFromMnemonic(mnemonic);
-    backupToCloudInternal(mnemonic); // Sync imported wallet to vault
-    toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
+    try {
+      loadWalletFromMnemonic(mnemonic);
+      backupToCloudInternal(mnemonic);
+      toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Import Error", description: e.message });
+    }
   }, [loadWalletFromMnemonic, toast, user]);
 
   const restoreFromCloud = async () => {
@@ -138,15 +143,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
       });
+      const data = await response.json();
       if (response.ok) {
-        const { phrase } = await response.json();
-        loadWalletFromMnemonic(phrase);
+        loadWalletFromMnemonic(data.phrase);
         toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored." });
       } else {
-        throw new Error("Decryption failed");
+        throw new Error(data.message || "Decryption failed");
       }
-    } catch (e) {
-      toast({ variant: "destructive", title: "Restore Failed", description: "Could not decrypt vault phrase." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Restore Failed", description: e.message });
     }
   };
 
@@ -166,8 +171,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     authSignOut();
   }, [user, authSignOut]);
 
+  const deleteWallet = useCallback(() => {
+    if (user) {
+      localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    }
+    setWallets(null);
+    setBalances({});
+  }, [user]);
+
   const fetchBalances = useCallback(async () => {
-    // STRICT GUARD: No balance fetching if no user, no wallet, or no RPC key
     if (!user || !wallets || wallets.length === 0 || !viewingNetwork || !infuraApiKey) return;
     
     setIsRefreshing(true);
@@ -231,7 +243,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     importWallet,
     backupToCloud,
     restoreFromCloud,
-    logout
+    logout,
+    deleteWallet
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
