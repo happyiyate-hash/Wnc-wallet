@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { encryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
@@ -19,8 +18,15 @@ export async function POST(req: NextRequest) {
     );
 
     try {
+        // Handle Authorization header as per integration guide
+        const authHeader = req.headers.get('Authorization');
+        const token = authHeader?.split(' ')[1];
+
         // Ensure user is authenticated before allowing encryption
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = token 
+            ? await supabase.auth.getUser(token)
+            : await supabase.auth.getUser();
+
         if (!user) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }

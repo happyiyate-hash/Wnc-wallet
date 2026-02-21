@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -93,9 +92,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const saveToVaultInternal = async (mnemonic: string) => {
     if (!user || !supabase) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ phrase: mnemonic })
       });
       const data = await response.json();
@@ -133,15 +138,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user]);
 
   const restoreFromCloud = async () => {
-    if (!user || !profile?.vault_phrase || !profile.iv) {
+    if (!user || !profile?.vault_phrase || !profile.iv || !supabase) {
       toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found." });
       return;
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
       });
       const data = await response.json();
