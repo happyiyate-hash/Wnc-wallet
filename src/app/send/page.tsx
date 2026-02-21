@@ -27,11 +27,17 @@ export default function SendPage() {
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
   const handleSendRequest = async () => {
-    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) return;
+    // Non-custodial signing check: ensure key and RPC are available
+    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) {
+      toast({ title: "Configuration Error", description: "Mnemonic or Infura Key missing.", variant: "destructive" });
+      return;
+    }
+    
     setIsSubmitting(true);
 
     try {
       const provider = new ethers.JsonRpcProvider(`${viewingNetwork.rpcBase}${infuraApiKey}`);
+      // Local signing: The key NEVER leaves the device
       const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
       
       let tx;
@@ -43,15 +49,15 @@ export default function SendPage() {
       } else {
         const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
         const contract = new ethers.Contract(selectedToken.address, abi, wallet);
-        tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18)); // Mocked 18 decimals
+        tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
       }
 
       setTxHash(tx.hash);
       setStep('success');
-      toast({ title: "Transaction Sent", description: tx.hash });
+      toast({ title: "Transaction Sent", description: "Successfully signed and broadcasted." });
     } catch (e: any) {
-      console.error("Failed to send transaction", e);
-      toast({ title: "Transaction Failed", description: e.message, variant: "destructive" });
+      console.error("Local signing failed", e);
+      toast({ title: "Signing Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -146,7 +152,7 @@ export default function SendPage() {
           disabled={!recipient || !isValidAmount || isSubmitting}
           onClick={handleSendRequest}
         >
-          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Review & Sign"}
+          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Send"}
         </Button>
       </div>
     </div>

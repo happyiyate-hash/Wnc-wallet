@@ -54,7 +54,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedMnemonic) {
       try {
         const wallet = ethers.Wallet.fromPhrase(savedMnemonic);
-        setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
+        setWallets([{ 
+          address: wallet.address, 
+          privateKey: wallet.privateKey,
+          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
+        }]);
       } catch (e) {
         console.error("Failed to load saved wallet", e);
       }
@@ -66,18 +70,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
       localStorage.setItem('wallet_mnemonic', mnemonic);
-      setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
+      setWallets([{ 
+        address: wallet.address, 
+        privateKey: wallet.privateKey,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
+      }]);
     }
     return mnemonic;
   }, []);
 
   const importWallet = useCallback((mnemonic: string) => {
     try {
-      const wallet = ethers.Wallet.fromPhrase(mnemonic);
-      localStorage.setItem('wallet_mnemonic', mnemonic);
-      setWallets([{ address: wallet.address, privateKey: wallet.privateKey }]);
+      const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
+      localStorage.setItem('wallet_mnemonic', mnemonic.trim());
+      setWallets([{ 
+        address: wallet.address, 
+        privateKey: wallet.privateKey,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
+      }]);
     } catch (e) {
-      throw new Error("Invalid mnemonic phrase");
+      throw new Error("Invalid mnemonic phrase. Please ensure it is 12 or 24 words.");
     }
   }, []);
 
@@ -96,7 +108,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!adapter) throw new Error("Adapter not supported");
 
       const baseAssets = getInitialAssets(viewingNetwork.chainId);
+      // Fetch raw on-chain balances
       const rawBalances = await adapter.fetchBalances(wallets[0].address, baseAssets);
+      // Hydrate with prices from CoinGecko
       const assetsWithPrices = await fetchAssetPrices(rawBalances);
 
       setBalances(prev => ({
@@ -110,6 +124,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets, viewingNetwork, infuraApiKey]);
 
+  // Refresh balances whenever dependencies change
   useEffect(() => {
     fetchBalances();
   }, [fetchBalances]);
@@ -135,7 +150,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    profile: wallets ? { username: 'My Wallet' } : null,
+    profile: wallets ? { username: 'Self-Custody' } : null,
     wallets,
     infuraApiKey,
     setInfuraApiKey: (key) => {

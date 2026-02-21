@@ -132,9 +132,9 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <div className="flex items-start gap-4 p-4 rounded-xl bg-secondary/10 border border-white/5">
               <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-sm">Full Control</p>
+                <p className="font-bold text-sm">Client-Side Security</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Private keys are stored only on your device.
+                  Private keys are stored only on this device.
                 </p>
               </div>
             </div>
