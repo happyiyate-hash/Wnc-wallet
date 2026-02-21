@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
-import { Loader2, ShieldCheck, Key, Lock, Copy, CheckCircle2 } from 'lucide-react';
+import { useUser } from "@/contexts/user-provider";
+import { Loader2, ShieldCheck, Lock, Copy, CheckCircle2, CloudUpload } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
@@ -14,7 +15,8 @@ interface WalletManagementSheetProps {
 }
 
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
-  const { generateWallet, importWallet, wallets } = useWallet();
+  const { generateWallet, importWallet, wallets, backupToCloud } = useWallet();
+  const { user, profile } = useUser();
   const [step, setStep] = useState<'start' | 'generate' | 'import'>('start');
   const [mnemonic, setMnemonic] = useState('');
   const [importInput, setImportInput] = useState('');
@@ -41,7 +43,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     }
   };
 
+  const handleCloudBackup = async () => {
+    setIsProcessing(true);
+    await backupToCloud();
+    setIsProcessing(false);
+  };
+
   const hasWallet = wallets && wallets.length > 0;
+  const isCloudBackedUp = !!profile?.vault_phrase;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -67,23 +76,49 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
         <div className="py-8 space-y-6">
           {step === 'start' && (
             <div className="grid gap-4">
-              <Button 
-                size="lg" 
-                onClick={handleGenerate} 
-                className="h-16 text-xl font-bold rounded-2xl"
-                disabled={hasWallet}
-              >
-                Create New Wallet
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                onClick={() => setStep('import')} 
-                className="h-16 text-xl font-bold rounded-2xl"
-                disabled={hasWallet}
-              >
-                Import Existing Wallet
-              </Button>
+              {hasWallet ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
+                    <p className="font-bold text-green-400">Wallet Active</p>
+                    <p className="text-sm opacity-80">{wallets[0].address}</p>
+                  </div>
+                  
+                  {user && !isCloudBackedUp && (
+                    <Button 
+                      className="w-full h-16 text-lg font-bold rounded-2xl gap-3" 
+                      onClick={handleCloudBackup}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin" /> : <CloudUpload className="w-6 h-6" />}
+                      Sync to Secure Vault
+                    </Button>
+                  )}
+                  
+                  {isCloudBackedUp && (
+                    <div className="flex items-center justify-center gap-2 text-primary font-semibold">
+                      <CheckCircle2 className="w-5 h-5" /> Secured in Cloud Vault
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <Button 
+                    size="lg" 
+                    onClick={handleGenerate} 
+                    className="h-16 text-xl font-bold rounded-2xl"
+                  >
+                    Create New Wallet
+                  </Button>
+                  <Button 
+                    size="lg" 
+                    variant="outline"
+                    onClick={() => setStep('import')} 
+                    className="h-16 text-xl font-bold rounded-2xl"
+                  >
+                    Import Existing Wallet
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
@@ -101,7 +136,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 {isCopied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 Copy Phrase
               </Button>
-              <Button className="w-full h-16 text-lg font-bold" onClick={() => onOpenChange(false)}>
+              <Button className="w-full h-16 text-lg font-bold" onClick={() => setStep('start')}>
                 I've Saved It
               </Button>
             </div>
@@ -132,9 +167,9 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <div className="flex items-start gap-4 p-4 rounded-xl bg-secondary/10 border border-white/5">
               <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-sm">Client-Side Security</p>
+                <p className="font-bold text-sm">Military-Grade Encryption</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Private keys are stored only on this device.
+                  Your keys are encrypted on the server and only you can unlock them.
                 </p>
               </div>
             </div>

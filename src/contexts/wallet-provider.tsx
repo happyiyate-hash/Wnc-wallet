@@ -7,6 +7,9 @@ import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { fetchAssetPrices } from '@/lib/coingecko';
+import { useUser } from './user-provider';
+import { supabase } from '@/lib/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -18,13 +21,13 @@ interface WalletContextType {
   allChains: ChainConfig[];
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
-  profile: UserProfile | null;
   wallets: WalletWithMetadata[] | null;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => void;
   generateWallet: () => string;
+  backupToCloud: () => Promise<void>;
   logout: () => void;
 }
 
@@ -32,6 +35,8 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
+  const { user, profile, refreshProfile } = useUser();
+  const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
@@ -40,7 +45,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize viewing network once logos are resolved (now from public CDN)
+  // Recovery logic: Try to decrypt cloud mnemonic if local is missing
+  useEffect(() => {
+    const checkCloudRecovery = async () => {
+      if (user && profile?.vault_phrase && profile.iv && !localStorage.getItem('wallet_mnemonic')) {
+        try {
+          const response = await fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+          });
+          if (response.ok) {
+            const { phrase } = await response.json();
+            importWallet(phrase);
+            toast({ title: "Wallet Recovered", description: "Your wallet was restored from your secure cloud vault." });
+          }
+        } catch (e) {
+          console.error("Cloud recovery failed", e);
+        }
+      }
+    };
+    checkCloudRecovery();
+  }, [user, profile, toast]);
+
   useEffect(() => {
     if (chainsWithLogos.length > 0) {
       if (!viewingNetwork) {
@@ -50,7 +77,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, viewingNetwork]);
 
-  // Load persistence
   useEffect(() => {
     const savedKey = localStorage.getItem('infuraApiKey');
     if (savedKey) setInfuraApiKeyInternal(savedKey);
@@ -97,6 +123,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       throw new Error("Invalid mnemonic phrase. Please ensure it is 12 or 24 words.");
     }
   }, []);
+
+  const backupToCloud = async () => {
+    const mnemonic = localStorage.getItem('wallet_mnemonic');
+    if (!user || !mnemonic || !supabase) return;
+
+    try {
+      const response = await fetch('/api/wallet/encrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phrase: mnemonic })
+      });
+      const { encrypted, iv } = await response.json();
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ vault_phrase: encrypted, iv: iv })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      await refreshProfile();
+      toast({ title: "Backup Successful", description: "Your wallet is now secured in your cloud vault." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Backup Failed", description: e.message });
+    }
+  };
 
   const logout = useCallback(() => {
     localStorage.removeItem('wallet_mnemonic');
@@ -155,7 +206,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
-    profile: wallets ? { username: 'Self-Custody' } : null,
     wallets,
     infuraApiKey,
     setInfuraApiKey: (key) => {
@@ -166,6 +216,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: fetchBalances,
     generateWallet,
     importWallet,
+    backupToCloud,
     logout
   };
 
