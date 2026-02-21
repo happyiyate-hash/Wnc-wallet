@@ -18,11 +18,9 @@ export async function POST(req: NextRequest) {
     );
 
     try {
-        // Handle Authorization header as per integration guide
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        // Ensure user is authenticated before allowing encryption
         const { data: { user } } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
@@ -36,13 +34,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Plaintext phrase is required.' }, { status: 400 });
         }
 
-        // The `encryptPhrase` function is now a server-only function
         const { encrypted, iv } = encryptPhrase(phrase);
 
         return NextResponse.json({ encrypted, iv });
 
     } catch (error: any) {
-        console.error('[API_ENCRYPT_ERROR]', error);
+        console.error('[API_ENCRYPT_ERROR]', error.message);
         return NextResponse.json({ message: 'Encryption failed on the server.' }, { status: 500 });
     }
 }

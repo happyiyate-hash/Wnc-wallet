@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     );
 
     try {
-        // Handle Authorization header as per integration guide
+        // Handle Authorization header
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
         }
 
         // Decrypt the phrase on the server using the master ENCRYPTION_KEY
+        // This explicitly returns the plaintext phrase to the client
         const phrase = decryptPhrase(encrypted, iv);
 
-        // Return the decrypted plaintext mnemonic to the client
         return NextResponse.json({ phrase });
 
     } catch (error: any) {
-        console.error('[API_DECRYPT_ERROR]', error);
-        return NextResponse.json({ message: 'Decryption failed on the server.' }, { status: 500 });
+        console.error('[API_DECRYPT_ERROR]', error.message);
+        return NextResponse.json({ message: 'Decryption failed. Please ensure your encryption key is correct.' }, { status: 500 });
     }
 }

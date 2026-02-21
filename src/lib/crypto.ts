@@ -2,26 +2,34 @@ import crypto from 'crypto'
 
 const ALGORITHM = 'aes-256-cbc'
 
-// Securely gets the ENCRYPTION_KEY from your environment variables.
-const keyString = process.env.ENCRYPTION_KEY
+/**
+ * Securely retrieves and validates the ENCRYPTION_KEY from environment variables.
+ * Ensures the key is exactly 32 bytes (256 bits) for AES-256.
+ */
+function getEncryptionKey(): Buffer {
+  const keyString = process.env.ENCRYPTION_KEY?.trim()
 
-if (!keyString) {
-  throw new Error("CRITICAL: ENCRYPTION_KEY is not set in the environment variables.")
-}
+  if (!keyString) {
+    throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is not set on the server.")
+  }
 
-// Convert the 64-character hex string into a 32-byte Buffer for aes-256-cbc
-const KEY = Buffer.from(keyString, 'hex')
+  // Convert the 64-character hex string into a 32-byte Buffer
+  const buffer = Buffer.from(keyString, 'hex')
 
-if (KEY.length !== 32) {
-  throw new Error("CRITICAL: ENCRYPTION_KEY must be a 64-character hex string (32 bytes).")
+  if (buffer.length !== 32) {
+    throw new Error(`CRITICAL: ENCRYPTION_KEY must be a 64-character hex string (32 bytes). Got ${buffer.length} bytes.`)
+  }
+
+  return buffer
 }
 
 /**
  * Encrypts a plaintext string (e.g., a mnemonic phrase) using AES-256-CBC.
  */
 export function encryptPhrase(phrase: string): { encrypted: string; iv: string } {
+  const key = getEncryptionKey()
   const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(ALGORITHM, KEY, iv)
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
   
   let encrypted = cipher.update(phrase, 'utf8', 'hex')
   encrypted += cipher.final('hex')
@@ -34,10 +42,17 @@ export function encryptPhrase(phrase: string): { encrypted: string; iv: string }
 
 /**
  * Decrypts an AES-256-CBC encrypted string.
+ * Returns the plaintext phrase.
  */
 export function decryptPhrase(encryptedPhrase: string, ivHex: string): string {
+  const key = getEncryptionKey()
   const iv = Buffer.from(ivHex, 'hex')
-  const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv)
+  
+  if (iv.length !== 16) {
+    throw new Error(`Invalid IV length: ${iv.length} bytes. Expected 16.`)
+  }
+
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
   
   let decrypted = decipher.update(encryptedPhrase, 'hex', 'utf8')
   decrypted += decipher.final('utf8')

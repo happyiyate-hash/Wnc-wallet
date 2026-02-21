@@ -52,6 +52,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     try {
       const cleanMnemonic = mnemonic.trim();
+      // Validate BIP-39 mnemonic
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) {
+        throw new Error("Invalid mnemonic phrase structure.");
+      }
+
       const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       
       setWallets([{ 
@@ -61,9 +66,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }]);
       
       localStorage.setItem(`wallet_mnemonic_${user.id}`, cleanMnemonic);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Mnemonic load error:", e);
-      throw new Error("Invalid mnemonic phrase.");
+      throw new Error(e.message || "Invalid mnemonic phrase.");
     }
   }, [user]);
 
@@ -116,11 +121,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error(data.message || 'Encryption failed');
       
       const { encrypted, iv } = data;
-      await supabase.from('profiles').update({ vault_phrase: encrypted, iv: iv }).eq('id', user.id);
+      const { error: updateError } = await supabase.from('profiles').update({ vault_phrase: encrypted, iv: iv }).eq('id', user.id);
+      if (updateError) throw updateError;
+
       await refreshProfile();
-    } catch (e) {
+    } catch (e: any) {
       console.error("Cloud backup failed", e);
-      toast({ variant: "destructive", title: "Backup Failed", description: "Could not sync keys to Cloud Vault." });
+      toast({ variant: "destructive", title: "Backup Failed", description: e.message || "Could not sync keys to Cloud Vault." });
     }
   };
 
@@ -172,7 +179,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         loadWalletFromMnemonic(data.phrase);
         toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored from vault." });
       } else {
-        throw new Error(data.message || "Decryption failed");
+        throw new Error(data.message || "Decryption failed on the server.");
       }
     } catch (e: any) {
       console.error("Restore error:", e);
