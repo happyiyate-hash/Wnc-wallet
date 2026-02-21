@@ -9,12 +9,12 @@
  *
  * @param {string | null | undefined} symbol - The symbol of the token (e.g., 'ETH').
  * @param {string | null | undefined} networkName - The name of the network (unused in CDN logic but kept for interface compatibility).
- * @returns {Promise<string|null>} A promise that resolves to the public logo URL.
+ * @returns {string|null} The public logo URL.
  */
-export async function getTokenLogoUrl(
+export function getTokenLogoUrl(
     symbol?: string | null,
     networkName?: string | null,
-): Promise<string | null> {
+): string | null {
     if (!symbol) return null;
 
     const sym = symbol.toLowerCase();

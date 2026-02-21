@@ -36,7 +36,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 
   return (
     <div
-      className="flex cursor-pointer items-center justify-between px-4 py-3"
+      className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors"
       onClick={handleRowClick}
       role="button"
       tabIndex={0}
@@ -45,7 +45,8 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
         <TokenLogoDynamic 
             alt={token.name} 
             logoUrl={token.iconUrl}
-            size={28}
+            symbol={token.symbol}
+            size={36}
             chainId={token.chainId}
         />
         <div>
@@ -278,7 +279,7 @@ export default function WalletTab() {
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                      </div>
                   ) : allAssets.length > 0 ? (
-                    <div>
+                    <div className="divide-y divide-white/5">
                         {allAssets.map((token) => (
                         <TokenRow
                             key={`${token.chainId}-${token.address || token.symbol}`}

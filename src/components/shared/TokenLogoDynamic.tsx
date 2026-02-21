@@ -4,6 +4,7 @@ import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import { useWallet } from '@/contexts/wallet-provider';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
+import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -12,6 +13,7 @@ interface TokenLogoDynamicProps {
   className?: string;
   FallbackComponent?: React.ReactElement;
   chainId?: number;
+  symbol?: string; // Added symbol prop for better resolution
 }
 
 export default function TokenLogoDynamic({
@@ -21,44 +23,44 @@ export default function TokenLogoDynamic({
   className,
   FallbackComponent,
   chainId,
+  symbol,
 }: TokenLogoDynamicProps) {
   const { allChainsMap } = useWallet();
 
-  // If logoUrl is undefined, it means we are still in a loading state.
-  if (logoUrl === undefined) {
+  // If logoUrl is explicitly undefined (loading state)
+  if (logoUrl === undefined && !symbol) {
     return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
   }
 
-  // If logoUrl is null, empty, or invalid, we decide the fallback.
-  if (!logoUrl) {
-    // If a chainId is provided, try to find the native token icon for that chain.
+  // Determine the best logo URL
+  let finalUrl = logoUrl;
+  
+  if (!finalUrl && symbol) {
+    finalUrl = getTokenLogoUrl(symbol);
+  }
+
+  // If we still don't have a URL, check for native chain icons
+  if (!finalUrl) {
     if (chainId && allChainsMap[chainId]) {
       const nativeChainIcon = allChainsMap[chainId].iconUrl;
       if (nativeChainIcon) {
-        return (
-          <CachedImage
-            src={nativeChainIcon}
-            alt={`${allChainsMap[chainId].name} logo`}
-            width={size}
-            height={size}
-            className={`rounded-full ${className}`}
-            unoptimized
-          />
-        );
+        finalUrl = nativeChainIcon;
       }
     }
-    // If we can't find a native icon, use the generic fallback.
+  }
+
+  // Final rendering logic
+  if (!finalUrl) {
     return FallbackComponent || <GenericCoinIcon size={size} className={className} />;
   }
 
-  // If we have a valid logoUrl, display the image.
   return (
     <CachedImage
-      src={logoUrl}
+      src={finalUrl}
       alt={alt}
       width={size}
       height={size}
-      className={`rounded-full ${className}`}
+      className={`rounded-full object-cover bg-white/5 ${className}`}
       unoptimized
     />
   );
