@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -25,10 +26,10 @@ interface WalletContextType {
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
   refresh: () => Promise<void>;
-  importWallet: (mnemonic: string) => void;
-  generateWallet: () => string;
-  backupToCloud: () => Promise<void>;
-  restoreFromCloud: () => Promise<void>;
+  importWallet: (mnemonic: string) => Promise<void>;
+  generateWallet: () => Promise<string>;
+  saveToVault: () => Promise<void>;
+  recoverFromVault: () => Promise<void>;
   logout: () => void;
   deleteWallet: () => void;
 }
@@ -89,7 +90,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKeyInternal(savedKey);
   }, []);
 
-  const backupToCloudInternal = async (mnemonic: string) => {
+  const saveToVaultInternal = async (mnemonic: string) => {
     if (!user || !supabase) return;
     try {
       const response = await fetch('/api/wallet/encrypt-phrase', {
@@ -108,30 +109,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const generateWallet = useCallback(() => {
+  const generateWallet = useCallback(async () => {
     if (!user) return '';
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
       loadWalletFromMnemonic(mnemonic);
-      backupToCloudInternal(mnemonic);
+      await saveToVaultInternal(mnemonic);
       toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
     }
     return mnemonic;
   }, [loadWalletFromMnemonic, toast, user]);
 
-  const importWallet = useCallback((mnemonic: string) => {
+  const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) return;
     try {
       loadWalletFromMnemonic(mnemonic);
-      backupToCloudInternal(mnemonic);
+      await saveToVaultInternal(mnemonic);
       toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Import Error", description: e.message });
     }
   }, [loadWalletFromMnemonic, toast, user]);
 
-  const restoreFromCloud = async () => {
+  const recoverFromVault = async () => {
     if (!user || !profile?.vault_phrase || !profile.iv) {
       toast({ variant: "destructive", title: "Restore Failed", description: "No cloud backup found." });
       return;
@@ -155,10 +156,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const backupToCloud = async () => {
+  const saveToVault = async () => {
     if (!user) return;
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-    if (mnemonic) await backupToCloudInternal(mnemonic);
+    if (mnemonic) await saveToVaultInternal(mnemonic);
     toast({ title: "Vault Synced", description: "Your backup is up to date." });
   };
 
@@ -241,8 +242,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: fetchBalances,
     generateWallet,
     importWallet,
-    backupToCloud,
-    restoreFromCloud,
+    saveToVault,
+    recoverFromVault,
     logout,
     deleteWallet
   };

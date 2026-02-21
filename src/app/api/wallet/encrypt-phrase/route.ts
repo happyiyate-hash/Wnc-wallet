@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { encryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
