@@ -5,12 +5,17 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-/**
- * Safe client initialization. 
- * Even if the Supabase project is paused, the client can be initialized
- * as long as the URL and Key are syntactically valid.
- */
+// Robust check to prevent crash during SSR if env vars are missing or invalid
+const isValidUrl = (url: string | undefined): boolean => {
+  if (!url || url === 'undefined' || url === '') return false;
+  try {
+    return url.startsWith('http');
+  } catch {
+    return false;
+  }
+};
+
 export const supabase = 
-  supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http')
+  isValidUrl(supabaseUrl) && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;

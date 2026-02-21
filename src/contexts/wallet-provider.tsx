@@ -36,7 +36,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, profile, refreshProfile } = useUser();
+  const { user, profile, loading: authLoading, refreshProfile, signOut: authSignOut } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -48,6 +48,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // Helper to load wallet into state
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
+    if (!user) return; // STRICT GUARD: No wallet loading without a user context
+    
     try {
       const wallet = ethers.Wallet.fromPhrase(mnemonic.trim());
       setWallets([{ 
@@ -55,19 +57,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         privateKey: wallet.privateKey,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
-      localStorage.setItem('wallet_mnemonic', mnemonic.trim());
+      localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
     } catch (e) {
       throw new Error("Invalid mnemonic phrase.");
     }
-  }, []);
+  }, [user]);
 
-  // Recovery logic: Silent recovery if possible
+  // Recovery logic: Silent recovery ONLY if authenticated
   useEffect(() => {
-    const savedMnemonic = localStorage.getItem('wallet_mnemonic');
-    if (savedMnemonic) {
-      loadWalletFromMnemonic(savedMnemonic);
+    if (!authLoading && user) {
+      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+      if (savedMnemonic) {
+        loadWalletFromMnemonic(savedMnemonic);
+      }
+    } else if (!authLoading && !user) {
+      // Clear wallets if user logged out
+      setWallets(null);
+      setBalances({});
     }
-  }, [loadWalletFromMnemonic]);
+  }, [authLoading, user, loadWalletFromMnemonic]);
 
   useEffect(() => {
     if (chainsWithLogos.length > 0) {
@@ -100,6 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const generateWallet = useCallback(() => {
+    if (!user) return '';
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
@@ -108,13 +117,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
     }
     return mnemonic;
-  }, [loadWalletFromMnemonic, toast]);
+  }, [loadWalletFromMnemonic, toast, user]);
 
   const importWallet = useCallback((mnemonic: string) => {
+    if (!user) return;
     loadWalletFromMnemonic(mnemonic);
     backupToCloudInternal(mnemonic); // Sync imported wallet to vault
     toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
-  }, [loadWalletFromMnemonic, toast]);
+  }, [loadWalletFromMnemonic, toast, user]);
 
   const restoreFromCloud = async () => {
     if (!user || !profile?.vault_phrase || !profile.iv) {
@@ -141,19 +151,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const backupToCloud = async () => {
-    const mnemonic = localStorage.getItem('wallet_mnemonic');
+    if (!user) return;
+    const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (mnemonic) await backupToCloudInternal(mnemonic);
     toast({ title: "Vault Synced", description: "Your backup is up to date." });
   };
 
   const logout = useCallback(() => {
-    localStorage.removeItem('wallet_mnemonic');
+    if (user) {
+      localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    }
     setWallets(null);
     setBalances({});
-  }, []);
+    authSignOut();
+  }, [user, authSignOut]);
 
   const fetchBalances = useCallback(async () => {
-    if (!wallets || wallets.length === 0 || !viewingNetwork || !infuraApiKey) return;
+    // STRICT GUARD: No balance fetching if no user, no wallet, or no RPC key
+    if (!user || !wallets || wallets.length === 0 || !viewingNetwork || !infuraApiKey) return;
+    
     setIsRefreshing(true);
 
     try {
@@ -173,13 +189,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets, viewingNetwork, infuraApiKey]);
+  }, [user, wallets, viewingNetwork, infuraApiKey]);
 
   useEffect(() => {
-    if (isInitialized && wallets && infuraApiKey) {
+    if (isInitialized && user && wallets && infuraApiKey) {
         fetchBalances();
     }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalances]);
+  }, [isInitialized, user, wallets, infuraApiKey, viewingNetwork, fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -194,7 +210,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
-    isInitialized,
+    isInitialized: isInitialized && !authLoading,
     isAssetsLoading: areLogosLoading,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],

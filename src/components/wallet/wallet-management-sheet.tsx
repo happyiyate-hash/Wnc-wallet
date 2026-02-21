@@ -24,8 +24,6 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     setIsProcessing(true);
     try {
       generateWallet();
-      // Provider handles the auto-backup to cloud inside generateWallet if it wants, 
-      // or we can call backupToCloud here if needed.
     } finally {
       setIsProcessing(false);
     }

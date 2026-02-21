@@ -14,8 +14,11 @@ export default function Home() {
   const { wallets, isInitialized } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Determine which sheet should be open
+  // Determine which sheet should be open based on strict priority
+  // Priority 1: Auth (Must be logged in to do anything)
   const isAuthOpen = !loading && !user;
+  
+  // Priority 2: Wallet Setup (Only if Auth is completed but no wallet found)
   const isWalletSetupOpen = !loading && !!user && isInitialized && !wallets;
 
   useEffect(() => {
@@ -24,7 +27,7 @@ export default function Home() {
 
     let lastScrollY = scrollDiv.scrollTop;
 
-    const handleScroll = () => {
+    const handle = () => {
       const currentScrollY = scrollDiv.scrollTop;
       if (currentScrollY > lastScrollY && currentScrollY > 50) {
         setIsHeaderCollapsed(true);
@@ -34,8 +37,8 @@ export default function Home() {
       lastScrollY = currentScrollY;
     };
 
-    scrollDiv.addEventListener('scroll', handleScroll);
-    return () => scrollDiv.removeEventListener('scroll', handleScroll);
+    scrollDiv.addEventListener('scroll', handle);
+    return () => scrollDiv.removeEventListener('scroll', handle);
   }, []);
 
   return (
@@ -43,14 +46,21 @@ export default function Home() {
         <WalletHeader isCollapsed={isHeaderCollapsed} />
         <main className="flex flex-col items-center">
           <div className="w-full mx-auto max-w-4xl">
-            <WalletTab />
+            {/* Show UI only if both auth and wallet are active */}
+            {user && wallets ? (
+              <WalletTab />
+            ) : (
+              <div className="flex h-[60vh] items-center justify-center text-muted-foreground p-8 text-center">
+                Please complete setup to view your assets.
+              </div>
+            )}
           </div>
         </main>
         
-        {/* Priority 1: Auth */}
+        {/* Auth takes precedence */}
         <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
         
-        {/* Priority 2: Wallet Setup (Only if Auth is done) */}
+        {/* Wallet setup only pops up after auth is valid */}
         <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
       </div>
   );
