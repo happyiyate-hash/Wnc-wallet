@@ -41,18 +41,18 @@ export default function Home() {
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <WalletHeader isCollapsed={isHeaderCollapsed} />
-        <main className={cn(
-          "flex flex-col items-center transition-all duration-500",
-          (isAuthOpen || isWalletSetupOpen) && "blur-md pointer-events-none"
-        )}>
-          <div className="w-full mx-auto max-w-4xl">
-            <WalletTab />
-          </div>
-        </main>
-        
-        <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
-        <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
-      </div>
+      <WalletHeader isCollapsed={isHeaderCollapsed} />
+      <main className={cn(
+        "flex flex-col items-center transition-all duration-500",
+        (isAuthOpen || isWalletSetupOpen) && "blur-md pointer-events-none"
+      )}>
+        <div className="w-full mx-auto max-w-4xl">
+          <WalletTab />
+        </div>
+      </main>
+      
+      <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
+      <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
+    </div>
   );
 }
