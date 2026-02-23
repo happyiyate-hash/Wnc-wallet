@@ -95,7 +95,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, refresh, viewingNetwork, fetchError } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, balances } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);

@@ -41,6 +41,7 @@ interface WalletContextType {
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
   wallets: WalletWithMetadata[] | null;
+  balances: { [key: string]: AssetRow[] };
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
@@ -336,6 +337,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChainsMap,
     isRefreshing,
     wallets,
+    balances,
     refresh: fetchBalances,
     generateWallet,
     importWallet,
