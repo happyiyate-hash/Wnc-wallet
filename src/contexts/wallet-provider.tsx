@@ -5,7 +5,6 @@ import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
-import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -167,7 +166,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setIsRefreshing(true);
     try {
-      // Step 1: Force profile refresh to get latest vault data
       await refreshProfile();
       
       const { data: latestProfile, error: fetchError } = await supabase
@@ -180,11 +178,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error("No cloud backup found for this account.");
       }
 
-      // Step 2: Get Auth Token for Production Vault Architecture
       const token = await getAuthToken();
       if (!token) throw new Error("Unauthorized: Please log in again.");
 
-      // Step 3: Decrypt via secure API
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
         headers: { 
@@ -238,16 +234,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const fetchBalances = useCallback(async () => {
-    if (!user || !wallets || wallets.length === 0 || !viewingNetwork || !infuraApiKey) return;
+    if (!user || !wallets || wallets.length === 0 || !viewingNetwork) return;
     
     setIsRefreshing(true);
 
     try {
-      const adapter = evmAdapterFactory(viewingNetwork, infuraApiKey);
-      if (!adapter) throw new Error("Adapter not supported");
-
+      const provider = new ethers.JsonRpcProvider(`${viewingNetwork.rpcBase}${infuraApiKey || ''}`);
       const baseAssets = getInitialAssets(viewingNetwork.chainId);
-      const rawBalances = await adapter.fetchBalances(wallets[0].address, baseAssets);
+      
+      const balancePromises = baseAssets.map(async (asset) => {
+        try {
+          if (asset.isNative) {
+            const bal = await provider.getBalance(wallets[0].address);
+            return { ...asset, balance: ethers.formatEther(bal) };
+          } else {
+            const abi = ["function balanceOf(address owner) view returns (uint256)", "function decimals() view returns (uint8)"];
+            const contract = new ethers.Contract(asset.address, abi, provider);
+            const [bal, decimals] = await Promise.all([
+              contract.balanceOf(wallets[0].address),
+              contract.decimals()
+            ]);
+            return { ...asset, balance: ethers.formatUnits(bal, decimals) };
+          }
+        } catch (e) {
+          return { ...asset, balance: '0' };
+        }
+      });
+
+      const rawBalances = await Promise.all(balancePromises);
       const assetsWithPrices = await fetchAssetPrices(rawBalances);
 
       setBalances(prev => ({
@@ -262,10 +276,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, wallets, viewingNetwork, infuraApiKey]);
 
   useEffect(() => {
-    if (isInitialized && user && wallets && infuraApiKey) {
+    if (isInitialized && user && wallets) {
         fetchBalances();
     }
-  }, [isInitialized, user, wallets, infuraApiKey, viewingNetwork, fetchBalances]);
+  }, [isInitialized, user, wallets, viewingNetwork, fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -276,7 +290,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    return balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    // CRITICAL: Strictly filter to show only assets for the active chainId
+    return (balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow))).filter(a => a.chainId === viewingNetwork.chainId);
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
@@ -284,7 +299,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isAssetsLoading: areLogosLoading,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
-    setNetwork: setViewingNetwork,
+    setNetwork: (net) => {
+        // Hard Reset: Clear local balance state for the current view before switching
+        setViewingNetwork(net);
+    },
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,

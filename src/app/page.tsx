@@ -15,10 +15,7 @@ export default function Home() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Determine which sheet should be open based on strict priority
-  // Priority 1: Auth (Must be logged in to do anything)
   const isAuthOpen = !loading && !user;
-  
-  // Priority 2: Wallet Setup (Only if Auth is completed but no wallet found)
   const isWalletSetupOpen = !loading && !!user && isInitialized && !wallets;
 
   useEffect(() => {
@@ -57,10 +54,7 @@ export default function Home() {
           </div>
         </main>
         
-        {/* Auth takes precedence */}
         <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
-        
-        {/* Wallet setup only pops up after auth is valid */}
         <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
       </div>
   );

@@ -82,7 +82,7 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, refresh, infuraApiKey } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, refresh, infuraApiKey, viewingNetwork } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
@@ -105,15 +105,20 @@ export default function WalletTab() {
     }
   }, [isInitialized, wallets, infuraApiKey]);
   
+  // Filter assets to only show those belonging to the current network
+  const currentNetworkAssets = useMemo(() => {
+    return allAssets.filter(a => a.chainId === viewingNetwork.chainId);
+  }, [allAssets, viewingNetwork]);
+
   const totalFiatValue = useMemo(() => {
-    return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
-  }, [allAssets]);
+    return currentNetworkAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
+  }, [currentNetworkAssets]);
   
   const total24hChange = useMemo(() => {
-    if (!allAssets || allAssets.length === 0 || totalFiatValue === 0) return 0;
+    if (!currentNetworkAssets || currentNetworkAssets.length === 0 || totalFiatValue === 0) return 0;
     
     let totalValueYesterday = 0;
-    for (const asset of allAssets) {
+    for (const asset of currentNetworkAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
@@ -130,7 +135,7 @@ export default function WalletTab() {
     
     const changeValue = totalFiatValue - totalValueYesterday;
     return (changeValue / totalValueYesterday) * 100;
-  }, [allAssets, totalFiatValue]);
+  }, [currentNetworkAssets, totalFiatValue]);
 
   const getBalanceFontSize = (balance: number) => {
     const safeBalance = Number.isFinite(balance) ? balance : 0;
@@ -169,27 +174,6 @@ export default function WalletTab() {
         <Loader2 className="w-10 h-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground mt-4">Initializing Wallet...</p>
       </div>
-    );
-  }
-
-  if (!wallets) {
-    return (
-      <>
-        <div className="flex h-full flex-col items-center justify-center text-center p-4 mt-6">
-          <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
-          <h2 className="text-xl font-bold">Welcome to Your Wallet</h2>
-          <p className="text-muted-foreground mt-2 mb-6">
-            Create or import a wallet to get started with non-custodial security.
-          </p>
-          <Button size="lg" onClick={() => setIsWalletSheetOpen(true)} className="rounded-xl px-8 h-12">
-            Get Started
-          </Button>
-        </div>
-        <WalletManagementSheet
-          isOpen={isWalletSheetOpen}
-          onOpenChange={setIsWalletSheetOpen}
-        />
-      </>
     );
   }
 
@@ -274,13 +258,13 @@ export default function WalletTab() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto thin-scrollbar">
-                  {isRefreshing && allAssets.length === 0 ? (
+                  {isRefreshing && currentNetworkAssets.length === 0 ? (
                      <div className="flex items-center justify-center pt-10">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                      </div>
-                  ) : allAssets.length > 0 ? (
+                  ) : currentNetworkAssets.length > 0 ? (
                     <div className="divide-y divide-white/5">
-                        {allAssets.map((token) => (
+                        {currentNetworkAssets.map((token) => (
                         <TokenRow
                             key={`${token.chainId}-${token.address || token.symbol}`}
                             token={token}
@@ -290,7 +274,7 @@ export default function WalletTab() {
                   ) : (
                     <div className="flex items-center justify-center pt-10">
                         <div className="text-center text-muted-foreground">
-                          No tokens found. Ensure you have an Infura key set.
+                          No tokens found on {viewingNetwork.name}.
                         </div>
                     </div>
                   )}
