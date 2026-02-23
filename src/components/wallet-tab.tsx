@@ -3,14 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw,
-  Plus,
   ArrowUpFromLine,
   ArrowDownToLine,
-  Wallet,
   Loader2,
   Repeat,
   Sparkles,
-  MoreHorizontal
+  MoreHorizontal,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -23,14 +22,15 @@ import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
-import ApiKeyManager from './wallet/api-key-manager';
 import MoreActionsSheet from './wallet/more-actions-sheet';
+import { Skeleton } from './ui/skeleton';
 
-const TokenRow = ({ token }: { token: AssetRow }) => {
+const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
 
   const handleRowClick = () => {
+    if (isLoading) return;
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
   };
 
@@ -51,74 +51,73 @@ const TokenRow = ({ token }: { token: AssetRow }) => {
         />
         <div>
           <p className="font-semibold text-sm">{token.name}</p>
-          <p
-            className={cn(
-              'text-xs',
-              isPositiveChange ? 'text-green-500' : 'text-red-400'
-            )}
-          >
-            {isPositiveChange ? '+' : ''}
-            {(token.pctChange24h ?? 0).toFixed(2)}%
-          </p>
+          {isLoading ? (
+            <Skeleton className="h-3 w-12 mt-1" />
+          ) : (
+            <p
+              className={cn(
+                'text-xs',
+                isPositiveChange ? 'text-green-500' : 'text-red-400'
+              )}
+            >
+              {isPositiveChange ? '+' : ''}
+              {(token.pctChange24h ?? 0).toFixed(2)}%
+            </p>
+          )}
         </div>
       </div>
       <div className="text-right">
-        <p className="font-semibold text-sm">
-          {parseFloat(token.balance || '0').toLocaleString('en-US', {
-            maximumFractionDigits: 6,
-          })}{' '}
-          {token.symbol}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          $
-          {(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </p>
+        {isLoading ? (
+          <div className="space-y-1">
+            <Skeleton className="h-4 w-20 ml-auto" />
+            <Skeleton className="h-3 w-16 ml-auto" />
+          </div>
+        ) : (
+          <>
+            <p className="font-semibold text-sm">
+              {parseFloat(token.balance || '0').toLocaleString('en-US', {
+                maximumFractionDigits: 6,
+              })}{' '}
+              {token.symbol}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              $
+              {(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, refresh, infuraApiKey, viewingNetwork } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, refresh, viewingNetwork, fetchError } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isApiManagerOpen, setIsApiManagerOpen] = useState(false);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const router = useRouter();
 
-  // Show the management sheet if no wallet exists once initialized
   useEffect(() => {
     if (isInitialized && !wallets) {
       setIsWalletSheetOpen(true);
     }
   }, [isInitialized, wallets]);
 
-  // Show API manager if wallet exists but no key is provided
-  useEffect(() => {
-    if (isInitialized && wallets && !infuraApiKey) {
-      setIsApiManagerOpen(true);
-    }
-  }, [isInitialized, wallets, infuraApiKey]);
-  
-  // Filter assets to only show those belonging to the current network
-  const currentNetworkAssets = useMemo(() => {
-    return allAssets.filter(a => a.chainId === viewingNetwork.chainId);
-  }, [allAssets, viewingNetwork]);
-
   const totalFiatValue = useMemo(() => {
-    return currentNetworkAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
-  }, [currentNetworkAssets]);
+    return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
+  }, [allAssets]);
   
   const total24hChange = useMemo(() => {
-    if (!currentNetworkAssets || currentNetworkAssets.length === 0 || totalFiatValue === 0) return 0;
+    if (!allAssets || allAssets.length === 0 || totalFiatValue === 0) return 0;
     
     let totalValueYesterday = 0;
-    for (const asset of currentNetworkAssets) {
+    for (const asset of allAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
@@ -132,10 +131,9 @@ export default function WalletTab() {
     }
 
     if (totalValueYesterday === 0) return 0;
-    
     const changeValue = totalFiatValue - totalValueYesterday;
     return (changeValue / totalValueYesterday) * 100;
-  }, [currentNetworkAssets, totalFiatValue]);
+  }, [allAssets, totalFiatValue]);
 
   const getBalanceFontSize = (balance: number) => {
     const safeBalance = Number.isFinite(balance) ? balance : 0;
@@ -168,15 +166,6 @@ export default function WalletTab() {
     </div>
   );
 
-  if (!isInitialized) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground mt-4">Initializing Wallet...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full">
       <div className="bg-background pt-8">
@@ -199,10 +188,7 @@ export default function WalletTab() {
                 )}
               >
                 {total24hChange >= 0 ? '+' : ''}$
-                {(
-                  totalFiatValue -
-                  (totalFiatValue / (1 + total24hChange / 100 || 1))
-                ).toFixed(2)}
+                {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
                 <span className="text-gray-400 ml-2">
                   ({total24hChange >= 0 ? '+' : ''}
                   {total24hChange.toFixed(2)}%)
@@ -243,41 +229,41 @@ export default function WalletTab() {
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
-                                onClick={() => refresh()}
-                                disabled={isRefreshing}
-                            >
-                            {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
-                            </Button>
-                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
+                            onClick={() => refresh()}
+                            disabled={isRefreshing}
+                        >
+                          {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
+                        </Button>
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto thin-scrollbar">
-                  {isRefreshing && currentNetworkAssets.length === 0 ? (
-                     <div className="flex items-center justify-center pt-10">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                     </div>
-                  ) : currentNetworkAssets.length > 0 ? (
-                    <div className="divide-y divide-white/5">
-                        {currentNetworkAssets.map((token) => (
-                        <TokenRow
-                            key={`${token.chainId}-${token.address || token.symbol}`}
-                            token={token}
-                        />
-                        ))}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center pt-10">
-                        <div className="text-center text-muted-foreground">
-                          No tokens found on {viewingNetwork.name}.
-                        </div>
+                  {fetchError && (
+                    <div className="mx-4 mb-4 p-3 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {fetchError}
                     </div>
                   )}
+
+                  <div className="divide-y divide-white/5">
+                    {allAssets.length > 0 ? (
+                      allAssets.map((token) => (
+                        <TokenRow
+                          key={`${token.chainId}-${token.address || token.symbol}`}
+                          token={token}
+                          isLoading={isRefreshing && !balances[viewingNetwork.chainId]}
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center py-10 text-muted-foreground text-sm">
+                        No tokens configured for {viewingNetwork.name}.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
             </Tabs>
@@ -287,7 +273,6 @@ export default function WalletTab() {
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
       <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
-      <ApiKeyManager isOpen={isApiManagerOpen} onOpenChange={setIsApiManagerOpen} />
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
     </div>
   );

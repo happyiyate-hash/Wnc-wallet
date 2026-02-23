@@ -7,6 +7,7 @@ import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
+import { cn } from '@/lib/utils';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
@@ -41,16 +42,12 @@ export default function Home() {
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <WalletHeader isCollapsed={isHeaderCollapsed} />
-        <main className="flex flex-col items-center">
+        <main className={cn(
+          "flex flex-col items-center transition-all duration-500",
+          (isAuthOpen || isWalletSetupOpen) && "blur-md pointer-events-none"
+        )}>
           <div className="w-full mx-auto max-w-4xl">
-            {/* Show UI only if both auth and wallet are active */}
-            {user && wallets ? (
-              <WalletTab />
-            ) : (
-              <div className="flex h-[60vh] items-center justify-center text-muted-foreground p-8 text-center">
-                Please complete setup to view your assets.
-              </div>
-            )}
+            <WalletTab />
           </div>
         </main>
         

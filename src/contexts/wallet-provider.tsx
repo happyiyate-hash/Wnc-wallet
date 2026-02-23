@@ -10,6 +10,26 @@ import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+const PUBLIC_RPC_MAP: Record<number, string> = {
+  1: "https://rpc.ankr.com/eth",
+  137: "https://rpc.ankr.com/polygon",
+  42161: "https://rpc.ankr.com/arbitrum",
+  10: "https://rpc.ankr.com/optimism",
+  8453: "https://rpc.ankr.com/base",
+  81457: "https://rpc.ankr.com/blast",
+  56: "https://rpc.ankr.com/bsc",
+  43114: "https://rpc.ankr.com/avalanche",
+  324: "https://rpc.ankr.com/zksync_era",
+  42220: "https://rpc.ankr.com/celo",
+  534352: "https://rpc.ankr.com/scroll",
+  1329: "https://rpc.ankr.com/sei",
+  5000: "https://rpc.ankr.com/mantle",
+  204: "https://rpc.ankr.com/opbnb",
+  130: "https://rpc.ankr.com/unichain",
+  1750: "https://rpc.ankr.com/swellchain",
+  11297108109: "https://rpc.ankr.com/palm",
+};
+
 interface WalletContextType {
   isInitialized: boolean;
   isAssetsLoading: boolean;
@@ -21,8 +41,6 @@ interface WalletContextType {
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
   wallets: WalletWithMetadata[] | null;
-  infuraApiKey: string | null;
-  setInfuraApiKey: (key: string | null) => void;
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
@@ -30,6 +48,7 @@ interface WalletContextType {
   restoreFromCloud: () => Promise<void>;
   logout: () => void;
   deleteWallet: () => void;
+  fetchError: string | null;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -40,11 +59,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
-  const [infuraApiKey, setInfuraApiKeyInternal] = useState<string | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const getAuthToken = useCallback(async () => {
     if (!supabase) return null;
@@ -101,11 +120,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, viewingNetwork]);
 
-  useEffect(() => {
-    const savedKey = localStorage.getItem('infuraApiKey');
-    if (savedKey) setInfuraApiKeyInternal(savedKey);
-  }, []);
-
   const saveToVaultInternal = async (mnemonic: string) => {
     if (!user || !supabase) return;
     try {
@@ -145,7 +159,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
     }
     return mnemonic;
-  }, [loadWalletFromMnemonic, toast, user, getAuthToken]);
+  }, [loadWalletFromMnemonic, toast, user]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) return;
@@ -156,7 +170,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) {
       toast({ variant: "destructive", title: "Import Error", description: e.message });
     }
-  }, [loadWalletFromMnemonic, toast, user, getAuthToken]);
+  }, [loadWalletFromMnemonic, toast, user]);
 
   const restoreFromCloud = async () => {
     if (!user || !supabase) {
@@ -234,12 +248,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const fetchBalances = useCallback(async () => {
-    if (!user || !wallets || wallets.length === 0 || !viewingNetwork) return;
+    if (!wallets || wallets.length === 0 || !viewingNetwork) return;
     
     setIsRefreshing(true);
+    setFetchError(null);
 
     try {
-      const provider = new ethers.JsonRpcProvider(`${viewingNetwork.rpcBase}${infuraApiKey || ''}`);
+      const rpcUrl = PUBLIC_RPC_MAP[viewingNetwork.chainId];
+      if (!rpcUrl) {
+        throw new Error(`Public RPC not configured for ${viewingNetwork.name}`);
+      }
+
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
       const baseAssets = getInitialAssets(viewingNetwork.chainId);
       
       const balancePromises = baseAssets.map(async (asset) => {
@@ -257,6 +277,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return { ...asset, balance: ethers.formatUnits(bal, decimals) };
           }
         } catch (e) {
+          console.warn(`Balance fetch failed for ${asset.symbol}:`, e);
           return { ...asset, balance: '0' };
         }
       });
@@ -268,18 +289,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         ...prev,
         [viewingNetwork.chainId]: assetsWithPrices
       }));
-    } catch (e) {
+    } catch (e: any) {
       console.error("Fetch balances failed", e);
+      setFetchError(e.message || "Could not fetch balances.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [user, wallets, viewingNetwork, infuraApiKey]);
+  }, [wallets, viewingNetwork]);
 
   useEffect(() => {
-    if (isInitialized && user && wallets) {
+    if (isInitialized && wallets) {
         fetchBalances();
     }
-  }, [isInitialized, user, wallets, viewingNetwork, fetchBalances]);
+  }, [isInitialized, wallets, viewingNetwork, fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -290,8 +312,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    // CRITICAL: Strictly filter to show only assets for the active chainId
-    return (balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow))).filter(a => a.chainId === viewingNetwork.chainId);
+    // Always render initial assets, update with live balances if available
+    const initial = getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    const live = balances[viewingNetwork.chainId] || [];
+    
+    return initial.map(item => {
+      const liveItem = live.find(l => l.symbol === item.symbol && l.address === item.address);
+      return liveItem || item;
+    });
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
@@ -300,27 +328,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork: (net) => {
-        // Hard Reset: Clear local balance state for the current view before switching
         setViewingNetwork(net);
+        setFetchError(null);
     },
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
     wallets,
-    infuraApiKey,
-    setInfuraApiKey: (key) => {
-      if (key) localStorage.setItem('infuraApiKey', key);
-      else localStorage.removeItem('infuraApiKey');
-      setInfuraApiKeyInternal(key);
-    },
     refresh: fetchBalances,
     generateWallet,
     importWallet,
     saveToVault,
     restoreFromCloud,
     logout,
-    deleteWallet
+    deleteWallet,
+    fetchError
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
