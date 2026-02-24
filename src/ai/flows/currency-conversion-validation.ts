@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -32,21 +33,7 @@ const swapValidationPrompt = ai.definePrompt({
   name: 'swapValidationPrompt',
   input: {schema: SwapValidationInputSchema},
   output: {schema: SwapValidationOutputSchema},
-  prompt: `You are an expert Crypto Trade Guardian. Analyze the following swap quote on the {{chainName}} network.
-
-Trade Details:
-- Swap: {{amount}} {{fromCurrency}} -> {{convertedAmount}} {{toCurrency}}
-- Price Impact: {{priceImpact}}%
-- Gas Fee: \${{gasFeeUsd}}
-
-Your Task:
-1. Check if the price impact is too high (usually < -2% is bad).
-2. Check if the gas fee is disproportionate to the trade amount (e.g., $20 gas for a $50 trade).
-3. Determine if the trade is "Valid" (safe/healthy) or has warnings.
-
-Provide a clear validationReason and a helpful suggestion.
-If impact is < -3%, mark isValid: false.
-If gas is > 20% of trade value, warn the user.`,
+  prompt: 'You are an expert Crypto Trade Guardian. Analyze the following swap quote on the {{{chainName}}} network.\n\nTrade Details:\n- Swap: {{{amount}}} {{{fromCurrency}}} -> {{{convertedAmount}}} {{{toCurrency}}}\n- Price Impact: {{{priceImpact}}}%\n- Gas Fee: ${{{gasFeeUsd}}}\n\nYour Task:\n1. Check if the price impact is too high (usually < -2% is bad).\n2. Check if the gas fee is disproportionate to the trade amount (e.g., $20 gas for a $50 trade).\n3. Determine if the trade is "Valid" (safe/healthy) or has warnings.\n\nProvide a clear validationReason and a helpful suggestion.\nIf impact is < -3%, mark isValid: false.\nIf gas is > 20% of trade value, warn the user.',
 });
 
 export async function validateSwapHealth(input: SwapValidationInput): Promise<SwapValidationOutput> {

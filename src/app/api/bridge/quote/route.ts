@@ -7,9 +7,10 @@ const lifi = new LiFi({
 });
 
 /**
- * BRIDGE QUOTE API
+ * BRIDGE & SWAP QUOTE API
  * 
- * Fetches the best bridge route from LI.FI based on the provided parameters.
+ * Fetches the best bridge/swap route from LI.FI based on the provided parameters.
+ * Supports same-chain swaps and cross-chain bridging.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
@@ -31,8 +32,8 @@ export async function GET(req: NextRequest) {
         }
 
         const quoteRequest = {
-            fromChain,
-            toChain,
+            fromChain: Number(fromChain),
+            toChain: Number(toChain),
             fromToken,
             toToken,
             fromAmount,
