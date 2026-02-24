@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -30,7 +31,6 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
 
   const handleRowClick = () => {
-    if (isLoading) return;
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
   };
 
@@ -51,25 +51,21 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
         />
         <div>
           <p className="font-semibold text-sm">{token.name}</p>
-          {isLoading ? (
-            <Skeleton className="h-3 w-12 mt-1" />
-          ) : (
-            <p
-              className={cn(
-                'text-xs',
-                isPositiveChange ? 'text-green-500' : 'text-red-400'
-              )}
-            >
-              {isPositiveChange ? '+' : ''}
-              {(token.pctChange24h ?? 0).toFixed(2)}%
-            </p>
-          )}
+          <p
+            className={cn(
+              'text-xs',
+              isPositiveChange ? 'text-green-500' : 'text-red-400'
+            )}
+          >
+            {isPositiveChange ? '+' : ''}
+            {(token.pctChange24h ?? 0).toFixed(2)}%
+          </p>
         </div>
       </div>
       <div className="text-right">
         {isLoading ? (
           <div className="space-y-1">
-            <Skeleton className="h-4 w-20 ml-auto" />
+            <Loader2 className="h-3 w-3 animate-spin ml-auto text-primary" />
             <Skeleton className="h-3 w-16 ml-auto" />
           </div>
         ) : (
@@ -95,7 +91,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, balances } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
@@ -109,7 +105,6 @@ export default function WalletTab() {
     }
   }, [isInitialized, wallets]);
 
-  // STRICTLY SCOPED to current network
   const totalFiatValue = useMemo(() => {
     return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
   }, [allAssets]);
@@ -251,19 +246,13 @@ export default function WalletTab() {
                   )}
 
                   <div className="divide-y divide-white/5">
-                    {allAssets.length > 0 ? (
-                      allAssets.map((token) => (
-                        <TokenRow
-                          key={`${token.chainId}-${token.address || token.symbol}`}
-                          token={token}
-                          isLoading={isRefreshing && !balances[viewingNetwork.chainId]}
-                        />
-                      ))
-                    ) : (
-                      <div className="text-center py-10 text-muted-foreground text-sm">
-                        No tokens configured for {viewingNetwork.name}.
-                      </div>
-                    )}
+                    {allAssets.map((token) => (
+                      <TokenRow
+                        key={`${token.chainId}-${token.address || token.symbol}`}
+                        token={token}
+                        isLoading={isTokenLoading(token.chainId, token.symbol)}
+                      />
+                    ))}
                   </div>
                 </div>
               </TabsContent>

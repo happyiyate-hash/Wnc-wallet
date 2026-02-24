@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -40,6 +41,7 @@ interface WalletContextType {
   allChains: ChainConfig[];
   allChainsMap: { [key: string]: ChainConfig };
   isRefreshing: boolean;
+  isTokenLoading: (chainId: number, symbol: string) => boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
   refresh: () => Promise<void>;
@@ -64,8 +66,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const isTokenLoading = useCallback((chainId: number, symbol: string) => {
+    return loadingTokens[`${chainId}:${symbol}`] || false;
+  }, [loadingTokens]);
 
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]): string | undefined => {
     if (wallets && wallets.length > 0) return wallets[0].address;
@@ -260,6 +267,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing(true);
     setFetchError(null);
 
+    // Set all tokens to loading
+    const initialAssets = getInitialAssets(viewingNetwork.chainId);
+    const newLoadingState = initialAssets.reduce((acc, asset) => {
+      acc[`${viewingNetwork.chainId}:${asset.symbol}`] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+    setLoadingTokens(prev => ({ ...prev, ...newLoadingState }));
+
     try {
       const rpcUrl = PUBLIC_RPC_MAP[viewingNetwork.chainId];
       if (!rpcUrl) {
@@ -267,9 +282,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       const provider = new ethers.JsonRpcProvider(rpcUrl);
-      const baseAssets = getInitialAssets(viewingNetwork.chainId);
       
-      const balancePromises = baseAssets.map(async (asset) => {
+      const balancePromises = initialAssets.map(async (asset) => {
         try {
           if (asset.isNative) {
             const bal = await provider.getBalance(wallets[0].address);
@@ -286,6 +300,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           console.warn(`Balance fetch failed for ${asset.symbol} on ${viewingNetwork.name}:`, e);
           return { ...asset, balance: '0' };
+        } finally {
+          // Individual token loading complete
+          setLoadingTokens(prev => {
+            const next = { ...prev };
+            delete next[`${viewingNetwork.chainId}:${asset.symbol}`];
+            return next;
+          });
         }
       });
 
@@ -299,6 +320,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) {
       console.error("Fetch balances failed", e);
       setFetchError(e.message || "Could not fetch balances.");
+      // Clear loading on error
+      setLoadingTokens({});
     } finally {
       setIsRefreshing(false);
     }
@@ -319,7 +342,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    // ATOMIC FILTERING: Never mix assets from different chains
+    // ATOMIC FILTERING: Always show tokens immediately, even if balances aren't loaded
     const initial = getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const live = balances[viewingNetwork.chainId] || [];
     
@@ -335,7 +358,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork: (net) => {
-        // Atomic switch: clear error and prepare for new context
         setViewingNetwork(net);
         setFetchError(null);
     },
@@ -343,6 +365,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing,
+    isTokenLoading,
     wallets,
     balances,
     refresh: fetchBalances,
