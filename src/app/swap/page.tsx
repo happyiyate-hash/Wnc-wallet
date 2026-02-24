@@ -9,13 +9,26 @@ import {
   ArrowLeft, 
   ArrowUpDown, 
   Loader2, 
+  AlertTriangle, 
+  CheckCircle2, 
   Fuel, 
+  Zap, 
   ChevronRight,
+  Wallet as WalletIcon,
+  Copy,
+  TrendingUp,
+  AlertCircle,
+  ArrowRight,
   Route as RouteIcon,
-  Settings2
+  Settings2,
+  ExternalLink,
+  ShieldCheck,
+  Info
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
+import { currencyConversionWithLLMValidation } from '@/app/actions';
+import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +37,14 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { ethers } from 'ethers';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useDebounce } from '@/hooks/use-debounce';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -128,23 +149,11 @@ export default function SwapPage() {
           </div>
         </div>
 
-        <div className="flex justify-center -my-6 relative z-10">
-            <Button variant="outline" size="icon" className="h-12 w-12 rounded-2xl bg-background border-white/10 shadow-xl" onClick={() => {
-                const temp = fromToken;
-                setFromToken(toToken);
-                setToToken(temp);
-            }}>
-                <ArrowUpDown className="w-5 h-5 text-primary" />
-            </Button>
-        </div>
-
         {/* TO SECTION */}
         <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4">
           <div className="flex justify-between items-center"><span className="text-[10px] font-black text-muted-foreground uppercase">You Receive Est.</span></div>
           <div className="flex items-center gap-4">
-            <div className="flex-1 text-4xl font-black">
-                {isQuoteLoading ? <Loader2 className="animate-spin text-primary" /> : (quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(6) : '0.00')}
-            </div>
+            <div className="flex-1 text-4xl font-black">{isQuoteLoading ? <Loader2 className="animate-spin" /> : (quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(6) : '0.00')}</div>
             <Button variant="outline" className="h-14 gap-2" onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}>
               <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={32} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
               <span className="font-black">{toToken?.symbol}</span>
@@ -152,28 +161,27 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* QUOTE VISUALS */}
+        {/* QUOTE VISUALS (SCROLLABLE) */}
         {quoteData && (
             <div className="p-4 rounded-xl bg-white/5 space-y-3">
                 <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground">
-                    <span className="flex items-center gap-2"><RouteIcon className="w-3 h-3"/> DEX Route</span>
-                    <span className="text-primary uppercase">{quoteData.tool}</span>
+                    <span className="flex items-center gap-2"><RouteIcon className="w-3 h-3"/> DEX Route</span>                    <span className="text-primary">{quoteData.tool}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground flex items-center gap-2"><Fuel className="w-3 h-3"/> Est. Gas</span>
-                    <span className="font-mono text-white">~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
+                    <span>Network Fee</span>
+                    <span className="font-mono">~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
                 </div>
             </div>
         )}
 
         <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto">
-            <Button className="w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl shadow-primary/20 border-b-4 border-primary/50" disabled={!quoteData || isQuoteLoading}>
-                {isQuoteLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Review Swap Details"}
+            <Button className="w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl" disabled={!quoteData || isQuoteLoading}>
+                Review Swap Details
             </Button>
         </div>
       </main>
 
-      {/* NETWORK SELECTOR */}
+      {/* FIXED NETWORK SELECTOR (SCROLLABLE) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
@@ -198,7 +206,7 @@ export default function SwapPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all hover:bg-white/5"
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
@@ -230,11 +238,11 @@ export default function SwapPage() {
                             <button 
                                 key={asset.symbol}
                                 onClick={() => handleTokenSelect(asset)}
-                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group text-left"
+                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
-                                    <div>
+                                    <div className="text-left leading-tight">
                                         <p className="font-black text-base text-white">{asset.symbol}</p>
                                         <p className="text-xs text-muted-foreground">{asset.name}</p>
                                     </div>
