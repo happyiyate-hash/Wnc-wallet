@@ -1,3 +1,4 @@
+
 'use client';
 
 import CachedImage from '../CachedImage';
@@ -5,6 +6,7 @@ import { Skeleton } from '../ui/skeleton';
 import { useWallet } from '@/contexts/wallet-provider';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
+import { useEffect, useState } from 'react';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -26,17 +28,29 @@ export default function TokenLogoDynamic({
   symbol,
 }: TokenLogoDynamicProps) {
   const { allChainsMap } = useWallet();
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   // If logoUrl is explicitly undefined (loading state)
   if (logoUrl === undefined && !symbol) {
     return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
   }
 
-  // Determine the best logo URL based on multi-chain context
   let finalUrl = logoUrl;
   
+  // If the URL is a relative path (starting with /api/cdn), prepend the current origin
+  if (finalUrl && finalUrl.startsWith('/api/cdn')) {
+    finalUrl = `${origin}${finalUrl}`;
+  }
+
   if (!finalUrl && symbol) {
-    finalUrl = getTokenLogoUrl(symbol, chainId);
+    const predicted = getTokenLogoUrl(symbol, chainId);
+    if (predicted) {
+        finalUrl = predicted.startsWith('http') ? predicted : `${origin}${predicted}`;
+    }
   }
 
   // If we still don't have a URL, check for native chain icons from registry
@@ -44,13 +58,13 @@ export default function TokenLogoDynamic({
     if (chainId && allChainsMap[chainId]) {
       const nativeChainIcon = allChainsMap[chainId].iconUrl;
       if (nativeChainIcon) {
-        finalUrl = nativeChainIcon;
+        finalUrl = nativeChainIcon.startsWith('http') ? nativeChainIcon : `${origin}${nativeChainIcon}`;
       }
     }
   }
 
   // Final rendering logic
-  if (!finalUrl) {
+  if (!finalUrl || finalUrl.includes('undefined')) {
     return FallbackComponent || <GenericCoinIcon size={size} className={className} />;
   }
 

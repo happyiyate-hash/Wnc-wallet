@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -6,9 +7,10 @@ import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
-import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
+
+const WEVINA_API_KEY = 'wevina_fc4ba8d7082f478aa21476941059de0a';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -41,12 +43,13 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, profile, loading: authLoading, refreshProfile, signOut: authSignOut } = useUser();
+  const { user, profile, loading: authLoading, signOut: authSignOut } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
+  const [tokenRegistry, setTokenRegistry] = useState<{ [chainId: number]: any[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
@@ -64,6 +67,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (key) localStorage.setItem('infura_api_key', key);
     else localStorage.removeItem('infura_api_key');
   };
+
+  /**
+   * WEVINA TOKEN METADATA FETCHING
+   * Fetches the complete list of tokens per network on startup.
+   */
+  const fetchTokenRegistry = useCallback(async () => {
+    const registry: { [chainId: number]: any[] } = {};
+    const fetchPromises = chainsWithLogos.map(async (chain) => {
+      try {
+        // Slugify the network name for the API (e.g. "Polygon" -> "polygon")
+        const slug = chain.name.split(' ')[0].toLowerCase();
+        const baseUrl = window.location.origin;
+        const response = await fetch(`${baseUrl}/api/tokens/${slug}`, {
+          headers: { 'x-api-key': WEVINA_API_KEY }
+        });
+        if (response.ok) {
+          const tokens = await response.json();
+          registry[chain.chainId] = tokens;
+        }
+      } catch (e) {
+        console.warn(`Metadata fetch failed for ${chain.name}`);
+      }
+    });
+    await Promise.all(fetchPromises);
+    setTokenRegistry(registry);
+  }, [chainsWithLogos]);
+
+  useEffect(() => {
+    if (chainsWithLogos.length > 0) {
+      if (!viewingNetwork) setViewingNetwork(chainsWithLogos[0]);
+      setIsInitialized(true);
+      fetchTokenRegistry();
+    }
+  }, [chainsWithLogos, fetchTokenRegistry]);
 
   const isTokenLoading = useCallback((chainId: number, symbol: string) => {
     return loadingTokens[`${chainId}:${symbol}`] || false;
@@ -110,17 +147,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [authLoading, user, loadWalletFromMnemonic]);
 
-  useEffect(() => {
-    if (chainsWithLogos.length > 0) {
-      if (!viewingNetwork) setViewingNetwork(chainsWithLogos[0]);
-      setIsInitialized(true);
-    }
-  }, [chainsWithLogos, viewingNetwork]);
-
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
     if (!infuraApiKey) {
-      setFetchError("Please provide an Infura API Key in Settings to fetch live balances.");
+      setFetchError("Connect to a node to fetch balances.");
       return;
     }
     
@@ -133,10 +163,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const balancePromises = chainsWithLogos.map(async (chain) => {
         if (!chain.rpcUrl || !chain.chainId) return null;
 
+        // Get initial assets enriched with metadata from our API registry
+        const apiTokens = tokenRegistry[chain.chainId] || [];
+        const initialAssets = getInitialAssets(chain.chainId).map(a => {
+          const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+          return {
+            ...a,
+            balance: '0',
+            name: apiMeta?.name || a.name,
+            iconUrl: apiMeta?.logo_url || a.iconUrl || chain.iconUrl
+          } as AssetRow;
+        });
+
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-          const initialAssets = getInitialAssets(chain.chainId);
           
           const chainBalances = await Promise.all(initialAssets.map(async (asset) => {
             try {
@@ -150,17 +191,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               }
               return {
                 ...asset,
-                balance: ethers.formatUnits(balance, 18), // Assuming standard 18 decimals for simplicity in this proto
-                iconUrl: asset.iconUrl || chain.iconUrl
+                balance: ethers.formatUnits(balance, 18), 
               } as AssetRow;
             } catch (e) {
-              return { ...asset, balance: '0', iconUrl: asset.iconUrl || chain.iconUrl } as AssetRow;
+              return asset;
             }
           }));
 
           return { chainId: chain.chainId, assets: chainBalances };
         } catch (e: any) {
-          return null;
+          return { chainId: chain.chainId, assets: initialAssets };
         }
       });
 
@@ -172,14 +212,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      // Fill in chains that failed
+      // Stable Merge Strategy
       chainsWithLogos.forEach(chain => {
         if (chain.chainId && !newBalances[chain.chainId]) {
-          newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
-            ...a,
-            balance: '0',
-            iconUrl: a.iconUrl || chain.iconUrl
-          } as AssetRow));
+          const apiTokens = tokenRegistry[chain.chainId] || [];
+          newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => {
+            const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+            return {
+              ...a,
+              balance: '0',
+              iconUrl: apiMeta?.logo_url || a.iconUrl || chain.iconUrl
+            } as AssetRow;
+          });
         }
       });
 
@@ -195,17 +239,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setBalances(finalBalances);
     } catch (e: any) {
       console.error("Global Balance Fetch Error:", e);
-      setFetchError("Market data sync issues. Some balances may be stale.");
+      setFetchError("Market data sync issue. Displaying local cache.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey]);
+  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey, tokenRegistry]);
 
   useEffect(() => {
-    if (isInitialized && wallets) {
+    if (isInitialized && wallets && infuraApiKey) {
         fetchBalances();
     }
-  }, [isInitialized, wallets, fetchBalances]);
+  }, [isInitialized, wallets, fetchBalances, infuraApiKey]);
 
   const generateWallet = useCallback(async () => {
     if (!user) return '';

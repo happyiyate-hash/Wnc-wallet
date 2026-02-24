@@ -1,16 +1,18 @@
+
 'use client';
 
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Copy, Share2, Info, QrCode } from 'lucide-react';
+import { ArrowLeft, Copy, Share2, Info, CheckCircle2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Card } from '@/components/ui/card';
-import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
+import { QRCodeSVG } from 'qrcode.react';
+import { cn } from '@/lib/utils';
 
 export default function ReceivePage() {
   const { wallets, viewingNetwork, allChains } = useWallet();
@@ -40,8 +42,13 @@ export default function ReceivePage() {
     }
   }, [viewingNetwork, searchParams]);
 
-  const chain = allChains.find(c => c.chainId === selectedToken?.chainId) || viewingNetwork;
-  const address = wallets ? getAddressForChain(chain, wallets) : null;
+  const chain = useMemo(() => 
+    allChains.find(c => c.chainId === selectedToken?.chainId) || viewingNetwork,
+  [allChains, selectedToken, viewingNetwork]);
+
+  const address = useMemo(() => 
+    wallets ? getAddressForChain(chain, wallets) : null,
+  [chain, wallets]);
 
   const handleCopy = () => {
     if (address) copy(address);
@@ -61,70 +68,95 @@ export default function ReceivePage() {
 
       <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto">
         <div className="text-center space-y-2">
-          <p className="text-sm text-muted-foreground px-4">
-            Send only <span className="text-foreground font-bold">{selectedToken?.name} ({selectedToken?.symbol})</span> to this unique address.
+          <p className="text-sm text-muted-foreground px-4 leading-relaxed">
+            Send only <span className="text-foreground font-bold">{selectedToken?.name} ({selectedToken?.symbol})</span> to this address via <span className="text-primary font-bold">{chain.name}</span>.
           </p>
-          <div className="flex items-center justify-center gap-2">
-            <span className="text-[10px] bg-primary/10 text-primary px-3 py-1 rounded-full font-bold uppercase tracking-widest">
-                Network: {chain.name}
-            </span>
-          </div>
         </div>
 
-        <Card className="p-8 bg-white rounded-[3rem] shadow-2xl shadow-primary/20 relative group overflow-hidden">
-          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-          <div className="relative z-10 w-64 h-64 bg-zinc-950 flex flex-col items-center justify-center rounded-[2.5rem] p-6">
-            <div className="relative w-full h-full flex items-center justify-center">
-                {/* QR Code Placeholder UI */}
-                <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-2 opacity-20">
-                    {Array.from({ length: 16 }).map((_, i) => (
-                        <div key={i} className="bg-white rounded-sm" />
-                    ))}
+        <div className="relative group">
+            <div className="absolute -inset-4 bg-primary/20 rounded-[4rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
+            <Card className="p-10 bg-white rounded-[3.5rem] shadow-2xl relative z-10 flex flex-col items-center gap-6">
+                <div className="bg-zinc-50 p-4 rounded-[2.5rem] border border-zinc-100">
+                    {address ? (
+                        <QRCodeSVG 
+                            value={address} 
+                            size={220}
+                            level="H"
+                            fgColor="#4c1d95" // Brand Purple (Deep)
+                            bgColor="#ffffff"
+                            includeMargin={false}
+                            imageSettings={selectedToken?.iconUrl ? {
+                                src: selectedToken.iconUrl,
+                                x: undefined,
+                                y: undefined,
+                                height: 48,
+                                width: 48,
+                                excavate: true,
+                            } : undefined}
+                        />
+                    ) : (
+                        <div className="w-[220px] h-[220px] flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
+                            <span className="text-xs text-muted-foreground font-mono">Generating...</span>
+                        </div>
+                    )}
                 </div>
-                <div className="relative z-10 bg-white p-3 rounded-2xl shadow-xl">
-                    <TokenLogoDynamic 
-                        logoUrl={selectedToken?.iconUrl} 
-                        alt={selectedToken?.symbol || ''} 
-                        size={80} 
-                        chainId={selectedToken?.chainId}
-                        className="bg-white"
-                    />
+                
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Scan to pay</span>
+                    <div className="h-1 w-8 bg-primary/20 rounded-full" />
                 </div>
-            </div>
-          </div>
-          <div className="mt-6 flex flex-col items-center gap-2">
-            <QrCode className="w-6 h-6 text-zinc-400" />
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Scan to pay</span>
-          </div>
-        </Card>
+            </Card>
+        </div>
 
         <div className="w-full space-y-4">
           <div 
             onClick={handleCopy}
-            className="w-full p-5 rounded-2xl bg-secondary/30 border border-white/10 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all group"
+            className={cn(
+                "w-full p-5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all duration-300 relative overflow-hidden group",
+                isCopied 
+                    ? "bg-green-500/10 border-green-500/30" 
+                    : "bg-secondary/30 border-white/10 hover:border-primary/30"
+            )}
           >
-            <div className="flex-1 min-w-0 pr-4">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Your Receiving Address</p>
-              <p className="text-sm font-mono break-all leading-relaxed text-foreground/90">
-                {address || 'Fetching address...'}
+            <div className="flex-1 min-w-0 pr-4 relative z-10">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-1.5 flex items-center gap-2">
+                Your Receiving Address
+                {isCopied && <span className="text-green-500 text-[9px] animate-in fade-in slide-in-from-left-1">Copied!</span>}
+              </p>
+              <p className={cn(
+                "text-sm font-mono break-all leading-relaxed transition-colors",
+                isCopied ? "text-green-400" : "text-foreground/90"
+              )}>
+                {address || 'Configuring vault...'}
               </p>
             </div>
-            <div className="w-12 h-12 bg-primary/20 group-hover:bg-primary/30 rounded-xl flex items-center justify-center text-primary transition-colors">
-              <Copy className="w-5 h-5" />
+            <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 relative z-10 shrink-0",
+                isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary group-hover:scale-110"
+            )}>
+              {isCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
             </div>
+            {isCopied && <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-transparent animate-in slide-in-from-left-full duration-700" />}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-             <Button variant="outline" className="h-14 rounded-2xl gap-2 font-bold text-base bg-white/5 border-white/10" onClick={handleCopy}>
-                <Copy className="w-5 h-5" /> Copy
+             <Button 
+                variant="outline" 
+                className="h-14 rounded-2xl gap-3 font-bold text-base bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 transition-all active:scale-95" 
+                onClick={handleCopy}
+             >
+                <Copy className="w-5 h-5 text-primary" /> Copy
              </Button>
-             <Button variant="outline" className="h-14 rounded-2xl gap-2 font-bold text-base bg-white/5 border-white/10">
-                <Share2 className="w-5 h-5" /> Share
+             <Button 
+                variant="outline" 
+                className="h-14 rounded-2xl gap-3 font-bold text-base bg-white/5 border-white/10 hover:bg-white/10 transition-all active:scale-95"
+             >
+                <Share2 className="w-5 h-5 text-primary" /> Share
              </Button>
           </div>
         </div>
 
-        <div className="mt-auto p-5 rounded-2xl bg-primary/5 border border-primary/10 text-muted-foreground text-[11px] leading-relaxed italic text-center">
+        <div className="mt-auto p-5 rounded-2xl bg-primary/5 border border-primary/10 text-muted-foreground text-[11px] leading-relaxed italic text-center max-w-[280px]">
            Deposits are automatically detected and credited to your balance after network confirmation.
         </div>
       </main>

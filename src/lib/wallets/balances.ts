@@ -65,6 +65,18 @@ const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' |
   ],
   130: [ // Unichain
     { chainId: 130, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Unichain', symbol: 'UNI', isNative: true, coingeckoId: 'uniswap' },
+  ],
+  99999: [ // Monad
+    { chainId: 99999, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Monad', symbol: 'MON', isNative: true, coingeckoId: 'ethereum' },
+  ],
+  88888: [ // MegaETH
+    { chainId: 88888, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'MegaETH', symbol: 'MEGA', isNative: true, coingeckoId: 'ethereum' },
+  ],
+  77777: [ // Sei Testnet
+    { chainId: 77777, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Sei Testnet', symbol: 'SEI', isNative: true, coingeckoId: 'sei-network' },
+  ],
+  66666: [ // Starknet
+    { chainId: 66666, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Starknet', symbol: 'STRK', isNative: true, coingeckoId: 'starknet' },
   ]
 };
 

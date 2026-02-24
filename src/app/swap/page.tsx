@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -77,8 +78,11 @@ export default function SwapPage() {
   // --- INITIALIZATION ---
   useEffect(() => {
     if (!fromToken) {
-      const fromSymbol = searchParams.get('fromSymbol');
-      const assets = getInitialAssets(viewingNetwork.chainId);
+      const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
+      const chainIdParam = parseInt(searchParams.get('chainId') || '');
+      const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
+      
+      const assets = getInitialAssets(targetChainId);
       const found = assets.find(a => a.symbol === fromSymbol) || assets[0];
       setFromToken({ ...found, balance: '0' } as AssetRow);
     }
