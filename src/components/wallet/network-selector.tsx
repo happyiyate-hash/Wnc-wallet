@@ -49,26 +49,17 @@ const NetworkRow = ({
     <div
       onClick={() => onSelect(chain)}
       style={{
-        borderColor: isSelected ? `${themeColor}60` : undefined,
-        background: isSelected 
-          ? `linear-gradient(135deg, ${themeColor}20 0%, ${themeColor}05 100%)` 
-          : undefined
+        borderColor: isSelected ? themeColor : `${themeColor}60`,
+        background: `linear-gradient(135deg, ${themeColor}${isSelected ? '25' : '10'} 0%, rgba(0,0,0,0) 100%)`
       }}
       className={cn(
         'w-full flex items-center gap-3 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
         isSelected 
-          ? "border-2 shadow-[0_0_20px_-5px_rgba(0,0,0,0.3)] shadow-primary/10" 
-          : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10"
+          ? "border-2 shadow-[0_0_25px_-5px_rgba(0,0,0,0.4)] ring-1 ring-white/10" 
+          : "border hover:bg-white/5 hover:border-white/20"
       )}
       role="button"
     >
-      {isSelected && (
-        <div 
-          className="absolute -right-4 -top-4 w-12 h-12 rounded-full blur-2xl opacity-20"
-          style={{ backgroundColor: themeColor }}
-        />
-      )}
-
       <div className="flex-shrink-0 relative z-10">
             <TokenLogoDynamic 
                 alt={chain.name} 
@@ -82,7 +73,7 @@ const NetworkRow = ({
         </div>
       <div className="flex-1 relative z-10">
         <div className="flex items-center gap-2">
-          <p className="font-bold text-base text-foreground group-hover:text-white transition-colors">{chain.name}</p>
+          <p className="font-bold text-base text-white group-hover:text-white transition-colors">{chain.name}</p>
           {isSelected && <CheckCircle className="w-4 h-4" style={{ color: themeColor }} />}
         </div>
         <p className="text-xs text-muted-foreground font-mono opacity-70">{shortAddress}</p>
@@ -91,7 +82,7 @@ const NetworkRow = ({
       <Button
         variant="ghost"
         size="icon"
-        className="h-10 w-10 text-muted-foreground hover:text-primary transition-colors relative z-10"
+        className="h-10 w-10 text-muted-foreground hover:text-white transition-colors relative z-10"
         onClick={(e) => {
           e.stopPropagation();
           address && onCopy(address);
@@ -170,8 +161,8 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         <SheetHeader className="p-6 pt-4 text-center">
           <SheetTitle className="sr-only">Select a network</SheetTitle>
           <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative px-2">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search 23+ networks"
               className="w-full h-14 bg-white/5 border-white/10 pl-11 rounded-2xl focus-visible:ring-primary text-base"
