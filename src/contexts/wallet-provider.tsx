@@ -6,31 +6,32 @@ import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import { getInitialAssets } from '@/lib/wallets/balances';
-import { fetchAssetPrices } from '@/lib/coingecko';
 import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const PUBLIC_RPC_MAP: Record<number | string, string> = {
-  1: "https://rpc.ankr.com/eth",
-  137: "https://rpc.ankr.com/polygon",
-  42161: "https://rpc.ankr.com/arbitrum",
-  10: "https://rpc.ankr.com/optimism",
-  8453: "https://rpc.ankr.com/base",
-  81457: "https://rpc.ankr.com/blast",
-  56: "https://rpc.ankr.com/bsc",
-  43114: "https://rpc.ankr.com/avalanche",
-  324: "https://rpc.ankr.com/zksync_era",
-  42220: "https://rpc.ankr.com/celo",
-  534352: "https://rpc.ankr.com/scroll",
-  1329: "https://rpc.ankr.com/sei",
-  5000: "https://rpc.ankr.com/mantle",
-  204: "https://rpc.ankr.com/opbnb",
-  130: "https://rpc.ankr.com/unichain",
-  1750: "https://rpc.ankr.com/swellchain",
-  11297108109: "https://rpc.ankr.com/palm",
-  59144: "https://rpc.ankr.com/linea",
-  1313161554: "https://rpc.ankr.com/hemi",
+// ANKR MULTICHAIN CONFIGURATION
+const ANKR_MULTICHAIN_URL = "https://rpc.ankr.com/multichain/";
+
+const ANKR_CHAIN_MAPPING: Record<number, string> = {
+  1: 'eth',
+  137: 'polygon',
+  8453: 'base',
+  10: 'optimism',
+  42161: 'arbitrum',
+  56: 'bsc',
+  43114: 'avalanche',
+  59144: 'linea',
+  534352: 'scroll',
+  324: 'zksync',
+  81457: 'blast',
+  5000: 'mantle',
+  204: 'opbnb',
+  1329: 'sei',
+  42220: 'celo',
+  130: 'unichain',
+  1750: 'swellchain',
+  1313161554: 'hemi'
 };
 
 interface WalletContextType {
@@ -263,74 +264,105 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setBalances({});
   }, [user]);
 
+  /**
+   * REFACTORED: ANKR MULTICHAIN BALANCE FETCHING
+   * Fetches all tokens across all chains in a single efficient request.
+   */
   const fetchBalances = useCallback(async () => {
-    if (!wallets || wallets.length === 0 || !viewingNetwork) return;
+    if (!wallets || wallets.length === 0) return;
     
     setIsRefreshing(true);
     setFetchError(null);
 
-    const initialAssets = getInitialAssets(viewingNetwork.chainId);
-    const newLoadingState = initialAssets.reduce((acc, asset) => {
-      acc[`${viewingNetwork.chainId}:${asset.symbol}`] = true;
-      return acc;
-    }, {} as Record<string, boolean>);
-    setLoadingTokens(prev => ({ ...prev, ...newLoadingState }));
-
     try {
-      const rpcUrl = PUBLIC_RPC_MAP[viewingNetwork.chainId] || viewingNetwork.rpcBase;
-      if (!rpcUrl) {
-        throw new Error(`RPC not configured for ${viewingNetwork.name}`);
-      }
+      // Prepare the list of blockchain names Ankr understands
+      const blockchainNames = Object.values(ANKR_CHAIN_MAPPING);
 
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      
-      const balancePromises = initialAssets.map(async (asset) => {
-        try {
-          if (asset.isNative) {
-            const bal = await provider.getBalance(wallets[0].address);
-            return { ...asset, balance: ethers.formatEther(bal) };
-          } else {
-            const abi = ["function balanceOf(address owner) view returns (uint256)", "function decimals() view returns (uint8)"];
-            const contract = new ethers.Contract(asset.address, abi, provider);
-            const [bal, decimals] = await Promise.all([
-              contract.balanceOf(wallets[0].address),
-              contract.decimals()
-            ]);
-            return { ...asset, balance: ethers.formatUnits(bal, decimals) };
-          }
-        } catch (e) {
-          console.warn(`Balance fetch failed for ${asset.symbol} on ${viewingNetwork.name}:`, e);
-          return { ...asset, balance: '0' };
-        } finally {
-          setLoadingTokens(prev => {
-            const next = { ...prev };
-            delete next[`${viewingNetwork.chainId}:${asset.symbol}`];
-            return next;
+      const response = await fetch(ANKR_MULTICHAIN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'ankr_getAccountBalance',
+          params: {
+            walletAddress: wallets[0].address,
+            blockchain: blockchainNames,
+            onlyWhitelisted: true
+          },
+          id: 1
+        }),
+      });
+
+      const result = await response.json();
+      if (result.error) throw new Error(result.error.message);
+
+      const assets = result.result?.assets || [];
+      const newBalances: { [key: string]: AssetRow[] } = {};
+
+      // Map Ankr assets back to our ChainID-based balance state
+      assets.forEach((asset: any) => {
+        const chainId = Object.keys(ANKR_CHAIN_MAPPING).find(key => ANKR_CHAIN_MAPPING[Number(key)] === asset.blockchain);
+        if (!chainId) return;
+
+        if (!newBalances[chainId]) newBalances[chainId] = [];
+
+        newBalances[chainId].push({
+          chainId: Number(chainId),
+          address: asset.contractAddress || 'native',
+          symbol: asset.tokenSymbol,
+          name: asset.tokenName,
+          balance: asset.balance,
+          fiatValueUsd: parseFloat(asset.balanceUsd),
+          priceUsd: parseFloat(asset.tokenPrice),
+          pctChange24h: 0, // Ankr simple balance doesn't always provide 24h change directly here
+          isNative: !asset.contractAddress,
+          iconUrl: asset.thumbnail
+        } as AssetRow);
+      });
+
+      // Ensure every network has its entry, even if Ankr didn't find tokens
+      Object.keys(ANKR_CHAIN_MAPPING).forEach(chainId => {
+        if (!newBalances[chainId]) {
+          // If no tokens found by Ankr, populate with our initial placeholder assets (0 balance)
+          newBalances[chainId] = getInitialAssets(Number(chainId)).map(a => ({
+            ...a,
+            balance: '0',
+            fiatValueUsd: 0,
+            priceUsd: 0,
+            pctChange24h: 0
+          } as AssetRow));
+        } else {
+          // Merge Ankr data with initialAssets to ensure we don't miss core tokens the user expects to see
+          const initial = getInitialAssets(Number(chainId));
+          initial.forEach(initAsset => {
+            const found = newBalances[chainId].find(b => b.symbol === initAsset.symbol);
+            if (!found) {
+              newBalances[chainId].push({
+                ...initAsset,
+                balance: '0',
+                fiatValueUsd: 0,
+                priceUsd: 0,
+                pctChange24h: 0
+              } as AssetRow);
+            }
           });
         }
       });
 
-      const rawBalances = await Promise.all(balancePromises);
-      const assetsWithPrices = await fetchAssetPrices(rawBalances);
-
-      setBalances(prev => ({
-        ...prev,
-        [viewingNetwork.chainId]: assetsWithPrices
-      }));
+      setBalances(newBalances);
     } catch (e: any) {
-      console.error("Fetch balances failed", e);
-      setFetchError(e.message || "Could not fetch balances.");
-      setLoadingTokens({});
+      console.error("Ankr Multichain fetch failed", e);
+      setFetchError(e.message || "Could not fetch multi-chain balances.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets, viewingNetwork]);
+  }, [wallets]);
 
   useEffect(() => {
-    if (isInitialized && wallets && viewingNetwork) {
+    if (isInitialized && wallets) {
         fetchBalances();
     }
-  }, [isInitialized, wallets, viewingNetwork, fetchBalances]);
+  }, [isInitialized, wallets, fetchBalances]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -341,13 +373,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    const initial = getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const live = balances[viewingNetwork.chainId] || [];
-    
-    return initial.map(item => {
-      const liveItem = live.find(l => l.symbol === item.symbol && l.address === item.address && l.chainId === viewingNetwork.chainId);
-      return liveItem || item;
-    });
+    return balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
   }, [balances, viewingNetwork]);
 
   const value: WalletContextType = {
