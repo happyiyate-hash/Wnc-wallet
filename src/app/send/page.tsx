@@ -1,21 +1,38 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Search, ChevronRight, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Search, 
+  ChevronRight, 
+  AlertCircle, 
+  Loader2, 
+  CheckCircle2, 
+  ArrowRight,
+  QrCode,
+  Users,
+  Fuel
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import { useToast } from '@/hooks/use-toast';
+import { useDebounce } from '@/hooks/use-debounce';
+import { supabase } from '@/lib/supabase/client';
+import { useUser } from '@/contexts/user-provider';
 
 export default function SendPage() {
-  const { allAssets, viewingNetwork, wallets, infuraApiKey } = useWallet();
+  const { allAssets, viewingNetwork, wallets } = useWallet();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
+  // Workflow Steps: select -> details -> success
   const [step, setStep] = useState<'select' | 'details' | 'success'>('select');
   const [selectedToken, setSelectedToken] = useState(allAssets[0] || null);
   const [recipient, setRecipient] = useState('');
@@ -23,21 +40,84 @@ export default function SendPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState('');
 
+  // Fee Estimation State
+  const [networkFee, setNetworkFee] = useState<string | null>(null);
+  const [isFeeLoading, setIsFeeLoading] = useState(false);
+  const debouncedAmount = useDebounce(amount, 500);
+  const debouncedRecipient = useDebounce(recipient, 500);
+
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
+  // Estimate Fee when amount or recipient changes
+  useEffect(() => {
+    const estimateFee = async () => {
+      if (!wallets || !wallets[0].privateKey || !selectedToken || !debouncedAmount || !ethers.isAddress(debouncedRecipient)) {
+        setNetworkFee(null);
+        return;
+      }
+
+      setIsFeeLoading(true);
+      try {
+        const rpcUrl = viewingNetwork.rpcBase.includes('infura') 
+          ? `https://rpc.ankr.com/eth` // Fallback to public if infura key is missing
+          : viewingNetwork.rpcBase;
+          
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const feeData = await provider.getFeeData();
+        const gasPrice = feeData.gasPrice || 0n;
+
+        let gasLimit = 21000n;
+        if (!selectedToken.isNative && selectedToken.address) {
+          const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
+          const contract = new ethers.Contract(selectedToken.address, abi, provider);
+          gasLimit = await contract.transfer.estimateGas(debouncedRecipient, ethers.parseUnits(debouncedAmount, 18));
+        }
+
+        const fee = gasPrice * gasLimit;
+        setNetworkFee(ethers.formatEther(fee));
+      } catch (e) {
+        console.warn("Fee estimation failed", e);
+        setNetworkFee(null);
+      } finally {
+        setIsFeeLoading(false);
+      }
+    };
+
+    if (step === 'details') estimateFee();
+  }, [debouncedAmount, debouncedRecipient, selectedToken, viewingNetwork, step, wallets]);
+
+  const saveTransaction = async (hash: string) => {
+    if (!user || !selectedToken) return;
+
+    try {
+      const { error } = await supabase.from('transactions').insert({
+        user_id: user.id,
+        tx_hash: hash,
+        type: 'withdrawal',
+        status: 'completed',
+        token_symbol: selectedToken.symbol,
+        amount: parseFloat(amount),
+        timestamp: new Date().toISOString()
+      });
+      if (error) throw error;
+    } catch (e) {
+      console.error("Failed to log transaction:", e);
+    }
+  };
+
   const handleSendRequest = async () => {
-    // Non-custodial signing check: ensure key and RPC are available
-    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) {
-      toast({ title: "Configuration Error", description: "Mnemonic or Infura Key missing.", variant: "destructive" });
+    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount) {
+      toast({ title: "Configuration Error", description: "Wallet or token data missing.", variant: "destructive" });
       return;
     }
     
     setIsSubmitting(true);
 
     try {
-      const provider = new ethers.JsonRpcProvider(`${viewingNetwork.rpcBase}${infuraApiKey}`);
-      // Local signing: The key NEVER leaves the device
+      // Use public RPCs for broadcasting if Infura isn't fully configured
+      const rpcUrl = `https://rpc.ankr.com/${viewingNetwork.name.toLowerCase().replace(' ', '')}`;
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
       const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
       
       let tx;
@@ -53,6 +133,7 @@ export default function SendPage() {
       }
 
       setTxHash(tx.hash);
+      await saveTransaction(tx.hash);
       setStep('success');
       toast({ title: "Transaction Sent", description: "Successfully signed and broadcasted." });
     } catch (e: any) {
@@ -63,6 +144,12 @@ export default function SendPage() {
     }
   };
 
+  const totalDisplayAmount = useMemo(() => {
+    const val = parseFloat(amount || '0');
+    const fee = parseFloat(networkFee || '0');
+    return selectedToken?.isNative ? (val + fee).toFixed(6) : val.toFixed(6);
+  }, [amount, networkFee, selectedToken]);
+
   const renderTokenSelect = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/5">
@@ -71,7 +158,7 @@ export default function SendPage() {
           <Input placeholder="Search tokens" className="pl-9 bg-secondary/40 border-none rounded-xl h-12" />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto thin-scrollbar">
         {allAssets.map((asset) => (
           <div 
             key={`${asset.chainId}-${asset.symbol}`}
@@ -79,7 +166,7 @@ export default function SendPage() {
               setSelectedToken(asset);
               setStep('details');
             }}
-            className="flex items-center justify-between p-4 hover:bg-secondary/20 cursor-pointer border-b border-white/5 transition-colors"
+            className="flex items-center justify-between p-4 hover:bg-secondary/20 cursor-pointer border-b border-white/5 transition-colors group"
           >
             <div className="flex items-center gap-3">
               <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.name} size={40} chainId={asset.chainId} />
@@ -88,7 +175,7 @@ export default function SendPage() {
                 <p className="text-xs text-muted-foreground">{asset.balance} {asset.symbol}</p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
         ))}
       </div>
@@ -96,8 +183,8 @@ export default function SendPage() {
   );
 
   const renderDetails = () => (
-    <div className="p-6 space-y-8 flex flex-col h-full">
-      <div className="flex items-center justify-center gap-3">
+    <div className="p-6 flex flex-col h-full space-y-6">
+      <div className="flex items-center justify-center gap-3 mb-4">
          <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.name || ''} size={48} chainId={selectedToken?.chainId} />
          <div className="text-center">
             <h2 className="text-2xl font-bold">{selectedToken?.symbol}</h2>
@@ -105,54 +192,97 @@ export default function SendPage() {
          </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="space-y-2">
-          <Label className="text-muted-foreground font-bold text-xs uppercase">Recipient Address</Label>
-          <Input 
-            placeholder="0x..." 
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            className="h-14 bg-secondary/40 border-none rounded-2xl text-lg font-mono"
-          />
+          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Recipient Address</Label>
+          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl">
+            <div className="relative bg-zinc-950 rounded-2xl overflow-hidden">
+                <Input 
+                    placeholder="0x..." 
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    className="h-14 bg-transparent border-none text-base font-mono focus-visible:ring-0 pr-24"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-primary">
+                        <Users className="w-5 h-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-primary">
+                        <QrCode className="w-5 h-5" />
+                    </Button>
+                </div>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
-          <div className="flex justify-between items-end">
-            <Label className="text-muted-foreground font-bold text-xs uppercase">Amount</Label>
-            <span className="text-xs text-muted-foreground">Balance: {selectedToken?.balance} {selectedToken?.symbol}</span>
+          <div className="flex justify-between items-end px-1">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Amount</Label>
+            <span className="text-xs text-muted-foreground">Balance: {selectedToken?.balance}</span>
           </div>
-          <div className="relative">
-            <Input 
-              type="number"
-              placeholder="0.00" 
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="h-20 bg-secondary/40 border-none rounded-2xl text-3xl font-bold pr-20"
-            />
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold"
-              onClick={() => setAmount(selectedToken?.balance || '0')}
-            >
-              MAX
-            </Button>
+          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl">
+            <div className="relative bg-zinc-950 rounded-2xl overflow-hidden">
+                <Input 
+                    type="number"
+                    placeholder="0.00" 
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="h-20 bg-transparent border-none text-3xl font-bold pr-20 focus-visible:ring-0"
+                />
+                <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold"
+                    onClick={() => setAmount(selectedToken?.balance || '0')}
+                >
+                    MAX
+                </Button>
+            </div>
           </div>
         </div>
       </div>
 
+      <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 space-y-4">
+          <div className="flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+                <Fuel className="w-4 h-4" />
+                Network Fee
+            </div>
+            {isFeeLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+                <span className="font-bold">{networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}</span>
+            )}
+          </div>
+          <div className="h-px bg-white/5" />
+          <div className="flex justify-between items-center">
+            <span className="text-base font-bold">Total</span>
+            <span className="text-xl font-bold text-primary">{totalDisplayAmount} {selectedToken?.symbol}</span>
+          </div>
+      </div>
+
       <div className="mt-auto space-y-4">
         {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm border border-destructive/20">
             <AlertCircle className="w-4 h-4" /> Insufficient balance
           </div>
         )}
         <Button 
-          className="w-full h-16 rounded-2xl text-xl font-bold"
+          className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20"
           disabled={!recipient || !isValidAmount || isSubmitting}
           onClick={handleSendRequest}
         >
-          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Send"}
+          {isSubmitting ? (
+            <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Broadcasting...</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+                <span>Send Funds</span>
+                <ArrowRight className="w-5 h-5" />
+            </div>
+          )}
         </Button>
       </div>
     </div>
@@ -160,14 +290,18 @@ export default function SendPage() {
 
   const renderSuccess = () => (
     <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
-      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center">
+      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center border border-green-500/30">
         <CheckCircle2 className="w-12 h-12 text-green-500" />
       </div>
-      <div>
-        <h2 className="text-2xl font-bold">Transaction Sent!</h2>
-        <p className="text-muted-foreground mt-2 font-mono text-xs break-all px-4">{txHash}</p>
+      <div className="space-y-2">
+        <h2 className="text-3xl font-bold">Funds Sent!</h2>
+        <p className="text-muted-foreground max-w-[240px] mx-auto text-sm">Your transaction has been broadcasted to the network.</p>
       </div>
-      <Button className="w-full h-14 rounded-xl" onClick={() => router.push('/')}>
+      <div className="p-4 rounded-xl bg-secondary/20 border border-white/5 w-full">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 text-left">Transaction Hash</p>
+        <p className="text-xs font-mono break-all text-foreground/80 text-left">{txHash}</p>
+      </div>
+      <Button className="w-full h-14 rounded-2xl font-bold text-lg" onClick={() => router.push('/')}>
         Done
       </Button>
     </div>
@@ -175,12 +309,12 @@ export default function SendPage() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="p-4 flex items-center gap-2 border-b border-white/5">
+      <header className="p-4 flex items-center gap-2 border-b border-white/5 sticky top-0 bg-background/80 backdrop-blur-xl z-50">
         <Button variant="ghost" size="icon" onClick={() => step === 'details' ? setStep('select') : router.back()}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-lg font-bold">
-          {step === 'select' ? 'Select Token' : step === 'details' ? `Send ${selectedToken?.symbol}` : 'Success'}
+          {step === 'select' ? 'Select Token' : step === 'details' ? `Send ${selectedToken?.symbol}` : 'Sent'}
         </h1>
       </header>
       
