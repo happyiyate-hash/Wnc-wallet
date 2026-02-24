@@ -109,6 +109,7 @@ export default function WalletTab() {
     }
   }, [isInitialized, wallets]);
 
+  // STRICTLY SCOPED to current network
   const totalFiatValue = useMemo(() => {
     return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
   }, [allAssets]);

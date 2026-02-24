@@ -13,7 +13,7 @@ interface TokenLogoDynamicProps {
   className?: string;
   FallbackComponent?: React.ReactElement;
   chainId?: number;
-  symbol?: string; // Added symbol prop for better resolution
+  symbol?: string; 
 }
 
 export default function TokenLogoDynamic({
@@ -32,14 +32,14 @@ export default function TokenLogoDynamic({
     return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
   }
 
-  // Determine the best logo URL
+  // Determine the best logo URL based on multi-chain context
   let finalUrl = logoUrl;
   
   if (!finalUrl && symbol) {
-    finalUrl = getTokenLogoUrl(symbol);
+    finalUrl = getTokenLogoUrl(symbol, chainId);
   }
 
-  // If we still don't have a URL, check for native chain icons
+  // If we still don't have a URL, check for native chain icons from registry
   if (!finalUrl) {
     if (chainId && allChainsMap[chainId]) {
       const nativeChainIcon = allChainsMap[chainId].iconUrl;

@@ -50,6 +50,7 @@ interface WalletContextType {
   logout: () => void;
   deleteWallet: () => void;
   fetchError: string | null;
+  getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -65,6 +66,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]): string | undefined => {
+    if (wallets && wallets.length > 0) return wallets[0].address;
+    return undefined;
+  }, []);
 
   const getAuthToken = useCallback(async () => {
     if (!supabase) return null;
@@ -278,7 +284,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return { ...asset, balance: ethers.formatUnits(bal, decimals) };
           }
         } catch (e) {
-          console.warn(`Balance fetch failed for ${asset.symbol}:`, e);
+          console.warn(`Balance fetch failed for ${asset.symbol} on ${viewingNetwork.name}:`, e);
           return { ...asset, balance: '0' };
         }
       });
@@ -299,7 +305,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [wallets, viewingNetwork]);
 
   useEffect(() => {
-    if (isInitialized && wallets) {
+    if (isInitialized && wallets && viewingNetwork) {
         fetchBalances();
     }
   }, [isInitialized, wallets, viewingNetwork, fetchBalances]);
@@ -313,12 +319,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    // Always render initial assets, update with live balances if available
+    // ATOMIC FILTERING: Never mix assets from different chains
     const initial = getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const live = balances[viewingNetwork.chainId] || [];
     
     return initial.map(item => {
-      const liveItem = live.find(l => l.symbol === item.symbol && l.address === item.address);
+      const liveItem = live.find(l => l.symbol === item.symbol && l.address === item.address && l.chainId === viewingNetwork.chainId);
       return liveItem || item;
     });
   }, [balances, viewingNetwork]);
@@ -329,6 +335,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork: (net) => {
+        // Atomic switch: clear error and prepare for new context
         setViewingNetwork(net);
         setFetchError(null);
     },
@@ -345,7 +352,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     restoreFromCloud,
     logout,
     deleteWallet,
-    fetchError
+    fetchError,
+    getAddressForChain
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
