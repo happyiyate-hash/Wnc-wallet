@@ -5,12 +5,11 @@ import { logoSupabase } from './supabase/logo-client';
 
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
- * 
- * Direct lookup via the dedicated metadata Supabase instance.
+ * Direct lookup via the dedicated metadata Supabase instance (gcghriodmljkusdduhzl).
  */
 
 /**
- * Fetches a token's direct logo URL from the dedicated Supabase storage.
+ * Fetches a token's direct logo URL from Supabase storage.
  * lookup priorities: Exact name match -> Symbol match.
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
@@ -23,9 +22,9 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
       .select('public_url')
       .ilike('name', tokenName)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (nameData) {
+    if (nameData?.public_url) {
       return nameData.public_url;
     }
 
@@ -35,10 +34,11 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
       .select('public_url')
       .ilike('symbol', tokenSymbol)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    return symbolData ? symbolData.public_url : null;
+    return symbolData?.public_url || null;
   } catch (error) {
+    console.warn("Logo lookup error:", error);
     return null;
   }
 }

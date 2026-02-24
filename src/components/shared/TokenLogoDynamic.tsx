@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
-import { useWallet } from '@/contexts/wallet-provider';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
 
@@ -25,11 +24,9 @@ export default function TokenLogoDynamic({
   size = 32,
   className,
   FallbackComponent,
-  chainId,
   symbol,
   name,
 }: TokenLogoDynamicProps) {
-  const { allChainsMap } = useWallet();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,7 +39,7 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 2. Fallback: Search the dedicated logo instance directly if symbol/name provided
+      // 2. Main Logic: Search the dedicated logo project directly if symbol/name provided
       if (symbol || name) {
         const direct = await getDirectLogoUrl(name || '', symbol || '');
         if (direct) {
@@ -52,21 +49,11 @@ export default function TokenLogoDynamic({
         }
       }
 
-      // 3. Fallback: Native network icon from chain mapping
-      if (chainId && allChainsMap[chainId]) {
-        const chainIcon = allChainsMap[chainId].iconUrl;
-        if (chainIcon) {
-          setResolvedUrl(chainIcon);
-          setIsLoading(false);
-          return;
-        }
-      }
-
       setIsLoading(false);
     }
 
     resolve();
-  }, [logoUrl, symbol, name, chainId, allChainsMap]);
+  }, [logoUrl, symbol, name]);
 
   if (isLoading) {
     return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
