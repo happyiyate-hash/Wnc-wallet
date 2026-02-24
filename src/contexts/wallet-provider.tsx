@@ -68,7 +68,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * DIRECT SUPABASE REGISTRY SYNC
-   * Fetches the entire token_metadata table for each network from the secondary instance.
+   * Fetches the entire token_metadata table for each network from the dedicated instance.
    */
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;

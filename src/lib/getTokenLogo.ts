@@ -3,12 +3,12 @@ import { logoSupabase } from './supabase/logo-client';
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
  * 
- * Migrated to direct Supabase lookup for accuracy.
+ * Direct lookup via the metadata Supabase instance.
  */
 
 /**
  * Fetches the CDN URL for a token's logo using the metadata database.
- * Priorities lookup by full name for accuracy, with symbol as fallback.
+ * Priority: Exact name match -> Symbol match.
  * 
  * @param {string} name - The full name of the token.
  * @param {string} symbol - The symbol of the token.
@@ -18,7 +18,7 @@ export async function getLogoUrlFromApi(name: string, symbol: string): Promise<s
     if (!logoSupabase) return null;
 
     try {
-        // 1. Prioritize lookup by full name
+        // 1. Prioritize lookup by full name for accuracy
         const { data: nameData } = await logoSupabase
             .from('token_logos')
             .select('public_url')
@@ -28,7 +28,7 @@ export async function getLogoUrlFromApi(name: string, symbol: string): Promise<s
 
         if (nameData) return nameData.public_url;
 
-        // 2. Fallback to symbol
+        // 2. Fallback to symbol search
         const { data: symbolData } = await logoSupabase
             .from('token_logos')
             .select('public_url')
@@ -44,8 +44,8 @@ export async function getLogoUrlFromApi(name: string, symbol: string): Promise<s
 }
 
 /**
- * Synchronous version for UI building.
- * Predicted path strategy while waiting for metadata fetch.
+ * Synchronous version for immediate UI rendering.
+ * Returns a predicted path while waiting for metadata fetches.
  */
 export function getTokenLogoUrl(
     symbol?: string | null,
@@ -56,6 +56,6 @@ export function getTokenLogoUrl(
     const sym = symbol.toLowerCase();
     const nameSlug = name ? name.toLowerCase().replace(/\s+/g, '-') : sym;
     
-    // Predicted API CDN path structure
+    // Returns relative path compatible with Wevina CDN layer
     return `/api/cdn/logo/${nameSlug}/${sym}`;
 }
