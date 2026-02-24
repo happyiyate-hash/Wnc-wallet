@@ -17,7 +17,8 @@ import {
   Wallet as WalletIcon,
   Copy,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -112,7 +113,7 @@ export default function SwapPage() {
     };
 
     getQuote();
-  }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork, getAddressForChain]);
+  }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork]);
 
   // --- GAS ESTIMATION ---
   useEffect(() => {
