@@ -32,6 +32,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from './ui/scroll-area';
 
 const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading: boolean, themeColor?: string }) => {
   const router = useRouter();
@@ -314,50 +315,53 @@ export default function WalletTab() {
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full p-6 overflow-y-auto thin-scrollbar relative z-10">
-                <SheetHeader className="mb-6">
+            <div className="flex flex-col h-full relative z-10">
+                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+                <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Network to {actionType}</SheetTitle>
                 </SheetHeader>
-                <div className="grid grid-cols-1 gap-3">
-                    {allChains.map((chain) => (
-                        <button 
-                            key={chain.chainId}
-                            onClick={() => {
-                                setSelectedNetworkForSelection(chain);
-                                setIsTokenSideSheetOpen(true);
-                            }}
-                            style={{
-                                borderColor: chain.themeColor || '#818cf8',
-                                borderWidth: '2px',
-                                background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
-                            }}
-                            className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
-                        >
-                            <div className="flex items-center gap-4">
-                                <TokenLogoDynamic 
-                                    logoUrl={chain.iconUrl} 
-                                    alt={chain.name} 
-                                    size={44} 
-                                    chainId={chain.chainId} 
-                                    name={chain.name} 
-                                    symbol={chain.symbol}
-                                />
-                                <div className="text-left">
-                                    <p className="font-bold text-base text-white">{chain.name}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                <ScrollArea className="flex-1 px-6 pb-8">
+                    <div className="grid grid-cols-1 gap-3 pb-12">
+                        {allChains.map((chain) => (
+                            <button 
+                                key={chain.chainId}
+                                onClick={() => {
+                                    setSelectedNetworkForSelection(chain);
+                                    setIsTokenSideSheetOpen(true);
+                                }}
+                                style={{
+                                    borderColor: chain.themeColor || '#818cf8',
+                                    borderWidth: '2px',
+                                    background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                                }}
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <TokenLogoDynamic 
+                                        logoUrl={chain.iconUrl} 
+                                        alt={chain.name} 
+                                        size={44} 
+                                        chainId={chain.chainId} 
+                                        name={chain.name} 
+                                        symbol={chain.symbol}
+                                    />
+                                    <div className="text-left">
+                                        <p className="font-bold text-base text-white">{chain.name}</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                                    </div>
                                 </div>
-                            </div>
-                            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                        </button>
-                    ))}
-                </div>
+                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                            </button>
+                        ))}
+                    </div>
+                </ScrollArea>
             </div>
         </SheetContent>
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[400px] p-0 flex flex-col shadow-2xl">
-            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent">
+            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
                 <SheetTitle className="flex items-center gap-2">
                     <TokenLogoDynamic 
                         logoUrl={selectedNetworkForSelection?.iconUrl} 
@@ -373,62 +377,64 @@ export default function WalletTab() {
                     </div>
                 </SheetTitle>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
-                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
-                        <WalletIcon className="w-3.5 h-3.5" /> Your Address
+            <ScrollArea className="flex-1 p-4">
+                <div className="space-y-6">
+                    <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
+                            <WalletIcon className="w-3.5 h-3.5" /> Your Address
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
+                                {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
+                            </p>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
+                                const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
+                                if (addr) {
+                                    navigator.clipboard.writeText(addr);
+                                    toast({ title: "Address Copied" });
+                                }
+                            }}>
+                                <Copy className="w-5 h-5" />
+                            </Button>
+                        </div>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
-                            {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
-                        </p>
-                        <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
-                            const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
-                            if (addr) {
-                                navigator.clipboard.writeText(addr);
-                                toast({ title: "Address Copied" });
-                            }
-                        }}>
-                            <Copy className="w-5 h-5" />
-                        </Button>
-                    </div>
-                </div>
 
-                <div className="space-y-3">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2">Available Assets</p>
-                    <div className="space-y-2">
-                        {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
-                            const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
-                            return (
-                                <button 
-                                    key={asset.symbol}
-                                    onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <TokenLogoDynamic 
-                                            logoUrl={asset.iconUrl} 
-                                            alt={asset.symbol} 
-                                            size={44} 
-                                            chainId={asset.chainId} 
-                                            symbol={asset.symbol} 
-                                            name={asset.name}
-                                        />
-                                        <div className="text-left leading-tight">
-                                            <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
-                                            <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
+                    <div className="space-y-3">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2">Available Assets</p>
+                        <div className="space-y-2 pb-12">
+                            {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                                const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
+                                return (
+                                    <button 
+                                        key={asset.symbol}
+                                        onClick={() => handleTokenSelect(asset)}
+                                        className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <TokenLogoDynamic 
+                                                logoUrl={asset.iconUrl} 
+                                                alt={asset.symbol} 
+                                                size={44} 
+                                                chainId={asset.chainId} 
+                                                symbol={asset.symbol} 
+                                                name={asset.name}
+                                            />
+                                            <div className="text-left leading-tight">
+                                                <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
-                                        <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
-                                    </div>
-                                </button>
-                            );
-                        })}
+                                        <div className="text-right">
+                                            <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                                            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
-            </div>
+            </ScrollArea>
         </SheetContent>
       </Sheet>
     </div>

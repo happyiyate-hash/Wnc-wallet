@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useDebounce } from '@/hooks/use-debounce';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function SwapPage() {
   const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets } = useWallet();
@@ -432,51 +433,53 @@ export default function SwapPage() {
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full p-6 overflow-y-auto thin-scrollbar relative z-10">
-                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-                <SheetHeader className="mb-6">
+            <div className="flex flex-col h-full relative z-10">
+                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+                <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
-                <div className="grid grid-cols-1 gap-3">
-                    {allChains.map((chain) => (
-                        <button 
-                            key={chain.chainId}
-                            onClick={() => {
-                                setSelectedNetworkForSelection(chain);
-                                setIsTokenSideSheetOpen(true);
-                            }}
-                            style={{
-                                borderColor: chain.themeColor || '#818cf8',
-                                borderWidth: '2px',
-                                background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
-                            }}
-                            className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
-                        >
-                            <div className="flex items-center gap-4">
-                                <TokenLogoDynamic 
-                                    logoUrl={chain.iconUrl} 
-                                    alt={chain.name} 
-                                    size={44} 
-                                    chainId={chain.chainId} 
-                                    name={chain.name}
-                                    symbol={chain.symbol}
-                                />
-                                <div className="text-left">
-                                    <p className="font-black text-base text-white">{chain.name}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                <ScrollArea className="flex-1 px-6 pb-8">
+                    <div className="grid grid-cols-1 gap-3 pb-12">
+                        {allChains.map((chain) => (
+                            <button 
+                                key={chain.chainId}
+                                onClick={() => {
+                                    setSelectedNetworkForSelection(chain);
+                                    setIsTokenSideSheetOpen(true);
+                                }}
+                                style={{
+                                    borderColor: chain.themeColor || '#818cf8',
+                                    borderWidth: '2px',
+                                    background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                                }}
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <TokenLogoDynamic 
+                                        logoUrl={chain.iconUrl} 
+                                        alt={chain.name} 
+                                        size={44} 
+                                        chainId={chain.chainId} 
+                                        name={chain.name}
+                                        symbol={chain.symbol}
+                                    />
+                                    <div className="text-left">
+                                        <p className="font-black text-base text-white">{chain.name}</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                                    </div>
                                 </div>
-                            </div>
-                            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                        </button>
-                    ))}
-                </div>
+                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                            </button>
+                        ))}
+                    </div>
+                </ScrollArea>
             </div>
         </SheetContent>
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
-            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent">
+            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
                 <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl mb-4"><ArrowLeft className="w-5 h-5"/></Button>
                 <SheetTitle className="flex items-center gap-3">
                     <TokenLogoDynamic 
@@ -493,8 +496,8 @@ export default function SwapPage() {
                     </div>
                 </SheetTitle>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
-                <div className="space-y-3">
+            <ScrollArea className="flex-1 p-4">
+                <div className="space-y-3 pb-12">
                     {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
                         const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
                         return (
@@ -525,7 +528,7 @@ export default function SwapPage() {
                         );
                     })}
                 </div>
-            </div>
+            </ScrollArea>
         </SheetContent>
       </Sheet>
 
