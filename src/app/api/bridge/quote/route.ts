@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { LiFi } from '@lifi/sdk';
 
@@ -7,9 +6,9 @@ const lifi = new LiFi({
 });
 
 /**
- * BRIDGE & SWAP QUOTE API
+ * BRIDGE & SWAP QUOTE API (LI.FI SDK)
  * 
- * Fetches the best bridge/swap route from LI.FI based on the provided parameters.
+ * Fetches the best bridge/swap route based on the provided parameters.
  * Supports same-chain swaps and cross-chain bridging.
  */
 export async function GET(req: NextRequest) {
@@ -23,10 +22,11 @@ export async function GET(req: NextRequest) {
         const fromAmount = searchParams.get('fromAmount');
         const fromAddress = searchParams.get('fromAddress');
         const toAddress = searchParams.get('toAddress');
+        const slippage = searchParams.get('slippage') || '0.005';
 
         if (!fromChain || !toChain || !fromToken || !toToken || !fromAmount || !fromAddress) {
             return NextResponse.json(
-                { error: 'Missing required query parameters.' }, 
+                { error: 'Missing required parameters for LI.FI quote.' }, 
                 { status: 400 }
             );
         }
@@ -39,22 +39,22 @@ export async function GET(req: NextRequest) {
             fromAmount,
             fromAddress,
             toAddress: toAddress || fromAddress,
+            slippage: Number(slippage),
         };
         
-        // Use the LI.FI SDK to find the best route
+        // Use the LI.FI SDK to find the absolute best route/quote
         const response = await lifi.getQuote(quoteRequest as any);
         
         return NextResponse.json(response);
 
     } catch (error: any) {
-        console.error('[BRIDGE_QUOTE_ERROR]', error);
+        console.error('[LI.FI_QUOTE_ERROR]', error);
         
-        const errorMessage = error.response?.data?.message || error.message || 'An internal server error occurred while fetching the bridge quote.';
-        const status = error.response?.status || 500;
+        const errorMessage = error.message || 'DEX aggregation failed. Please try a different asset pair.';
         
         return NextResponse.json(
-            { error: 'Failed to fetch bridge quote.', details: errorMessage }, 
-            { status }
+            { error: 'DEX Aggregator Error', details: errorMessage }, 
+            { status: 500 }
         );
     }
 }

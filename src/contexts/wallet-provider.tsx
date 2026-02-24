@@ -11,7 +11,7 @@ import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const PUBLIC_RPC_MAP: Record<number, string> = {
+const PUBLIC_RPC_MAP: Record<number | string, string> = {
   1: "https://rpc.ankr.com/eth",
   137: "https://rpc.ankr.com/polygon",
   42161: "https://rpc.ankr.com/arbitrum",
@@ -29,6 +29,8 @@ const PUBLIC_RPC_MAP: Record<number, string> = {
   130: "https://rpc.ankr.com/unichain",
   1750: "https://rpc.ankr.com/swellchain",
   11297108109: "https://rpc.ankr.com/palm",
+  59144: "https://rpc.ankr.com/linea",
+  1313161554: "https://rpc.ankr.com/hemi",
 };
 
 interface WalletContextType {
