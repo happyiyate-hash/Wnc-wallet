@@ -131,7 +131,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <Lock className="w-4 h-4 text-primary" />
           </div>
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
-          <div className="text-xs text-muted-foreground mt-2">
+          <div className="mt-2">
             {isProcessing ? (
                 <div className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
                     <Timer className="w-3 h-3 animate-pulse" />
@@ -140,7 +140,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                     <span className="ml-1">{status}</span>
                 </div>
             ) : (
-                <div className="text-muted-foreground opacity-60">
+                <div className="text-xs text-muted-foreground opacity-60">
                     {step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}
                 </div>
             )}
