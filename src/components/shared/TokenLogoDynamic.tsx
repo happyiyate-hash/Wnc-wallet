@@ -36,12 +36,22 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // 1. Perform direct Supabase lookup using Name-first priority
+      // 1. Check persistent cache first
+      const cacheKey = `logo_url_${name?.replace(/\s+/g, '_')}_${symbol}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setResolvedUrl(cached);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Perform direct Supabase lookup using Name-first priority
       if (symbol || name) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
+            localStorage.setItem(cacheKey, direct); // Save to cache
             setIsLoading(false);
             return;
           }
@@ -50,14 +60,13 @@ export default function TokenLogoDynamic({
         }
       }
 
-      // 2. Check if provided logoUrl is already a full absolute path
+      // 3. Fallback logic for provided URLs
       if (logoUrl && logoUrl.startsWith('http')) {
         setResolvedUrl(logoUrl);
         setIsLoading(false);
         return;
       }
 
-      // 3. Fallback to relative CDN path if provided
       if (logoUrl && logoUrl.startsWith('/')) {
         setResolvedUrl(logoUrl);
       }
