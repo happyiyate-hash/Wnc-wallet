@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -51,11 +52,10 @@ const NetworkRow = ({
         borderColor: themeColor,
         borderWidth: '2px',
         background: `linear-gradient(135deg, ${themeColor}25 0%, rgba(0,0,0,0) 100%)`,
-        boxShadow: isSelected ? `0 0 25px -5px ${themeColor}60` : 'none'
       }}
       className={cn(
         'w-full flex items-center gap-3 p-3.5 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
-        !isSelected && "hover:bg-white/5"
+        isSelected && "shadow-lg"
       )}
       role="button"
     >
@@ -73,7 +73,7 @@ const NetworkRow = ({
       <div className="flex-1 relative z-10">
         <div className="flex items-center gap-2">
           <p className="font-bold text-base text-white">{chain.name}</p>
-          {isSelected && <CheckCircle2 className="w-4 h-4 text-yellow-500 fill-yellow-500/10" />}
+          {isSelected && <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10" />}
         </div>
         <p className="text-[11px] text-muted-foreground font-mono opacity-60">{shortAddress}</p>
       </div>
@@ -155,14 +155,13 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
 
       <SheetContent
         side="bottom"
-        className="h-[90vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
+        className="h-[80vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
       >
-        {/* Glass Background Layers */}
         <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
 
-        <div className="flex flex-col h-full relative z-10">
-            <SheetHeader className="p-6 pt-4 text-center">
+        <div className="flex flex-col h-full relative z-10 overflow-hidden">
+            <SheetHeader className="p-6 pt-4 text-center shrink-0">
               <SheetTitle className="sr-only">Select a network</SheetTitle>
               <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
               <div className="relative px-4">
@@ -180,12 +179,8 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
               </div>
             </SheetHeader>
 
-            <p className="px-6 pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
-              Available Ecosystems
-            </p>
-
             <ScrollArea className="flex-1 px-4">
-              <div className="space-y-3 pb-12">
+              <div className="space-y-3 pb-12 pt-2">
                 {filteredChains.map((chain) => {
                   const displayAddress = wallets ? getAddressForChain(chain, wallets) : null;
                   const isSelected = viewingNetwork?.chainId === chain.chainId;

@@ -209,8 +209,8 @@ export default function WalletTab() {
             </div>
         </div>
 
-        {/* CLUSTERED ACTION BUTTONS */}
-        <div className="flex justify-center gap-4 my-10 px-8">
+        {/* CLUSTERED ACTION BUTTONS (DENSE CENTERED) */}
+        <div className="flex justify-center gap-4 my-10 px-10">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
@@ -254,10 +254,11 @@ export default function WalletTab() {
                     </div>
                 </div>
 
-                <div className="flex-1 pb-32">
+                {/* CARDLESS PORTFOLIO LIST (STRETCHED EDGE-TO-EDGE) */}
+                <div className="flex-1 pb-32 border-t border-white/5">
                   {fetchError && (
                     <div 
-                      className="mx-6 mb-6 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
+                      className="mx-6 mt-6 mb-4 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
                       <AlertCircle className="w-5 h-5 shrink-0" />
@@ -288,13 +289,13 @@ export default function WalletTab() {
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
 
-      {/* GLOBAL ACTION SHEET (NETWORK -> TOKEN) */}
+      {/* GLOBAL ACTION SHEET (SCROLLING REINFORCED) */}
       <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
-        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 max-h-[85vh] overflow-hidden shadow-2xl">
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full relative z-10">
+            <div className="flex flex-col h-full relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Network to {actionType}</SheetTitle>

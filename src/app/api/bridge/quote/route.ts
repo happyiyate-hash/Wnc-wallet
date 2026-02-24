@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getQuote, createConfig } from '@lifi/sdk';
 
-// Configure LI.FI SDK globally
+// Configure LI.FI SDK globally for v3 functional approach
 createConfig({
     integrator: 'WNC-Wallet',
 });
@@ -11,6 +11,7 @@ createConfig({
  * BRIDGE & SWAP QUOTE API (LI.FI SDK v3)
  * 
  * Fetches the best bridge/swap route using functional API approach.
+ * Fixed: Removed legacy LiFi class import which caused build errors in v3.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
             slippage: Number(slippage),
         };
         
-        // In v3, use the getQuote function directly
+        // Use the functional getQuote utility from v3
         const response = await getQuote(quoteRequest as any);
         
         return NextResponse.json(response);
