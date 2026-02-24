@@ -68,8 +68,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * DIRECT DEDICATED SUPABASE SYNC
-   * Fetches metadata for all 23 networks from the isolated logo project.
+   * DEDICATED LOGO SYNC
+   * Fetches metadata for all networks from the secondary logo instance.
    */
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
@@ -160,7 +160,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
     if (!infuraApiKey) {
-      setFetchError("Please provide an Infura API Key to fetch live balances.");
+      setFetchError("Connect your Infura API Key to view live balances.");
       return;
     }
     
@@ -229,7 +229,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(finalBalances);
     } catch (e: any) {
-      console.warn("Market data sync issue.");
+      console.warn("Market data fetch issue.");
     } finally {
       setIsRefreshing(false);
     }

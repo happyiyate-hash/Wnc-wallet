@@ -151,5 +151,33 @@
     "rpcUrl": "https://unichain-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "uniswap",
     "themeColor": "#FF007A"
+  },
+  "99999": {
+    "name": "Monad",
+    "symbol": "MON",
+    "chainId": 99999,
+    "rpcUrl": "https://monad-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "ethereum"
+  },
+  "88888": {
+    "name": "MegaETH",
+    "symbol": "MEGA",
+    "chainId": 88888,
+    "rpcUrl": "https://megaeth-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "ethereum"
+  },
+  "77777": {
+    "name": "Sei Testnet",
+    "symbol": "SEI",
+    "chainId": 77777,
+    "rpcUrl": "https://sei-testnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "sei-network"
+  },
+  "66666": {
+    "name": "Starknet",
+    "symbol": "STRK",
+    "chainId": 66666,
+    "rpcUrl": "https://starknet-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "starknet"
   }
 }
