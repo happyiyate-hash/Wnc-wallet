@@ -176,9 +176,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing(true);
     setFetchError(null);
 
-    // CRITICAL: Preserve old balances to prevent zeroing during refresh
-    const oldBalances = { ...balances };
-    const currentBalances = { ...balances };
     const chainsToFetch = [...chainsWithLogos];
 
     if (priorityChainId) {
@@ -190,6 +187,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const updatedBalances: { [key: string]: AssetRow[] } = {};
+
       for (const chain of chainsToFetch) {
         const apiTokens = tokenRegistry[chain.chainId] || [];
         const baseAssets = getInitialAssets(chain.chainId);
@@ -200,15 +199,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return acc;
         }, [] as any[]).map(a => {
             const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
-            const oldAsset = oldBalances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
+            const cachedAsset = balances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
             return {
                 ...a,
-                balance: oldAsset?.balance || '0', // Keep old balance if exists
+                balance: cachedAsset?.balance || '0',
                 name: apiMeta?.name || a.name,
                 iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
-                priceUsd: oldAsset?.priceUsd || 0,
-                pctChange24h: oldAsset?.pctChange24h || 0,
-                fiatValueUsd: oldAsset?.fiatValueUsd || 0
+                priceUsd: cachedAsset?.priceUsd || 0,
+                pctChange24h: cachedAsset?.pctChange24h || 0,
+                fiatValueUsd: cachedAsset?.fiatValueUsd || 0
             } as AssetRow;
         });
 
@@ -230,40 +229,49 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               return {
                 ...asset,
                 balance: balanceStr,
-                fiatValueUsd: parseFloat(balanceStr) * (asset.priceUsd || 0)
               } as AssetRow;
             } catch (e) {
               return asset;
             }
           }));
 
-          currentBalances[chain.chainId] = chainBalances;
+          updatedBalances[chain.chainId] = chainBalances;
           
-          if (chain.chainId === priorityChainId) {
-              setBalances({ ...currentBalances });
-          }
+          // Incremental state update to preserve cache during loop
+          setBalances(prev => ({
+            ...prev,
+            [chain.chainId]: chainBalances.map(nb => {
+              const existing = prev[chain.chainId]?.find(eb => eb.symbol === nb.symbol);
+              return {
+                ...nb,
+                priceUsd: existing?.priceUsd || 0,
+                pctChange24h: existing?.pctChange24h || 0,
+                fiatValueUsd: parseFloat(nb.balance) * (existing?.priceUsd || 0)
+              };
+            })
+          }));
         } catch (e) {
-          currentBalances[chain.chainId] = combinedAssetsList;
+          updatedBalances[chain.chainId] = combinedAssetsList;
         }
         
-        await delay(priorityChainId === chain.chainId ? 0 : 30);
+        await delay(priorityChainId === chain.chainId ? 0 : 20);
       }
 
-      const flatAssets = Object.values(currentBalances).flat();
+      // Final price sync
+      const flatAssets = Object.values(updatedBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
       
       const finalBalances: { [key: string]: AssetRow[] } = {};
       assetsWithPrices.forEach(asset => {
-        const oldAsset = oldBalances[asset.chainId]?.find(oa => oa.symbol === asset.symbol);
+        const existing = balances[asset.chainId]?.find(eb => eb.symbol === asset.symbol);
         
-        // MERGE: Keep old price if new fetch failed (returned 0)
         const finalAsset = {
             ...asset,
-            priceUsd: (asset.priceUsd === 0 && oldAsset?.priceUsd) ? oldAsset.priceUsd : (asset.priceUsd || 0),
-            pctChange24h: (asset.priceUsd === 0 && oldAsset?.pctChange24h) ? oldAsset.pctChange24h : (asset.pctChange24h || 0),
+            // Only update price if we got a valid non-zero price back, else preserve cache
+            priceUsd: asset.priceUsd > 0 ? asset.priceUsd : (existing?.priceUsd || 0),
+            pctChange24h: asset.pctChange24h !== 0 ? asset.pctChange24h : (existing?.pctChange24h || 0),
         };
         
-        // Recalculate fiat based on potentially restored price
         finalAsset.fiatValueUsd = parseFloat(finalAsset.balance) * (finalAsset.priceUsd || 0);
 
         if (!finalBalances[asset.chainId]) finalBalances[asset.chainId] = [];
@@ -275,8 +283,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(finalBalances));
       }
     } catch (e: any) {
-      console.warn("Market data fetch issue:", e.message);
-      setFetchError("Market data delayed. Check connection.");
+      console.warn("Refresh issue:", e.message);
+      setFetchError("Connection limited. Check API key.");
     } finally {
       setIsRefreshing(false);
     }
