@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -24,6 +23,7 @@ import { useUser } from '@/contexts/user-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import MoreActionsSheet from './wallet/more-actions-sheet';
+import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import { Skeleton } from './ui/skeleton';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
@@ -91,19 +91,32 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
+  const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const router = useRouter();
 
+  // Handle wallet onboarding
   useEffect(() => {
     if (isInitialized && !wallets) {
       setIsWalletSheetOpen(true);
     }
   }, [isInitialized, wallets]);
+
+  // Proactively request API key if missing but wallet exists
+  useEffect(() => {
+    if (isInitialized && !!wallets && !infuraApiKey) {
+      // Small delay to let the initial UI breathe
+      const timer = setTimeout(() => {
+        setIsApiKeySheetOpen(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, wallets, infuraApiKey]);
 
   const totalFiatValue = useMemo(() => {
     return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
@@ -239,9 +252,15 @@ export default function WalletTab() {
 
                 <div className="flex-1 overflow-y-auto thin-scrollbar">
                   {fetchError && (
-                    <div className="mx-4 mb-4 p-3 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
-                      {fetchError}
+                    <div 
+                      className="mx-4 mb-4 p-4 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-3 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
+                      onClick={() => setIsApiKeySheetOpen(true)}
+                    >
+                      <AlertCircle className="w-5 h-5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-bold mb-0.5">Connection Error</p>
+                        <p className="opacity-80">Tap here to fix your Infura API Key and see live balances.</p>
+                      </div>
                     </div>
                   )}
 
@@ -262,8 +281,10 @@ export default function WalletTab() {
 
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
       <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
+      <ApiKeyRequestSheet isOpen={isApiKeySheetOpen} onOpenChange={setIsApiKeySheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
     </div>
   );
 }
+
