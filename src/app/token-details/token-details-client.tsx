@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
@@ -38,9 +39,9 @@ const ActionButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className="flex flex-col items-center justify-center gap-1.5 text-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-foreground group"
+    className="flex flex-col items-center justify-center gap-1.5 text-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
   >
-    <div className="w-14 h-14 bg-primary/10 group-disabled:bg-zinc-800 group-disabled:hover:bg-zinc-800 hover:bg-primary/20 rounded-2xl flex items-center justify-center transition-colors">
+    <div className="w-14 h-14 bg-primary/10 group-disabled:bg-zinc-800 hover:bg-primary/20 rounded-2xl flex items-center justify-center transition-colors">
       {icon}
     </div>
     <span className="text-xs font-medium">{label}</span>
@@ -61,8 +62,8 @@ const formatDisplayPrice = (price: number) => {
 };
 
 const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => void, onInfo: () => void, token: AssetRow, network: any }) => (
-    <div className="flex items-center justify-between p-4">
-        <Button onClick={onBack} variant="ghost" size="icon">
+    <div className="flex items-center justify-between p-4 border-b border-white/5 bg-background/80 backdrop-blur-xl">
+        <Button onClick={onBack} variant="ghost" size="icon" className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex flex-col items-center">
@@ -77,9 +78,9 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
                 />
                 <span className="font-semibold">{token.symbol}</span>
             </div>
-            <span className="text-xs text-muted-foreground">{network?.name}</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">{network?.name}</span>
         </div>
-        <Button onClick={onInfo} variant="ghost" size="icon">
+        <Button onClick={onInfo} variant="ghost" size="icon" className="rounded-xl">
             <Info className="w-5 h-5" />
         </Button>
     </div>
@@ -93,11 +94,7 @@ export default function TokenDetailsClientPage() {
 
   const tokenSymbol = searchParams.get('symbol');
 
-  const [chartRange, setChartRange] = useState<
-    "1D" | "1W" | "1M" | "3M" | "1Y" | "All"
-  >("1D");
-  
-  const [priceChanged, setPriceChanged] = useState(false);
+  const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
   const prevPriceRef = useRef<number | undefined | null>();
 
   const token = useMemo(() => {
@@ -105,19 +102,9 @@ export default function TokenDetailsClientPage() {
     return allAssets.find(a => a.symbol === tokenSymbol && a.chainId === viewingNetwork.chainId);
   }, [tokenSymbol, allAssets, viewingNetwork.chainId, isInitialized]);
 
-
   const coingeckoId = token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
   const isEvmChain = typeof token?.chainId === 'number' && token?.chainId > 0;
-
-  useEffect(() => {
-    if (prevPriceRef.current !== undefined && token?.priceUsd !== prevPriceRef.current) {
-        setPriceChanged(true);
-        const timer = setTimeout(() => setPriceChanged(false), 500);
-        return () => clearTimeout(timer);
-    }
-    prevPriceRef.current = token?.priceUsd;
-  }, [token?.priceUsd]);
 
   if (!token) {
      return (
@@ -135,40 +122,23 @@ export default function TokenDetailsClientPage() {
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
   const fiatValue = token.fiatValueUsd ?? (price * balance);
-  const displayPrice = price;
-
-
-  const handleInfoClick = () => {
-    if (token) {
-      router.push(`/token-info?symbol=${token.symbol}`);
-    }
-  };
 
   const handleAction = (path: string) => {
     router.push(`${path}?symbol=${token.symbol}&chainId=${token.chainId}`);
   };
 
-  const displayBalance = isNaN(balance) ? '0.00' : balance.toLocaleString('en-US', { maximumFractionDigits: 6 });
-  const displayFiat = isNaN(fiatValue) ? '$0.00' : `$${fiatValue.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   return (
     <div className="flex flex-col h-screen bg-background">
-      <TokenDetailHeader onBack={() => router.back()} onInfo={handleInfoClick} token={token} network={viewingNetwork} />
+      <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={viewingNetwork} />
       <div className="flex-1 overflow-y-auto thin-scrollbar">
-        <div className="text-center pt-4">
+        <div className="text-center pt-8 pb-4">
           <div className="flex items-center justify-center gap-2">
-            <h2 className={`text-4xl font-bold transition-all duration-500 ${priceChanged ? 'animate-glow' : ''}`}>
-              ${formatDisplayPrice(displayPrice)}
+            <h2 className="text-4xl font-black tracking-tight text-white">
+              ${formatDisplayPrice(price)}
             </h2>
           </div>
-          <div
-            className={`mt-1 text-sm font-medium ${
-              isNegativeChange ? "text-red-400" : "text-green-400"
-            }`}
-          >
-            {priceChange24h !== null
-              ? `${priceChange24h >= 0 ? "+" : ""}${priceChange24h.toFixed(2)}%`
-              : "..."}
+          <div className={cn("mt-1 text-sm font-bold", isNegativeChange ? "text-red-400" : "text-green-400")}>
+            {priceChange24h !== null ? `${priceChange24h >= 0 ? "+" : ""}${priceChange24h.toFixed(2)}%` : "..."}
           </div>
         </div>
 
@@ -176,18 +146,14 @@ export default function TokenDetailsClientPage() {
           <RechartsChart coingeckoId={coingeckoId} days={chartRange} isNegative={isNegativeChange}/>
         </div>
 
-        <div className="flex justify-between w-full mt-2 px-4">
+        <div className="flex justify-between w-full mt-2 px-6">
           {(["1D", "1W", "1M", "3M", "1Y", "All"] as const).map((r) => (
             <Button
               key={r}
               onClick={() => setChartRange(r)}
               variant="ghost"
               size="sm"
-              className={`text-xs transition-colors duration-300 px-3 rounded-md h-7 ${
-                chartRange === r
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground"
-              }`}
+              className={cn("text-[10px] font-black h-7 rounded-lg", chartRange === r ? "bg-primary/20 text-primary" : "text-muted-foreground")}
               disabled={!coingeckoId}
             >
               {r}
@@ -195,52 +161,33 @@ export default function TokenDetailsClientPage() {
           ))}
         </div>
 
-        <div className="flex items-center justify-around my-8 px-4">
-            <ActionButton icon={<DollarSign className="w-7 h-7 text-primary" />} label="Buy" onClick={() => handleAction('/buy')} />
-            <ActionButton icon={<Landmark className="w-7 h-7 text-primary" />} label="Sell" onClick={() => handleAction('/sell')} />
-            <ActionButton icon={<ArrowLeftRight className="w-7 h-7 text-primary" />} label="Swap" onClick={() => handleAction('/swap')} />
-            <ActionButton icon={<GitFork className="w-7 h-7 text-primary" />} label="Bridge" onClick={() => alert("Bridge sheet opened")} disabled={!isEvmChain} />
-            <ActionButton icon={<ArrowUpRight className="w-7 h-7 text-primary" />} label="Send" onClick={() => handleAction('/send')} />
-            <ActionButton icon={<QrCode className="w-7 h-7 text-primary" />} label="Receive" onClick={() => handleAction('/receive')} />
+        <div className="flex items-center justify-around my-10 px-4">
+            <ActionButton icon={<DollarSign className="w-6 h-6 text-primary" />} label="Buy" onClick={() => handleAction('/buy')} />
+            <ActionButton icon={<ArrowLeftRight className="w-6 h-6 text-primary" />} label="Swap" onClick={() => handleAction('/swap')} />
+            <ActionButton icon={<GitFork className="w-6 h-6 text-primary" />} label="Bridge" onClick={() => {}} disabled={!isEvmChain} />
+            <ActionButton icon={<ArrowUpRight className="w-6 h-6 text-primary" />} label="Send" onClick={() => handleAction('/send')} />
+            <ActionButton icon={<QrCode className="w-6 h-6 text-primary" />} label="Receive" onClick={() => handleAction('/receive')} />
         </div>
         
-        <div className="px-4 pb-4 space-y-8">
-            <div className="flex items-center justify-between w-full text-left p-2 -mx-2">
+        <div className="px-6 pb-12 space-y-8">
+            <div className="flex items-center justify-between w-full p-4 rounded-2xl bg-secondary/30 border border-white/5">
                 <div className="flex items-center gap-3">
-                    <div className="relative flex-shrink-0">
-                        <TokenLogoDynamic 
-                            logoUrl={token.iconUrl} 
-                            size={40} 
-                            alt={token.name} 
-                            chainId={token.chainId} 
-                            name={token.name}
-                            symbol={token.symbol}
-                        />
-                    </div>
+                    <TokenLogoDynamic logoUrl={token.iconUrl} size={40} alt={token.name} chainId={token.chainId} name={token.name} symbol={token.symbol}/>
                     <div>
-                        <p className="font-semibold text-lg">{token.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                        Balance
-                        </p>
+                        <p className="font-bold text-base text-white">{token.symbol} Balance</p>
+                        <p className="text-xs text-muted-foreground">{viewingNetwork.name}</p>
                     </div>
                 </div>
                 <div className="text-right">
-                    <p className="font-semibold text-lg">
-                        {displayBalance}{" "}
-                        <span className="text-muted-foreground">{token.symbol}</span>
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        {displayFiat}
-                    </p>
+                    <p className="font-bold text-lg text-white">{balance.toLocaleString('en-US', { maximumFractionDigits: 6 })}</p>
+                    <p className="text-xs text-muted-foreground">≈ ${fiatValue.toLocaleString("en", { minimumFractionDigits: 2 })}</p>
                 </div>
             </div>
             
-            <div className="pt-4">
-                <MarketStats stats={marketStats} tokenSymbol={token.symbol} />
-            </div>
-
+            <MarketStats stats={marketStats} tokenSymbol={token.symbol} />
+            
             <div>
-                <h3 className="text-lg font-bold mb-2">Recent Activity</h3>
+                <h3 className="text-lg font-black uppercase tracking-tight mb-4">Activity</h3>
                 <TransactionHistory token={token} />
             </div>
         </div>

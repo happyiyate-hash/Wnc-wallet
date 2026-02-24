@@ -1,16 +1,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LiFi } from '@lifi/sdk';
+import { getQuote, createConfig } from '@lifi/sdk';
 
-const lifi = new LiFi({
+// Configure LI.FI SDK globally
+createConfig({
     integrator: 'WNC-Wallet',
 });
 
 /**
- * BRIDGE & SWAP QUOTE API (LI.FI SDK)
+ * BRIDGE & SWAP QUOTE API (LI.FI SDK v3)
  * 
- * Fetches the best bridge/swap route based on the provided parameters.
- * Supports same-chain swaps and cross-chain bridging.
+ * Fetches the best bridge/swap route using functional API approach.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
             slippage: Number(slippage),
         };
         
-        // Use the LI.FI SDK to find the absolute best route/quote
-        const response = await lifi.getQuote(quoteRequest as any);
+        // In v3, use the getQuote function directly
+        const response = await getQuote(quoteRequest as any);
         
         return NextResponse.json(response);
 

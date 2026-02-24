@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -45,7 +46,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   return (
     <div
       onClick={handleRowClick}
-      className="flex cursor-pointer items-center justify-between py-4 border-b border-white/5 active:bg-white/5 transition-all w-full"
+      className="flex cursor-pointer items-center justify-between py-4 border-b border-white/5 active:bg-white/5 transition-all w-full px-6"
       role="button"
       tabIndex={0}
     >
@@ -59,7 +60,10 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
             chainId={token.chainId}
         />
         <div className="flex flex-col">
-          <p className="font-bold text-sm text-white tracking-tight">{token.name}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-sm text-white tracking-tight">{token.symbol}</p>
+            <p className="text-[10px] text-muted-foreground/60 font-medium">{token.name}</p>
+          </div>
           <p
             className={cn(
               'text-[10px] font-bold uppercase tracking-wider',
@@ -79,7 +83,6 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
               {parseFloat(token.balance || '0').toLocaleString('en-US', {
                 maximumFractionDigits: 6,
               })}{' '}
-              <span className="text-[10px] text-muted-foreground uppercase font-bold ml-1">{token.symbol}</span>
             </p>
             <p className="text-[10px] font-medium text-muted-foreground/60 mt-1 uppercase">
               ≈ ${(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
@@ -95,7 +98,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, allChainsMap, balances } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   
@@ -104,7 +107,6 @@ export default function WalletTab() {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   
-  // Action sheets
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
   const [actionType, setActionType] = useState<'send' | 'receive' | 'swap'>('send');
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
@@ -112,7 +114,6 @@ export default function WalletTab() {
 
   const router = useRouter();
 
-  // Proactively request API key if missing but wallet exists
   useEffect(() => {
     if (isInitialized && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
@@ -128,37 +129,28 @@ export default function WalletTab() {
   
   const total24hChange = useMemo(() => {
     if (!allAssets || allAssets.length === 0 || totalFiatValue === 0) return 0;
-    
     let totalValueYesterday = 0;
     for (const asset of allAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
       if (!price || !balance) continue;
-      
       const denom = 1 + change / 100;
       if (!isFinite(denom) || denom === 0) continue;
-      
       const priceYesterday = price / denom;
       totalValueYesterday += priceYesterday * balance;
     }
-
     if (totalValueYesterday === 0) return 0;
     const changeValue = totalFiatValue - totalValueYesterday;
     return (changeValue / totalValueYesterday) * 100;
   }, [allAssets, totalFiatValue]);
 
   const getBalanceFontSize = (balance: number) => {
-    const safeBalance = Number.isFinite(balance) ? balance : 0;
-    const balanceString = safeBalance.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const length = balanceString.length;
-
-    if (length > 16) return 'text-xl';
-    if (length > 12) return 'text-2xl';
-    if (length > 9) return 'text-3xl';
+    const val = Number.isFinite(balance) ? balance : 0;
+    const s = val.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (s.length > 16) return 'text-xl';
+    if (s.length > 12) return 'text-2xl';
+    if (s.length > 9) return 'text-3xl';
     return 'text-4xl';
   };
 
@@ -217,7 +209,8 @@ export default function WalletTab() {
             </div>
         </div>
 
-        <div className="flex justify-center gap-3 my-10 px-12">
+        {/* CLUSTERED ACTION BUTTONS */}
+        <div className="flex justify-center gap-4 my-10 px-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
@@ -261,10 +254,10 @@ export default function WalletTab() {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto thin-scrollbar pb-32 px-6">
+                <div className="flex-1 pb-32">
                   {fetchError && (
                     <div 
-                      className="mb-6 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
+                      className="mx-6 mb-6 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
                       <AlertCircle className="w-5 h-5 shrink-0" />

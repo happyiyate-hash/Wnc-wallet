@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -57,103 +58,42 @@ export default function SendPage() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
-  // Auto-select token based on query params or defaults
+  // Auto-select token
   useEffect(() => {
     if (!selectedToken && allAssets.length > 0) {
         const symbol = searchParams.get('symbol');
         const chainId = parseInt(searchParams.get('chainId') || '');
-        
         const found = allAssets.find(a => a.symbol === symbol && a.chainId === chainId) || allAssets[0];
-        if (found) {
-            setSelectedToken({ ...found });
-        }
+        if (found) setSelectedToken({ ...found });
     }
   }, [allAssets, selectedToken, searchParams]);
 
-  // Estimate Fee
-  useEffect(() => {
-    const estimateFee = async () => {
-      if (!infuraApiKey || !selectedToken || !viewingNetwork.rpcUrl) {
-        setNetworkFee(null);
-        return;
-      }
-
-      setIsFeeLoading(true);
-      try {
-        const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
-        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-        const feeData = await provider.getFeeData();
-        const gasPrice = feeData.gasPrice || 0n;
-
-        let gasLimit = 21000n;
-        if (!selectedToken.isNative && selectedToken.address) {
-          const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
-          const contract = new ethers.Contract(selectedToken.address, abi, provider);
-          if (ethers.isAddress(debouncedRecipient) && parseFloat(debouncedAmount) > 0) {
-            try {
-              gasLimit = await contract.transfer.estimateGas(
-                debouncedRecipient, 
-                ethers.parseUnits(debouncedAmount, 18)
-              );
-            } catch (e) {
-              gasLimit = 65000n;
-            }
-          } else {
-            gasLimit = 65000n;
-          }
-        }
-
-        const feeWei = gasPrice * gasLimit;
-        setNetworkFee(ethers.formatEther(feeWei));
-      } catch (e) {
-        setNetworkFee(null);
-      } finally {
-        setIsFeeLoading(false);
-      }
-    };
-
-    if (step === 'details' && selectedToken) estimateFee();
-  }, [debouncedAmount, debouncedRecipient, selectedToken, viewingNetwork, step, infuraApiKey]);
-
   const handleSendRequest = async () => {
     if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) {
-      toast({ title: "Configuration Error", description: "Wallet data or API key missing.", variant: "destructive" });
+      toast({ title: "Configuration Error", description: "Missing wallet or key.", variant: "destructive" });
       return;
     }
-    
     setIsSubmitting(true);
     try {
       const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
       const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
-      
       let tx;
       if (selectedToken.isNative) {
-        tx = await wallet.sendTransaction({
-          to: recipient,
-          value: ethers.parseEther(amount)
-        });
+        tx = await wallet.sendTransaction({ to: recipient, value: ethers.parseEther(amount) });
       } else {
         const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
         const contract = new ethers.Contract(selectedToken.address, abi, wallet);
         tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
       }
-
       setTxHash(tx.hash);
       setStep('success');
-      toast({ title: "Transaction Sent", description: "Successfully signed and broadcasted." });
     } catch (e: any) {
-      toast({ title: "Signing Failed", description: e.message, variant: "destructive" });
+      toast({ title: "Send Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const totalDisplayAmount = useMemo(() => {
-    const val = parseFloat(amount || '0');
-    const fee = parseFloat(networkFee || '0');
-    return selectedToken?.isNative ? (val + fee).toFixed(6) : val.toFixed(6);
-  }, [amount, networkFee, selectedToken]);
 
   const handleTokenSelect = (token: AssetRow) => {
     setSelectedToken(token);
@@ -251,53 +191,24 @@ export default function SendPage() {
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
             <span className="text-base font-black uppercase tracking-widest text-[10px] text-muted-foreground">Total to Send</span>
-            <span className="text-2xl font-black text-primary">{totalDisplayAmount} {selectedToken?.symbol}</span>
+            <span className="text-2xl font-black text-primary">{amount || '0.00'} {selectedToken?.symbol}</span>
           </div>
       </div>
 
       <div className="mt-auto pb-4">
         {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4 font-black shadow-xl animate-in zoom-in-95">
+          <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4 font-black shadow-xl">
             <AlertCircle className="w-5 h-5" /> Insufficient balance
           </div>
         )}
         <Button 
-          className="w-full h-16 rounded-[1.5rem] text-lg font-black shadow-2xl shadow-primary/30 border-b-4 border-primary/50 transition-all active:translate-y-1 active:border-b-0 disabled:opacity-50"
+          className="w-full h-16 rounded-[1.5rem] text-lg font-black shadow-2xl shadow-primary/30 border-b-4 border-primary/50"
           disabled={!recipient || !isValidAmount || isSubmitting || !infuraApiKey}
           onClick={handleSendRequest}
         >
-          {isSubmitting ? (
-            <div className="flex items-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span>Broadcasting to network...</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-                <span>Sign & Send Funds</span>
-                <ArrowRight className="w-6 h-6" />
-            </div>
-          )}
+          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Send Funds"}
         </Button>
       </div>
-    </div>
-  );
-
-  const renderSuccess = () => (
-    <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
-      <div className="w-24 h-24 bg-green-500/20 rounded-[2.5rem] flex items-center justify-center border border-green-500/30 shadow-2xl shadow-green-500/20">
-        <CheckCircle2 className="w-12 h-12 text-green-500" />
-      </div>
-      <div className="space-y-2">
-        <h2 className="text-3xl font-black tracking-tight">Funds Sent!</h2>
-        <p className="text-muted-foreground max-w-[240px] mx-auto text-sm leading-relaxed">Your transaction has been broadcasted and will be confirmed shortly.</p>
-      </div>
-      <div className="p-5 rounded-[1.5rem] bg-secondary/20 border border-white/5 w-full shadow-inner">
-        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2 text-left">Transaction ID</p>
-        <p className="text-xs font-mono break-all text-foreground/80 text-left leading-relaxed">{txHash}</p>
-      </div>
-      <Button className="w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl" onClick={() => router.push('/')}>
-        Return to Wallet
-      </Button>
     </div>
   );
 
@@ -307,14 +218,20 @@ export default function SendPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-black uppercase tracking-widest">{step === 'details' ? 'Send Assets' : 'Success'}</h1>
+        <h1 className="text-lg font-black uppercase tracking-widest">Send Assets</h1>
       </header>
       
       <main className="flex-1 overflow-hidden">
-        {step === 'details' ? renderDetails() : renderSuccess()}
+        {step === 'details' ? renderDetails() : (
+            <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
+                <CheckCircle2 className="w-16 h-16 text-green-500" />
+                <h2 className="text-2xl font-black">Transaction Sent!</h2>
+                <Button className="w-full h-14 rounded-xl" onClick={() => router.push('/')}>Return Home</Button>
+            </div>
+        )}
       </main>
 
-      {/* STEP 1: BOTTOM SHEET (NETWORKS) */}
+      {/* FIXED NETWORK SHEET (SCROLLABLE) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
@@ -339,23 +256,16 @@ export default function SendPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all shadow-lg"
                             >
                                 <div className="flex items-center gap-4">
-                                    <TokenLogoDynamic 
-                                        logoUrl={chain.iconUrl} 
-                                        alt={chain.name} 
-                                        size={44} 
-                                        chainId={chain.chainId} 
-                                        name={chain.name}
-                                        symbol={chain.symbol}
-                                    />
+                                    <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
                                     <div className="text-left">
                                         <p className="font-black text-base text-white">{chain.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase font-mono opacity-60">ID: {chain.chainId}</p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
                             </button>
                         ))}
                     </div>
@@ -364,83 +274,35 @@ export default function SendPage() {
         </SheetContent>
       </Sheet>
 
-      {/* STEP 2: SIDE SHEET (TOKENS ON NETWORK) */}
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl h-full">
-            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent flex flex-row items-center gap-4 space-y-0 shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl"><ArrowLeft className="w-5 h-5"/></Button>
-                <SheetTitle className="flex items-center gap-3">
-                    <TokenLogoDynamic 
-                        logoUrl={selectedNetworkForSelection?.iconUrl} 
-                        alt={selectedNetworkForSelection?.name || ''} 
-                        size={32} 
-                        chainId={selectedNetworkForSelection?.chainId} 
-                        name={selectedNetworkForSelection?.name}
-                        symbol={selectedNetworkForSelection?.symbol}
-                    />
-                    <div className="flex flex-col items-start leading-none">
-                        <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
-                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-black mt-1">Available Assets</span>
-                    </div>
-                </SheetTitle>
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col h-full">
+            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0 flex flex-row items-center gap-4 space-y-0">
+                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)}><ArrowLeft className="w-5 h-5"/></Button>
+                <SheetTitle className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</SheetTitle>
             </SheetHeader>
             <ScrollArea className="flex-1 p-4">
-                <div className="space-y-6">
-                    {/* ADDRESS HEADER */}
-                    <div className="p-6 rounded-2xl bg-primary/10 border border-primary/20 space-y-3 shadow-inner">
-                        <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">
-                            <WalletIcon className="w-3.5 h-3.5" /> Your Address
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                            <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
-                                {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
-                            </p>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
-                                const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
-                                if (addr) {
-                                    navigator.clipboard.writeText(addr);
-                                    toast({ title: "Address Copied" });
-                                }
-                            }}>
-                                <Copy className="w-5 h-5" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pl-2">Select token to send</p>
-                        <div className="space-y-2 pb-20">
-                            {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
-                                const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
-                                return (
-                                    <button 
-                                        key={asset.symbol}
-                                        onClick={() => handleTokenSelect(asset)}
-                                        className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <TokenLogoDynamic 
-                                                logoUrl={asset.iconUrl} 
-                                                alt={asset.symbol} 
-                                                size={44} 
-                                                chainId={asset.chainId} 
-                                                symbol={asset.symbol} 
-                                                name={asset.name}
-                                            />
-                                            <div className="text-left leading-tight">
-                                                <p className="font-black text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p>
-                                            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                <div className="space-y-3 pb-20">
+                    {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                        const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
+                        return (
+                            <button 
+                                key={asset.symbol}
+                                onClick={() => handleTokenSelect(asset)}
+                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
+                                    <div className="text-left">
+                                        <p className="font-black text-base text-white">{asset.symbol}</p>
+                                        <p className="text-xs text-muted-foreground">{asset.name}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
             </ScrollArea>
         </SheetContent>
