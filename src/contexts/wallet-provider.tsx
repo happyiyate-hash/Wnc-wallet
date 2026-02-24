@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 // ANKR MULTICHAIN CONFIGURATION
 const ANKR_MULTICHAIN_URL = "https://rpc.ankr.com/multichain/";
 
+// Mapping internal Chain IDs to Ankr-specific blockchain names
 const ANKR_CHAIN_MAPPING: Record<number, string> = {
   1: 'eth',
   137: 'polygon',
@@ -265,17 +266,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * REFACTORED: ANKR MULTICHAIN BALANCE FETCHING
-   * Fetches all tokens across all chains in a single efficient request.
+   * REFACTORED: ANKR MULTICHAIN BALANCE FETCHING (PRO VERSION)
+   * Merges Ankr live data with local metadata to ensure perfect logo and chain resolution.
    */
   const fetchBalances = useCallback(async () => {
-    if (!wallets || wallets.length === 0) return;
+    if (!wallets || wallets.length === 0 || !isInitialized) return;
     
     setIsRefreshing(true);
     setFetchError(null);
 
     try {
-      // Prepare the list of blockchain names Ankr understands
       const blockchainNames = Object.values(ANKR_CHAIN_MAPPING);
 
       const response = await fetch(ANKR_MULTICHAIN_URL, {
@@ -294,69 +294,63 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
 
       const result = await response.json();
-      if (result.error) throw new Error(result.error.message);
+      if (!response.ok || result.error) throw new Error(result.error?.message || "Ankr request failed");
 
       const assets = result.result?.assets || [];
       const newBalances: { [key: string]: AssetRow[] } = {};
 
-      // Map Ankr assets back to our ChainID-based balance state
-      assets.forEach((asset: any) => {
-        const chainId = Object.keys(ANKR_CHAIN_MAPPING).find(key => ANKR_CHAIN_MAPPING[Number(key)] === asset.blockchain);
-        if (!chainId) return;
-
-        if (!newBalances[chainId]) newBalances[chainId] = [];
-
-        newBalances[chainId].push({
-          chainId: Number(chainId),
-          address: asset.contractAddress || 'native',
-          symbol: asset.tokenSymbol,
-          name: asset.tokenName,
-          balance: asset.balance,
-          fiatValueUsd: parseFloat(asset.balanceUsd),
-          priceUsd: parseFloat(asset.tokenPrice),
-          pctChange24h: 0, // Ankr simple balance doesn't always provide 24h change directly here
-          isNative: !asset.contractAddress,
-          iconUrl: asset.thumbnail
-        } as AssetRow);
+      // Initialize all configured chains with zero-balance initial assets
+      chainsWithLogos.forEach(chain => {
+        newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
+          ...a,
+          balance: '0',
+          fiatValueUsd: 0,
+          priceUsd: 0,
+          pctChange24h: 0,
+          iconUrl: a.iconUrl || null
+        } as AssetRow));
       });
 
-      // Ensure every network has its entry, even if Ankr didn't find tokens
-      Object.keys(ANKR_CHAIN_MAPPING).forEach(chainId => {
-        if (!newBalances[chainId]) {
-          // If no tokens found by Ankr, populate with our initial placeholder assets (0 balance)
-          newBalances[chainId] = getInitialAssets(Number(chainId)).map(a => ({
-            ...a,
-            balance: '0',
-            fiatValueUsd: 0,
-            priceUsd: 0,
-            pctChange24h: 0
-          } as AssetRow));
+      // Update balances with Ankr live data
+      assets.forEach((ankrAsset: any) => {
+        const chainIdKey = Object.keys(ANKR_CHAIN_MAPPING).find(key => ANKR_CHAIN_MAPPING[Number(key)] === ankrAsset.blockchain);
+        if (!chainIdKey) return;
+        
+        const chainId = Number(chainIdKey);
+        const internalChain = chainsWithLogos.find(c => c.chainId === chainId);
+        if (!internalChain) return;
+
+        // Find existing asset in our initial list or create new entry
+        const existingIndex = newBalances[chainId].findIndex(a => a.symbol === ankrAsset.tokenSymbol);
+        
+        const updatedAsset: AssetRow = {
+          chainId: chainId,
+          address: ankrAsset.contractAddress || 'native',
+          symbol: ankrAsset.tokenSymbol,
+          name: ankrAsset.tokenName,
+          balance: ankrAsset.balance,
+          fiatValueUsd: parseFloat(ankrAsset.balanceUsd || '0'),
+          priceUsd: parseFloat(ankrAsset.tokenPrice || '0'),
+          pctChange24h: 0,
+          isNative: !ankrAsset.contractAddress,
+          iconUrl: ankrAsset.thumbnail || internalChain.iconUrl // Prefer Ankr thumbnail, fallback to internal chain logo
+        };
+
+        if (existingIndex > -1) {
+          newBalances[chainId][existingIndex] = updatedAsset;
         } else {
-          // Merge Ankr data with initialAssets to ensure we don't miss core tokens the user expects to see
-          const initial = getInitialAssets(Number(chainId));
-          initial.forEach(initAsset => {
-            const found = newBalances[chainId].find(b => b.symbol === initAsset.symbol);
-            if (!found) {
-              newBalances[chainId].push({
-                ...initAsset,
-                balance: '0',
-                fiatValueUsd: 0,
-                priceUsd: 0,
-                pctChange24h: 0
-              } as AssetRow);
-            }
-          });
+          newBalances[chainId].push(updatedAsset);
         }
       });
 
       setBalances(newBalances);
     } catch (e: any) {
-      console.error("Ankr Multichain fetch failed", e);
-      setFetchError(e.message || "Could not fetch multi-chain balances.");
+      console.error("Ankr Portfolio Fetch Error:", e);
+      setFetchError(e.message || "Could not retrieve multi-chain portfolio.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets]);
+  }, [wallets, isInitialized, chainsWithLogos]);
 
   useEffect(() => {
     if (isInitialized && wallets) {
