@@ -45,6 +45,7 @@ export default function SwapPage() {
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
+  const [isSlippageSheetOpen, setIsSlippageSheetOpen] = useState(false);
 
   // Data State
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
@@ -59,7 +60,6 @@ export default function SwapPage() {
         const chainIdParam = parseInt(searchParams.get('chainId') || '');
         const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
         
-        // Find supported default if possible
         const found = allAssets.find(a => 
             a.symbol === fromSymbol && 
             a.chainId === targetChainId && 
@@ -72,7 +72,7 @@ export default function SwapPage() {
         const found = allAssets.find(a => 
             a.symbol !== fromToken?.symbol && 
             LIFI_SUPPORTED_CHAINS.includes(a.chainId)
-        ) || allAssets[allAssets.length - 1];
+        ) || allAssets.find(a => a.symbol === 'USDC' && LIFI_SUPPORTED_CHAINS.includes(a.chainId));
         if (found) setToToken({ ...found });
       }
     }
@@ -85,7 +85,6 @@ export default function SwapPage() {
         return;
       }
 
-      // GUARD: Block unsupported chains
       if (!LIFI_SUPPORTED_CHAINS.includes(fromToken.chainId) || !LIFI_SUPPORTED_CHAINS.includes(toToken.chainId)) {
         setFetchError("One of the selected networks is not supported by the bridge API.");
         setQuoteData(null);
@@ -130,6 +129,14 @@ export default function SwapPage() {
     setIsNetworkSheetOpen(false);
   };
 
+  const swapReverse = () => {
+    const temp = fromToken;
+    setFromToken(toToken);
+    setToToken(temp);
+    setAmount('');
+    setQuoteData(null);
+  };
+
   const fromUsdValue = parseFloat(amount || '0') * (fromToken?.priceUsd || 0);
   const toAmount = quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) : 0;
   const toUsdValue = toAmount * (toToken?.priceUsd || 0);
@@ -155,17 +162,25 @@ export default function SwapPage() {
             <h1 className="text-sm font-black uppercase tracking-widest">Bridge & Swap</h1>
             <span className="text-[10px] text-primary font-bold">Best Price via LI.FI</span>
         </div>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}>
           <Settings2 className="w-5 h-5 text-muted-foreground" />
         </Button>
       </header>
 
-      <main className="flex-1 p-4 max-lg mx-auto w-full space-y-4 overflow-y-auto pb-32">
+      <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto pb-32">
         {/* FROM SECTION */}
-        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4">
+        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4 relative">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Pay</span>
-            <span className="text-[10px] font-bold text-muted-foreground/60">Balance: {fromBalance.toFixed(4)}</span>
+            <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-muted-foreground/60">Balance: {fromBalance.toFixed(4)}</span>
+                <button 
+                    onClick={() => setAmount(fromBalance.toString())}
+                    className="text-[10px] font-black text-primary hover:text-primary/80 uppercase"
+                >
+                    Max
+                </button>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex-1">
@@ -178,26 +193,38 @@ export default function SwapPage() {
                 />
                 <p className="text-xs font-bold text-muted-foreground mt-1">≈ ${fromUsdValue.toFixed(2)}</p>
             </div>
-            <Button variant="outline" className="h-14 gap-2" onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}>
+            <Button variant="outline" className="h-14 gap-2 rounded-2xl bg-white/5 border-white/10" onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}>
               <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={32} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
               <span className="font-black">{fromToken?.symbol}</span>
             </Button>
           </div>
         </div>
 
+        {/* SWAP REVERSE BUTTON */}
+        <div className="flex justify-center -my-8 relative z-10">
+            <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={swapReverse}
+                className="w-12 h-12 rounded-2xl bg-black border-2 border-white/5 shadow-2xl hover:bg-zinc-900 group transition-all"
+            >
+                <ArrowUpDown className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
+            </Button>
+        </div>
+
         {/* TO SECTION */}
-        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4">
+        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4 pt-10">
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex-1">
-                <div className="text-4xl font-black">
-                    {isQuoteLoading ? <Loader2 className="animate-spin" /> : (toAmount > 0 ? toAmount.toFixed(6) : '0.00')}
+                <div className="text-4xl font-black min-h-[40px] flex items-center">
+                    {isQuoteLoading ? <Loader2 className="w-8 h-8 animate-spin text-primary" /> : (toAmount > 0 ? toAmount.toFixed(6) : '0.00')}
                 </div>
                 <p className="text-xs font-bold text-muted-foreground mt-1">≈ ${toUsdValue.toFixed(2)}</p>
             </div>
-            <Button variant="outline" className="h-14 gap-2" onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}>
+            <Button variant="outline" className="h-14 gap-2 rounded-2xl bg-white/5 border-white/10" onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}>
               <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={32} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
               <span className="font-black">{toToken?.symbol}</span>
             </Button>
@@ -210,6 +237,36 @@ export default function SwapPage() {
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     <span className="flex items-center gap-2"><RouteIcon className="w-3.5 h-3.5 text-primary"/> Execution Route</span>
                     <span className="text-primary">{quoteData.tool}</span>
+                </div>
+                
+                <div className="flex items-center gap-3 py-2">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+                        <TokenLogoDynamic 
+                            logoUrl={fromToken?.iconUrl} 
+                            size={16} 
+                            chainId={fromToken?.chainId} 
+                            symbol={fromToken?.symbol} 
+                            name={fromToken?.name} 
+                            alt=""
+                        />
+                        <span className="text-[10px] font-bold">{fromToken?.symbol}</span>
+                    </div>
+                    <ChevronRight className="w-3 h-3 text-muted-foreground/40" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                        <span className="text-[10px] font-black text-primary uppercase">LI.FI</span>
+                    </div>
+                    <ChevronRight className="w-3 h-3 text-muted-foreground/40" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+                        <TokenLogoDynamic 
+                            logoUrl={toToken?.iconUrl} 
+                            size={16} 
+                            chainId={toToken?.chainId} 
+                            symbol={toToken?.symbol} 
+                            name={toToken?.name} 
+                            alt=""
+                        />
+                        <span className="text-[10px] font-bold">{toToken?.symbol}</span>
+                    </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
@@ -242,8 +299,8 @@ export default function SwapPage() {
         <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto">
             <Button 
                 className={cn(
-                    "w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl",
-                    isInsufficient ? "bg-destructive hover:bg-destructive" : ""
+                    "w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl transition-all active:scale-[0.98]",
+                    isInsufficient ? "bg-destructive hover:bg-destructive" : "bg-primary hover:bg-primary/90"
                 )} 
                 disabled={!quoteData || isQuoteLoading || isInsufficient}
             >
@@ -252,7 +309,7 @@ export default function SwapPage() {
         </div>
       </main>
 
-      {/* NETWORK SELECTOR (FILTERED) */}
+      {/* NETWORK SELECTOR */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
@@ -264,7 +321,7 @@ export default function SwapPage() {
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6 pb-12">
-                    <div className="grid grid-cols-1 gap-3 pb-20">
+                    <div className="grid grid-cols-2 gap-3 pb-20">
                         {allChains
                           .filter(chain => LIFI_SUPPORTED_CHAINS.includes(chain.chainId))
                           .map((chain) => (
@@ -279,16 +336,10 @@ export default function SwapPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all"
+                                className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center group"
                             >
-                                <div className="flex items-center gap-4">
-                                    <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                    <div className="text-left">
-                                        <p className="font-black text-base text-white">{chain.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase font-mono opacity-60">Chain ID: {chain.chainId}</p>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                                <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                                <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>
@@ -328,6 +379,48 @@ export default function SwapPage() {
                     })}
                 </div>
             </ScrollArea>
+        </SheetContent>
+      </Sheet>
+
+      {/* SLIPPAGE SETTINGS SHEET */}
+      <Sheet open={isSlippageSheetOpen} onOpenChange={setIsSlippageSheetOpen}>
+        <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-white/10 rounded-t-[2.5rem] p-6 pb-10">
+            <SheetHeader className="text-center mb-6">
+                <SheetTitle className="text-lg font-black uppercase tracking-widest">Swap Settings</SheetTitle>
+            </SheetHeader>
+            <div className="space-y-6">
+                <div className="space-y-3">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Slippage Tolerance</p>
+                    <div className="grid grid-cols-4 gap-2">
+                        {['0.5', '1.0', '3.0'].map((val) => (
+                            <Button 
+                                key={val}
+                                variant={slippage === val ? 'default' : 'outline'}
+                                onClick={() => setSlippage(val)}
+                                className="h-12 rounded-xl font-bold"
+                            >
+                                {val}%
+                            </Button>
+                        ))}
+                        <div className="relative">
+                            <Input 
+                                placeholder="Custom" 
+                                value={!['0.5', '1.0', '3.0'].includes(slippage) ? slippage : ''}
+                                onChange={(e) => setSlippage(e.target.value)}
+                                className="h-12 rounded-xl bg-white/5 border-white/10 text-center font-bold"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                        Slippage tolerance is the maximum price change you are willing to accept. High slippage settings can lead to unfavorable trade results.
+                    </p>
+                </div>
+                <Button className="w-full h-14 rounded-2xl font-black text-base" onClick={() => setIsSlippageSheetOpen(false)}>
+                    Save Settings
+                </Button>
+            </div>
         </SheetContent>
       </Sheet>
     </div>
