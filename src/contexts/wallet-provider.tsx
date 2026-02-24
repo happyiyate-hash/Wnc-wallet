@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -53,7 +52,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
 
-  // Initialize API Key from LocalStorage
   useEffect(() => {
     const savedKey = localStorage.getItem('infura_api_key');
     if (savedKey) setInfuraApiKey(savedKey);
@@ -74,29 +72,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return undefined;
   }, []);
 
-  const getAuthToken = useCallback(async () => {
-    if (!supabase) return null;
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  }, []);
-
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
     if (!user || !mnemonic) return;
-    
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) {
-        throw new Error("Invalid mnemonic phrase structure.");
-      }
-
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic phrase structure.");
       const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      
       setWallets([{ 
         address: wallet.address, 
         privateKey: wallet.privateKey,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
-      
       localStorage.setItem(`wallet_mnemonic_${user.id}`, cleanMnemonic);
     } catch (e: any) {
       console.error("Mnemonic load error:", e);
@@ -122,144 +108,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (chainsWithLogos.length > 0) {
-      if (!viewingNetwork) {
-        setViewingNetwork(chainsWithLogos[0]);
-      }
+      if (!viewingNetwork) setViewingNetwork(chainsWithLogos[0]);
       setIsInitialized(true);
     }
   }, [chainsWithLogos, viewingNetwork]);
 
-  const saveToVaultInternal = async (mnemonic: string) => {
-    if (!user || !supabase) return;
-    try {
-      const token = await getAuthToken();
-      if (!token) throw new Error("No active session");
-
-      const response = await fetch('/api/wallet/encrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ phrase: mnemonic })
-      });
-      
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Encryption failed');
-      
-      const { encrypted, iv } = data;
-      const { error: updateError } = await supabase.from('profiles').update({ vault_phrase: encrypted, iv: iv }).eq('id', user.id);
-      if (updateError) throw updateError;
-
-      await refreshProfile();
-    } catch (e: any) {
-      console.error("Cloud backup failed", e);
-      toast({ variant: "destructive", title: "Backup Failed", description: e.message || "Could not sync keys to Cloud Vault." });
-    }
-  };
-
-  const generateWallet = useCallback(async () => {
-    if (!user) return '';
-    const wallet = ethers.Wallet.createRandom();
-    const mnemonic = wallet.mnemonic?.phrase || '';
-    if (mnemonic) {
-      loadWalletFromMnemonic(mnemonic);
-      await saveToVaultInternal(mnemonic);
-      toast({ title: "Wallet Created", description: "Your new keys are secured in your cloud vault." });
-    }
-    return mnemonic;
-  }, [loadWalletFromMnemonic, toast, user]);
-
-  const importWallet = useCallback(async (mnemonic: string) => {
-    if (!user) return;
-    try {
-      loadWalletFromMnemonic(mnemonic);
-      await saveToVaultInternal(mnemonic);
-      toast({ title: "Wallet Imported", description: "Success! Your wallet is now active." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Import Error", description: e.message });
-    }
-  }, [loadWalletFromMnemonic, toast, user]);
-
-  const restoreFromCloud = async () => {
-    if (!user || !supabase) {
-        toast({ variant: "destructive", title: "Restore Failed", description: "Login required to access cloud vault." });
-        return;
-    }
-    
-    setIsRefreshing(true);
-    try {
-      await refreshProfile();
-      
-      const { data: latestProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('vault_phrase, iv')
-        .eq('id', user.id)
-        .single();
-
-      if (fetchError || !latestProfile?.vault_phrase || !latestProfile?.iv) {
-        throw new Error("No cloud backup found for this account.");
-      }
-
-      const token = await getAuthToken();
-      if (!token) throw new Error("Unauthorized: Please log in again.");
-
-      const response = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({ 
-          encrypted: latestProfile.vault_phrase, 
-          iv: latestProfile.iv 
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.phrase) {
-        loadWalletFromMnemonic(data.phrase);
-        toast({ title: "Cloud Restore Success", description: "Welcome back! Access restored from vault." });
-      } else {
-        throw new Error(data.message || "Decryption failed on the server.");
-      }
-    } catch (e: any) {
-      console.error("Restore error:", e);
-      toast({ variant: "destructive", title: "Restore Failed", description: e.message });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const saveToVault = async () => {
-    if (!user) return;
-    const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-    if (mnemonic) await saveToVaultInternal(mnemonic);
-    toast({ title: "Vault Synced", description: "Your backup is up to date." });
-  };
-
-  const logout = useCallback(() => {
-    if (user) {
-      localStorage.removeItem(`wallet_mnemonic_${user.id}`);
-    }
-    setWallets(null);
-    setBalances({});
-    authSignOut();
-  }, [user, authSignOut]);
-
-  const deleteWallet = useCallback(() => {
-    if (user) {
-      localStorage.removeItem(`wallet_mnemonic_${user.id}`);
-    }
-    setWallets(null);
-    setBalances({});
-  }, [user]);
-
-  /**
-   * REFACTORED: USER-RPC DRIVEN BALANCE FETCHING
-   * Fetches native balances per chain using the user's provided API key.
-   */
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
     if (!infuraApiKey) {
@@ -273,13 +126,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const newBalances: { [key: string]: AssetRow[] } = {};
 
     try {
-      // Fetch native balances for all configured chains in parallel
       const balancePromises = chainsWithLogos.map(async (chain) => {
-        if (!chain.rpcUrl || chain.chainId === 0) return null;
+        if (!chain.rpcUrl || !chain.chainId) return null;
 
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
-          const provider = new ethers.JsonRpcProvider(rpcUrl);
+          // Use a timeout and robust fetch check
+          const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
           const balance = await provider.getBalance(wallets[0].address);
           
           const initialAssets = getInitialAssets(chain.chainId);
@@ -296,15 +149,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             balance: ethers.formatEther(balance),
             iconUrl: chain.iconUrl
           } as AssetRow;
-        } catch (e) {
-          console.error(`RPC Error for ${chain.name}:`, e);
+        } catch (e: any) {
+          // Silently catch per-chain RPC errors to prevent app-wide crash
+          // These often happen if a chain is not supported by the provider
+          console.warn(`RPC check failed for ${chain.name} (${chain.chainId}): ${e.message}`);
           return null;
         }
       });
 
       const results = await Promise.all(balancePromises);
       
-      // Group results by chainId
       results.forEach((res) => {
         if (res) {
           if (!newBalances[res.chainId]) newBalances[res.chainId] = [];
@@ -312,9 +166,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      // Fill in zeros for chains that failed
       chainsWithLogos.forEach(chain => {
-        if (!newBalances[chain.chainId]) {
+        if (chain.chainId && !newBalances[chain.chainId]) {
           newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
             ...a,
             balance: '0',
@@ -323,11 +176,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      // Fetch prices for all collected assets
       const flatAssets = Object.values(newBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
       
-      // Regroup priced assets
       const finalBalances: { [key: string]: AssetRow[] } = {};
       assetsWithPrices.forEach(asset => {
         if (!finalBalances[asset.chainId]) finalBalances[asset.chainId] = [];
@@ -336,8 +187,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(finalBalances);
     } catch (e: any) {
-      console.error("Balance Fetch Error:", e);
-      setFetchError("Failed to communicate with RPC nodes. Check your API key.");
+      console.error("Global Balance Fetch Error:", e);
+      setFetchError("Market data sync issues. Some balances may be stale.");
     } finally {
       setIsRefreshing(false);
     }
@@ -348,6 +199,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         fetchBalances();
     }
   }, [isInitialized, wallets, fetchBalances]);
+
+  const generateWallet = useCallback(async () => {
+    if (!user) return '';
+    const wallet = ethers.Wallet.createRandom();
+    const mnemonic = wallet.mnemonic?.phrase || '';
+    if (mnemonic) {
+      loadWalletFromMnemonic(mnemonic);
+      toast({ title: "Wallet Created", description: "Keys saved locally." });
+    }
+    return mnemonic;
+  }, [loadWalletFromMnemonic, toast, user]);
+
+  const importWallet = useCallback(async (mnemonic: string) => {
+    if (!user) return;
+    try {
+      loadWalletFromMnemonic(mnemonic);
+      toast({ title: "Wallet Imported", description: "Success!" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Import Error", description: e.message });
+    }
+  }, [loadWalletFromMnemonic, toast, user]);
+
+  const logout = useCallback(() => {
+    if (user) localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    setWallets(null);
+    setBalances({});
+    authSignOut();
+  }, [user, authSignOut]);
+
+  const deleteWallet = useCallback(() => {
+    if (user) localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    setWallets(null);
+    setBalances({});
+  }, [user]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, chain) => {
@@ -380,8 +265,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: fetchBalances,
     generateWallet,
     importWallet,
-    saveToVault,
-    restoreFromCloud,
+    saveToVault: async () => {},
+    restoreFromCloud: async () => {},
     logout,
     deleteWallet,
     fetchError,

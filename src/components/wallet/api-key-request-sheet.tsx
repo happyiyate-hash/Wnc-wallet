@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,8 +31,8 @@ export default function ApiKeyRequestSheet({
     setErrorMessage('');
 
     try {
-      // Simple validation check using a basic JSON-RPC call to Ethereum Mainnet
-      const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${keyInput.trim()}`);
+      // Use a strict JSON-RPC check. If the URL is invalid or returns non-JSON, ethers throws.
+      const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${keyInput.trim()}`, undefined, { staticNetwork: true });
       await provider.getBlockNumber();
       
       // Success
@@ -42,10 +42,15 @@ export default function ApiKeyRequestSheet({
         onOpenChange(false);
         refresh(); // Trigger balance fetch immediately
       }, 1500);
-    } catch (error) {
-      console.warn("API Key validation failed:", error);
+    } catch (error: any) {
+      console.warn("API Key validation failed:", error.message);
       setStatus('error');
-      setErrorMessage("This key seems invalid. Please check and try again.");
+      // Detect common non-JSON response error (like 404 or invalid subdomain)
+      if (error.message.includes('response body is not valid JSON') || error.message.includes('404')) {
+        setErrorMessage("Connection Error: Infura endpoint not responding correctly.");
+      } else {
+        setErrorMessage("Invalid API key. Please check your credentials.");
+      }
     } finally {
       setIsValidating(false);
     }
