@@ -1,106 +1,55 @@
 'use server';
 
 /**
- * @fileOverview Converts between different cryptocurrencies using a real-time conversion tool,
- * with an LLM validating the data before display to ensure accuracy and prevent misinformation.
- *
- * - currencyConversionWithLLMValidation - A function that handles the currency conversion process.
- * - CurrencyConversionWithLLMValidationInput - The input type for the currencyConversionWithLLMValidation function.
- * - CurrencyConversionWithLLMValidationOutput - The return type for the currencyConversionWithLLMValidation function.
+ * @fileOverview A Trade Guardian AI agent that validates swap quotes.
+ * It analyzes price impact, gas fees, and liquidity to prevent bad trades.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const CurrencyConversionWithLLMValidationInputSchema = z.object({
-  fromCurrency: z.string().describe('The currency to convert from (e.g., BTC).'),
-  toCurrency: z.string().describe('The currency to convert to (e.g., USD).'),
-  amount: z.number().describe('The amount to convert.'),
+const SwapValidationInputSchema = z.object({
+  fromCurrency: z.string(),
+  toCurrency: z.string(),
+  amount: z.number(),
+  convertedAmount: z.number(),
+  priceImpact: z.number().describe('The price impact percentage (negative for loss).'),
+  gasFeeUsd: z.number().describe('The estimated gas fee in USD.'),
+  chainName: z.string(),
 });
 
-export type CurrencyConversionWithLLMValidationInput = z.infer<typeof CurrencyConversionWithLLMValidationInputSchema>;
+export type SwapValidationInput = z.infer<typeof SwapValidationInputSchema>;
 
-const CurrencyConversionWithLLMValidationOutputSchema = z.object({
-  convertedAmount: z.number().describe('The converted amount in the target currency.'),
-  isValid: z.boolean().describe('Whether the conversion data is valid according to the LLM.'),
-  validationReason: z.string().optional().describe('The reason why the conversion data is invalid, if applicable.'),
+const SwapValidationOutputSchema = z.object({
+  isValid: z.boolean().describe('Whether the trade is considered healthy.'),
+  validationReason: z.string().describe('Explanation of the health status or warnings.'),
+  suggestion: z.string().optional().describe('Actionable advice (e.g., "Wait for gas to drop").'),
 });
 
-export type CurrencyConversionWithLLMValidationOutput = z.infer<typeof CurrencyConversionWithLLMValidationOutputSchema>;
+export type SwapValidationOutput = z.infer<typeof SwapValidationOutputSchema>;
 
+const swapValidationPrompt = ai.definePrompt({
+  name: 'swapValidationPrompt',
+  input: {schema: SwapValidationInputSchema},
+  output: {schema: SwapValidationOutputSchema},
+  prompt: `You are an expert Crypto Trade Guardian. Analyze the following swap quote on the {{chainName}} network.
 
-const currencyConverterTool = ai.defineTool(
-    {
-      name: 'currencyConverter',
-      description: 'Converts an amount from one cryptocurrency to another using a real-time API.',
-      inputSchema: z.object({
-        fromCurrency: z.string().describe('The currency to convert from (e.g., BTC).'),
-        toCurrency: z.string().describe('The currency to convert to (e.g., USD).'),
-        amount: z.number().describe('The amount to convert.'),
-      }),
-      outputSchema: z.object({
-        convertedAmount: z.number().describe('The converted amount in the target currency.'),
-      }),
-    },
-    async (input) => {
-      // Replace with actual API call to a currency conversion service
-      console.log(`Calling currency conversion API with ${input.amount} ${input.fromCurrency} to ${input.toCurrency}`);
-      const conversionRate = 0.000015; // Mock conversion rate for demonstration
-      const convertedAmount = input.amount * conversionRate;
+Trade Details:
+- Swap: {{amount}} {{fromCurrency}} -> {{convertedAmount}} {{toCurrency}}
+- Price Impact: {{priceImpact}}%
+- Gas Fee: ${{gasFeeUsd}}
 
-      return {
-        convertedAmount: convertedAmount,
-      };
-    }
-);
+Your Task:
+1. Check if the price impact is too high (usually < -2% is bad).
+2. Check if the gas fee is disproportionate to the trade amount (e.g., $20 gas for a $50 trade).
+3. Determine if the trade is "Valid" (safe/healthy) or has warnings.
 
-const currencyValidationPrompt = ai.definePrompt({
-  name: 'currencyValidationPrompt',
-  input: {schema: CurrencyConversionWithLLMValidationOutputSchema},
-  prompt: `You are an expert at identifying misinformation, especially with currency values.  Given the following cryptocurrency conversion data, determine if the \"convertedAmount\" is plausible, safe and suitable to display to the user, considering the \"fromCurrency\", \"toCurrency\", and the original \"amount\".
-
-  Return whether the data is valid, and if not, the reason.
-  If the data seems accurate and safe, return isValid: true. If the data is potentially dangerous or inaccurate, return isValid: false and provide a validationReason.
-  Here is the conversion data:
-  From Currency: {{{fromCurrency}}}
-  To Currency: {{{toCurrency}}}
-  Amount: {{{amount}}}
-  Converted Amount: {{{convertedAmount}}}
-
-  Consider these factors to test for validity:
-  - Is the conversion rate plausible given the currencies involved?
-  - Is there any indication of fraud or malicious intent?
-  - Could displaying this information mislead the user?
-
-  Return in the following format:
-  \"isValid\": true/false,
-  \"validationReason\": \"reason\" // only if isValid is false`,
+Provide a clear validationReason and a helpful suggestion.
+If impact is < -3%, mark isValid: false.
+If gas is > 20% of trade value, warn the user.`,
 });
 
-const currencyConversionFlow = ai.defineFlow(
-  {
-    name: 'currencyConversionFlow',
-    inputSchema: CurrencyConversionWithLLMValidationInputSchema,
-    outputSchema: CurrencyConversionWithLLMValidationOutputSchema,
-  },
-  async input => {
-    const conversionResult = await currencyConverterTool(input);
-
-    // Validate the data using the LLM
-    const validationInput: CurrencyConversionWithLLMValidationOutput = {
-      ...input,
-      ...conversionResult,
-      isValid: true, // initial value, prompt will override this
-      validationReason: undefined,
-    } as CurrencyConversionWithLLMValidationOutput;
-    const {output} = await currencyValidationPrompt(validationInput);
-
-    return output!;
-  }
-);
-
-export async function currencyConversionWithLLMValidation(input: CurrencyConversionWithLLMValidationInput): Promise<CurrencyConversionWithLLMValidationOutput> {
-  return currencyConversionFlow(input);
+export async function validateSwapHealth(input: SwapValidationInput): Promise<SwapValidationOutput> {
+  const {output} = await swapValidationPrompt(input);
+  return output!;
 }
-
-export type {currencyConversionFlow as CurrencyConversionFlow};

@@ -1,12 +1,11 @@
 'use server';
 
 import { 
-  currencyConversionWithLLMValidation as currencyConversionFlow,
-  type CurrencyConversionWithLLMValidationInput,
+  validateSwapHealth,
+  type SwapValidationInput,
 } from '@/ai/flows/currency-conversion-validation';
 
-export async function currencyConversionWithLLMValidation(input: CurrencyConversionWithLLMValidationInput) {
-  // Add a delay to simulate network latency for better UX
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  return await currencyConversionFlow(input);
+export async function currencyConversionWithLLMValidation(input: SwapValidationInput) {
+  // Trade Guardian AI check
+  return await validateSwapHealth(input);
 }
