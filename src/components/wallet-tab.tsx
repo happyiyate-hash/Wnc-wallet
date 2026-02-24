@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -50,9 +49,9 @@ const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading
         borderColor: color,
         borderWidth: '2px',
         background: `linear-gradient(135deg, ${color}25 0%, rgba(0,0,0,0) 100%)`,
-        boxShadow: `0 10px 30px -10px ${color}30`
+        boxShadow: `0 4px 20px -10px ${color}30`
       }}
-      className="flex cursor-pointer items-center justify-between p-5 rounded-[2.5rem] border mb-4 mx-4 hover:scale-[1.01] active:scale-[0.98] transition-all group relative overflow-hidden"
+      className="flex cursor-pointer items-center justify-between p-3.5 rounded-2xl border mb-3 mx-4 hover:scale-[1.01] active:scale-[0.98] transition-all group relative overflow-hidden"
       role="button"
       tabIndex={0}
     >
@@ -332,7 +331,7 @@ export default function WalletTab() {
                                 borderWidth: '2px',
                                 background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                             }}
-                            className="flex items-center justify-between p-5 rounded-[2rem] border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                            className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
                         >
                             <div className="flex items-center gap-4">
                                 <TokenLogoDynamic 
@@ -340,7 +339,7 @@ export default function WalletTab() {
                                     alt={chain.name} 
                                     size={44} 
                                     chainId={chain.chainId} 
-                                    name={chain.name}
+                                    name={chain.name} 
                                     symbol={chain.symbol}
                                 />
                                 <div className="text-left">
@@ -375,7 +374,7 @@ export default function WalletTab() {
                 </SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
-                <div className="p-5 rounded-[2rem] bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
+                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
                         <WalletIcon className="w-3.5 h-3.5" /> Your Address
                     </div>
@@ -404,7 +403,7 @@ export default function WalletTab() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                                 >
                                     <div className="flex items-center gap-4">
                                         <TokenLogoDynamic 

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -165,7 +164,7 @@ export default function SendPage() {
       <div className="flex flex-col items-center gap-4 mb-4">
         <button 
             onClick={() => setIsNetworkSheetOpen(true)}
-            className="flex items-center gap-4 p-4 rounded-[2rem] bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group shadow-xl"
+            className="flex items-center gap-4 p-3.5 rounded-2xl bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group shadow-xl"
         >
             <TokenLogoDynamic 
                 logoUrl={selectedToken?.iconUrl} 
@@ -337,7 +336,7 @@ export default function SendPage() {
                                 borderWidth: '2px',
                                 background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                             }}
-                            className="flex items-center justify-between p-5 rounded-[2rem] border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                            className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
                         >
                             <div className="flex items-center gap-4">
                                 <TokenLogoDynamic 
@@ -383,7 +382,7 @@ export default function SendPage() {
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
                 {/* ADDRESS HEADER */}
-                <div className="p-6 rounded-[2rem] bg-primary/10 border border-primary/20 space-y-3 shadow-inner">
+                <div className="p-6 rounded-2xl bg-primary/10 border border-primary/20 space-y-3 shadow-inner">
                     <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">
                         <WalletIcon className="w-3.5 h-3.5" /> Your Address
                     </div>
@@ -412,7 +411,7 @@ export default function SendPage() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                                 >
                                     <div className="flex items-center gap-4">
                                         <TokenLogoDynamic 

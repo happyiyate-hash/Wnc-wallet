@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -220,7 +219,7 @@ export default function SwapPage() {
 
       <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-32">
         {/* FROM TOKEN SECTION */}
-        <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
+        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Pay</span>
             <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {fromToken?.balance}</span>
@@ -235,7 +234,7 @@ export default function SwapPage() {
             />
             <Button 
                 variant="outline" 
-                className="rounded-[2rem] gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
+                className="rounded-xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('from');
                     setIsNetworkSheetOpen(true);
@@ -263,7 +262,7 @@ export default function SwapPage() {
           <Button 
             size="icon" 
             variant="outline" 
-            className="rounded-[1.5rem] bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group border-b-4 active:border-b-0"
+            className="rounded-xl bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group border-b-4 active:border-b-0"
             onClick={handleFlip}
           >
             <ArrowUpDown className="w-5 h-5 text-primary group-hover:rotate-180 transition-transform duration-500" />
@@ -271,7 +270,7 @@ export default function SwapPage() {
         </div>
 
         {/* TO TOKEN SECTION */}
-        <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
+        <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
           </div>
@@ -285,7 +284,7 @@ export default function SwapPage() {
             </div>
             <Button 
                 variant="outline" 
-                className="rounded-[2rem] gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
+                className="rounded-xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('to');
                     setIsNetworkSheetOpen(true);
@@ -309,7 +308,7 @@ export default function SwapPage() {
         </div>
 
         {fetchError && (
-            <div className="p-4 rounded-[2rem] bg-destructive/10 border border-destructive/20 flex items-center gap-3 text-destructive text-sm font-black animate-in slide-in-from-top-2">
+            <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center gap-3 text-destructive text-sm font-black animate-in slide-in-from-top-2">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <p>{fetchError}</p>
             </div>
@@ -318,7 +317,7 @@ export default function SwapPage() {
         {/* QUOTE DETAILS & ROUTING */}
         {quoteData && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 text-xs">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 text-xs">
               <div className="flex items-center gap-2 text-muted-foreground uppercase font-black tracking-widest text-[9px]">
                 <RouteIcon className="w-3.5 h-3.5" /> Best Multi-DEX Route
               </div>
@@ -328,7 +327,7 @@ export default function SwapPage() {
             </div>
 
             {/* SMART ROUTE VISUALIZER */}
-            <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-3">
+            <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
                 <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-2 flex items-center gap-2">
                     <Zap className="w-3 h-3 text-yellow-500 fill-current" /> Optimized Path Breakdown
                 </p>
@@ -350,14 +349,14 @@ export default function SwapPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-                <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-1">
+                <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-1">
                     <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Network Fees</p>
                     <p className="text-sm font-black flex items-center gap-1.5 text-white">
                         <Fuel className="w-3.5 h-3.5 text-muted-foreground" />
                         ~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}
                     </p>
                 </div>
-                <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-1">
+                <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-1">
                     <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Price Impact</p>
                     <p className={cn(
                         "text-sm font-black flex items-center gap-1.5", 
@@ -373,7 +372,7 @@ export default function SwapPage() {
 
         {aiValidation && (
           <div className={cn(
-            "p-5 rounded-[2.5rem] flex items-start gap-4 border animate-in zoom-in-95 shadow-2xl transition-all",
+            "p-5 rounded-2xl flex items-start gap-4 border animate-in zoom-in-95 shadow-2xl transition-all",
             aiValidation.isValid 
                 ? "bg-green-500/10 border-green-500/20 text-green-400" 
                 : "bg-destructive/10 border-destructive/20 text-destructive shadow-destructive/5"
@@ -451,7 +450,7 @@ export default function SwapPage() {
                                 borderWidth: '2px',
                                 background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                             }}
-                            className="flex items-center justify-between p-5 rounded-[2rem] border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                            className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
                         >
                             <div className="flex items-center gap-4">
                                 <TokenLogoDynamic 
@@ -502,7 +501,7 @@ export default function SwapPage() {
                             <button 
                                 key={asset.symbol}
                                 onClick={() => handleTokenSelect(asset)}
-                                className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic 
@@ -544,7 +543,7 @@ export default function SwapPage() {
           </DialogHeader>
 
           <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between p-6 rounded-[2rem] bg-white/5 border border-white/5 shadow-inner">
+            <div className="flex items-center justify-between p-6 rounded-2xl bg-white/5 border border-white/5 shadow-inner">
                 <div className="flex flex-col items-center gap-2">
                     <TokenLogoDynamic 
                         logoUrl={fromToken?.iconUrl} 
@@ -573,7 +572,7 @@ export default function SwapPage() {
                 </div>
             </div>
             
-            <div className="p-5 rounded-[1.5rem] bg-secondary/20 border border-white/5 space-y-3">
+            <div className="p-5 rounded-xl bg-secondary/20 border border-white/5 space-y-3">
                 <div className="flex justify-between text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                     <span>Aggregator Fee</span>
                     <span className="text-white">$0.00</span>

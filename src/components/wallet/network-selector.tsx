@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -55,7 +54,7 @@ const NetworkRow = ({
         boxShadow: isSelected ? `0 0 25px -5px ${themeColor}60` : 'none'
       }}
       className={cn(
-        'w-full flex items-center gap-3 p-5 rounded-[2.5rem] text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
+        'w-full flex items-center gap-3 p-3.5 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
         !isSelected && "hover:bg-white/5"
       )}
       role="button"
