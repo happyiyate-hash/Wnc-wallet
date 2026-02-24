@@ -34,10 +34,9 @@ import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 
-const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading: boolean, themeColor?: string }) => {
+const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
-  const color = themeColor || '#818cf8';
 
   const handleRowClick = () => {
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
@@ -46,30 +45,24 @@ const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading
   return (
     <div
       onClick={handleRowClick}
-      style={{
-        borderColor: color,
-        borderWidth: '2px',
-        background: `linear-gradient(135deg, ${color}25 0%, rgba(0,0,0,0) 100%)`,
-        boxShadow: `0 4px 20px -10px ${color}30`
-      }}
-      className="flex cursor-pointer items-center justify-between p-3.5 rounded-2xl border mb-3 mx-4 hover:scale-[1.01] active:scale-[0.98] transition-all group relative overflow-hidden"
+      className="flex cursor-pointer items-center justify-between py-4 border-b border-white/5 active:bg-white/5 transition-all w-full"
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-center gap-4 relative z-10">
+      <div className="flex items-center gap-3">
         <TokenLogoDynamic 
             alt={token.name} 
             logoUrl={token.iconUrl}
             symbol={token.symbol}
             name={token.name}
-            size={44}
+            size={36}
             chainId={token.chainId}
         />
         <div className="flex flex-col">
-          <p className="font-black text-base text-white tracking-tight">{token.name}</p>
+          <p className="font-bold text-sm text-white tracking-tight">{token.name}</p>
           <p
             className={cn(
-              'text-[10px] font-black uppercase tracking-[0.1em]',
+              'text-[10px] font-bold uppercase tracking-wider',
               isPositiveChange ? 'text-green-400' : 'text-red-400'
             )}
           >
@@ -77,21 +70,18 @@ const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading
           </p>
         </div>
       </div>
-      <div className="text-right relative z-10">
+      <div className="text-right">
         {isLoading ? (
-          <div className="space-y-1.5">
-            <Loader2 className="h-4 w-4 animate-spin ml-auto text-primary" />
-            <Skeleton className="h-3 w-24 ml-auto bg-white/5" />
-          </div>
+          <Loader2 className="h-4 w-4 animate-spin ml-auto text-primary" />
         ) : (
           <>
-            <p className="font-black text-lg text-white leading-none">
+            <p className="font-bold text-sm text-white leading-none">
               {parseFloat(token.balance || '0').toLocaleString('en-US', {
                 maximumFractionDigits: 6,
               })}{' '}
-              <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold ml-1">{token.symbol}</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold ml-1">{token.symbol}</span>
             </p>
-            <p className="text-[11px] font-bold text-muted-foreground/60 mt-1.5 uppercase tracking-tighter">
+            <p className="text-[10px] font-medium text-muted-foreground/60 mt-1 uppercase">
               ≈ ${(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -99,9 +89,6 @@ const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading
             </p>
           </>
         )}
-      </div>
-      <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
-          <ChevronRight className="w-12 h-12 text-white" />
       </div>
     </div>
   );
@@ -191,12 +178,12 @@ export default function WalletTab() {
       <Button
         variant="default"
         size="icon"
-        className="bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl shadow-xl shadow-primary/20 transition-transform active:scale-90"
+        className="bg-primary hover:bg-primary/90 w-12 h-12 rounded-2xl shadow-lg transition-transform active:scale-90"
         onClick={onClick}
       >
-        <Icon className="w-6 h-6 text-primary-foreground" />
+        <Icon className="w-5 h-5 text-primary-foreground" />
       </Button>
-      <span className="text-[10px] uppercase font-black tracking-widest text-foreground">{label}</span>
+      <span className="text-[9px] uppercase font-bold tracking-widest text-muted-foreground">{label}</span>
     </div>
   );
 
@@ -222,7 +209,7 @@ export default function WalletTab() {
               >
                 {total24hChange >= 0 ? '+' : ''}$
                 {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
-                <span className="text-gray-500 font-medium">
+                <span className="text-gray-500 font-medium text-xs">
                   ({total24hChange >= 0 ? '+' : ''}
                   {total24hChange.toFixed(2)}%)
                 </span>
@@ -230,7 +217,7 @@ export default function WalletTab() {
             </div>
         </div>
 
-        <div className="flex justify-center gap-4 my-10 px-4">
+        <div className="flex justify-center gap-3 my-10 px-12">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
@@ -255,7 +242,7 @@ export default function WalletTab() {
                     <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
                         <Button
                             variant="outline"
-                            className="h-10 px-5 bg-background hover:bg-muted/50 rounded-full border-none shadow-lg"
+                            className="h-9 px-4 bg-background hover:bg-muted/50 rounded-full border-none shadow-lg"
                             onClick={() => setIsTokenManagerOpen(true)}
                         >
                             <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-black text-[10px] uppercase tracking-[0.1em]">Manage Assets</span>
@@ -265,36 +252,35 @@ export default function WalletTab() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-10 w-10 bg-white/5 rounded-full hover:bg-white/10 active:scale-90 transition-all"
+                            className="h-9 w-9 bg-white/5 rounded-full hover:bg-white/10 active:scale-90 transition-all"
                             onClick={() => refresh()}
                             disabled={isRefreshing}
                         >
-                          {isRefreshing ? <Loader2 className="h-5 w-5 animate-spin text-primary"/> : <RefreshCw className="h-5 w-5 text-primary"/>}
+                          {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-primary"/> : <RefreshCw className="h-4 w-4 text-primary"/>}
                         </Button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto thin-scrollbar pb-32">
+                <div className="flex-1 overflow-y-auto thin-scrollbar pb-32 px-6">
                   {fetchError && (
                     <div 
-                      className="mx-6 mb-6 p-5 rounded-3xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all shadow-2xl"
+                      className="mb-6 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
-                      <AlertCircle className="w-6 h-6 shrink-0" />
+                      <AlertCircle className="w-5 h-5 shrink-0" />
                       <div className="flex-1">
-                        <p className="font-black uppercase tracking-wider mb-0.5">Connection Error</p>
-                        <p className="opacity-80 leading-relaxed">Infrastructure link offline. Tap to restore live balance tracking.</p>
+                        <p className="font-bold uppercase tracking-wider mb-0.5">Connection Error</p>
+                        <p className="opacity-80">Tap to restore live balance tracking.</p>
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-1">
+                  <div className="space-y-0">
                     {allAssets.map((token) => (
                       <TokenRow
                         key={`${token.chainId}-${token.address || token.symbol}`}
                         token={token}
                         isLoading={isTokenLoading(token.chainId, token.symbol)}
-                        themeColor={allChainsMap[token.chainId]?.themeColor}
                       />
                     ))}
                   </div>
