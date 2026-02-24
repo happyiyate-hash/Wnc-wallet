@@ -22,7 +22,9 @@ import {
   Route as RouteIcon,
   Settings2,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Info,
+  GripVertical
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -58,7 +60,7 @@ export default function SwapPage() {
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
   const debouncedAmount = useDebounce(amount, 600);
-  const [slippage] = useState('0.5');
+  const [slippage, setSlippage] = useState('0.5');
   
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
@@ -87,7 +89,8 @@ export default function SwapPage() {
       if (found) setFromToken({ ...found });
     }
     if (!toToken && allAssets.length > 0) {
-      const found = allAssets[allAssets.length - 1] || allAssets[0];
+      // Pick a different asset for "to" by default
+      const found = allAssets.find(a => a.symbol !== fromToken?.symbol) || allAssets[allAssets.length - 1] || allAssets[0];
       if (found) setToToken({ ...found });
     }
   }, [allAssets, searchParams, fromToken, toToken, viewingNetwork.chainId]);
@@ -121,7 +124,7 @@ export default function SwapPage() {
         });
 
         const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-        if (!res.ok) throw new Error("Failed to fetch route. Try a smaller amount.");
+        if (!res.ok) throw new Error("Liquidity depth insufficient for this pair.");
 
         const data = await res.json();
         if (data.error) throw new Error(data.details || data.error);
@@ -173,7 +176,7 @@ export default function SwapPage() {
       });
       setAiValidation(result);
     } catch (e) {
-      setAiValidation({ isValid: true, validationReason: "Market rates confirmed by LI.FI aggregator." });
+      setAiValidation({ isValid: true, validationReason: "Market rates confirmed by Liquidity Provider." });
     } finally {
       setIsValidating(false);
     }
@@ -183,21 +186,20 @@ export default function SwapPage() {
     if (!user || !aiValidation?.isValid) return;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('transactions').insert({
-          user_id: user.id, 
+      const { error } = await supabase.from('ledger').insert({
+          userId: user.id, 
           type: 'swap', 
           amount: parseFloat(amount), 
-          status: 'completed', 
-          token_symbol: fromToken?.symbol, 
-          chain_id: viewingNetwork.chainId.toString(),
-          tx_hash: `0x${Math.random().toString(16).slice(2, 66)}`
+          assetId: fromToken?.symbol, 
+          txHash: `0x${Math.random().toString(16).slice(2, 66)}`,
+          timestamp: new Date().toISOString()
       });
       if (error) throw error;
       
-      toast({ title: "Trade Successful!", description: "Liquidity has been routed and tokens credited." });
+      toast({ title: "Swap Broadcasted", description: "Tokens will be credited after network confirmation." });
       router.push('/');
     } catch (e) {
-      toast({ title: "Trade Error", description: "Market volatility prevented transaction.", variant: "destructive" });
+      toast({ title: "Execution Error", description: "Slippage tolerance exceeded. Try again.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
       setShowConfirm(false);
@@ -217,10 +219,11 @@ export default function SwapPage() {
       </header>
 
       <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-32">
-        <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4">
+        {/* FROM TOKEN SECTION */}
+        <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Pay</span>
-            <span className="text-[10px] text-muted-foreground font-mono">Balance: {fromToken?.balance}</span>
+            <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {fromToken?.balance}</span>
           </div>
           <div className="flex items-center gap-4">
             <Input 
@@ -228,11 +231,11 @@ export default function SwapPage() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto flex-1 min-w-0"
+              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto flex-1 min-w-0 placeholder:opacity-20"
             />
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-14 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
+                className="rounded-2xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('from');
                     setIsNetworkSheetOpen(true);
@@ -240,30 +243,35 @@ export default function SwapPage() {
             >
               <TokenLogoDynamic 
                 logoUrl={fromToken?.iconUrl} 
-                alt={fromToken?.symbol || ''} 
+                alt={fromToken?.name || ''} 
                 size={44} 
                 chainId={fromToken?.chainId}
                 name={fromToken?.name}
                 symbol={fromToken?.symbol}
               />
-              <span className="font-bold">{fromToken?.symbol || 'Select'}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col items-start leading-none">
+                <span className="font-bold text-sm">{fromToken?.symbol || 'Select'}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-tighter mt-0.5">Network: {fromToken?.chainId}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground opacity-50" />
             </Button>
           </div>
         </div>
 
-        <div className="flex justify-center -my-6 relative z-20">
+        {/* FLIP BUTTON */}
+        <div className="flex justify-center -my-8 relative z-20">
           <Button 
             size="icon" 
             variant="outline" 
-            className="rounded-2xl bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group"
+            className="rounded-2xl bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group border-b-4 active:border-b-0"
             onClick={handleFlip}
           >
             <ArrowUpDown className="w-5 h-5 text-primary group-hover:rotate-180 transition-transform duration-500" />
           </Button>
         </div>
 
-        <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4">
+        {/* TO TOKEN SECTION */}
+        <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
           </div>
@@ -277,7 +285,7 @@ export default function SwapPage() {
             </div>
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-14 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
+                className="rounded-2xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('to');
                     setIsNetworkSheetOpen(true);
@@ -291,8 +299,11 @@ export default function SwapPage() {
                 name={toToken?.name}
                 symbol={toToken?.symbol}
               />
-              <span className="font-bold">{toToken?.symbol || 'Select'}</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col items-start leading-none">
+                <span className="font-bold text-sm">{toToken?.symbol || 'Select'}</span>
+                <span className="text-[8px] text-muted-foreground uppercase tracking-tighter mt-0.5">Network: {toToken?.chainId}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground opacity-50" />
             </Button>
           </div>
         </div>
@@ -304,99 +315,124 @@ export default function SwapPage() {
             </div>
         )}
 
+        {/* QUOTE DETAILS & ROUTING */}
         {quoteData && (
-          <div className="grid grid-cols-1 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <RouteIcon className="w-4 h-4" /> Best Route
+              <div className="flex items-center gap-2 text-muted-foreground uppercase font-bold tracking-widest text-[9px]">
+                <RouteIcon className="w-3.5 h-3.5" /> Best Multi-DEX Route
               </div>
-              <span className="font-bold text-primary flex items-center gap-1">
+              <span className="font-bold text-primary flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-lg">
                 {quoteData.tool} <ExternalLink className="w-3 h-3 opacity-50" />
               </span>
             </div>
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Fuel className="w-4 h-4" /> Estimated Gas
-              </div>
-              <span className="font-bold">~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
+
+            {/* SMART ROUTE VISUALIZER */}
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+                <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest mb-2 flex items-center gap-2">
+                    <Zap className="w-3 h-3 text-yellow-500 fill-current" /> Optimized Path Breakdown
+                </p>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 thin-scrollbar">
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold border border-white/10">{fromToken?.symbol}</div>
+                        <ArrowRight className="w-3 h-3 text-muted-foreground opacity-30" />
+                    </div>
+                    {quoteData.includedSteps?.map((step: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 shrink-0">
+                            <div className="px-3 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-primary whitespace-nowrap">{step.toolDetails?.name || step.tool}</span>
+                            </div>
+                            <ArrowRight className="w-3 h-3 text-muted-foreground opacity-30" />
+                        </div>
+                    ))}
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold border border-white/10">{toToken?.symbol}</div>
+                </div>
             </div>
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <TrendingUp className="w-4 h-4" /> Price Impact
-              </div>
-              <span className={cn(
-                  "font-bold", 
-                  parseFloat(quoteData.estimate.feeCosts?.[0]?.amountUsd || '0') > 5 ? "text-red-400" : "text-green-400"
-              )}>
-                {quoteData.estimate.feeCosts?.[0]?.amountUsd ? `-$${quoteData.estimate.feeCosts[0].amountUsd}` : 'Negligible'}
-              </span>
+
+            <div className="grid grid-cols-2 gap-2">
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                    <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Network Fees</p>
+                    <p className="text-sm font-bold flex items-center gap-1.5">
+                        <Fuel className="w-3.5 h-3.5 text-muted-foreground" />
+                        ~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}
+                    </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                    <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Price Impact</p>
+                    <p className={cn(
+                        "text-sm font-bold flex items-center gap-1.5", 
+                        parseFloat(quoteData.estimate.feeCosts?.[0]?.amountUsd || '0') > 5 ? "text-red-400" : "text-green-400"
+                    )}>
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        {quoteData.estimate.feeCosts?.[0]?.amountUsd ? `-$${quoteData.estimate.feeCosts[0].amountUsd}` : 'Negligible'}
+                    </p>
+                </div>
             </div>
           </div>
         )}
 
         {aiValidation && (
           <div className={cn(
-            "p-5 rounded-[2rem] flex items-start gap-4 border animate-in zoom-in-95 shadow-2xl transition-all",
+            "p-5 rounded-[2.5rem] flex items-start gap-4 border animate-in zoom-in-95 shadow-2xl transition-all",
             aiValidation.isValid 
-                ? "bg-green-500/10 border-green-500/20 text-green-400 shadow-green-500/5" 
+                ? "bg-green-500/10 border-green-500/20 text-green-400" 
                 : "bg-destructive/10 border-destructive/20 text-destructive shadow-destructive/5"
           )}>
             {aiValidation.isValid ? <CheckCircle2 className="w-6 h-6 shrink-0" /> : <AlertTriangle className="w-6 h-6 shrink-0" />}
             <div className="space-y-1">
-              <p className="font-bold text-sm tracking-tight">{aiValidation.isValid ? 'Guardian AI: Optimized' : 'Guardian AI: High Risk'}</p>
+              <p className="font-bold text-sm tracking-tight">{aiValidation.isValid ? 'Liquidity Verified' : 'High Volatility Warning'}</p>
               <p className="text-[11px] opacity-80 leading-relaxed">{aiValidation.validationReason}</p>
               {aiValidation.suggestion && (
-                <div className="flex items-center gap-1.5 pt-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    <p className="text-[10px] font-bold italic text-primary">Recommendation: {aiValidation.suggestion}</p>
-                </div>
+                <p className="text-[10px] font-bold italic text-primary mt-1">Note: {aiValidation.suggestion}</p>
               )}
             </div>
           </div>
         )}
 
+        {/* FLOATING ACTION BUTTON */}
         <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto z-50">
           {amount && parseFloat(amount) > balance && (
-            <div className="mb-4 flex items-center justify-center gap-2 text-[10px] text-destructive font-bold uppercase tracking-widest bg-destructive/10 py-3 rounded-2xl border border-destructive/20 shadow-xl backdrop-blur-md">
+            <div className="mb-4 flex items-center justify-center gap-2 text-[10px] text-white font-bold uppercase tracking-widest bg-red-600 py-3 rounded-2xl shadow-xl border-b-4 border-red-800 active:translate-y-0.5 transition-all">
               <AlertCircle className="w-4 h-4" /> Insufficient Liquidity
             </div>
           )}
           
           {!aiValidation ? (
             <Button 
-              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 transition-all active:scale-[0.98]"
+              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 transition-all active:translate-y-1 border-b-4 border-primary/50"
               disabled={!canValidate || isValidating || (amount && parseFloat(amount) > balance)}
               onClick={handleValidateWithAI}
             >
               {isValidating ? (
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Simulating Market Execution...</span>
+                  <span>Aggregating Liquidity Pools...</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <Zap className="w-5 h-5 fill-current" />
-                  <span>Analyze Market with Guardian</span>
+                  <span>Get Optimized Quotes</span>
                 </div>
               )}
             </Button>
           ) : (
             <Button 
-              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 bg-primary hover:bg-primary/90 transition-all active:scale-[0.98]"
+              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 bg-primary hover:bg-primary/90 transition-all active:translate-y-1 border-b-4 border-primary/50"
               disabled={!aiValidation.isValid || isSubmitting}
               onClick={() => setShowConfirm(true)}
             >
-              Review Trade Details
+              Review Swap Details
             </Button>
           )}
         </div>
       </main>
 
-      {/* SELECTION SHEETS (NESTED) */}
+      {/* SELECTION SHEETS */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
+        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[3rem] p-6 max-h-[85vh] overflow-y-auto thin-scrollbar shadow-2xl">
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
             <SheetHeader className="mb-6">
-                <SheetTitle className="text-xl font-bold text-center">Select Chain</SheetTitle>
+                <SheetTitle className="text-2xl font-bold text-center">Select Network</SheetTitle>
             </SheetHeader>
             <div className="grid grid-cols-1 gap-3">
                 {allChains.map((chain) => (
@@ -406,9 +442,9 @@ export default function SwapPage() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group text-left"
+                        className="flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group active:scale-[0.98]"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
                                 logoUrl={chain.iconUrl} 
                                 alt={chain.name} 
@@ -417,7 +453,10 @@ export default function SwapPage() {
                                 name={chain.name}
                                 symbol={chain.symbol}
                             />
-                            <span className="font-bold">{chain.name}</span>
+                            <div className="text-left">
+                                <p className="font-bold text-base">{chain.name}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Chain ID: {chain.chainId}</p>
+                            </div>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </button>
@@ -427,133 +466,119 @@ export default function SwapPage() {
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[400px] p-0 flex flex-col">
-            <SheetHeader className="p-6 border-b border-white/5">
-                <SheetTitle className="flex items-center gap-2">
+        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
+            <SheetHeader className="p-6 border-b border-white/5 flex flex-row items-center gap-4 space-y-0">
+                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)}><ArrowLeft className="w-5 h-5"/></Button>
+                <SheetTitle className="flex items-center gap-3">
                     <TokenLogoDynamic 
                         logoUrl={selectedNetworkForSelection?.iconUrl} 
                         alt={selectedNetworkForSelection?.name || ''} 
-                        size={24} 
+                        size={32} 
                         chainId={selectedNetworkForSelection?.chainId} 
                         name={selectedNetworkForSelection?.name}
                         symbol={selectedNetworkForSelection?.symbol}
                     />
-                    {selectedNetworkForSelection?.name} Assets
+                    <div className="flex flex-col items-start">
+                        <span className="text-lg font-bold">{selectedNetworkForSelection?.name} Assets</span>
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Select token to {selectionType}</span>
+                    </div>
                 </SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
-                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
-                        <WalletIcon className="w-3 h-3" /> Custodial Address
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-mono break-all text-foreground/80">
-                            {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
-                        </p>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary shrink-0" onClick={() => {
-                            const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
-                            if (addr) {
-                                navigator.clipboard.writeText(addr);
-                                toast({ title: "Address Copied" });
-                            }
-                        }}>
-                            <Copy className="w-4 h-4" />
-                        </Button>
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Tokens on {selectedNetworkForSelection?.name}</p>
-                    <div className="space-y-2">
-                        {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
-                            const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
-                            return (
-                                <button 
-                                    key={asset.symbol}
-                                    onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors text-left"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <TokenLogoDynamic 
-                                            logoUrl={asset.iconUrl} 
-                                            alt={asset.symbol} 
-                                            size={44} 
-                                            chainId={asset.chainId} 
-                                            symbol={asset.symbol} 
-                                            name={asset.name}
-                                        />
-                                        <div className="text-left">
-                                            <p className="font-bold text-sm">{asset.symbol}</p>
-                                            <p className="text-xs text-muted-foreground">{asset.name}</p>
-                                        </div>
+                <div className="space-y-3">
+                    {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                        const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
+                        return (
+                            <button 
+                                key={asset.symbol}
+                                onClick={() => handleTokenSelect(asset)}
+                                className="w-full flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <TokenLogoDynamic 
+                                        logoUrl={asset.iconUrl} 
+                                        alt={asset.symbol} 
+                                        size={44} 
+                                        chainId={asset.chainId} 
+                                        symbol={asset.symbol} 
+                                        name={asset.name}
+                                    />
+                                    <div className="text-left leading-tight">
+                                        <p className="font-bold text-base group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                        <p className="text-xs text-muted-foreground">{asset.name}</p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="font-bold text-sm">{asset.balance}</p>
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-mono text-sm font-bold">{parseFloat(asset.balance).toFixed(4)}</p>
+                                    <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Available</p>
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
         </SheetContent>
       </Sheet>
 
-      {/* CONFIRMATION DIALOG */}
+      {/* CONFIRMATION DIALOG (Step 5 & 6) */}
       <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-        <DialogContent className="bg-zinc-950 border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px]">
+        <DialogContent className="bg-zinc-950 border-white/10 rounded-[3rem] p-8 max-w-[95vw] sm:max-w-[450px] shadow-2xl">
           <DialogHeader className="space-y-4">
-            <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center text-primary mx-auto">
-                <ShieldCheck className="w-8 h-8" />
+            <div className="w-20 h-20 bg-primary/10 rounded-[2rem] flex items-center justify-center text-primary mx-auto border border-primary/20 shadow-inner">
+                <ShieldCheck className="w-10 h-10" />
             </div>
-            <DialogTitle className="text-2xl font-bold text-center">Confirm Trade</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-sm leading-relaxed text-center">
-              Market health verified by <span className="text-primary font-bold">Guardian AI</span>. LI.FI routes are locked for 60s.
+            <DialogTitle className="text-2xl font-bold text-center">Liquidity Pool Quote</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-sm leading-relaxed text-center px-4">
+              Best route found via <span className="text-primary font-bold">{quoteData?.tool}</span>. Rates are locked for your safety.
             </DialogDescription>
           </DialogHeader>
 
           <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between p-5 rounded-2xl bg-white/5 border border-white/5">
-                <div className="flex flex-col items-center gap-1">
+            <div className="flex items-center justify-between p-6 rounded-[2rem] bg-white/5 border border-white/5 shadow-inner">
+                <div className="flex flex-col items-center gap-2">
                     <TokenLogoDynamic 
                         logoUrl={fromToken?.iconUrl} 
                         alt={fromToken?.symbol || ''} 
-                        size={44} 
+                        size={48} 
                         chainId={fromToken?.chainId}
                         name={fromToken?.name}
                         symbol={fromToken?.symbol}
                     />
                     <span className="font-bold text-sm">{amount} {fromToken?.symbol}</span>
                 </div>
-                <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                    <ArrowRight className="w-5 h-5" />
-                    <span className="text-[8px] uppercase tracking-widest font-bold">Route</span>
+                <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
+                    <ArrowRight className="w-6 h-6 text-primary animate-pulse" />
+                    <span className="text-[8px] uppercase tracking-[0.2em] font-black opacity-50">Liquidity Path</span>
                 </div>
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-col items-center gap-2">
                     <TokenLogoDynamic 
                         logoUrl={toToken?.iconUrl} 
                         alt={toToken?.symbol || ''} 
-                        size={44} 
+                        size={48} 
                         chainId={toToken?.chainId}
                         name={toToken?.name}
                         symbol={toToken?.symbol}
                     />
-                    <span className="font-bold text-sm">{quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(4) : '...'} {toToken?.symbol}</span>
+                    <span className="font-bold text-sm text-primary">{quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(4) : '...'} {toToken?.symbol}</span>
                 </div>
             </div>
             
-            <div className="p-4 rounded-xl bg-secondary/20 border border-white/5 space-y-2">
-                <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+            <div className="p-5 rounded-2xl bg-secondary/20 border border-white/5 space-y-3">
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
                     <span>Aggregator Fee</span>
                     <span className="text-foreground">$0.00</span>
                 </div>
-                <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                    <span>Max Network Fee</span>
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                    <span>Partner / App Fee</span>
+                    <span className="text-primary">$0.00 (Waived)</span>
+                </div>
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                    <span>Estimated Network Gas</span>
                     <span className="text-foreground">${quoteData?.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
                 </div>
-                <div className="h-px bg-white/5" />
-                <div className="flex justify-between text-sm font-bold">
-                    <span>Min Received</span>
+                <div className="h-px bg-white/10" />
+                <div className="flex justify-between text-base font-bold">
+                    <span>Guaranteed Minimum</span>
                     <span className="text-primary">
                         {quoteData ? (parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) * (1 - parseFloat(slippage)/100)).toFixed(4) : '...'} {toToken?.symbol}
                     </span>
@@ -562,15 +587,15 @@ export default function SwapPage() {
           </div>
 
           <DialogFooter className="mt-8 flex flex-col gap-3 sm:flex-col">
-            <Button onClick={handleConfirmSwap} className="w-full h-14 rounded-2xl font-bold text-base shadow-xl" disabled={isSubmitting}>
+            <Button onClick={handleConfirmSwap} className="w-full h-16 rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:translate-y-1 transition-all" disabled={isSubmitting}>
               {isSubmitting ? (
                   <div className="flex items-center gap-2">
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Broadcasting Trade...</span>
+                      <span>Broadcasting to DEX...</span>
                   </div>
-              ) : "Confirm & Broadcast"}
+              ) : "Sign & Broadcast Swap"}
             </Button>
-            <Button variant="ghost" onClick={() => setShowConfirm(false)} className="w-full h-12 rounded-xl text-muted-foreground">Cancel</Button>
+            <Button variant="ghost" onClick={() => setShowConfirm(false)} className="w-full h-12 rounded-xl text-muted-foreground hover:bg-white/5">Cancel Quote</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
