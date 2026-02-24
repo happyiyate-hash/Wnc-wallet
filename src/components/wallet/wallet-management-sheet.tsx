@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
@@ -131,14 +131,15 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <Lock className="w-4 h-4 text-primary" />
           </div>
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
-          <div className="text-xs text-muted-foreground">
+          {/* Use a div instead of SheetDescription to avoid paragraph nesting issues */}
+          <div className="text-xs text-muted-foreground mt-2">
             {isProcessing ? (
-                <span className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
+                <div className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
                     <Timer className="w-3 h-3 animate-pulse" />
                     {(timer / 1000).toFixed(3)}s
-                </span>
+                </div>
             ) : (
-                <span>{step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}</span>
+                <div>{step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}</div>
             )}
           </div>
         </SheetHeader>

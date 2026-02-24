@@ -348,9 +348,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ phrase: mnemonic }),
       });
 
@@ -371,15 +375,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
-    if (!user || !profile?.vault_phrase || !profile?.iv) {
+    if (!user || !profile?.vault_phrase || !profile?.iv || !supabase) {
       toast({ variant: "destructive", title: "No Cloud Vault Found", description: "You haven't backed up your phrase yet." });
       throw new Error("No vault found");
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ 
           encrypted: profile.vault_phrase, 
           iv: profile.iv 
