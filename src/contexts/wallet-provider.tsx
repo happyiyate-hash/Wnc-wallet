@@ -36,6 +36,11 @@ interface WalletContextType {
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
+  // Visibility & Custom Token Management
+  hiddenTokenKeys: Set<string>;
+  toggleTokenVisibility: (chainId: number, symbol: string) => void;
+  userAddedTokens: AssetRow[];
+  addUserToken: (token: AssetRow) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -58,6 +63,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
 
+  // Visibility & Dynamic States
+  const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
+  const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
+
   // Persistence Refs
   const isBackgroundFetching = useRef(false);
 
@@ -67,6 +76,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedKey) setInfuraApiKey(savedKey);
 
     if (user) {
+        // Load Balances
         const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
         if (cachedBalances) {
             try {
@@ -74,6 +84,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             } catch (e) {
                 console.warn("Failed to parse cached balances");
             }
+        }
+
+        // Load Visibility Preferences
+        const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
+        if (savedHidden) {
+            try {
+                setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
+            } catch (e) {}
+        }
+
+        // Load User Added Tokens
+        const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
+        if (savedCustom) {
+            try {
+                setUserAddedTokens(JSON.parse(savedCustom));
+            } catch (e) {}
         }
     }
   }, [user]);
@@ -83,6 +109,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (key) localStorage.setItem('infura_api_key', key);
     else localStorage.removeItem('infura_api_key');
   };
+
+  const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
+    if (!user) return;
+    setHiddenTokenKeys(prev => {
+        const next = new Set(prev);
+        const key = `${chainId}:${symbol}`;
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        
+        localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(next)));
+        return next;
+    });
+  }, [user]);
+
+  const addUserToken = useCallback((token: AssetRow) => {
+    if (!user) return;
+    setUserAddedTokens(prev => {
+        const exists = prev.find(t => t.chainId === token.chainId && t.symbol === token.symbol);
+        if (exists) return prev;
+        const next = [...prev, token];
+        localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next));
+        return next;
+    });
+  }, [user]);
 
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
@@ -150,7 +200,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       for (const chain of chainsToFetch) {
         const apiTokens = tokenRegistry[chain.chainId] || [];
-        const combinedAssetsList = getInitialAssets(chain.chainId).map(a => {
+        
+        // Merge hardcoded, user-added, and registry tokens
+        const baseAssets = getInitialAssets(chain.chainId);
+        const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
+        
+        const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
+            if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+            return acc;
+        }, [] as any[]).map(a => {
             const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
             return {
                 ...a,
@@ -196,7 +254,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await delay(priorityChainId === chain.chainId ? 0 : 100);
       }
 
-      // Enrich with prices at the end
+      // Enrichment logic...
       const flatAssets = Object.values(currentBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
       
@@ -216,22 +274,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey, tokenRegistry, balances, user]);
+  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey, tokenRegistry, balances, user, userAddedTokens]);
 
-  // Periodic Refresh (50s) for Visible Network
+  // Periodic Refresh
   useEffect(() => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
-
     const interval = setInterval(() => {
-        if (!isRefreshing) {
-            fetchAllBalances(viewingNetwork.chainId);
-        }
+        if (!isRefreshing) fetchAllBalances(viewingNetwork.chainId);
     }, 50000);
-
     return () => clearInterval(interval);
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchAllBalances, isRefreshing]);
 
-  // Initial Sync on Start
+  // Initial Sync
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && !isBackgroundFetching.current) {
         isBackgroundFetching.current = true;
@@ -243,7 +297,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic structure.");
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
       const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       setWallets([{ 
         address: wallet.address, 
@@ -251,7 +305,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
     } catch (e: any) {
-      throw new Error("Mnemonic validation failed.");
+      throw new Error("Validation failed.");
     }
   }, []);
 
@@ -284,7 +338,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (mnemonic) {
       loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-      toast({ title: "Secure Wallet Generated", description: "Keys saved locally." });
+      toast({ title: "Secure Wallet Generated" });
     }
     return mnemonic;
   }, [loadWalletFromMnemonic, toast, user]);
@@ -294,9 +348,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
-      toast({ title: "Access Restored", description: "Your wallet has been re-imported successfully." });
+      toast({ title: "Access Restored" });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Import Error", description: "Check your phrase and try again." });
+      toast({ variant: "destructive", title: "Import Error" });
     }
   }, [loadWalletFromMnemonic, toast, user]);
 
@@ -328,8 +382,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    return balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-  }, [balances, viewingNetwork]);
+    const list = balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    // Filter out tokens marked as hidden
+    return list.filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
+  }, [balances, viewingNetwork, hiddenTokenKeys]);
 
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
@@ -358,7 +414,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     fetchError,
     getAddressForChain,
     infuraApiKey,
-    setInfuraApiKey: handleSetApiKey
+    setInfuraApiKey: handleSetApiKey,
+    hiddenTokenKeys,
+    toggleTokenVisibility,
+    userAddedTokens,
+    addUserToken
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
