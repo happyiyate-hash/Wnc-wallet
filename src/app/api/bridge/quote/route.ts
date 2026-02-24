@@ -1,54 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import LiFi from '@lifi/sdk';
+import LiFi from '@lifi/sdk'; // ✅ default import
 
-// create LiFi instance with integrator identification
+// create LiFi instance
 const lifi = new LiFi({ integrator: 'WNC-Wallet' });
 
-/**
- * BRIDGE & SWAP QUOTE API
- * 
- * Uses the default LiFi import and instance method to resolve build errors.
- * Dynamically handles chains, tokens, and amounts from URL parameters.
- */
-export async function GET(req: NextRequest) {
-    try {
-        const { searchParams } = new URL(req.url);
-        
-        const fromChain = searchParams.get('fromChain');
-        const toChain = searchParams.get('toChain');
-        const fromToken = searchParams.get('fromToken');
-        const toToken = searchParams.get('toToken');
-        const fromAmount = searchParams.get('fromAmount');
-        const fromAddress = searchParams.get('fromAddress');
-        const toAddress = searchParams.get('toAddress');
-        const slippage = searchParams.get('slippage') || '0.005';
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const fromToken = searchParams.get('fromToken');
+    const toToken = searchParams.get('toToken');
+    const amount = searchParams.get('amount');
 
-        if (!fromChain || !toChain || !fromToken || !toToken || !fromAmount || !fromAddress) {
-            return NextResponse.json(
-                { error: 'Missing required parameters for bridge quote.' }, 
-                { status: 400 }
-            );
-        }
-
-        // Fetch the quote from the LiFi instance
-        const quote = await lifi.getQuote({
-            fromChain: Number(fromChain),
-            toChain: Number(toChain),
-            fromToken,
-            toToken,
-            fromAmount,
-            fromAddress,
-            toAddress: toAddress || fromAddress,
-            slippage: Number(slippage),
-        });
-        
-        return NextResponse.json(quote);
-
-    } catch (error: any) {
-        console.error('[LI.FI_QUOTE_ERROR]', error);
-        return NextResponse.json(
-            { error: 'Bridge Service Error', details: error.message || 'Unknown error' }, 
-            { status: 500 }
-        );
+    if (!fromToken || !toToken || !amount) {
+      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
+
+    // fetch the quote from LiFi
+    const quote = await lifi.getQuote({
+      fromChain: 137, // Polygon mainnet
+      toChain: 137,
+      fromToken,
+      toToken,
+      fromAmount: amount,
+    });
+
+    return NextResponse.json(quote);
+  } catch (error: any) {
+    console.error('LiFi quote error:', error);
+    return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 });
+  }
 }
