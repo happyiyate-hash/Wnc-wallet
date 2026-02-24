@@ -1,4 +1,3 @@
-
 'use client';
 
 import { logoSupabase } from './supabase/logo-client';
@@ -17,26 +16,34 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
 
   try {
     // 1. Prioritize lookup by the full token name for accuracy
-    const { data: nameData } = await logoSupabase
-      .from('token_logos')
-      .select('public_url')
-      .ilike('name', tokenName)
-      .limit(1)
-      .maybeSingle();
+    if (tokenName) {
+        const { data: nameData } = await logoSupabase
+          .from('token_logos')
+          .select('public_url')
+          .ilike('name', tokenName)
+          .limit(1)
+          .maybeSingle();
 
-    if (nameData?.public_url) {
-      return nameData.public_url;
+        if (nameData?.public_url) {
+          return nameData.public_url;
+        }
     }
 
     // 2. If no match is found by name, fall back to the symbol
-    const { data: symbolData } = await logoSupabase
-      .from('token_logos')
-      .select('public_url')
-      .ilike('symbol', tokenSymbol)
-      .limit(1)
-      .maybeSingle();
+    if (tokenSymbol) {
+        const { data: symbolData } = await logoSupabase
+          .from('token_logos')
+          .select('public_url')
+          .ilike('symbol', tokenSymbol)
+          .limit(1)
+          .maybeSingle();
 
-    return symbolData?.public_url || null;
+        if (symbolData?.public_url) {
+            return symbolData.public_url;
+        }
+    }
+
+    return null;
   } catch (error) {
     console.warn("Logo lookup error:", error);
     return null;

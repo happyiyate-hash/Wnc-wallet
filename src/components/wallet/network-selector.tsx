@@ -62,6 +62,8 @@ const NetworkRow = ({
                 logoUrl={chain.iconUrl}
                 size={32}
                 chainId={chain.chainId}
+                name={chain.name}
+                symbol={chain.symbol}
                 FallbackComponent={<GenericCoinIcon />}
             />
         </div>
@@ -145,6 +147,8 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             logoUrl={viewingNetwork.iconUrl}
             size={24}
             chainId={viewingNetwork.chainId}
+            name={viewingNetwork.name}
+            symbol={viewingNetwork.symbol}
             FallbackComponent={<GenericCoinIcon />}
           />
           <ChevronDown className="h-4 w-4 text-muted-foreground" />

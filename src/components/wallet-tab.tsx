@@ -52,6 +52,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
             alt={token.name} 
             logoUrl={token.iconUrl}
             symbol={token.symbol}
+            name={token.name}
             size={36}
             chainId={token.chainId}
         />
@@ -315,7 +316,14 @@ export default function WalletTab() {
                         className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
                     >
                         <div className="flex items-center gap-3">
-                            <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} />
+                            <TokenLogoDynamic 
+                                logoUrl={chain.iconUrl} 
+                                alt={chain.name} 
+                                size={40} 
+                                chainId={chain.chainId} 
+                                name={chain.name}
+                                symbol={chain.symbol}
+                            />
                             <span className="font-bold">{chain.name}</span>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -329,7 +337,14 @@ export default function WalletTab() {
         <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[400px] p-0 flex flex-col">
             <SheetHeader className="p-6 border-b border-white/5">
                 <SheetTitle className="flex items-center gap-2">
-                    <TokenLogoDynamic logoUrl={selectedNetworkForSelection?.iconUrl} alt={selectedNetworkForSelection?.name || ''} size={24} chainId={selectedNetworkForSelection?.chainId} />
+                    <TokenLogoDynamic 
+                        logoUrl={selectedNetworkForSelection?.iconUrl} 
+                        alt={selectedNetworkForSelection?.name || ''} 
+                        size={24} 
+                        chainId={selectedNetworkForSelection?.chainId} 
+                        name={selectedNetworkForSelection?.name}
+                        symbol={selectedNetworkForSelection?.symbol}
+                    />
                     {selectedNetworkForSelection?.name} Assets
                 </SheetTitle>
             </SheetHeader>
@@ -366,7 +381,14 @@ export default function WalletTab() {
                                     className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={36} chainId={asset.chainId} symbol={asset.symbol} />
+                                        <TokenLogoDynamic 
+                                            logoUrl={asset.iconUrl} 
+                                            alt={asset.symbol} 
+                                            size={36} 
+                                            chainId={asset.chainId} 
+                                            symbol={asset.symbol} 
+                                            name={asset.name}
+                                        />
                                         <div className="text-left">
                                             <p className="font-bold text-sm">{asset.symbol}</p>
                                             <p className="text-xs text-muted-foreground">{asset.name}</p>
