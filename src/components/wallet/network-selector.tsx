@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,18 +30,12 @@ const NetworkRow = ({
   address,
   isSelected,
   onSelect,
-  onCopy,
 }: {
   chain: ChainConfig;
   address: string | null;
   isSelected: boolean;
   onSelect: (chain: ChainConfig) => void;
-  onCopy: (address: string) => void;
 }) => {
-  const shortAddress = address
-    ? `${address.slice(0, 8)}...${address.slice(-8)}`
-    : 'Connecting...';
-
   const themeColor = chain.themeColor || '#818cf8';
 
   return (
@@ -54,42 +47,30 @@ const NetworkRow = ({
         background: `linear-gradient(135deg, ${themeColor}25 0%, rgba(0,0,0,0) 100%)`,
       }}
       className={cn(
-        'w-full flex items-center gap-3 p-3.5 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
+        'w-full flex flex-col items-center gap-2 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
         isSelected && "shadow-lg"
       )}
       role="button"
     >
-      <div className="flex-shrink-0 relative z-10">
-            <TokenLogoDynamic 
-                alt={chain.name} 
-                logoUrl={chain.iconUrl}
-                size={44}
-                chainId={chain.chainId}
-                name={chain.name}
-                symbol={chain.symbol}
-                FallbackComponent={<GenericCoinIcon />}
-            />
-        </div>
-      <div className="flex-1 relative z-10">
-        <div className="flex items-center gap-2">
-          <p className="font-bold text-base text-white">{chain.name}</p>
-          {isSelected && <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10" />}
-        </div>
-        <p className="text-[11px] text-muted-foreground font-mono opacity-60">{shortAddress}</p>
+      <div className="relative z-10">
+        <TokenLogoDynamic 
+            alt={chain.name} 
+            logoUrl={chain.iconUrl}
+            size={40}
+            chainId={chain.chainId}
+            name={chain.name}
+            symbol={chain.symbol}
+            FallbackComponent={<GenericCoinIcon />}
+        />
       </div>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-10 w-10 text-muted-foreground hover:text-white transition-colors relative z-10"
-        onClick={(e) => {
-          e.stopPropagation();
-          address && onCopy(address);
-        }}
-        disabled={!address}
-      >
-        <Copy className="h-4 w-4" />
-      </Button>
+      <div className="text-center relative z-10">
+        <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
+        {isSelected && (
+          <div className="flex items-center justify-center mt-1">
+            <CheckCircle2 className="w-3 h-3 text-primary fill-primary/10" />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -108,14 +89,6 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
   const handleNetworkSelect = (newNetwork: ChainConfig) => {
     setNetwork(newNetwork);
     setIsOpen(false);
-  };
-
-  const handleCopyAddress = (addr: string) => {
-    navigator.clipboard.writeText(addr);
-    toast({
-      title: 'Address Copied!',
-      description: 'Your wallet address has been copied to the clipboard.',
-    });
   };
 
   const filteredChains = allChains.filter((chain) =>
@@ -180,7 +153,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             </SheetHeader>
 
             <ScrollArea className="flex-1 px-4">
-              <div className="space-y-3 pb-12 pt-2">
+              <div className="grid grid-cols-2 gap-3 pb-12 pt-2">
                 {filteredChains.map((chain) => {
                   const displayAddress = wallets ? getAddressForChain(chain, wallets) : null;
                   const isSelected = viewingNetwork?.chainId === chain.chainId;
@@ -192,7 +165,6 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
                       address={displayAddress || ''}
                       isSelected={isSelected}
                       onSelect={handleNetworkSelect}
-                      onCopy={handleCopyAddress}
                     />
                   );
                 })}

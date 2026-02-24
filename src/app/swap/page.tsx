@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -137,7 +136,6 @@ export default function SwapPage() {
       </header>
 
       <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto pb-32">
-        {/* FROM SECTION */}
         <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4">
           <div className="flex justify-between items-center"><span className="text-[10px] font-black text-muted-foreground uppercase">You Pay</span></div>
           <div className="flex items-center gap-4">
@@ -149,7 +147,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* TO SECTION */}
         <div className="p-6 rounded-2xl bg-secondary/30 border border-white/5 space-y-4">
           <div className="flex justify-between items-center"><span className="text-[10px] font-black text-muted-foreground uppercase">You Receive Est.</span></div>
           <div className="flex items-center gap-4">
@@ -161,7 +158,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* QUOTE VISUALS (SCROLLABLE) */}
         {quoteData && (
             <div className="p-4 rounded-xl bg-white/5 space-y-3">
                 <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground">
@@ -182,19 +178,18 @@ export default function SwapPage() {
         </div>
       </main>
 
-      {/* FIXED NETWORK SELECTOR (SCROLLABLE) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full relative z-10">
+            <div className="flex flex-col h-full relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6 pb-12">
-                    <div className="grid grid-cols-1 gap-3 pb-20">
+                    <div className="grid grid-cols-2 gap-3 pb-20">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -207,16 +202,10 @@ export default function SwapPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all"
+                                className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center"
                             >
-                                <div className="flex items-center gap-4">
-                                    <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                    <div className="text-left">
-                                        <p className="font-black text-base text-white">{chain.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase font-mono opacity-60">Chain ID: {chain.chainId}</p>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                                <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                                <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>

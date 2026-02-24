@@ -220,7 +220,6 @@ export default function SendPage() {
         )}
       </main>
 
-      {/* FIXED NETWORK SHEET (SCROLLABLE) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl flex flex-col">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
@@ -232,7 +231,7 @@ export default function SendPage() {
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6">
-                    <div className="grid grid-cols-1 gap-3 pb-24">
+                    <div className="grid grid-cols-2 gap-3 pb-24">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -245,16 +244,10 @@ export default function SendPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all shadow-lg text-left"
+                                className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all shadow-lg text-center"
                             >
-                                <div className="flex items-center gap-4">
-                                    <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                    <div>
-                                        <p className="font-black text-base text-white">{chain.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase font-mono opacity-60">ID: {chain.chainId}</p>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                                <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                                <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>
