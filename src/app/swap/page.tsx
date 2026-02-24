@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,6 @@ import {
   Loader2, 
   AlertTriangle, 
   CheckCircle2, 
-  Info, 
   Fuel, 
   Zap, 
   ChevronRight,
@@ -46,7 +45,7 @@ import {
 import { useDebounce } from '@/hooks/use-debounce';
 
 export default function SwapPage() {
-  const { allChains, viewingNetwork, balances, wallets } = useWallet();
+  const { allChains, viewingNetwork, balances, wallets, infuraApiKey } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
@@ -57,7 +56,7 @@ export default function SwapPage() {
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
   const debouncedAmount = useDebounce(amount, 600);
-  const [slippage, setSlippage] = useState('0.5');
+  const [slippage] = useState('0.5');
   
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
@@ -85,16 +84,15 @@ export default function SwapPage() {
     }
     if (!toToken) {
       const assets = getInitialAssets(viewingNetwork.chainId);
-      // Try to find a different token for the "To" side
       const found = assets[assets.length - 1] || assets[0];
       setToToken({ ...found, balance: '0' } as AssetRow);
     }
-  }, [viewingNetwork, searchParams]);
+  }, [viewingNetwork, searchParams, fromToken, toToken]);
 
   // --- QUOTE FETCHING (LI.FI) ---
   useEffect(() => {
     const getQuote = async () => {
-      if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0) {
+      if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
         setQuoteData(null);
         setFetchError(null);
         return;
@@ -137,7 +135,7 @@ export default function SwapPage() {
     };
 
     getQuote();
-  }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork, slippage]);
+  }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork, slippage, infuraApiKey]);
 
   // --- HANDLERS ---
   const balance = parseFloat(fromToken?.balance || '0');
@@ -164,7 +162,6 @@ export default function SwapPage() {
     if (!canValidate || !fromToken || !toToken || !quoteData) return;
     setIsValidating(true);
     try {
-      // Analyze route impact and gas efficiency via AI
       const result = await currencyConversionWithLLMValidation({
         fromCurrency: fromToken.symbol,
         toCurrency: toToken.symbol,
@@ -187,7 +184,6 @@ export default function SwapPage() {
     if (!user || !aiValidation?.isValid) return;
     setIsSubmitting(true);
     try {
-      // In a real custodial app, this would sign and broadcast via backend
       const { error } = await supabase.from('transactions').insert({
           user_id: user.id, 
           type: 'swap', 
@@ -222,7 +218,6 @@ export default function SwapPage() {
       </header>
 
       <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-32">
-        {/* PAY SECTION */}
         <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Pay</span>
@@ -251,7 +246,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* FLIP BUTTON */}
         <div className="flex justify-center -my-6 relative z-20">
           <Button 
             size="icon" 
@@ -263,7 +257,6 @@ export default function SwapPage() {
           </Button>
         </div>
 
-        {/* RECEIVE SECTION */}
         <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4">
           <div className="flex justify-between items-center px-1">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
@@ -291,7 +284,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* ERROR MESSAGE */}
         {fetchError && (
             <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center gap-3 text-destructive text-sm font-medium animate-in slide-in-from-top-2">
                 <AlertCircle className="w-5 h-5 shrink-0" />
@@ -299,7 +291,6 @@ export default function SwapPage() {
             </div>
         )}
 
-        {/* QUOTE BREAKDOWN */}
         {quoteData && (
           <div className="grid grid-cols-1 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
@@ -312,13 +303,13 @@ export default function SwapPage() {
             </div>
             <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Fuel className="w-4 h-4" /> Estimated Fees
+                <Fuel className="w-4 h-4" /> Estimated Gas
               </div>
               <span className="font-bold">~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
             </div>
             <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <TrendingUp className="w-4 h-4" /> Market Impact
+                <TrendingUp className="w-4 h-4" /> Price Impact
               </div>
               <span className={cn(
                   "font-bold", 
@@ -330,7 +321,6 @@ export default function SwapPage() {
           </div>
         )}
 
-        {/* AI TRADE GUARDIAN */}
         {aiValidation && (
           <div className={cn(
             "p-5 rounded-[2rem] flex items-start gap-4 border animate-in zoom-in-95 shadow-2xl transition-all",
@@ -352,7 +342,6 @@ export default function SwapPage() {
           </div>
         )}
 
-        {/* PINNED ACTIONS */}
         <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto z-50">
           {amount && parseFloat(amount) > balance && (
             <div className="mb-4 flex items-center justify-center gap-2 text-[10px] text-destructive font-bold uppercase tracking-widest bg-destructive/10 py-3 rounded-2xl border border-destructive/20 shadow-xl backdrop-blur-md">

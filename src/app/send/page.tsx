@@ -13,9 +13,7 @@ import {
   CheckCircle2, 
   ArrowRight,
   QrCode,
-  Users,
   Fuel,
-  Search,
   Copy,
   Wallet as WalletIcon
 } from 'lucide-react';
@@ -24,16 +22,14 @@ import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
-import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 
 export default function SendPage() {
-  const { allChains, viewingNetwork, wallets, balances } = useWallet();
-  const { user } = useUser();
+  const { viewingNetwork, wallets, balances, infuraApiKey, allChains } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -69,31 +65,47 @@ export default function SendPage() {
     }
   }, [viewingNetwork, selectedToken]);
 
-  // Estimate Fee
+  // Estimate Fee using User RPC and FeeData
   useEffect(() => {
     const estimateFee = async () => {
-      if (!wallets || !wallets[0].privateKey || !selectedToken || !debouncedAmount || !ethers.isAddress(debouncedRecipient)) {
+      if (!infuraApiKey || !selectedToken || !viewingNetwork.rpcUrl) {
         setNetworkFee(null);
         return;
       }
 
       setIsFeeLoading(true);
       try {
-        const rpcUrl = `https://rpc.ankr.com/${viewingNetwork.name.toLowerCase().replace(' ', '')}`;
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
+        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+        
+        // Fetch real-time gas data
         const feeData = await provider.getFeeData();
         const gasPrice = feeData.gasPrice || 0n;
 
+        // Estimate Gas Limit
         let gasLimit = 21000n;
         if (!selectedToken.isNative && selectedToken.address) {
           const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
           const contract = new ethers.Contract(selectedToken.address, abi, provider);
-          gasLimit = await contract.transfer.estimateGas(debouncedRecipient, ethers.parseUnits(debouncedAmount, 18));
+          // Only estimate if we have a valid recipient and amount to simulate
+          if (ethers.isAddress(debouncedRecipient) && parseFloat(debouncedAmount) > 0) {
+            try {
+              gasLimit = await contract.transfer.estimateGas(
+                debouncedRecipient, 
+                ethers.parseUnits(debouncedAmount, 18)
+              );
+            } catch (e) {
+              gasLimit = 65000n; // Standard ERC20 transfer fallback
+            }
+          } else {
+            gasLimit = 65000n;
+          }
         }
 
-        const fee = gasPrice * gasLimit;
-        setNetworkFee(ethers.formatEther(fee));
+        const feeWei = gasPrice * gasLimit;
+        setNetworkFee(ethers.formatEther(feeWei));
       } catch (e) {
+        console.error("Gas estimation failed:", e);
         setNetworkFee(null);
       } finally {
         setIsFeeLoading(false);
@@ -101,18 +113,18 @@ export default function SendPage() {
     };
 
     if (step === 'details' && selectedToken) estimateFee();
-  }, [debouncedAmount, debouncedRecipient, selectedToken, viewingNetwork, step, wallets]);
+  }, [debouncedAmount, debouncedRecipient, selectedToken, viewingNetwork, step, infuraApiKey]);
 
   const handleSendRequest = async () => {
-    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount) {
-      toast({ title: "Configuration Error", description: "Wallet or token data missing.", variant: "destructive" });
+    if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount || !infuraApiKey) {
+      toast({ title: "Configuration Error", description: "Wallet data or API key missing.", variant: "destructive" });
       return;
     }
     
     setIsSubmitting(true);
     try {
-      const rpcUrl = `https://rpc.ankr.com/${viewingNetwork.name.toLowerCase().replace(' ', '')}`;
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
+      const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
       
       let tx;
@@ -218,7 +230,16 @@ export default function SendPage() {
                 <Fuel className="w-4 h-4" />
                 Network Fee
             </div>
-            {isFeeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="font-bold">{networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}</span>}
+            {isFeeLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-xs italic opacity-50">Estimating...</span>
+              </div>
+            ) : (
+              <span className="font-bold">
+                {networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}
+              </span>
+            )}
           </div>
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
@@ -235,7 +256,7 @@ export default function SendPage() {
         )}
         <Button 
           className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20"
-          disabled={!recipient || !isValidAmount || isSubmitting}
+          disabled={!recipient || !isValidAmount || isSubmitting || !infuraApiKey}
           onClick={handleSendRequest}
         >
           {isSubmitting ? (
