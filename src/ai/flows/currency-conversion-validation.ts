@@ -37,7 +37,7 @@ const swapValidationPrompt = ai.definePrompt({
 Trade Details:
 - Swap: {{amount}} {{fromCurrency}} -> {{convertedAmount}} {{toCurrency}}
 - Price Impact: {{priceImpact}}%
-- Gas Fee: ${{gasFeeUsd}}
+- Gas Fee: \${{gasFeeUsd}}
 
 Your Task:
 1. Check if the price impact is too high (usually < -2% is bad).
