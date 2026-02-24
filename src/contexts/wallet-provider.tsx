@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -9,8 +8,7 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
-
-const WEVINA_API_KEY = 'wevina_fc4ba8d7082f478aa21476941059de0a';
+import { logoSupabase } from '@/lib/supabase/logo-client';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -43,7 +41,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, profile, loading: authLoading, signOut: authSignOut } = useUser();
+  const { user, loading: authLoading, signOut: authSignOut } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -69,27 +67,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * WEVINA TOKEN METADATA FETCHING
-   * Fetches the complete list of tokens per network on startup.
+   * DIRECT SUPABASE REGISTRY SYNC
+   * Fetches the entire token_metadata table for each network from the secondary instance.
    */
   const fetchTokenRegistry = useCallback(async () => {
+    if (!logoSupabase) return;
     const registry: { [chainId: number]: any[] } = {};
+
     const fetchPromises = chainsWithLogos.map(async (chain) => {
       try {
-        // Slugify the network name for the API (e.g. "Polygon" -> "polygon")
-        const slug = chain.name.split(' ')[0].toLowerCase();
-        const baseUrl = window.location.origin;
-        const response = await fetch(`${baseUrl}/api/tokens/${slug}`, {
-          headers: { 'x-api-key': WEVINA_API_KEY }
-        });
-        if (response.ok) {
-          const tokens = await response.json();
-          registry[chain.chainId] = tokens;
+        const networkSlug = chain.name.split(' ')[0].toLowerCase();
+        const { data, error } = await logoSupabase
+          .from('token_metadata')
+          .select('token_details, contract_address, network, logo_url')
+          .eq('network', networkSlug);
+
+        if (!error && data) {
+          registry[chain.chainId] = data.map(token => ({
+            symbol: token.token_details.symbol,
+            name: token.token_details.name,
+            decimals: token.token_details.decimals,
+            network: token.network,
+            contract: token.contract_address,
+            logo_url: token.logo_url
+          }));
         }
       } catch (e) {
-        console.warn(`Metadata fetch failed for ${chain.name}`);
+        console.error(`Metadata sync failed for ${chain.name}:`, e);
       }
     });
+
     await Promise.all(fetchPromises);
     setTokenRegistry(registry);
   }, [chainsWithLogos]);
@@ -123,28 +130,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
     } catch (e: any) {
-      console.error("Mnemonic load error:", e);
       throw new Error(e.message || "Invalid mnemonic phrase.");
     }
   }, []);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (user) {
-        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-        if (savedMnemonic) {
-          try {
-            loadWalletFromMnemonic(savedMnemonic);
-          } catch (e) {
-            localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    const initWallet = async () => {
+      if (!authLoading) {
+        if (user) {
+          const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+          if (savedMnemonic) {
+            try {
+              loadWalletFromMnemonic(savedMnemonic);
+            } catch (e) {
+              localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+            }
           }
+        } else {
+          setWallets(null);
+          setBalances({});
         }
-      } else {
-        setWallets(null);
-        setBalances({});
+        setIsWalletLoading(false);
       }
-      setIsWalletLoading(false);
-    }
+    };
+    initWallet();
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const fetchBalances = useCallback(async () => {
@@ -163,23 +172,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const balancePromises = chainsWithLogos.map(async (chain) => {
         if (!chain.rpcUrl || !chain.chainId) return null;
 
-        // Get initial assets enriched with metadata from our API registry
         const apiTokens = tokenRegistry[chain.chainId] || [];
-        const initialAssets = getInitialAssets(chain.chainId).map(a => {
-          const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
-          return {
-            ...a,
-            balance: '0',
-            name: apiMeta?.name || a.name,
-            iconUrl: apiMeta?.logo_url || a.iconUrl || chain.iconUrl
-          } as AssetRow;
+        const combinedAssetsList = getInitialAssets(chain.chainId).map(a => {
+            const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+            return {
+                ...a,
+                balance: '0',
+                name: apiMeta?.name || a.name,
+                iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl)
+            } as AssetRow;
         });
 
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
           
-          const chainBalances = await Promise.all(initialAssets.map(async (asset) => {
+          const chainBalances = await Promise.all(combinedAssetsList.map(async (asset) => {
             try {
               let balance;
               if (asset.isNative) {
@@ -200,31 +208,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
           return { chainId: chain.chainId, assets: chainBalances };
         } catch (e: any) {
-          return { chainId: chain.chainId, assets: initialAssets };
+          return { chainId: chain.chainId, assets: combinedAssetsList };
         }
       });
 
       const results = await Promise.all(balancePromises);
-      
       results.forEach((res) => {
-        if (res) {
-          newBalances[res.chainId] = res.assets;
-        }
-      });
-
-      // Stable Merge Strategy
-      chainsWithLogos.forEach(chain => {
-        if (chain.chainId && !newBalances[chain.chainId]) {
-          const apiTokens = tokenRegistry[chain.chainId] || [];
-          newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => {
-            const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
-            return {
-              ...a,
-              balance: '0',
-              iconUrl: apiMeta?.logo_url || a.iconUrl || chain.iconUrl
-            } as AssetRow;
-          });
-        }
+        if (res) newBalances[res.chainId] = res.assets;
       });
 
       const flatAssets = Object.values(newBalances).flat();
@@ -238,8 +228,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(finalBalances);
     } catch (e: any) {
-      console.error("Global Balance Fetch Error:", e);
-      setFetchError("Market data sync issue. Displaying local cache.");
+      setFetchError("Market data sync issue.");
     } finally {
       setIsRefreshing(false);
     }

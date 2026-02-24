@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -16,7 +17,6 @@ export default function Home() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Determine which sheet should be open based on strict priority
-  // We check isWalletLoading to prevent the sheet from popping up while we are still checking localStorage
   const isAuthOpen = !loading && !user;
   const isWalletSetupOpen = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
 

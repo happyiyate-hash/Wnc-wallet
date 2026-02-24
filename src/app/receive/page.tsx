@@ -1,9 +1,8 @@
-
 'use client';
 
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Copy, Share2, Info, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Copy, Share2, Info, CheckCircle2, QrCode } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Card } from '@/components/ui/card';
@@ -11,8 +10,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
-import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
+import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 
 export default function ReceivePage() {
   const { wallets, viewingNetwork, allChains } = useWallet();
@@ -35,7 +34,6 @@ export default function ReceivePage() {
         }
     }
 
-    // Default to native token of current viewing network
     const initial = getInitialAssets(viewingNetwork.chainId)[0];
     if (initial) {
         setSelectedToken({ ...initial, balance: '0' } as AssetRow);
@@ -66,37 +64,39 @@ export default function ReceivePage() {
         </Button>
       </header>
 
-      <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto">
+      <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto thin-scrollbar">
         <div className="text-center space-y-2">
           <p className="text-sm text-muted-foreground px-4 leading-relaxed">
-            Send only <span className="text-foreground font-bold">{selectedToken?.name} ({selectedToken?.symbol})</span> to this address via <span className="text-primary font-bold">{chain.name}</span>.
+            Send only <span className="text-foreground font-bold">{selectedToken?.name || selectedToken?.symbol}</span> to this address via <span className="text-primary font-bold">{chain.name}</span>.
           </p>
         </div>
 
         <div className="relative group">
             <div className="absolute -inset-4 bg-primary/20 rounded-[4rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
             <Card className="p-10 bg-white rounded-[3.5rem] shadow-2xl relative z-10 flex flex-col items-center gap-6">
-                <div className="bg-zinc-50 p-4 rounded-[2.5rem] border border-zinc-100">
+                <div className="bg-zinc-50 p-4 rounded-[2.5rem] border border-zinc-100 relative w-[220px] h-[220px] flex items-center justify-center">
                     {address ? (
-                        <QRCodeSVG 
-                            value={address} 
-                            size={220}
-                            level="H"
-                            fgColor="#4c1d95" // Brand Purple (Deep)
-                            bgColor="#ffffff"
-                            includeMargin={false}
-                            imageSettings={selectedToken?.iconUrl ? {
-                                src: selectedToken.iconUrl,
-                                x: undefined,
-                                y: undefined,
-                                height: 48,
-                                width: 48,
-                                excavate: true,
-                            } : undefined}
-                        />
+                        <div className="flex flex-col items-center gap-2 text-zinc-400">
+                            <QrCode className="w-24 h-24 opacity-20" />
+                            <span className="text-[10px] font-mono text-center px-4">QR Code Generation Coming Soon</span>
+                        </div>
                     ) : (
-                        <div className="w-[220px] h-[220px] flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
+                        <div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
                             <span className="text-xs text-muted-foreground font-mono">Generating...</span>
+                        </div>
+                    )}
+                    
+                    {address && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="p-2 bg-white rounded-xl shadow-lg border border-zinc-100">
+                                <TokenLogoDynamic 
+                                    logoUrl={selectedToken?.iconUrl} 
+                                    alt={selectedToken?.symbol || ''} 
+                                    size={32} 
+                                    chainId={selectedToken?.chainId} 
+                                    symbol={selectedToken?.symbol}
+                                />
+                            </div>
                         </div>
                     )}
                 </div>

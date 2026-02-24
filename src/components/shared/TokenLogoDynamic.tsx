@@ -16,6 +16,7 @@ interface TokenLogoDynamicProps {
   FallbackComponent?: React.ReactElement;
   chainId?: number;
   symbol?: string; 
+  name?: string;
 }
 
 export default function TokenLogoDynamic({
@@ -26,6 +27,7 @@ export default function TokenLogoDynamic({
   FallbackComponent,
   chainId,
   symbol,
+  name,
 }: TokenLogoDynamicProps) {
   const { allChainsMap } = useWallet();
   const [origin, setOrigin] = useState('');
@@ -34,36 +36,33 @@ export default function TokenLogoDynamic({
     setOrigin(window.location.origin);
   }, []);
 
-  // If logoUrl is explicitly undefined (loading state)
   if (logoUrl === undefined && !symbol) {
     return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
   }
 
   let finalUrl = logoUrl;
   
-  // If the URL is a relative path (starting with /api/cdn), prepend the current origin
+  // Handle relative paths from the Wevina CDN API
   if (finalUrl && finalUrl.startsWith('/api/cdn')) {
     finalUrl = `${origin}${finalUrl}`;
   }
 
+  // Fallback to predicted path if no URL provided but symbol is known
   if (!finalUrl && symbol) {
-    const predicted = getTokenLogoUrl(symbol, chainId);
+    const predicted = getTokenLogoUrl(symbol, name);
     if (predicted) {
-        finalUrl = predicted.startsWith('http') ? predicted : `${origin}${predicted}`;
+        finalUrl = `${origin}${predicted}`;
     }
   }
 
-  // If we still don't have a URL, check for native chain icons from registry
-  if (!finalUrl) {
-    if (chainId && allChainsMap[chainId]) {
-      const nativeChainIcon = allChainsMap[chainId].iconUrl;
-      if (nativeChainIcon) {
-        finalUrl = nativeChainIcon.startsWith('http') ? nativeChainIcon : `${origin}${nativeChainIcon}`;
-      }
+  // Native token icon fallback from chain config
+  if (!finalUrl && chainId && allChainsMap[chainId]) {
+    const nativeChainIcon = allChainsMap[chainId].iconUrl;
+    if (nativeChainIcon) {
+      finalUrl = nativeChainIcon.startsWith('http') ? nativeChainIcon : `${origin}${nativeChainIcon}`;
     }
   }
 
-  // Final rendering logic
   if (!finalUrl || finalUrl.includes('undefined')) {
     return FallbackComponent || <GenericCoinIcon size={size} className={className} />;
   }

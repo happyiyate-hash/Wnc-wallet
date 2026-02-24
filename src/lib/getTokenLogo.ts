@@ -1,38 +1,44 @@
+import { logoSupabase } from './supabase/logo-client';
 
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
  * 
- * Migrated from static maps to dedicated CDN caching layer.
- * Uses the /api/logo endpoint for on-demand path resolution.
+ * Migrated to direct Supabase lookup for accuracy.
  */
 
-const WEVINA_API_KEY = 'wevina_fc4ba8d7082f478aa21476941059de0a';
-
 /**
- * Fetches the CDN URL for a token's logo using the metadata API.
- * This is used as a fallback or for individual token resolution.
+ * Fetches the CDN URL for a token's logo using the metadata database.
+ * Priorities lookup by full name for accuracy, with symbol as fallback.
  * 
  * @param {string} name - The full name of the token.
  * @param {string} symbol - The symbol of the token.
  * @returns {Promise<string|null>} The logo path or null.
  */
 export async function getLogoUrlFromApi(name: string, symbol: string): Promise<string | null> {
-    if (typeof window === 'undefined') return null;
-    
-    const baseUrl = window.location.origin;
-    const url = new URL(`${baseUrl}/api/logo`);
-    url.searchParams.set('name', name);
-    url.searchParams.set('symbol', symbol);
+    if (!logoSupabase) return null;
 
     try {
-        const response = await fetch(url.toString(), {
-            headers: { 'x-api-key': WEVINA_API_KEY }
-        });
-        if (!response.ok) return null;
-        const data = await response.json();
-        // Prepend domain to the returned path (/api/cdn/logo/...)
-        return `${baseUrl}${data.logo_url}`;
+        // 1. Prioritize lookup by full name
+        const { data: nameData } = await logoSupabase
+            .from('token_logos')
+            .select('public_url')
+            .ilike('name', name)
+            .limit(1)
+            .single();
+
+        if (nameData) return nameData.public_url;
+
+        // 2. Fallback to symbol
+        const { data: symbolData } = await logoSupabase
+            .from('token_logos')
+            .select('public_url')
+            .ilike('symbol', symbol)
+            .limit(1)
+            .single();
+
+        return symbolData ? symbolData.public_url : null;
     } catch (error) {
+        console.error('Failed to fetch logo from metadata DB:', error);
         return null;
     }
 }
@@ -43,26 +49,13 @@ export async function getLogoUrlFromApi(name: string, symbol: string): Promise<s
  */
 export function getTokenLogoUrl(
     symbol?: string | null,
-    chainId?: number | null,
+    name?: string | null,
 ): string | null {
     if (!symbol) return null;
 
-    // We build the predicted API CDN path structure
-    // This allows immediate rendering if the metadata is already being fetched
     const sym = symbol.toLowerCase();
+    const nameSlug = name ? name.toLowerCase().replace(/\s+/g, '-') : sym;
     
-    // For native tokens, we have a stable mapping
-    const nativeMaps: Record<string, string> = {
-        'eth': 'ethereum',
-        'pol': 'polygon',
-        'matic': 'polygon',
-        'bnb': 'binance-coin',
-        'avax': 'avalanche',
-        'ftm': 'fantom',
-        'sol': 'solana',
-        'btc': 'bitcoin'
-    };
-
-    const nameSlug = nativeMaps[sym] || sym;
+    // Predicted API CDN path structure
     return `/api/cdn/logo/${nameSlug}/${sym}`;
 }
