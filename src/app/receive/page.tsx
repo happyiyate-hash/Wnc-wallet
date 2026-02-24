@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useWallet } from '@/contexts/wallet-provider';
@@ -7,7 +8,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Card } from '@/components/ui/card';
 import { useEffect, useState, useMemo } from 'react';
-import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { cn } from '@/lib/utils';
