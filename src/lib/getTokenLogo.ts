@@ -10,18 +10,18 @@ import { logoSupabase } from './supabase/logo-client';
 
 /**
  * Fetches a token's direct logo URL from Supabase storage.
- * lookup priorities: Exact name match -> Symbol match.
+ * Lookup priorities: Name match -> Symbol match.
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
 
   try {
-    // 1. Prioritize lookup by the full token name for accuracy (Case-insensitive)
-    if (tokenName) {
+    // 1. Prioritize lookup by the full token name for accuracy (Case-insensitive ILIKE)
+    if (tokenName && tokenName.trim()) {
         const { data: nameData } = await logoSupabase
           .from('token_logos')
           .select('public_url')
-          .ilike('name', tokenName)
+          .ilike('name', tokenName.trim())
           .limit(1)
           .maybeSingle();
 
@@ -30,12 +30,12 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
         }
     }
 
-    // 2. If no match is found by name, fall back to the symbol (Case-insensitive)
-    if (tokenSymbol) {
+    // 2. If no match is found by name, fall back to the symbol (Case-insensitive ILIKE)
+    if (tokenSymbol && tokenSymbol.trim()) {
         const { data: symbolData } = await logoSupabase
           .from('token_logos')
           .select('public_url')
-          .ilike('symbol', tokenSymbol)
+          .ilike('symbol', tokenSymbol.trim())
           .limit(1)
           .maybeSingle();
 
