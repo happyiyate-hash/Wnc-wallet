@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,13 +13,13 @@ import {
   Loader2, 
   CheckCircle2, 
   QrCode,
-  Fuel
+  Fuel,
+  Search
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import { useToast } from '@/hooks/use-toast';
-import { useDebounce } from '@/hooks/use-debounce';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
@@ -166,16 +167,9 @@ export default function SendPage() {
                 <Fuel className="w-4 h-4 text-primary" />
                 Network Fee
             </div>
-            {isFeeLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-[10px] italic opacity-50 uppercase tracking-tighter">Estimating...</span>
-              </div>
-            ) : (
-              <span className="font-bold font-mono text-white">
-                {networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}
-              </span>
-            )}
+            <span className="font-bold font-mono text-white">
+                ~0.000 {viewingNetwork.symbol}
+            </span>
           </div>
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
@@ -222,16 +216,16 @@ export default function SendPage() {
 
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl flex flex-col">
-            <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+            <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
             <div className="flex flex-col flex-1 relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                <SheetHeader className="mb-6 px-6 shrink-0">
+                <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6">
-                    <div className="grid grid-cols-2 gap-3 pb-24">
+                    <div className="grid grid-cols-2 gap-3 pb-24 pt-2">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -247,7 +241,7 @@ export default function SendPage() {
                                 className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all shadow-lg text-center"
                             >
                                 <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
+                                <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>

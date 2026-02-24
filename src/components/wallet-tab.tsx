@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -72,7 +73,12 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
       </div>
       <div className="text-right">
         {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin ml-auto text-primary" />
+          <div className="flex flex-col items-end gap-1">
+            <p className="font-bold text-sm text-white leading-none">
+              {parseFloat(token.balance || '0').toLocaleString('en-US', { maximumFractionDigits: 6 })}
+            </p>
+            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          </div>
         ) : (
           <>
             <p className="font-bold text-sm text-white leading-none">
@@ -252,7 +258,7 @@ export default function WalletTab() {
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
                       <AlertCircle className="w-4 h-4 shrink-0" />
-                      <p className="font-medium">Connection limited. Tap to check Infura key.</p>
+                      <p className="font-medium">Connection limited. Check Infura key.</p>
                     </div>
                   )}
 
@@ -261,7 +267,7 @@ export default function WalletTab() {
                       <TokenRow
                         key={`${token.chainId}-${token.address || token.symbol}`}
                         token={token}
-                        isLoading={isTokenLoading(token.chainId, token.symbol)}
+                        isLoading={isTokenLoading(token.chainId, token.symbol) || isRefreshing}
                       />
                     ))}
                   </div>
@@ -278,16 +284,16 @@ export default function WalletTab() {
 
       <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+            <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
             <div className="flex flex-col flex-1 relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                <SheetHeader className="mb-6 px-6 shrink-0">
+                <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
                     <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Network to {actionType}</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6">
-                    <div className="grid grid-cols-1 gap-3 pb-24">
+                    <div className="grid grid-cols-2 gap-3 pb-24 pt-2">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -300,23 +306,17 @@ export default function WalletTab() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left"
+                                className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center group"
                             >
-                                <div className="flex items-center gap-4">
-                                    <TokenLogoDynamic 
-                                        logoUrl={chain.iconUrl} 
-                                        alt={chain.name} 
-                                        size={44} 
-                                        chainId={chain.chainId} 
-                                        name={chain.name} 
-                                        symbol={chain.symbol}
-                                    />
-                                    <div>
-                                        <p className="font-bold text-base text-white">{chain.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                                <TokenLogoDynamic 
+                                    logoUrl={chain.iconUrl} 
+                                    alt={chain.name} 
+                                    size={40} 
+                                    chainId={chain.chainId} 
+                                    name={chain.name} 
+                                    symbol={chain.symbol}
+                                />
+                                <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>
@@ -339,7 +339,7 @@ export default function WalletTab() {
                     />
                     <div className="flex flex-col items-start text-left">
                         <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Select Token to {actionType}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Select Token</span>
                     </div>
                 </SheetTitle>
             </SheetHeader>
@@ -357,7 +357,7 @@ export default function WalletTab() {
                                 const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
                                 if (addr) {
                                     navigator.clipboard.writeText(addr);
-                                    toast({ title: "Address Copied" });
+                                    toast({ title: "Copied" });
                                 }
                             }}>
                                 <Copy className="w-5 h-5" />
@@ -392,7 +392,7 @@ export default function WalletTab() {
                                         </div>
                                         <div className="text-right">
                                             <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
-                                            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
+                                            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Balance</p>
                                         </div>
                                     </button>
                                 );

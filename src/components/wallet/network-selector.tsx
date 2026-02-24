@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Copy, Search, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Search, CheckCircle2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -15,7 +16,6 @@ import { useWallet } from '@/contexts/wallet-provider';
 import type { ChainConfig } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
-import { useToast } from '@/hooks/use-toast';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
@@ -27,12 +27,10 @@ interface NetworkSelectorProps {
 
 const NetworkRow = ({
   chain,
-  address,
   isSelected,
   onSelect,
 }: {
   chain: ChainConfig;
-  address: string | null;
   isSelected: boolean;
   onSelect: (chain: ChainConfig) => void;
 }) => {
@@ -48,7 +46,7 @@ const NetworkRow = ({
       }}
       className={cn(
         'w-full flex flex-col items-center gap-2 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
-        isSelected && "shadow-lg"
+        isSelected && "shadow-lg bg-white/5"
       )}
       role="button"
     >
@@ -64,10 +62,10 @@ const NetworkRow = ({
         />
       </div>
       <div className="text-center relative z-10">
-        <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
+        <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
         {isSelected && (
           <div className="flex items-center justify-center mt-1">
-            <CheckCircle2 className="w-3 h-3 text-primary fill-primary/10" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-primary fill-primary/10" />
           </div>
         )}
       </div>
@@ -77,7 +75,6 @@ const NetworkRow = ({
 
 export default function NetworkSelector({ className }: NetworkSelectorProps) {
   const { viewingNetwork, setNetwork, wallets, isInitialized, allChains } = useWallet();
-  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isClient, setIsClient] = useState(false);
@@ -111,7 +108,6 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         <Button
           variant="ghost"
           className={cn('flex items-center gap-2 p-1 h-auto hover:bg-white/5 rounded-full transition-colors', className)}
-          disabled={!isInitialized}
         >
           <TokenLogoDynamic 
             alt={viewingNetwork.name} 
@@ -130,13 +126,13 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         side="bottom"
         className="h-[80vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
       >
-        <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+        <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
 
         <div className="flex flex-col h-full relative z-10 overflow-hidden">
-            <SheetHeader className="p-6 pt-4 text-center shrink-0">
-              <SheetTitle className="sr-only">Select a network</SheetTitle>
+            <SheetHeader className="p-6 pt-8 text-center shrink-0">
               <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
+              <SheetTitle className="text-xl font-black uppercase tracking-widest mb-4">Select Network</SheetTitle>
               <div className="relative px-4">
                 <div className="p-[1px] bg-gradient-to-r from-primary/50 to-purple-500/50 rounded-2xl">
                     <div className="relative bg-zinc-950/80 backdrop-blur-xl rounded-2xl">
@@ -153,21 +149,15 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             </SheetHeader>
 
             <ScrollArea className="flex-1 px-4">
-              <div className="grid grid-cols-2 gap-3 pb-12 pt-2">
-                {filteredChains.map((chain) => {
-                  const displayAddress = wallets ? getAddressForChain(chain, wallets) : null;
-                  const isSelected = viewingNetwork?.chainId === chain.chainId;
-
-                  return (
+              <div className="grid grid-cols-2 gap-3 pb-24 pt-2">
+                {filteredChains.map((chain) => (
                     <NetworkRow
                       key={chain.chainId}
                       chain={chain}
-                      address={displayAddress || ''}
-                      isSelected={isSelected}
+                      isSelected={viewingNetwork?.chainId === chain.chainId}
                       onSelect={handleNetworkSelect}
                     />
-                  );
-                })}
+                ))}
               </div>
             </ScrollArea>
         </div>

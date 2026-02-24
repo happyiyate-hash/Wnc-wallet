@@ -176,6 +176,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing(true);
     setFetchError(null);
 
+    // CRITICAL: Preserve old balances to prevent zeroing during refresh
+    const oldBalances = { ...balances };
     const currentBalances = { ...balances };
     const chainsToFetch = [...chainsWithLogos];
 
@@ -198,11 +200,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return acc;
         }, [] as any[]).map(a => {
             const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+            const oldAsset = oldBalances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
             return {
                 ...a,
-                balance: currentBalances[chain.chainId]?.find(b => b.symbol === a.symbol)?.balance || '0',
+                balance: oldAsset?.balance || '0', // Keep old balance if exists
                 name: apiMeta?.name || a.name,
-                iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl)
+                iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
+                priceUsd: oldAsset?.priceUsd || 0,
+                pctChange24h: oldAsset?.pctChange24h || 0,
+                fiatValueUsd: oldAsset?.fiatValueUsd || 0
             } as AssetRow;
         });
 
@@ -220,9 +226,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 const contract = new ethers.Contract(asset.address, abi, provider);
                 balance = await contract.balanceOf(wallets[0].address);
               }
+              const balanceStr = ethers.formatUnits(balance, 18);
               return {
                 ...asset,
-                balance: ethers.formatUnits(balance, 18), 
+                balance: balanceStr,
+                fiatValueUsd: parseFloat(balanceStr) * (asset.priceUsd || 0)
               } as AssetRow;
             } catch (e) {
               return asset;
@@ -238,7 +246,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           currentBalances[chain.chainId] = combinedAssetsList;
         }
         
-        await delay(priorityChainId === chain.chainId ? 0 : 50);
+        await delay(priorityChainId === chain.chainId ? 0 : 30);
       }
 
       const flatAssets = Object.values(currentBalances).flat();
@@ -246,8 +254,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       const finalBalances: { [key: string]: AssetRow[] } = {};
       assetsWithPrices.forEach(asset => {
+        const oldAsset = oldBalances[asset.chainId]?.find(oa => oa.symbol === asset.symbol);
+        
+        // MERGE: Keep old price if new fetch failed (returned 0)
+        const finalAsset = {
+            ...asset,
+            priceUsd: (asset.priceUsd === 0 && oldAsset?.priceUsd) ? oldAsset.priceUsd : (asset.priceUsd || 0),
+            pctChange24h: (asset.priceUsd === 0 && oldAsset?.pctChange24h) ? oldAsset.pctChange24h : (asset.pctChange24h || 0),
+        };
+        
+        // Recalculate fiat based on potentially restored price
+        finalAsset.fiatValueUsd = parseFloat(finalAsset.balance) * (finalAsset.priceUsd || 0);
+
         if (!finalBalances[asset.chainId]) finalBalances[asset.chainId] = [];
-        finalBalances[asset.chainId].push(asset);
+        finalBalances[asset.chainId].push(finalAsset);
       });
 
       setBalances(finalBalances);
@@ -256,7 +276,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (e: any) {
       console.warn("Market data fetch issue:", e.message);
-      setFetchError("Rate limit encountered. Data may be delayed.");
+      setFetchError("Market data delayed. Check connection.");
     } finally {
       setIsRefreshing(false);
     }
@@ -343,7 +363,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (!mnemonic) {
-        toast({ variant: "destructive", title: "Backup Error", description: "Mnemonic not found in local memory." });
+        toast({ variant: "destructive", title: "Backup Error", description: "Mnemonic not found." });
         return;
     }
 
@@ -367,7 +387,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
       
-      toast({ title: "Vault Sync Complete", description: "Your phrase is now secured in the cloud." });
+      toast({ title: "Vault Sync Complete" });
       refreshProfile();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Vault Error", description: e.message });
@@ -376,8 +396,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const restoreFromCloud = useCallback(async () => {
     if (!user || !profile?.vault_phrase || !profile?.iv || !supabase) {
-      toast({ variant: "destructive", title: "No Cloud Vault Found", description: "You haven't backed up your phrase yet." });
-      throw new Error("No vault found");
+      toast({ variant: "destructive", title: "Vault Not Found" });
+      throw new Error("No vault");
     }
 
     try {
@@ -397,12 +417,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
       if (data.phrase) {
         await importWallet(data.phrase);
-        toast({ title: "Cloud Restoration Success", description: "Your wallet has been synchronized." });
+        toast({ title: "Vault Restored" });
       } else {
         throw new Error(data.message || "Decryption failed");
       }
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Restoration Failed", description: e.message });
+      toast({ variant: "destructive", title: "Restoration Failed" });
       throw e;
     }
   }, [user, profile, importWallet, toast]);

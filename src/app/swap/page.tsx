@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,28 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   ArrowLeft, 
-  ArrowUpDown, 
   Loader2, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Fuel, 
-  Zap, 
   ChevronRight,
-  Wallet as WalletIcon,
-  Copy,
-  TrendingUp,
-  AlertCircle,
-  ArrowRight,
   Route as RouteIcon,
   Settings2,
-  ExternalLink,
-  ShieldCheck,
-  Info
+  Search
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
-import { currencyConversionWithLLMValidation } from '@/app/actions';
-import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -36,14 +23,6 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { ethers } from 'ethers';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { useDebounce } from '@/hooks/use-debounce';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -180,16 +159,16 @@ export default function SwapPage() {
 
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
-            <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+            <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
             <div className="flex flex-col h-full relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                <SheetHeader className="mb-6 px-6 shrink-0">
+                <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6 pb-12">
-                    <div className="grid grid-cols-2 gap-3 pb-20">
+                    <div className="grid grid-cols-2 gap-3 pb-20 pt-2">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -205,7 +184,7 @@ export default function SwapPage() {
                                 className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center"
                             >
                                 <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                <p className="font-bold text-sm text-white line-clamp-1">{chain.name}</p>
+                                <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
                             </button>
                         ))}
                     </div>
