@@ -12,12 +12,13 @@ import { cn } from '@/lib/utils';
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const { user, loading } = useUser();
-  const { wallets, isInitialized } = useWallet();
+  const { wallets, isInitialized, isWalletLoading } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Determine which sheet should be open based on strict priority
+  // We check isWalletLoading to prevent the sheet from popping up while we are still checking localStorage
   const isAuthOpen = !loading && !user;
-  const isWalletSetupOpen = !loading && !!user && isInitialized && !wallets;
+  const isWalletSetupOpen = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;

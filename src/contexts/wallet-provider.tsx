@@ -13,6 +13,7 @@ import { fetchAssetPrices } from '@/lib/coingecko';
 interface WalletContextType {
   isInitialized: boolean;
   isAssetsLoading: boolean;
+  isWalletLoading: boolean;
   hasNewNotifications: boolean;
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
@@ -49,6 +50,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isWalletLoading, setIsWalletLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
 
@@ -73,7 +75,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
-    if (!user || !mnemonic) return;
+    if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
       if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic phrase structure.");
@@ -83,26 +85,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         privateKey: wallet.privateKey,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
-      localStorage.setItem(`wallet_mnemonic_${user.id}`, cleanMnemonic);
     } catch (e: any) {
       console.error("Mnemonic load error:", e);
       throw new Error(e.message || "Invalid mnemonic phrase.");
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-      if (savedMnemonic) {
-        try {
-          loadWalletFromMnemonic(savedMnemonic);
-        } catch (e) {
-          localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    if (!authLoading) {
+      if (user) {
+        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        if (savedMnemonic) {
+          try {
+            loadWalletFromMnemonic(savedMnemonic);
+          } catch (e) {
+            localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+          }
         }
+      } else {
+        setWallets(null);
+        setBalances({});
       }
-    } else if (!authLoading && !user) {
-      setWallets(null);
-      setBalances({});
+      setIsWalletLoading(false);
     }
   }, [authLoading, user, loadWalletFromMnemonic]);
 
@@ -131,7 +135,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
-          // Use a timeout and robust fetch check
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
           const balance = await provider.getBalance(wallets[0].address);
           
@@ -150,8 +153,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             iconUrl: chain.iconUrl
           } as AssetRow;
         } catch (e: any) {
-          // Silently catch per-chain RPC errors to prevent app-wide crash
-          // These often happen if a chain is not supported by the provider
           console.warn(`RPC check failed for ${chain.name} (${chain.chainId}): ${e.message}`);
           return null;
         }
@@ -206,6 +207,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
       loadWalletFromMnemonic(mnemonic);
+      localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
       toast({ title: "Wallet Created", description: "Keys saved locally." });
     }
     return mnemonic;
@@ -215,6 +217,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     try {
       loadWalletFromMnemonic(mnemonic);
+      localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
       toast({ title: "Wallet Imported", description: "Success!" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Import Error", description: e.message });
@@ -249,6 +252,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
     isAssetsLoading: areLogosLoading,
+    isWalletLoading,
     hasNewNotifications: false,
     viewingNetwork: viewingNetwork || chainsWithLogos[0],
     setNetwork: (net) => {

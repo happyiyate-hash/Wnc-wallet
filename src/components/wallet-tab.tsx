@@ -17,7 +17,6 @@ import type { AssetRow } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import TokenManager from '@/components/wallet/tokens/token-manager';
-import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,23 +93,14 @@ export default function WalletTab() {
   const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey } = useWallet();
   const { user } = useUser();
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
-  const [isWalletSheetOpen, setIsWalletSheetOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const router = useRouter();
 
-  // Handle wallet onboarding
-  useEffect(() => {
-    if (isInitialized && !wallets) {
-      setIsWalletSheetOpen(true);
-    }
-  }, [isInitialized, wallets]);
-
   // Proactively request API key if missing but wallet exists
   useEffect(() => {
     if (isInitialized && !!wallets && !infuraApiKey) {
-      // Small delay to let the initial UI breathe
       const timer = setTimeout(() => {
         setIsApiKeySheetOpen(true);
       }, 800);
@@ -280,11 +270,9 @@ export default function WalletTab() {
       </div>
 
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
-      <WalletManagementSheet isOpen={isWalletSheetOpen} onOpenChange={setIsWalletSheetOpen} />
       <ApiKeyRequestSheet isOpen={isApiKeySheetOpen} onOpenChange={setIsApiKeySheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
     </div>
   );
 }
-
