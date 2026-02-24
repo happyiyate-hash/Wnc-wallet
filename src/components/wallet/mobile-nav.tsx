@@ -31,6 +31,10 @@ const SharedGradient = () => (
 export default function MobileNav() {
   const pathname = usePathname();
 
+  // Hide the navigation on specific pages like Swap to allow for full-screen actions
+  const isSwapPage = pathname === '/swap';
+  if (isSwapPage) return null;
+
   const navItems: NavItem[] = [
     { href: '/', label: 'Wallet', icon: GradientWalletIcon },
     { href: '/browse', label: 'Browse', icon: GradientGlobeIcon },

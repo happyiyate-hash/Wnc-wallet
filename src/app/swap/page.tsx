@@ -144,7 +144,7 @@ export default function SwapPage() {
         </Button>
       </header>
 
-      <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-24">
+      <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-32">
         {/* FROM PANEL */}
         <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-5">
@@ -256,7 +256,7 @@ export default function SwapPage() {
         )}
 
         {/* CTA BUTTON */}
-        <div className="fixed bottom-24 left-4 right-4 max-w-lg mx-auto">
+        <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto">
           {!validationResult ? (
             <Button 
               className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20"
