@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -242,7 +241,7 @@ export default function SendPage() {
                 <span className="text-[10px] italic opacity-50 uppercase tracking-tighter">Estimating...</span>
               </div>
             ) : (
-              <span className="font-bold font-mono">
+              <span className="font-bold font-mono text-white">
                 {networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}
               </span>
             )}
@@ -328,20 +327,25 @@ export default function SendPage() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group active:scale-[0.98]"
+                        style={{
+                            borderColor: chain.themeColor || '#818cf8',
+                            borderWidth: '2px',
+                            background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                        }}
+                        className="flex items-center justify-between p-5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
                     >
                         <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
                                 logoUrl={chain.iconUrl} 
                                 alt={chain.name} 
-                                size={40} 
+                                size={44} 
                                 chainId={chain.chainId} 
                                 name={chain.name}
                                 symbol={chain.symbol}
                             />
                             <div className="text-left">
-                                <p className="font-bold text-base">{chain.name}</p>
-                                <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Chain ID: {chain.chainId}</p>
+                                <p className="font-bold text-base text-white">{chain.name}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
                             </div>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -414,12 +418,12 @@ export default function SendPage() {
                                             name={asset.name}
                                         />
                                         <div className="text-left leading-tight">
-                                            <p className="font-bold text-base group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                            <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
                                             <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-mono text-sm font-bold">{parseFloat(asset.balance).toFixed(4)}</p>
+                                        <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
                                         <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
                                     </div>
                                 </button>

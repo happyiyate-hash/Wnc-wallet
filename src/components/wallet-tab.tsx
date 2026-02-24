@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -302,7 +301,7 @@ export default function WalletTab() {
 
       {/* GLOBAL ACTION SHEET (NETWORK -> TOKEN) */}
       <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
+        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[3rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
             <SheetHeader className="mb-6">
                 <SheetTitle className="text-xl font-bold text-center capitalize">Select Network to {actionType}</SheetTitle>
             </SheetHeader>
@@ -314,9 +313,14 @@ export default function WalletTab() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
+                        style={{
+                            borderColor: chain.themeColor || '#818cf8',
+                            borderWidth: '2px',
+                            background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                        }}
+                        className="flex items-center justify-between p-5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
                                 logoUrl={chain.iconUrl} 
                                 alt={chain.name} 
@@ -325,7 +329,10 @@ export default function WalletTab() {
                                 name={chain.name}
                                 symbol={chain.symbol}
                             />
-                            <span className="font-bold">{chain.name}</span>
+                            <div className="text-left">
+                                <p className="font-bold text-base text-white">{chain.name}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                            </div>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </button>
@@ -341,37 +348,40 @@ export default function WalletTab() {
                     <TokenLogoDynamic 
                         logoUrl={selectedNetworkForSelection?.iconUrl} 
                         alt={selectedNetworkForSelection?.name || ''} 
-                        size={24} 
+                        size={32} 
                         chainId={selectedNetworkForSelection?.chainId} 
                         name={selectedNetworkForSelection?.name}
                         symbol={selectedNetworkForSelection?.symbol}
                     />
-                    {selectedNetworkForSelection?.name} Assets
+                    <div className="flex flex-col items-start text-left">
+                        <span className="text-lg font-bold">{selectedNetworkForSelection?.name}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Select Token to {actionType}</span>
+                    </div>
                 </SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
                 <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
-                        <WalletIcon className="w-3 h-3" /> Your Address
+                        <WalletIcon className="w-3.5 h-3.5" /> Your Address
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-mono break-all text-foreground/80">
+                        <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
                             {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
                         </p>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary shrink-0" onClick={() => {
+                        <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
                             const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
                             if (addr) {
                                 navigator.clipboard.writeText(addr);
                                 toast({ title: "Address Copied" });
                             }
                         }}>
-                            <Copy className="w-4 h-4" />
+                            <Copy className="w-5 h-5" />
                         </Button>
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Available Tokens</p>
+                <div className="space-y-3">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-2">Available Assets</p>
                     <div className="space-y-2">
                         {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
                             const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
@@ -379,9 +389,9 @@ export default function WalletTab() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+                                    className="w-full flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                                 >
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-4">
                                         <TokenLogoDynamic 
                                             logoUrl={asset.iconUrl} 
                                             alt={asset.symbol} 
@@ -390,13 +400,14 @@ export default function WalletTab() {
                                             symbol={asset.symbol} 
                                             name={asset.name}
                                         />
-                                        <div className="text-left">
-                                            <p className="font-bold text-sm">{asset.symbol}</p>
-                                            <p className="text-xs text-muted-foreground">{asset.name}</p>
+                                        <div className="text-left leading-tight">
+                                            <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-sm">{asset.balance}</p>
+                                        <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                                        <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
                                     </div>
                                 </button>
                             );
