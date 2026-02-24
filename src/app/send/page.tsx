@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,11 +11,8 @@ import {
   AlertCircle, 
   Loader2, 
   CheckCircle2, 
-  ArrowRight,
   QrCode,
-  Fuel,
-  Copy,
-  Wallet as WalletIcon
+  Fuel
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -26,7 +22,6 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
-import { getAddressForChain } from '@/lib/wallets/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +31,6 @@ export default function SendPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Workflow State
   const [step, setStep] = useState<'details' | 'success'>('details');
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
   const [recipient, setRecipient] = useState('');
@@ -44,21 +38,16 @@ export default function SendPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState('');
 
-  // Sheet State
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
-  // Fee Estimation State
   const [networkFee, setNetworkFee] = useState<string | null>(null);
   const [isFeeLoading, setIsFeeLoading] = useState(false);
-  const debouncedAmount = useDebounce(amount, 500);
-  const debouncedRecipient = useDebounce(recipient, 500);
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
-  // Auto-select token
   useEffect(() => {
     if (!selectedToken && allAssets.length > 0) {
         const symbol = searchParams.get('symbol');
@@ -233,17 +222,17 @@ export default function SendPage() {
 
       {/* FIXED NETWORK SHEET (SCROLLABLE) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl flex flex-col">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full relative z-10">
+            <div className="flex flex-col flex-1 relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
-                <ScrollArea className="flex-1 px-6 pb-12">
-                    <div className="grid grid-cols-1 gap-3 pb-20">
+                <ScrollArea className="flex-1 px-6">
+                    <div className="grid grid-cols-1 gap-3 pb-24">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -256,11 +245,11 @@ export default function SendPage() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all shadow-lg"
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all shadow-lg text-left"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={44} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                    <div className="text-left">
+                                    <div>
                                         <p className="font-black text-base text-white">{chain.name}</p>
                                         <p className="text-[10px] text-muted-foreground uppercase font-mono opacity-60">ID: {chain.chainId}</p>
                                     </div>
@@ -288,11 +277,11 @@ export default function SendPage() {
                             <button 
                                 key={asset.symbol}
                                 onClick={() => handleTokenSelect(asset)}
-                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
+                                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group text-left"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
-                                    <div className="text-left">
+                                    <div>
                                         <p className="font-black text-base text-white">{asset.symbol}</p>
                                         <p className="text-xs text-muted-foreground">{asset.name}</p>
                                     </div>

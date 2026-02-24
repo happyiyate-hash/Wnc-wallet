@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,8 +12,7 @@ import {
   AlertCircle,
   ChevronRight,
   Wallet as WalletIcon,
-  Copy,
-  Search
+  Copy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -28,7 +26,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import MoreActionsSheet from './wallet/more-actions-sheet';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
-import { Skeleton } from './ui/skeleton';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
@@ -48,7 +45,6 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
       onClick={handleRowClick}
       className="flex cursor-pointer items-center justify-between py-4 border-b border-white/5 active:bg-white/5 transition-all w-full px-6"
       role="button"
-      tabIndex={0}
     >
       <div className="flex items-center gap-3">
         <TokenLogoDynamic 
@@ -209,7 +205,7 @@ export default function WalletTab() {
             </div>
         </div>
 
-        <div className="flex justify-center gap-4 my-10 px-10">
+        <div className="flex justify-center gap-4 my-10 px-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
@@ -219,7 +215,7 @@ export default function WalletTab() {
         
         <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-6">
+              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-6 border-b border-white/5">
                 <TabsTrigger
                   value="tokens"
                   className="p-0 pb-3 text-xs uppercase tracking-[0.2em] font-black data-[state=active]:text-primary data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-4 data-[state=active]:border-primary transition-all"
@@ -231,39 +227,32 @@ export default function WalletTab() {
               </TabsList>
               <TabsContent value="tokens" className="px-0 pt-2">
                 <div className="flex items-center justify-between py-6 px-6">
-                    <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
-                        <Button
-                            variant="outline"
-                            className="h-9 px-4 bg-background hover:bg-muted/50 rounded-full border-none shadow-lg"
-                            onClick={() => setIsTokenManagerOpen(true)}
-                        >
-                            <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-black text-[10px] uppercase tracking-[0.1em]">Manage Assets</span>
-                        </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 bg-white/5 rounded-full hover:bg-white/10 active:scale-90 transition-all"
-                            onClick={() => refresh()}
-                            disabled={isRefreshing}
-                        >
-                          {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-primary"/> : <RefreshCw className="h-4 w-4 text-primary"/>}
-                        </Button>
-                    </div>
+                    <Button
+                        variant="ghost"
+                        className="h-9 px-4 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 transition-all"
+                        onClick={() => setIsTokenManagerOpen(true)}
+                    >
+                        <span className="font-black text-[10px] uppercase tracking-widest text-primary">Manage Assets</span>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 bg-white/5 rounded-full hover:bg-white/10"
+                        onClick={() => refresh()}
+                        disabled={isRefreshing}
+                    >
+                      {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-primary"/> : <RefreshCw className="h-4 w-4 text-primary"/>}
+                    </Button>
                 </div>
 
-                <div className="flex-1 pb-32 border-t border-white/5">
+                <div className="flex-1 pb-32">
                   {fetchError && (
                     <div 
-                      className="mx-6 mt-6 mb-4 p-5 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
+                      className="mx-6 mb-4 p-4 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-3 border border-destructive/20 cursor-pointer"
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
-                      <AlertCircle className="w-5 h-5 shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-bold uppercase tracking-wider mb-0.5">Connection Error</p>
-                        <p className="opacity-80">Tap to restore live balance tracking.</p>
-                      </div>
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <p className="font-medium">Connection limited. Tap to check Infura key.</p>
                     </div>
                   )}
 
@@ -292,13 +281,13 @@ export default function WalletTab() {
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
-            <div className="flex flex-col h-full relative z-10 overflow-hidden">
+            <div className="flex flex-col flex-1 relative z-10 overflow-hidden">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Network to {actionType}</SheetTitle>
                 </SheetHeader>
-                <ScrollArea className="flex-1 px-6 pb-8">
-                    <div className="grid grid-cols-1 gap-3 pb-12">
+                <ScrollArea className="flex-1 px-6">
+                    <div className="grid grid-cols-1 gap-3 pb-24">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -311,7 +300,7 @@ export default function WalletTab() {
                                     borderWidth: '2px',
                                     background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
                                 }}
-                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                                className="flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic 
@@ -322,12 +311,12 @@ export default function WalletTab() {
                                         name={chain.name} 
                                         symbol={chain.symbol}
                                     />
-                                    <div className="text-left">
+                                    <div>
                                         <p className="font-bold text-base text-white">{chain.name}</p>
                                         <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                                <ChevronRight className="w-5 h-5 text-muted-foreground" />
                             </button>
                         ))}
                     </div>
@@ -356,7 +345,7 @@ export default function WalletTab() {
             </SheetHeader>
             <ScrollArea className="flex-1 p-4">
                 <div className="space-y-6">
-                    <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
+                    <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
                             <WalletIcon className="w-3.5 h-3.5" /> Your Address
                         </div>
@@ -385,7 +374,7 @@ export default function WalletTab() {
                                     <button 
                                         key={asset.symbol}
                                         onClick={() => handleTokenSelect(asset)}
-                                        className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                        className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-left"
                                     >
                                         <div className="flex items-center gap-4">
                                             <TokenLogoDynamic 
@@ -396,8 +385,8 @@ export default function WalletTab() {
                                                 symbol={asset.symbol} 
                                                 name={asset.name}
                                             />
-                                            <div className="text-left leading-tight">
-                                                <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                            <div>
+                                                <p className="font-bold text-base text-white">{asset.symbol}</p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                             </div>
                                         </div>

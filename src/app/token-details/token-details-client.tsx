@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import "chartjs-adapter-date-fns";
 import type { AssetRow } from "@/lib/types";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -12,7 +11,6 @@ import {
   ArrowLeftRight,
   QrCode,
   DollarSign,
-  Landmark,
   ArrowLeft,
   Info
 } from "lucide-react";
@@ -95,7 +93,6 @@ export default function TokenDetailsClientPage() {
   const tokenSymbol = searchParams.get('symbol');
 
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
-  const prevPriceRef = useRef<number | undefined | null>();
 
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
@@ -172,7 +169,14 @@ export default function TokenDetailsClientPage() {
         <div className="px-6 pb-12 space-y-8">
             <div className="flex items-center justify-between w-full p-4 rounded-2xl bg-secondary/30 border border-white/5">
                 <div className="flex items-center gap-3">
-                    <TokenLogoDynamic logoUrl={token.iconUrl} size={40} alt={token.name} chainId={token.chainId} name={token.name} symbol={token.symbol}/>
+                    <TokenLogoDynamic 
+                      logoUrl={token.iconUrl} 
+                      size={40} 
+                      alt={token.name} 
+                      chainId={token.chainId} 
+                      name={token.name} 
+                      symbol={token.symbol}
+                    />
                     <div>
                         <p className="font-bold text-base text-white">{token.symbol} Balance</p>
                         <p className="text-xs text-muted-foreground">{viewingNetwork.name}</p>
