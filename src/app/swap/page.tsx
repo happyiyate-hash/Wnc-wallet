@@ -1,31 +1,68 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, ArrowUpDown, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  ArrowUpDown, 
+  Loader2, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Info, 
+  Fuel, 
+  Zap, 
+  GitBranch,
+  X
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { currencyConversionWithLLMValidation } from '@/app/actions';
 import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 export default function SwapPage() {
   const { allAssets, viewingNetwork } = useWallet();
   const { user } = useUser();
+  const { toast } = useToast();
   const router = useRouter();
 
+  // Swap State
   const [fromToken, setFromToken] = useState(allAssets[0] || null);
   const [toToken, setToToken] = useState(allAssets[1] || null);
   const [amount, setAmount] = useState('');
+  
+  // Workflow States
   const [isValidating, setIsValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Mock Market Data (Would be dynamic in production)
+  const gasFeeUsd = 2.45;
+  const slippage = 0.5;
+  const priceImpact = -0.08;
 
   const balance = parseFloat(fromToken?.balance || '0');
   const canValidate = parseFloat(amount) > 0 && parseFloat(amount) <= balance && fromToken && toToken;
+
+  const handleFlip = () => {
+    const temp = fromToken;
+    setFromToken(toToken);
+    setToToken(temp);
+    setValidationResult(null);
+  };
 
   const handleValidateSwap = async () => {
     if (!canValidate) return;
@@ -41,6 +78,11 @@ export default function SwapPage() {
       setValidationResult(result);
     } catch (e) {
       console.error("Validation failed", e);
+      toast({
+        title: "Validation Error",
+        description: "AI could not verify this rate. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsValidating(false);
     }
@@ -62,74 +104,142 @@ export default function SwapPage() {
         });
       
       if (error) throw error;
+      
+      toast({
+        title: "Swap Initiated",
+        description: `Swapping ${amount} ${fromToken.symbol} for ${toToken.symbol}...`,
+      });
+
+      // Simulate network delay
+      await new Promise(r => setTimeout(r, 2000));
+
+      toast({
+        title: "Swap Confirmed",
+        description: "Successfully swapped assets on the ledger.",
+      });
+
       router.push('/');
     } catch (e) {
       console.error("Swap submission failed", e);
+      toast({
+        title: "Swap Failed",
+        description: "Could not broadcast the transaction.",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
+      setShowConfirm(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <header className="p-4 flex items-center gap-2 border-b border-white/5">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    <div className="flex flex-col h-screen bg-background text-foreground">
+      <header className="p-4 flex items-center justify-between border-b border-white/5 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-bold">Swap Assets</h1>
+        <h1 className="text-lg font-bold">Swap</h1>
+        <Button variant="ghost" size="icon" className="rounded-xl">
+          <Info className="w-5 h-5 text-muted-foreground" />
+        </Button>
       </header>
 
-      <main className="flex-1 p-6 space-y-4 overflow-y-auto">
-        <div className="p-6 rounded-3xl bg-secondary/40 border border-white/5 space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase">From</span>
-            <span className="text-xs text-muted-foreground">Balance: {fromToken?.balance}</span>
+      <main className="flex-1 p-4 max-w-lg mx-auto w-full space-y-4 overflow-y-auto thin-scrollbar pb-24">
+        {/* FROM PANEL */}
+        <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5">
+            <Zap className="w-24 h-24 text-primary" />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex justify-between items-center relative z-10">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Pay</span>
+            <span className="text-[10px] text-muted-foreground font-mono">Balance: {fromToken?.balance}</span>
+          </div>
+          <div className="flex items-center gap-4 relative z-10">
             <Input 
               type="number"
               placeholder="0.00"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="text-3xl font-bold bg-transparent border-none p-0 focus-visible:ring-0"
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setValidationResult(null);
+              }}
+              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto"
             />
-            <Button variant="outline" className="rounded-full gap-2 h-10 px-4">
-              <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={24} chainId={fromToken?.chainId} />
-              {fromToken?.symbol}
+            <Button variant="outline" className="rounded-2xl gap-2 h-12 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0">
+              <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={28} chainId={fromToken?.chainId} />
+              <span className="font-bold">{fromToken?.symbol}</span>
             </Button>
           </div>
         </div>
 
-        <div className="flex justify-center -my-6 relative z-10">
+        {/* FLIP BUTTON */}
+        <div className="flex justify-center -my-6 relative z-20">
           <Button 
             size="icon" 
             variant="outline" 
-            className="rounded-xl bg-background border-white/5 h-10 w-10 shadow-xl"
-            onClick={() => {
-              const temp = fromToken;
-              setFromToken(toToken);
-              setToToken(temp);
-            }}
+            className="rounded-2xl bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group"
+            onClick={handleFlip}
           >
-            <ArrowUpDown className="w-4 h-4 text-primary" />
+            <ArrowUpDown className="w-5 h-5 text-primary group-hover:rotate-180 transition-transform duration-500" />
           </Button>
         </div>
 
-        <div className="p-6 rounded-3xl bg-secondary/40 border border-white/5 space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-muted-foreground uppercase">To (Estimated)</span>
+        {/* TO PANEL */}
+        <div className="p-6 rounded-[2rem] bg-secondary/30 border border-white/5 space-y-4 relative overflow-hidden">
+          <div className="flex justify-between items-center relative z-10">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Receive (Est.)</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 text-3xl font-bold">
-              {validationResult?.convertedAmount?.toFixed(6) || '0.00'}
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="flex-1 text-4xl font-bold truncate">
+              {validationResult?.convertedAmount ? validationResult.convertedAmount.toFixed(6) : '0.00'}
             </div>
-            <Button variant="outline" className="rounded-full gap-2 h-10 px-4">
-              <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={24} chainId={toToken?.chainId} />
-              {toToken?.symbol}
+            <Button variant="outline" className="rounded-2xl gap-2 h-12 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0">
+              <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={28} chainId={toToken?.chainId} />
+              <span className="font-bold">{toToken?.symbol}</span>
             </Button>
           </div>
         </div>
 
+        {/* ROUTE INFO */}
+        <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+          <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+            <div className="flex items-center gap-2"><GitBranch className="w-3 h-3 text-primary" /> Best Route</div>
+            <div className="text-primary">Auto-Optimized</div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-white/70 overflow-hidden">
+            <span className="bg-white/5 px-2 py-1 rounded-lg shrink-0">Uniswap</span>
+            <span className="text-primary">→</span>
+            <span className="bg-white/5 px-2 py-1 rounded-lg shrink-0">1inch</span>
+            <span className="text-primary">→</span>
+            <span className="bg-white/5 px-2 py-1 rounded-lg shrink-0">SushiSwap</span>
+          </div>
+        </div>
+
+        {/* MARKET STATS */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center space-y-1">
+             <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
+                <Fuel className="w-3 h-3" /> Gas
+             </div>
+             <p className="text-xs font-bold">${gasFeeUsd}</p>
+          </div>
+          <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center space-y-1">
+             <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
+                Slippage
+             </div>
+             <p className="text-xs font-bold">{slippage}%</p>
+          </div>
+          <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center space-y-1">
+             <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
+                Impact
+             </div>
+             <p className={cn("text-xs font-bold", priceImpact < -1 ? "text-red-400" : "text-green-400")}>
+                {priceImpact}%
+             </p>
+          </div>
+        </div>
+
+        {/* AI VALIDATION ALERT */}
         {validationResult && (
           <div className={cn(
             "p-4 rounded-2xl flex items-start gap-3 border animate-in fade-in slide-in-from-top-2",
@@ -138,31 +248,93 @@ export default function SwapPage() {
             {validationResult.isValid ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
             <div className="text-sm">
               <p className="font-bold">{validationResult.isValid ? 'Rate Validated' : 'Suspicious Rate Detected'}</p>
-              <p className="opacity-80">{validationResult.isValid ? 'AI confirms this conversion rate is plausible and safe.' : validationResult.validationReason}</p>
+              <p className="opacity-80 text-xs leading-relaxed">
+                {validationResult.isValid ? 'AI confirms this conversion rate is plausible and safe.' : validationResult.validationReason}
+              </p>
             </div>
           </div>
         )}
 
-        <div className="pt-4">
+        {/* CTA BUTTON */}
+        <div className="fixed bottom-24 left-4 right-4 max-w-lg mx-auto">
           {!validationResult ? (
             <Button 
-              className="w-full h-16 rounded-2xl text-lg font-bold"
+              className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20"
               disabled={!canValidate || isValidating}
               onClick={handleValidateSwap}
             >
-              {isValidating ? <Loader2 className="w-6 h-6 animate-spin mr-2" /> : "Verify with AI"}
+              {isValidating ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Verifying with AI...</span>
+                </div>
+              ) : "Verify Rate with AI"}
             </Button>
           ) : (
             <Button 
-              className="w-full h-16 rounded-2xl text-lg font-bold"
+              className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20 bg-primary hover:bg-primary/90"
               disabled={!validationResult.isValid || isSubmitting}
-              onClick={handleConfirmSwap}
+              onClick={() => setShowConfirm(true)}
             >
-              {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin mr-2" /> : "Confirm Swap"}
+              Review & Swap
             </Button>
           )}
         </div>
       </main>
+
+      {/* CONFIRMATION DIALOG */}
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent className="bg-zinc-950 border-white/10 rounded-[2.5rem] p-8 max-w-[90vw] sm:max-w-[400px]">
+          <DialogHeader className="space-y-4">
+            <DialogTitle className="text-2xl font-bold text-center">Confirm Swap</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-sm leading-relaxed text-center">
+              Please review your transaction details. Once confirmed, this swap will be broadcasted to the <span className="text-primary font-bold">{viewingNetwork.name}</span> network.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                <div className="flex items-center gap-3">
+                    <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={32} chainId={fromToken?.chainId} />
+                    <span className="font-bold">{amount} {fromToken?.symbol}</span>
+                </div>
+                <Zap className="w-4 h-4 text-muted-foreground" />
+                <div className="flex items-center gap-3 text-right">
+                    <span className="font-bold">{validationResult?.convertedAmount?.toFixed(4)} {toToken?.symbol}</span>
+                    <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={32} chainId={toToken?.chainId} />
+                </div>
+            </div>
+
+            <div className="space-y-2 px-1">
+                <div className="flex justify-between text-xs text-muted-foreground font-medium uppercase tracking-widest">
+                    <span>Estimated Gas</span>
+                    <span className="text-foreground">${gasFeeUsd}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground font-medium uppercase tracking-widest">
+                    <span>Max Slippage</span>
+                    <span className="text-foreground">{slippage}%</span>
+                </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-8 flex flex-col gap-3 sm:flex-col">
+            <Button 
+                onClick={handleConfirmSwap}
+                className="w-full h-14 rounded-2xl font-bold text-base gap-2"
+                disabled={isSubmitting}
+            >
+              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Swap"}
+            </Button>
+            <Button 
+                variant="ghost"
+                onClick={() => setShowConfirm(false)}
+                className="w-full h-12 rounded-xl text-zinc-500 hover:text-white"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
