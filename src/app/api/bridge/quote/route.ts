@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getQuote, createConfig } from '@lifi/sdk';
 
-// Configure LI.FI SDK globally for v3 functional approach
+// Configure LI.FI SDK globally (v3 Functional Approach)
 createConfig({
     integrator: 'WNC-Wallet',
 });
 
 /**
- * BRIDGE & SWAP QUOTE API (LI.FI SDK v3)
+ * BRIDGE & SWAP QUOTE API
  * 
- * Fetches the best bridge/swap route using the functional API approach.
- * This fixes the "Export LiFi was not found" compilation error by avoiding the class-based SDK.
+ * Uses the functional getQuote approach to fix the "Export LiFi was not found" error.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
@@ -32,7 +31,8 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const quoteRequest = {
+        // Fetch the quote using the recommended v3 functional method
+        const response = await getQuote({
             fromChain: Number(fromChain),
             toChain: Number(toChain),
             fromToken,
@@ -41,20 +41,14 @@ export async function GET(req: NextRequest) {
             fromAddress,
             toAddress: toAddress || fromAddress,
             slippage: Number(slippage),
-        };
-        
-        // Use the functional getQuote utility from v3
-        const response = await getQuote(quoteRequest as any);
+        } as any);
         
         return NextResponse.json(response);
 
     } catch (error: any) {
         console.error('[LI.FI_QUOTE_ERROR]', error);
-        
-        const errorMessage = error.message || 'DEX aggregation failed. Please try a different asset pair.';
-        
         return NextResponse.json(
-            { error: 'DEX Aggregator Error', details: errorMessage }, 
+            { error: 'DEX Aggregator Error', details: error.message || 'Unknown error' }, 
             { status: 500 }
         );
     }

@@ -209,7 +209,6 @@ export default function WalletTab() {
             </div>
         </div>
 
-        {/* CLUSTERED ACTION BUTTONS (DENSE CENTERED) */}
         <div className="flex justify-center gap-4 my-10 px-10">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
@@ -254,7 +253,6 @@ export default function WalletTab() {
                     </div>
                 </div>
 
-                {/* CARDLESS PORTFOLIO LIST (STRETCHED EDGE-TO-EDGE) */}
                 <div className="flex-1 pb-32 border-t border-white/5">
                   {fetchError && (
                     <div 
@@ -289,7 +287,6 @@ export default function WalletTab() {
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
 
-      {/* GLOBAL ACTION SHEET (SCROLLING REINFORCED) */}
       <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
