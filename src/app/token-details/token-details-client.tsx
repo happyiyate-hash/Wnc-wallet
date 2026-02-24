@@ -137,6 +137,10 @@ export default function TokenDetailsClientPage() {
     }
   };
 
+  const handleAction = (path: string) => {
+    router.push(`${path}?symbol=${token.symbol}&chainId=${token.chainId}`);
+  };
+
   const displayBalance = isNaN(balance) ? '0.00' : balance.toLocaleString('en-US', { maximumFractionDigits: 6 });
   const displayFiat = isNaN(fiatValue) ? '$0.00' : `$${fiatValue.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -185,12 +189,12 @@ export default function TokenDetailsClientPage() {
         </div>
 
         <div className="flex items-center justify-around my-8 px-4">
-            <ActionButton icon={<DollarSign className="w-7 h-7 text-primary" />} label="Buy" onClick={() => router.push('/buy')} />
-            <ActionButton icon={<Landmark className="w-7 h-7 text-primary" />} label="Sell" onClick={() => router.push('/sell')} />
-            <ActionButton icon={<ArrowLeftRight className="w-7 h-7 text-primary" />} label="Swap" onClick={() => router.push(`/swap?fromSymbol=${token.symbol}`)} />
+            <ActionButton icon={<DollarSign className="w-7 h-7 text-primary" />} label="Buy" onClick={() => handleAction('/buy')} />
+            <ActionButton icon={<Landmark className="w-7 h-7 text-primary" />} label="Sell" onClick={() => handleAction('/sell')} />
+            <ActionButton icon={<ArrowLeftRight className="w-7 h-7 text-primary" />} label="Swap" onClick={() => handleAction('/swap')} />
             <ActionButton icon={<GitFork className="w-7 h-7 text-primary" />} label="Bridge" onClick={() => alert("Bridge sheet opened")} disabled={!isEvmChain} />
-            <ActionButton icon={<ArrowUpRight className="w-7 h-7 text-primary" />} label="Send" onClick={() => router.push(`/send/details?chainId=${token.chainId}&tokenAddress=${token.address || 'native'}`)} />
-            <ActionButton icon={<QrCode className="w-7 h-7 text-primary" />} label="Receive" onClick={() => alert("Receive sheet opened")} />
+            <ActionButton icon={<ArrowUpRight className="w-7 h-7 text-primary" />} label="Send" onClick={() => handleAction('/send')} />
+            <ActionButton icon={<QrCode className="w-7 h-7 text-primary" />} label="Receive" onClick={() => handleAction('/receive')} />
         </div>
         
         <div className="px-4 pb-4 space-y-8">

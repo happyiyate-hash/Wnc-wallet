@@ -136,24 +136,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-          const balance = await provider.getBalance(wallets[0].address);
-          
           const initialAssets = getInitialAssets(chain.chainId);
-          const nativeAsset = initialAssets.find(a => a.isNative) || {
-             chainId: chain.chainId,
-             address: 'native',
-             symbol: chain.symbol,
-             name: chain.name,
-             isNative: true
-          };
+          
+          const chainBalances = await Promise.all(initialAssets.map(async (asset) => {
+            try {
+              let balance;
+              if (asset.isNative) {
+                balance = await provider.getBalance(wallets[0].address);
+              } else {
+                const abi = ["function balanceOf(address owner) view returns (uint256)"];
+                const contract = new ethers.Contract(asset.address, abi, provider);
+                balance = await contract.balanceOf(wallets[0].address);
+              }
+              return {
+                ...asset,
+                balance: ethers.formatUnits(balance, 18), // Assuming standard 18 decimals for simplicity in this proto
+                iconUrl: asset.iconUrl || chain.iconUrl
+              } as AssetRow;
+            } catch (e) {
+              return { ...asset, balance: '0', iconUrl: asset.iconUrl || chain.iconUrl } as AssetRow;
+            }
+          }));
 
-          return {
-            ...nativeAsset,
-            balance: ethers.formatEther(balance),
-            iconUrl: chain.iconUrl
-          } as AssetRow;
+          return { chainId: chain.chainId, assets: chainBalances };
         } catch (e: any) {
-          console.warn(`RPC check failed for ${chain.name} (${chain.chainId}): ${e.message}`);
           return null;
         }
       });
@@ -162,11 +168,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       results.forEach((res) => {
         if (res) {
-          if (!newBalances[res.chainId]) newBalances[res.chainId] = [];
-          newBalances[res.chainId].push(res);
+          newBalances[res.chainId] = res.assets;
         }
       });
 
+      // Fill in chains that failed
       chainsWithLogos.forEach(chain => {
         if (chain.chainId && !newBalances[chain.chainId]) {
           newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({

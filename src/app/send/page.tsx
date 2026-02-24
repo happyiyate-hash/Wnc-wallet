@@ -17,7 +17,7 @@ import {
   Copy,
   Wallet as WalletIcon
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +32,7 @@ export default function SendPage() {
   const { viewingNetwork, wallets, balances, infuraApiKey, allChains } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Workflow State
   const [step, setStep] = useState<'details' | 'success'>('details');
@@ -55,15 +56,27 @@ export default function SendPage() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
-  // Auto-select first available token on mount if none selected
+  // Auto-select token based on query params or defaults
   useEffect(() => {
-    if (!selectedToken && viewingNetwork) {
+    if (!selectedToken) {
+        const symbol = searchParams.get('symbol');
+        const chainId = parseInt(searchParams.get('chainId') || '');
+        
+        if (symbol && !isNaN(chainId)) {
+            const assets = getInitialAssets(chainId);
+            const found = assets.find(a => a.symbol === symbol);
+            if (found) {
+                setSelectedToken({ ...found, balance: '0' } as AssetRow);
+                return;
+            }
+        }
+
         const initial = getInitialAssets(viewingNetwork.chainId)[0];
         if (initial) {
             setSelectedToken({ ...initial, balance: '0' } as AssetRow);
         }
     }
-  }, [viewingNetwork, selectedToken]);
+  }, [viewingNetwork, selectedToken, searchParams]);
 
   // Estimate Fee using User RPC and FeeData
   useEffect(() => {
