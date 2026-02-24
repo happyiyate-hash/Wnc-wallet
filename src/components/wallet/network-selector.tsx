@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Copy, Repeat, Grip, Search, CheckCircle } from 'lucide-react';
+import { ChevronDown, Copy, Grip, Search, CheckCircle } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -61,7 +61,7 @@ const NetworkRow = ({
             <TokenLogoDynamic 
                 alt={chain.name} 
                 logoUrl={chain.iconUrl}
-                size={32}
+                size={44}
                 chainId={chain.chainId}
                 name={chain.name}
                 symbol={chain.symbol}

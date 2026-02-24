@@ -94,7 +94,7 @@ export default function ReceivePage() {
                                 <TokenLogoDynamic 
                                     logoUrl={selectedToken?.iconUrl} 
                                     alt={selectedToken?.symbol || ''} 
-                                    size={40} 
+                                    size={44} 
                                     chainId={selectedToken?.chainId} 
                                     symbol={selectedToken?.symbol}
                                     name={selectedToken?.name}

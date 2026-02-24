@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -319,7 +320,7 @@ export default function WalletTab() {
                             <TokenLogoDynamic 
                                 logoUrl={chain.iconUrl} 
                                 alt={chain.name} 
-                                size={40} 
+                                size={44} 
                                 chainId={chain.chainId} 
                                 name={chain.name}
                                 symbol={chain.symbol}
@@ -384,7 +385,7 @@ export default function WalletTab() {
                                         <TokenLogoDynamic 
                                             logoUrl={asset.iconUrl} 
                                             alt={asset.symbol} 
-                                            size={36} 
+                                            size={44} 
                                             chainId={asset.chainId} 
                                             symbol={asset.symbol} 
                                             name={asset.name}
