@@ -79,11 +79,11 @@ export default function ReceivePage() {
                     {address ? (
                         <div className="flex flex-col items-center gap-2 text-zinc-400">
                             <QrCode className="w-24 h-24 opacity-20" />
-                            <span className="text-[10px] font-mono text-center px-4">QR System Initializing</span>
+                            <span className="text-[10px] font-mono text-center px-4">QR System Ready</span>
                         </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
-                            <span className="text-xs text-muted-foreground font-mono">Vault Connecting...</span>
+                            <span className="text-xs text-muted-foreground font-mono">Connecting...</span>
                         </div>
                     )}
                     

@@ -6,11 +6,11 @@ import { logoSupabase } from './supabase/logo-client';
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
  * 
- * Direct lookup via the metadata Supabase instance.
+ * Direct lookup via the dedicated metadata Supabase instance.
  */
 
 /**
- * Fetches a token's direct logo URL from Supabase storage.
+ * Fetches a token's direct logo URL from the dedicated Supabase storage.
  * lookup priorities: Exact name match -> Symbol match.
  * 
  * @param {string} tokenName - The full name of the token (e.g., 'Wrapped Ether').
@@ -49,7 +49,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
 }
 
 /**
- * Immediate path prediction for the CDN caching layer.
+ * Prepares a logo path prediction for the CDN caching layer.
  */
 export function getTokenLogoUrl(
     symbol?: string | null,

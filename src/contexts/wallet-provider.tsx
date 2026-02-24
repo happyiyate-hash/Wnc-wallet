@@ -68,8 +68,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * DIRECT SUPABASE REGISTRY SYNC
-   * Fetches metadata from the dedicated instance for every network.
+   * DIRECT DEDICATED SUPABASE SYNC
+   * Fetches metadata for all 23 networks from the isolated logo project.
    */
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
