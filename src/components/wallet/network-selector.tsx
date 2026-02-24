@@ -51,7 +51,7 @@ const NetworkRow = ({
     <div
       style={cardStyle}
       className={cn(
-        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border transition-colors hover:bg-muted/50'
+        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border transition-colors hover:bg-muted/50 cursor-pointer'
       )}
       onClick={() => onSelect(chain)}
       role="button"

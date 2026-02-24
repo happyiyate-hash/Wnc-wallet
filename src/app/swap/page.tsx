@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -93,7 +92,7 @@ export default function SwapPage() {
     }
   }, [viewingNetwork, searchParams, fromToken, toToken]);
 
-  // --- QUOTE FETCHING (LI.FI) ---
+  // --- QUOTE FETCHING ---
   useEffect(() => {
     const getQuote = async () => {
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
@@ -243,7 +242,14 @@ export default function SwapPage() {
                     setIsNetworkSheetOpen(true);
                 }}
             >
-              <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={28} chainId={fromToken?.chainId} />
+              <TokenLogoDynamic 
+                logoUrl={fromToken?.iconUrl} 
+                alt={fromToken?.symbol || ''} 
+                size={28} 
+                chainId={fromToken?.chainId}
+                name={fromToken?.name}
+                symbol={fromToken?.symbol}
+              />
               <span className="font-bold">{fromToken?.symbol}</span>
               <ChevronRight className="w-3 h-3 text-muted-foreground" />
             </Button>
@@ -281,7 +287,14 @@ export default function SwapPage() {
                     setIsNetworkSheetOpen(true);
                 }}
             >
-              <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={28} chainId={toToken?.chainId} />
+              <TokenLogoDynamic 
+                logoUrl={toToken?.iconUrl} 
+                alt={toToken?.symbol || ''} 
+                size={28} 
+                chainId={toToken?.chainId}
+                name={toToken?.name}
+                symbol={toToken?.symbol}
+              />
               <span className="font-bold">{toToken?.symbol}</span>
               <ChevronRight className="w-3 h-3 text-muted-foreground" />
             </Button>
@@ -397,10 +410,17 @@ export default function SwapPage() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
+                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group text-left"
                     >
                         <div className="flex items-center gap-3">
-                            <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} />
+                            <TokenLogoDynamic 
+                                logoUrl={chain.iconUrl} 
+                                alt={chain.name} 
+                                size={40} 
+                                chainId={chain.chainId} 
+                                name={chain.name}
+                                symbol={chain.symbol}
+                            />
                             <span className="font-bold">{chain.name}</span>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -414,7 +434,14 @@ export default function SwapPage() {
         <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[400px] p-0 flex flex-col">
             <SheetHeader className="p-6 border-b border-white/5">
                 <SheetTitle className="flex items-center gap-2">
-                    <TokenLogoDynamic logoUrl={selectedNetworkForSelection?.iconUrl} alt={selectedNetworkForSelection?.name || ''} size={24} chainId={selectedNetworkForSelection?.chainId} />
+                    <TokenLogoDynamic 
+                        logoUrl={selectedNetworkForSelection?.iconUrl} 
+                        alt={selectedNetworkForSelection?.name || ''} 
+                        size={24} 
+                        chainId={selectedNetworkForSelection?.chainId} 
+                        name={selectedNetworkForSelection?.name}
+                        symbol={selectedNetworkForSelection?.symbol}
+                    />
                     {selectedNetworkForSelection?.name} Assets
                 </SheetTitle>
             </SheetHeader>
@@ -448,10 +475,17 @@ export default function SwapPage() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors text-left"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={36} chainId={asset.chainId} symbol={asset.symbol} />
+                                        <TokenLogoDynamic 
+                                            logoUrl={asset.iconUrl} 
+                                            alt={asset.symbol} 
+                                            size={36} 
+                                            chainId={asset.chainId} 
+                                            symbol={asset.symbol} 
+                                            name={asset.name}
+                                        />
                                         <div className="text-left">
                                             <p className="font-bold text-sm">{asset.symbol}</p>
                                             <p className="text-xs text-muted-foreground">{asset.name}</p>
@@ -485,7 +519,14 @@ export default function SwapPage() {
           <div className="mt-6 space-y-4">
             <div className="flex items-center justify-between p-5 rounded-2xl bg-white/5 border border-white/5">
                 <div className="flex flex-col items-center gap-1">
-                    <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={40} chainId={fromToken?.chainId} />
+                    <TokenLogoDynamic 
+                        logoUrl={fromToken?.iconUrl} 
+                        alt={fromToken?.symbol || ''} 
+                        size={40} 
+                        chainId={fromToken?.chainId}
+                        name={fromToken?.name}
+                        symbol={fromToken?.symbol}
+                    />
                     <span className="font-bold text-sm">{amount} {fromToken?.symbol}</span>
                 </div>
                 <div className="flex flex-col items-center gap-1 text-muted-foreground">
@@ -493,7 +534,14 @@ export default function SwapPage() {
                     <span className="text-[8px] uppercase tracking-widest font-bold">Route</span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
-                    <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={40} chainId={toToken?.chainId} />
+                    <TokenLogoDynamic 
+                        logoUrl={toToken?.iconUrl} 
+                        alt={toToken?.symbol || ''} 
+                        size={40} 
+                        chainId={toToken?.chainId}
+                        name={toToken?.name}
+                        symbol={toToken?.symbol}
+                    />
                     <span className="font-bold text-sm">{quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(4) : '...'} {toToken?.symbol}</span>
                 </div>
             </div>

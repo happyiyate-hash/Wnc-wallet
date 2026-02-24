@@ -78,7 +78,7 @@ export default function SendPage() {
     }
   }, [viewingNetwork, selectedToken, searchParams]);
 
-  // Estimate Fee using User RPC and FeeData
+  // Estimate Fee
   useEffect(() => {
     const estimateFee = async () => {
       if (!infuraApiKey || !selectedToken || !viewingNetwork.rpcUrl) {
@@ -90,17 +90,13 @@ export default function SendPage() {
       try {
         const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
         const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-        
-        // Fetch real-time gas data
         const feeData = await provider.getFeeData();
         const gasPrice = feeData.gasPrice || 0n;
 
-        // Estimate Gas Limit
         let gasLimit = 21000n;
         if (!selectedToken.isNative && selectedToken.address) {
           const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
           const contract = new ethers.Contract(selectedToken.address, abi, provider);
-          // Only estimate if we have a valid recipient and amount to simulate
           if (ethers.isAddress(debouncedRecipient) && parseFloat(debouncedAmount) > 0) {
             try {
               gasLimit = await contract.transfer.estimateGas(
@@ -108,7 +104,7 @@ export default function SendPage() {
                 ethers.parseUnits(debouncedAmount, 18)
               );
             } catch (e) {
-              gasLimit = 65000n; // Standard ERC20 transfer fallback
+              gasLimit = 65000n;
             }
           } else {
             gasLimit = 65000n;
@@ -331,7 +327,7 @@ export default function SendPage() {
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
             <SheetHeader className="mb-6">
-                <SheetTitle className="text-xl font-bold">Select Network</SheetTitle>
+                <SheetTitle className="text-xl font-bold text-center">Select Network</SheetTitle>
             </SheetHeader>
             <div className="grid grid-cols-1 gap-3">
                 {allChains.map((chain) => (
@@ -341,7 +337,7 @@ export default function SendPage() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
+                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group text-left"
                     >
                         <div className="flex items-center gap-3">
                             <TokenLogoDynamic 
@@ -408,7 +404,7 @@ export default function SendPage() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors text-left"
                                 >
                                     <div className="flex items-center gap-3">
                                         <TokenLogoDynamic 

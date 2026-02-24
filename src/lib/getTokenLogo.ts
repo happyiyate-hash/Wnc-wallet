@@ -15,7 +15,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
   if (!logoSupabase) return null;
 
   try {
-    // 1. Prioritize lookup by the full token name for accuracy
+    // 1. Prioritize lookup by the full token name for accuracy (Case-insensitive)
     if (tokenName) {
         const { data: nameData } = await logoSupabase
           .from('token_logos')
@@ -29,7 +29,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
         }
     }
 
-    // 2. If no match is found by name, fall back to the symbol
+    // 2. If no match is found by name, fall back to the symbol (Case-insensitive)
     if (tokenSymbol) {
         const { data: symbolData } = await logoSupabase
           .from('token_logos')

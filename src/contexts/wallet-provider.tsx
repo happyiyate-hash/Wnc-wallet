@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -40,6 +39,8 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const { user, loading: authLoading, signOut: authSignOut } = useUser();
@@ -67,10 +68,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   };
 
-  /**
-   * DEDICATED LOGO SYNC
-   * Fetches metadata for all networks from the secondary logo instance.
-   */
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
     const registry: { [chainId: number]: any[] } = {};
@@ -170,8 +167,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const newBalances: { [key: string]: AssetRow[] } = {};
 
     try {
-      const balancePromises = chainsWithLogos.map(async (chain) => {
-        if (!chain.rpcUrl || !chain.chainId) return null;
+      // SEQUENTIAL FETCHING to avoid Infura "Too Many Requests" error
+      for (const chain of chainsWithLogos) {
+        if (!chain.rpcUrl || !chain.chainId) continue;
 
         const apiTokens = tokenRegistry[chain.chainId] || [];
         const combinedAssetsList = getInitialAssets(chain.chainId).map(a => {
@@ -207,16 +205,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
           }));
 
-          return { chainId: chain.chainId, assets: chainBalances };
+          newBalances[chain.chainId] = chainBalances;
         } catch (e: any) {
-          return { chainId: chain.chainId, assets: combinedAssetsList };
+          newBalances[chain.chainId] = combinedAssetsList;
         }
-      });
-
-      const results = await Promise.all(balancePromises);
-      results.forEach((res) => {
-        if (res) newBalances[res.chainId] = res.assets;
-      });
+        
+        // Small delay between chains to respect rate limits
+        await delay(150);
+      }
 
       const flatAssets = Object.values(newBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
@@ -229,7 +225,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(finalBalances);
     } catch (e: any) {
-      console.warn("Market data fetch issue.");
+      console.warn("Market data fetch issue:", e.message);
+      if (e.message.includes("Too Many Requests")) {
+        setFetchError("Rate limit exceeded. Slowing down connection...");
+      }
     } finally {
       setIsRefreshing(false);
     }
