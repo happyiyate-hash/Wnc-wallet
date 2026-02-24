@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -164,7 +165,7 @@ export default function SendPage() {
       <div className="flex flex-col items-center gap-4 mb-4">
         <button 
             onClick={() => setIsNetworkSheetOpen(true)}
-            className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group shadow-xl"
+            className="flex items-center gap-4 p-4 rounded-[2rem] bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group shadow-xl"
         >
             <TokenLogoDynamic 
                 logoUrl={selectedToken?.iconUrl} 
@@ -175,7 +176,7 @@ export default function SendPage() {
                 symbol={selectedToken?.symbol}
             />
             <div className="text-left">
-                <h2 className="text-xl font-bold leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
+                <h2 className="text-xl font-black leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1.5 font-bold">Change Token</p>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform ml-2" />
@@ -184,7 +185,7 @@ export default function SendPage() {
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Recipient Address</Label>
+          <Label className="text-xs font-black text-muted-foreground uppercase tracking-widest pl-1">Recipient Address</Label>
           <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl shadow-inner">
             <div className="relative bg-zinc-950 rounded-2xl overflow-hidden">
                 <Input 
@@ -204,7 +205,7 @@ export default function SendPage() {
 
         <div className="space-y-2">
           <div className="flex justify-between items-end px-1">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Amount</Label>
+            <Label className="text-xs font-black text-muted-foreground uppercase tracking-widest">Amount</Label>
             <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {selectedToken?.balance}</span>
           </div>
           <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl shadow-inner">
@@ -214,12 +215,12 @@ export default function SendPage() {
                     placeholder="0.00" 
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="h-20 bg-transparent border-none text-4xl font-bold pr-20 focus-visible:ring-0"
+                    className="h-20 bg-transparent border-none text-4xl font-black pr-20 focus-visible:ring-0"
                 />
                 <Button 
                     size="sm" 
                     variant="ghost" 
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold hover:bg-primary/10 rounded-xl"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-black hover:bg-primary/10 rounded-xl"
                     onClick={() => setAmount(selectedToken?.balance || '0')}
                 >
                     MAX
@@ -231,7 +232,7 @@ export default function SendPage() {
 
       <div className="p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 shadow-2xl">
           <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground font-bold text-[10px] uppercase tracking-widest">
+            <div className="flex items-center gap-2 text-muted-foreground font-black text-[10px] uppercase tracking-widest">
                 <Fuel className="w-4 h-4 text-primary" />
                 Network Fee
             </div>
@@ -248,19 +249,19 @@ export default function SendPage() {
           </div>
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
-            <span className="text-base font-bold uppercase tracking-widest text-[10px] text-muted-foreground">Total to Send</span>
+            <span className="text-base font-black uppercase tracking-widest text-[10px] text-muted-foreground">Total to Send</span>
             <span className="text-2xl font-black text-primary">{totalDisplayAmount} {selectedToken?.symbol}</span>
           </div>
       </div>
 
       <div className="mt-auto pb-4">
         {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4 font-bold shadow-xl animate-in zoom-in-95">
+          <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4 font-black shadow-xl animate-in zoom-in-95">
             <AlertCircle className="w-5 h-5" /> Insufficient balance
           </div>
         )}
         <Button 
-          className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 border-b-4 border-primary/50 transition-all active:translate-y-1 active:border-b-0 disabled:opacity-50"
+          className="w-full h-16 rounded-[1.5rem] text-lg font-black shadow-2xl shadow-primary/30 border-b-4 border-primary/50 transition-all active:translate-y-1 active:border-b-0 disabled:opacity-50"
           disabled={!recipient || !isValidAmount || isSubmitting || !infuraApiKey}
           onClick={handleSendRequest}
         >
@@ -293,7 +294,7 @@ export default function SendPage() {
         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2 text-left">Transaction ID</p>
         <p className="text-xs font-mono break-all text-foreground/80 text-left leading-relaxed">{txHash}</p>
       </div>
-      <Button className="w-full h-16 rounded-[1.5rem] font-bold text-lg shadow-xl" onClick={() => router.push('/')}>
+      <Button className="w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl" onClick={() => router.push('/')}>
         Return to Wallet
       </Button>
     </div>
@@ -314,51 +315,56 @@ export default function SendPage() {
 
       {/* STEP 1: BOTTOM SHEET (NETWORKS) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[3rem] p-6 max-h-[85vh] overflow-y-auto thin-scrollbar shadow-2xl">
-            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-            <SheetHeader className="mb-6">
-                <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
-            </SheetHeader>
-            <div className="grid grid-cols-1 gap-3">
-                {allChains.map((chain) => (
-                    <button 
-                        key={chain.chainId}
-                        onClick={() => {
-                            setSelectedNetworkForSelection(chain);
-                            setIsTokenSideSheetOpen(true);
-                        }}
-                        style={{
-                            borderColor: chain.themeColor || '#818cf8',
-                            borderWidth: '2px',
-                            background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
-                        }}
-                        className="flex items-center justify-between p-5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
-                    >
-                        <div className="flex items-center gap-4">
-                            <TokenLogoDynamic 
-                                logoUrl={chain.iconUrl} 
-                                alt={chain.name} 
-                                size={44} 
-                                chainId={chain.chainId} 
-                                name={chain.name}
-                                symbol={chain.symbol}
-                            />
-                            <div className="text-left">
-                                <p className="font-bold text-base text-white">{chain.name}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 max-h-[85vh] overflow-hidden shadow-2xl">
+            <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+            <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
+            
+            <div className="flex flex-col h-full p-6 overflow-y-auto thin-scrollbar relative z-10">
+                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
+                <SheetHeader className="mb-6">
+                    <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
+                </SheetHeader>
+                <div className="grid grid-cols-1 gap-3">
+                    {allChains.map((chain) => (
+                        <button 
+                            key={chain.chainId}
+                            onClick={() => {
+                                setSelectedNetworkForSelection(chain);
+                                setIsTokenSideSheetOpen(true);
+                            }}
+                            style={{
+                                borderColor: chain.themeColor || '#818cf8',
+                                borderWidth: '2px',
+                                background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                            }}
+                            className="flex items-center justify-between p-5 rounded-[2rem] border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                        >
+                            <div className="flex items-center gap-4">
+                                <TokenLogoDynamic 
+                                    logoUrl={chain.iconUrl} 
+                                    alt={chain.name} 
+                                    size={44} 
+                                    chainId={chain.chainId} 
+                                    name={chain.name}
+                                    symbol={chain.symbol}
+                                />
+                                <div className="text-left">
+                                    <p className="font-black text-base text-white">{chain.name}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                                </div>
                             </div>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </button>
-                ))}
+                            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </button>
+                    ))}
+                </div>
             </div>
         </SheetContent>
       </Sheet>
 
       {/* STEP 2: SIDE SHEET (TOKENS ON NETWORK) */}
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
-            <SheetHeader className="p-6 border-b border-white/5 flex flex-row items-center gap-4 space-y-0">
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
+            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent flex flex-row items-center gap-4 space-y-0">
                 <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl"><ArrowLeft className="w-5 h-5"/></Button>
                 <SheetTitle className="flex items-center gap-3">
                     <TokenLogoDynamic 
@@ -371,7 +377,7 @@ export default function SendPage() {
                     />
                     <div className="flex flex-col items-start leading-none">
                         <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
-                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mt-1">Available Assets</span>
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-black mt-1">Available Assets</span>
                     </div>
                 </SheetTitle>
             </SheetHeader>
@@ -406,7 +412,7 @@ export default function SendPage() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                    className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                                 >
                                     <div className="flex items-center gap-4">
                                         <TokenLogoDynamic 
@@ -418,12 +424,12 @@ export default function SendPage() {
                                             name={asset.name}
                                         />
                                         <div className="text-left leading-tight">
-                                            <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                            <p className="font-black text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
                                             <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                                        <p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p>
                                         <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
                                     </div>
                                 </button>

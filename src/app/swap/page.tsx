@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -211,7 +212,7 @@ export default function SwapPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-bold">Bridge & Swap</h1>
+        <h1 className="text-lg font-black uppercase tracking-widest">Bridge & Swap</h1>
         <Button variant="ghost" size="icon" className="rounded-xl">
           <Settings2 className="w-5 h-5 text-muted-foreground" />
         </Button>
@@ -221,7 +222,7 @@ export default function SwapPage() {
         {/* FROM TOKEN SECTION */}
         <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Pay</span>
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Pay</span>
             <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {fromToken?.balance}</span>
           </div>
           <div className="flex items-center gap-4">
@@ -230,11 +231,11 @@ export default function SwapPage() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto flex-1 min-w-0 placeholder:opacity-20 text-white"
+              className="text-4xl font-black bg-transparent border-none p-0 focus-visible:ring-0 h-auto flex-1 min-w-0 placeholder:opacity-20 text-white"
             />
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
+                className="rounded-[2rem] gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('from');
                     setIsNetworkSheetOpen(true);
@@ -249,7 +250,7 @@ export default function SwapPage() {
                 symbol={fromToken?.symbol}
               />
               <div className="flex flex-col items-start leading-none">
-                <span className="font-bold text-sm text-white">{fromToken?.symbol || 'Select'}</span>
+                <span className="font-black text-sm text-white">{fromToken?.symbol || 'Select'}</span>
                 <span className="text-[8px] text-muted-foreground uppercase tracking-tighter mt-0.5">Chain ID: {fromToken?.chainId}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground opacity-50" />
@@ -262,7 +263,7 @@ export default function SwapPage() {
           <Button 
             size="icon" 
             variant="outline" 
-            className="rounded-2xl bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group border-b-4 active:border-b-0"
+            className="rounded-[1.5rem] bg-zinc-950 border-white/10 h-12 w-12 shadow-2xl hover:scale-110 active:scale-95 transition-all group border-b-4 active:border-b-0"
             onClick={handleFlip}
           >
             <ArrowUpDown className="w-5 h-5 text-primary group-hover:rotate-180 transition-transform duration-500" />
@@ -272,10 +273,10 @@ export default function SwapPage() {
         {/* TO TOKEN SECTION */}
         <div className="p-6 rounded-[2.5rem] bg-secondary/30 border border-white/5 space-y-4 shadow-inner">
           <div className="flex justify-between items-center px-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
+            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You Receive Est.</span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex-1 text-4xl font-bold truncate flex items-center gap-2 text-white">
+            <div className="flex-1 text-4xl font-black truncate flex items-center gap-2 text-white">
               {isQuoteLoading ? (
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               ) : (
@@ -284,7 +285,7 @@ export default function SwapPage() {
             </div>
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
+                className="rounded-[2rem] gap-2 h-14 px-4 bg-zinc-900 border-white/10 hover:bg-zinc-800 shrink-0 shadow-xl border-b-2 active:translate-y-0.5 transition-all"
                 onClick={() => {
                     setSelectionType('to');
                     setIsNetworkSheetOpen(true);
@@ -299,7 +300,7 @@ export default function SwapPage() {
                 symbol={toToken?.symbol}
               />
               <div className="flex flex-col items-start leading-none">
-                <span className="font-bold text-sm text-white">{toToken?.symbol || 'Select'}</span>
+                <span className="font-black text-sm text-white">{toToken?.symbol || 'Select'}</span>
                 <span className="text-[8px] text-muted-foreground uppercase tracking-tighter mt-0.5">Chain ID: {toToken?.chainId}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground opacity-50" />
@@ -308,7 +309,7 @@ export default function SwapPage() {
         </div>
 
         {fetchError && (
-            <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center gap-3 text-destructive text-sm font-medium animate-in slide-in-from-top-2">
+            <div className="p-4 rounded-[2rem] bg-destructive/10 border border-destructive/20 flex items-center gap-3 text-destructive text-sm font-black animate-in slide-in-from-top-2">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <p>{fetchError}</p>
             </div>
@@ -317,49 +318,49 @@ export default function SwapPage() {
         {/* QUOTE DETAILS & ROUTING */}
         {quoteData && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground uppercase font-bold tracking-widest text-[9px]">
+            <div className="flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground uppercase font-black tracking-widest text-[9px]">
                 <RouteIcon className="w-3.5 h-3.5" /> Best Multi-DEX Route
               </div>
-              <span className="font-bold text-primary flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-lg">
+              <span className="font-black text-primary flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-lg">
                 {quoteData.tool} <ExternalLink className="w-3 h-3 opacity-50" />
               </span>
             </div>
 
             {/* SMART ROUTE VISUALIZER */}
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
-                <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest mb-2 flex items-center gap-2">
+            <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-3">
+                <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-2 flex items-center gap-2">
                     <Zap className="w-3 h-3 text-yellow-500 fill-current" /> Optimized Path Breakdown
                 </p>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 thin-scrollbar">
                     <div className="flex items-center gap-2 shrink-0">
-                        <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold border border-white/10 text-white">{fromToken?.symbol}</div>
+                        <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-black border border-white/10 text-white">{fromToken?.symbol}</div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground opacity-30" />
                     </div>
                     {quoteData.includedSteps?.map((step: any, idx: number) => (
                         <div key={idx} className="flex items-center gap-2 shrink-0">
                             <div className="px-3 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-primary whitespace-nowrap">{step.toolDetails?.name || step.tool}</span>
+                                <span className="text-[10px] font-black text-primary whitespace-nowrap">{step.toolDetails?.name || step.tool}</span>
                             </div>
                             <ArrowRight className="w-3 h-3 text-muted-foreground opacity-30" />
                         </div>
                     ))}
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold border border-white/10 text-white">{toToken?.symbol}</div>
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-black border border-white/10 text-white">{toToken?.symbol}</div>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-1">
-                    <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Network Fees</p>
-                    <p className="text-sm font-bold flex items-center gap-1.5 text-white">
+                <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-1">
+                    <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Network Fees</p>
+                    <p className="text-sm font-black flex items-center gap-1.5 text-white">
                         <Fuel className="w-3.5 h-3.5 text-muted-foreground" />
                         ~${quoteData.estimate.gasCosts?.[0]?.amountUsd || '2.50'}
                     </p>
                 </div>
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-1">
-                    <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Price Impact</p>
+                <div className="p-4 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-1">
+                    <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Price Impact</p>
                     <p className={cn(
-                        "text-sm font-bold flex items-center gap-1.5", 
+                        "text-sm font-black flex items-center gap-1.5", 
                         parseFloat(quoteData.estimate.feeCosts?.[0]?.amountUsd || '0') > 5 ? "text-red-400" : "text-green-400"
                     )}>
                         <TrendingUp className="w-3.5 h-3.5" />
@@ -379,10 +380,10 @@ export default function SwapPage() {
           )}>
             {aiValidation.isValid ? <CheckCircle2 className="w-6 h-6 shrink-0" /> : <AlertTriangle className="w-6 h-6 shrink-0" />}
             <div className="space-y-1">
-              <p className="font-bold text-sm tracking-tight">{aiValidation.isValid ? 'Liquidity Verified' : 'High Volatility Warning'}</p>
+              <p className="font-black text-sm tracking-tight">{aiValidation.isValid ? 'Liquidity Verified' : 'High Volatility Warning'}</p>
               <p className="text-[11px] opacity-80 leading-relaxed">{aiValidation.validationReason}</p>
               {aiValidation.suggestion && (
-                <p className="text-[10px] font-bold italic text-primary mt-1">Note: {aiValidation.suggestion}</p>
+                <p className="text-[10px] font-black italic text-primary mt-1">Note: {aiValidation.suggestion}</p>
               )}
             </div>
           </div>
@@ -391,14 +392,14 @@ export default function SwapPage() {
         {/* FLOATING ACTION BUTTON */}
         <div className="fixed bottom-6 left-4 right-4 max-w-lg mx-auto z-50">
           {amount && parseFloat(amount) > balance && (
-            <div className="mb-4 flex items-center justify-center gap-2 text-[10px] text-white font-bold uppercase tracking-widest bg-red-600 py-3 rounded-2xl shadow-xl border-b-4 border-red-800 active:translate-y-0.5 transition-all">
+            <div className="mb-4 flex items-center justify-center gap-2 text-[10px] text-white font-black uppercase tracking-widest bg-red-600 py-3 rounded-2xl shadow-xl border-b-4 border-red-800 active:translate-y-0.5 transition-all">
               <AlertCircle className="w-4 h-4" /> Insufficient Liquidity
             </div>
           )}
           
           {!aiValidation ? (
             <Button 
-              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 transition-all active:translate-y-1 border-b-4 border-primary/50"
+              className="w-full h-16 rounded-[1.5rem] text-lg font-black shadow-2xl shadow-primary/30 transition-all active:translate-y-1 border-b-4 border-primary/50"
               disabled={!canValidate || isValidating || (amount && parseFloat(amount) > balance)}
               onClick={handleValidateWithAI}
             >
@@ -416,7 +417,7 @@ export default function SwapPage() {
             </Button>
           ) : (
             <Button 
-              className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 bg-primary hover:bg-primary/90 transition-all active:translate-y-1 border-b-4 border-primary/50"
+              className="w-full h-16 rounded-[1.5rem] text-lg font-black shadow-2xl shadow-primary/30 bg-primary hover:bg-primary/90 transition-all active:translate-y-1 border-b-4 border-primary/50"
               disabled={!aiValidation.isValid || isSubmitting}
               onClick={() => setShowConfirm(true)}
             >
@@ -428,51 +429,56 @@ export default function SwapPage() {
 
       {/* SELECTION SHEETS */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[3rem] p-6 max-h-[85vh] overflow-y-auto thin-scrollbar shadow-2xl">
-            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-            <SheetHeader className="mb-6">
-                <SheetTitle className="text-2xl font-bold text-center uppercase tracking-widest">Select Network</SheetTitle>
-            </SheetHeader>
-            <div className="grid grid-cols-1 gap-3">
-                {allChains.map((chain) => (
-                    <button 
-                        key={chain.chainId}
-                        onClick={() => {
-                            setSelectedNetworkForSelection(chain);
-                            setIsTokenSideSheetOpen(true);
-                        }}
-                        style={{
-                            borderColor: chain.themeColor || '#818cf8',
-                            borderWidth: '2px',
-                            background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
-                        }}
-                        className="flex items-center justify-between p-5 rounded-2xl border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
-                    >
-                        <div className="flex items-center gap-4">
-                            <TokenLogoDynamic 
-                                logoUrl={chain.iconUrl} 
-                                alt={chain.name} 
-                                size={44} 
-                                chainId={chain.chainId} 
-                                name={chain.name}
-                                symbol={chain.symbol}
-                            />
-                            <div className="text-left">
-                                <p className="font-bold text-base text-white">{chain.name}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 max-h-[85vh] overflow-hidden shadow-2xl">
+            <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
+            <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
+            
+            <div className="flex flex-col h-full p-6 overflow-y-auto thin-scrollbar relative z-10">
+                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
+                <SheetHeader className="mb-6">
+                    <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
+                </SheetHeader>
+                <div className="grid grid-cols-1 gap-3">
+                    {allChains.map((chain) => (
+                        <button 
+                            key={chain.chainId}
+                            onClick={() => {
+                                setSelectedNetworkForSelection(chain);
+                                setIsTokenSideSheetOpen(true);
+                            }}
+                            style={{
+                                borderColor: chain.themeColor || '#818cf8',
+                                borderWidth: '2px',
+                                background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
+                            }}
+                            className="flex items-center justify-between p-5 rounded-[2rem] border transition-all group active:scale-[0.98] shadow-lg shadow-black/20"
+                        >
+                            <div className="flex items-center gap-4">
+                                <TokenLogoDynamic 
+                                    logoUrl={chain.iconUrl} 
+                                    alt={chain.name} 
+                                    size={44} 
+                                    chainId={chain.chainId} 
+                                    name={chain.name}
+                                    symbol={chain.symbol}
+                                />
+                                <div className="text-left">
+                                    <p className="font-black text-base text-white">{chain.name}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono opacity-60">Chain ID: {chain.chainId}</p>
+                                </div>
                             </div>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </button>
-                ))}
+                            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </button>
+                    ))}
+                </div>
             </div>
         </SheetContent>
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
-            <SheetHeader className="p-6 border-b border-white/5 flex flex-row items-center gap-4 space-y-0">
-                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl"><ArrowLeft className="w-5 h-5"/></Button>
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
+            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent">
+                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl mb-4"><ArrowLeft className="w-5 h-5"/></Button>
                 <SheetTitle className="flex items-center gap-3">
                     <TokenLogoDynamic 
                         logoUrl={selectedNetworkForSelection?.iconUrl} 
@@ -483,8 +489,8 @@ export default function SwapPage() {
                         symbol={selectedNetworkForSelection?.symbol}
                     />
                     <div className="flex flex-col items-start text-left leading-none">
-                        <span className="text-lg font-bold text-white">{selectedNetworkForSelection?.name} Assets</span>
-                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mt-1">Select token to {selectionType}</span>
+                        <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-black mt-1">Select token to {selectionType}</span>
                     </div>
                 </SheetTitle>
             </SheetHeader>
@@ -496,7 +502,7 @@ export default function SwapPage() {
                             <button 
                                 key={asset.symbol}
                                 onClick={() => handleTokenSelect(asset)}
-                                className="w-full flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
+                                className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                             >
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic 
@@ -508,12 +514,12 @@ export default function SwapPage() {
                                         name={asset.name}
                                     />
                                     <div className="text-left leading-tight">
-                                        <p className="font-bold text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                        <p className="font-black text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                                    <p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p>
                                     <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
                                 </div>
                             </button>
@@ -531,7 +537,7 @@ export default function SwapPage() {
             <div className="w-20 h-20 bg-primary/10 rounded-[2rem] flex items-center justify-center text-primary mx-auto border border-primary/20 shadow-inner">
                 <ShieldCheck className="w-10 h-10" />
             </div>
-            <DialogTitle className="text-2xl font-bold text-center">Liquidity Pool Quote</DialogTitle>
+            <DialogTitle className="text-2xl font-black text-center">Liquidity Pool Quote</DialogTitle>
             <DialogDescription className="text-zinc-400 text-sm leading-relaxed text-center px-4">
               Best route found via <span className="text-primary font-bold">{quoteData?.tool}</span>. Rates are locked for your safety.
             </DialogDescription>
@@ -548,7 +554,7 @@ export default function SwapPage() {
                         name={fromToken?.name}
                         symbol={fromToken?.symbol}
                     />
-                    <span className="font-bold text-sm text-white">{amount} {fromToken?.symbol}</span>
+                    <span className="font-black text-sm text-white">{amount} {fromToken?.symbol}</span>
                 </div>
                 <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
                     <ArrowRight className="w-6 h-6 text-primary animate-pulse" />
@@ -563,25 +569,25 @@ export default function SwapPage() {
                         name={toToken?.name}
                         symbol={toToken?.symbol}
                     />
-                    <span className="font-bold text-sm text-primary">{quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(4) : '...'} {toToken?.symbol}</span>
+                    <span className="font-black text-sm text-primary">{quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)).toFixed(4) : '...'} {toToken?.symbol}</span>
                 </div>
             </div>
             
-            <div className="p-5 rounded-2xl bg-secondary/20 border border-white/5 space-y-3">
-                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+            <div className="p-5 rounded-[1.5rem] bg-secondary/20 border border-white/5 space-y-3">
+                <div className="flex justify-between text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                     <span>Aggregator Fee</span>
                     <span className="text-white">$0.00</span>
                 </div>
-                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                <div className="flex justify-between text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                     <span>Partner / App Fee</span>
                     <span className="text-primary">$0.00 (Waived)</span>
                 </div>
-                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                <div className="flex justify-between text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                     <span>Estimated Network Gas</span>
                     <span className="text-white">${quoteData?.estimate.gasCosts?.[0]?.amountUsd || '2.50'}</span>
                 </div>
                 <div className="h-px bg-white/10" />
-                <div className="flex justify-between text-base font-bold text-white">
+                <div className="flex justify-between text-base font-black text-white">
                     <span>Guaranteed Minimum</span>
                     <span className="text-primary">
                         {quoteData ? (parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) * (1 - parseFloat(slippage)/100)).toFixed(4) : '...'} {toToken?.symbol}
@@ -591,7 +597,7 @@ export default function SwapPage() {
           </div>
 
           <DialogFooter className="mt-8 flex flex-col gap-3 sm:flex-col">
-            <Button onClick={handleConfirmSwap} className="w-full h-16 rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:translate-y-1 transition-all" disabled={isSubmitting}>
+            <Button onClick={handleConfirmSwap} className="w-full h-16 rounded-[1.5rem] font-black text-lg shadow-xl shadow-primary/20 border-b-4 border-primary/50 active:translate-y-1 transition-all" disabled={isSubmitting}>
               {isSubmitting ? (
                   <div className="flex items-center gap-2">
                       <Loader2 className="w-5 h-5 animate-spin" />

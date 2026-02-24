@@ -29,19 +29,14 @@ export default function TokenLogoDynamic({
 }: TokenLogoDynamicProps) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     async function resolve() {
       setIsLoading(true);
+      setHasError(false);
 
-      // 1. Check if provided logoUrl is already a full absolute path
-      if (logoUrl && logoUrl.startsWith('http')) {
-        setResolvedUrl(logoUrl);
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Perform direct Supabase lookup using Name-first priority
+      // 1. Perform direct Supabase lookup using Name-first priority
       if (symbol || name) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
@@ -53,6 +48,13 @@ export default function TokenLogoDynamic({
         } catch (e) {
           console.warn("Direct logo lookup failed:", e);
         }
+      }
+
+      // 2. Check if provided logoUrl is already a full absolute path
+      if (logoUrl && logoUrl.startsWith('http')) {
+        setResolvedUrl(logoUrl);
+        setIsLoading(false);
+        return;
       }
 
       // 3. Fallback to relative CDN path if provided
@@ -70,7 +72,7 @@ export default function TokenLogoDynamic({
     return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
   }
 
-  if (!resolvedUrl) {
+  if (!resolvedUrl || hasError) {
     return FallbackComponent || <GenericCoinIcon size={size} className={className} />;
   }
 
@@ -83,6 +85,7 @@ export default function TokenLogoDynamic({
         height={size}
         className={`rounded-full object-cover bg-white/5 ${className}`}
         unoptimized
+        onError={() => setHasError(true)}
       />
     </div>
   );
