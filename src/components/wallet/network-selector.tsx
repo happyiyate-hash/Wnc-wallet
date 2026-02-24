@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Copy, Search, CheckCircle } from 'lucide-react';
+import { ChevronDown, Copy, Search, CheckCircle2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -49,14 +49,14 @@ const NetworkRow = ({
     <div
       onClick={() => onSelect(chain)}
       style={{
-        borderColor: isSelected ? themeColor : `${themeColor}60`,
-        background: `linear-gradient(135deg, ${themeColor}${isSelected ? '25' : '10'} 0%, rgba(0,0,0,0) 100%)`
+        borderColor: themeColor,
+        borderWidth: '2px',
+        background: `linear-gradient(135deg, ${themeColor}20 0%, rgba(0,0,0,0) 100%)`,
+        boxShadow: isSelected ? `0 0 25px -10px ${themeColor}80` : 'none'
       }}
       className={cn(
-        'w-full flex items-center gap-3 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
-        isSelected 
-          ? "border-2 shadow-[0_0_25px_-5px_rgba(0,0,0,0.4)] ring-1 ring-white/10" 
-          : "border hover:bg-white/5 hover:border-white/20"
+        'w-full flex items-center gap-3 p-4 rounded-[1.5rem] text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
+        isSelected ? "ring-1 ring-white/20" : "hover:bg-white/5"
       )}
       role="button"
     >
@@ -73,10 +73,10 @@ const NetworkRow = ({
         </div>
       <div className="flex-1 relative z-10">
         <div className="flex items-center gap-2">
-          <p className="font-bold text-base text-white group-hover:text-white transition-colors">{chain.name}</p>
-          {isSelected && <CheckCircle className="w-4 h-4" style={{ color: themeColor }} />}
+          <p className="font-bold text-base text-white">{chain.name}</p>
+          {isSelected && <CheckCircle2 className="w-4 h-4 text-yellow-500 fill-yellow-500/10" />}
         </div>
-        <p className="text-xs text-muted-foreground font-mono opacity-70">{shortAddress}</p>
+        <p className="text-[11px] text-muted-foreground font-mono opacity-60">{shortAddress}</p>
       </div>
 
       <Button
@@ -161,23 +161,27 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         <SheetHeader className="p-6 pt-4 text-center">
           <SheetTitle className="sr-only">Select a network</SheetTitle>
           <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-          <div className="relative px-2">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search 23+ networks"
-              className="w-full h-14 bg-white/5 border-white/10 pl-11 rounded-2xl focus-visible:ring-primary text-base"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="relative px-4">
+            <div className="p-[1px] bg-gradient-to-r from-primary/50 to-purple-500/50 rounded-2xl">
+                <div className="relative bg-zinc-950 rounded-2xl">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search 23+ networks"
+                      className="w-full h-14 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-base"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
           </div>
         </SheetHeader>
 
-        <p className="px-6 pb-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
+        <p className="px-6 pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
           Available Ecosystems
         </p>
 
         <ScrollArea className="flex-1 px-4">
-          <div className="space-y-3 pb-8">
+          <div className="space-y-3 pb-12">
             {filteredChains.map((chain) => {
               const displayAddress = wallets ? getAddressForChain(chain, wallets) : null;
               const isSelected = viewingNetwork?.chainId === chain.chainId;
