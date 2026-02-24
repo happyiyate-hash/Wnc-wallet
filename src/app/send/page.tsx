@@ -23,7 +23,6 @@ import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
-import { useUser } from '@/contexts/user-provider';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
@@ -166,7 +165,7 @@ export default function SendPage() {
       <div className="flex flex-col items-center gap-4 mb-4">
         <button 
             onClick={() => setIsNetworkSheetOpen(true)}
-            className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group"
+            className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group shadow-xl"
         >
             <TokenLogoDynamic 
                 logoUrl={selectedToken?.iconUrl} 
@@ -177,27 +176,27 @@ export default function SendPage() {
                 symbol={selectedToken?.symbol}
             />
             <div className="text-left">
-                <h2 className="text-lg font-bold leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Change Token</p>
+                <h2 className="text-xl font-bold leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1.5 font-bold">Change Token</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform ml-2" />
         </button>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-2">
           <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Recipient Address</Label>
-          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl">
+          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl shadow-inner">
             <div className="relative bg-zinc-950 rounded-2xl overflow-hidden">
                 <Input 
-                    placeholder="0x..." 
+                    placeholder="0x... or ENS name" 
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="h-14 bg-transparent border-none text-base font-mono focus-visible:ring-0 pr-24"
+                    className="h-16 bg-transparent border-none text-base font-mono focus-visible:ring-0 pr-24"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-primary">
-                        <QrCode className="w-5 h-5" />
+                    <Button variant="ghost" size="icon" className="h-10 w-10 text-primary">
+                        <QrCode className="w-6 h-6" />
                     </Button>
                 </div>
             </div>
@@ -207,21 +206,21 @@ export default function SendPage() {
         <div className="space-y-2">
           <div className="flex justify-between items-end px-1">
             <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Amount</Label>
-            <span className="text-xs text-muted-foreground">Balance: {selectedToken?.balance}</span>
+            <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {selectedToken?.balance}</span>
           </div>
-          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl">
+          <div className="p-[1px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-green-500/30 rounded-2xl shadow-inner">
             <div className="relative bg-zinc-950 rounded-2xl overflow-hidden">
                 <Input 
                     type="number"
                     placeholder="0.00" 
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="h-20 bg-transparent border-none text-3xl font-bold pr-20 focus-visible:ring-0"
+                    className="h-20 bg-transparent border-none text-4xl font-bold pr-20 focus-visible:ring-0"
                 />
                 <Button 
                     size="sm" 
                     variant="ghost" 
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold hover:bg-primary/10 rounded-xl"
                     onClick={() => setAmount(selectedToken?.balance || '0')}
                 >
                     MAX
@@ -231,50 +230,50 @@ export default function SendPage() {
         </div>
       </div>
 
-      <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 space-y-4">
+      <div className="p-6 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 shadow-2xl">
           <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-                <Fuel className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-muted-foreground font-bold text-[10px] uppercase tracking-widest">
+                <Fuel className="w-4 h-4 text-primary" />
                 Network Fee
             </div>
             {isFeeLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-xs italic opacity-50">Estimating...</span>
+                <span className="text-[10px] italic opacity-50 uppercase tracking-tighter">Estimating...</span>
               </div>
             ) : (
-              <span className="font-bold">
+              <span className="font-bold font-mono">
                 {networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}
               </span>
             )}
           </div>
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
-            <span className="text-base font-bold">Total</span>
-            <span className="text-xl font-bold text-primary">{totalDisplayAmount} {selectedToken?.symbol}</span>
+            <span className="text-base font-bold uppercase tracking-widest text-[10px] text-muted-foreground">Total to Send</span>
+            <span className="text-2xl font-black text-primary">{totalDisplayAmount} {selectedToken?.symbol}</span>
           </div>
       </div>
 
       <div className="mt-auto pb-4">
         {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4">
-            <AlertCircle className="w-4 h-4" /> Insufficient balance
+          <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4 font-bold shadow-xl animate-in zoom-in-95">
+            <AlertCircle className="w-5 h-5" /> Insufficient balance
           </div>
         )}
         <Button 
-          className="w-full h-16 rounded-2xl text-lg font-bold shadow-2xl shadow-primary/20"
+          className="w-full h-16 rounded-[1.5rem] text-lg font-bold shadow-2xl shadow-primary/30 border-b-4 border-primary/50 transition-all active:translate-y-1 active:border-b-0 disabled:opacity-50"
           disabled={!recipient || !isValidAmount || isSubmitting || !infuraApiKey}
           onClick={handleSendRequest}
         >
           {isSubmitting ? (
-            <div className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Broadcasting...</span>
+            <div className="flex items-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span>Broadcasting to network...</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-                <span>Send Funds</span>
-                <ArrowRight className="w-5 h-5" />
+                <span>Sign & Send Funds</span>
+                <ArrowRight className="w-6 h-6" />
             </div>
           )}
         </Button>
@@ -284,19 +283,19 @@ export default function SendPage() {
 
   const renderSuccess = () => (
     <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
-      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center border border-green-500/30">
+      <div className="w-24 h-24 bg-green-500/20 rounded-[2.5rem] flex items-center justify-center border border-green-500/30 shadow-2xl shadow-green-500/20">
         <CheckCircle2 className="w-12 h-12 text-green-500" />
       </div>
       <div className="space-y-2">
-        <h2 className="text-3xl font-bold">Funds Sent!</h2>
-        <p className="text-muted-foreground max-w-[240px] mx-auto text-sm">Your transaction has been broadcasted to the network.</p>
+        <h2 className="text-3xl font-black tracking-tight">Funds Sent!</h2>
+        <p className="text-muted-foreground max-w-[240px] mx-auto text-sm leading-relaxed">Your transaction has been broadcasted and will be confirmed shortly.</p>
       </div>
-      <div className="p-4 rounded-xl bg-secondary/20 border border-white/5 w-full">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 text-left">Transaction Hash</p>
-        <p className="text-xs font-mono break-all text-foreground/80 text-left">{txHash}</p>
+      <div className="p-5 rounded-[1.5rem] bg-secondary/20 border border-white/5 w-full shadow-inner">
+        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2 text-left">Transaction ID</p>
+        <p className="text-xs font-mono break-all text-foreground/80 text-left leading-relaxed">{txHash}</p>
       </div>
-      <Button className="w-full h-14 rounded-2xl font-bold text-lg" onClick={() => router.push('/')}>
-        Done
+      <Button className="w-full h-16 rounded-[1.5rem] font-bold text-lg shadow-xl" onClick={() => router.push('/')}>
+        Return to Wallet
       </Button>
     </div>
   );
@@ -304,10 +303,10 @@ export default function SendPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <header className="p-4 flex items-center gap-2 border-b border-white/5 sticky top-0 bg-background/80 backdrop-blur-xl z-50">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-bold">{step === 'details' ? 'Send' : 'Success'}</h1>
+        <h1 className="text-lg font-black uppercase tracking-widest">{step === 'details' ? 'Send Assets' : 'Success'}</h1>
       </header>
       
       <main className="flex-1 overflow-hidden">
@@ -316,9 +315,10 @@ export default function SendPage() {
 
       {/* STEP 1: BOTTOM SHEET (NETWORKS) */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
+        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[3rem] p-6 max-h-[85vh] overflow-y-auto thin-scrollbar shadow-2xl">
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
             <SheetHeader className="mb-6">
-                <SheetTitle className="text-xl font-bold text-center">Select Network</SheetTitle>
+                <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
             </SheetHeader>
             <div className="grid grid-cols-1 gap-3">
                 {allChains.map((chain) => (
@@ -328,18 +328,21 @@ export default function SendPage() {
                             setSelectedNetworkForSelection(chain);
                             setIsTokenSideSheetOpen(true);
                         }}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group text-left"
+                        className="flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group active:scale-[0.98]"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
                                 logoUrl={chain.iconUrl} 
                                 alt={chain.name} 
-                                size={44} 
+                                size={40} 
                                 chainId={chain.chainId} 
                                 name={chain.name}
                                 symbol={chain.symbol}
                             />
-                            <span className="font-bold">{chain.name}</span>
+                            <div className="text-left">
+                                <p className="font-bold text-base">{chain.name}</p>
+                                <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-mono">Chain ID: {chain.chainId}</p>
+                            </div>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </button>
@@ -350,44 +353,48 @@ export default function SendPage() {
 
       {/* STEP 2: SIDE SHEET (TOKENS ON NETWORK) */}
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[400px] p-0 flex flex-col">
-            <SheetHeader className="p-6 border-b border-white/5">
-                <SheetTitle className="flex items-center gap-2">
+        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
+            <SheetHeader className="p-6 border-b border-white/5 flex flex-row items-center gap-4 space-y-0">
+                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl"><ArrowLeft className="w-5 h-5"/></Button>
+                <SheetTitle className="flex items-center gap-3">
                     <TokenLogoDynamic 
                         logoUrl={selectedNetworkForSelection?.iconUrl} 
                         alt={selectedNetworkForSelection?.name || ''} 
-                        size={24} 
+                        size={32} 
                         chainId={selectedNetworkForSelection?.chainId} 
                         name={selectedNetworkForSelection?.name}
                         symbol={selectedNetworkForSelection?.symbol}
                     />
-                    {selectedNetworkForSelection?.name} Assets
+                    <div className="flex flex-col items-start leading-none">
+                        <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mt-1">Available Assets</span>
+                    </div>
                 </SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
                 {/* ADDRESS HEADER */}
-                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
-                        <WalletIcon className="w-3 h-3" /> Your Address
+                <div className="p-6 rounded-[2rem] bg-primary/10 border border-primary/20 space-y-3 shadow-inner">
+                    <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">
+                        <WalletIcon className="w-3.5 h-3.5" /> Your Address
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-mono break-all text-foreground/80">
+                    <div className="flex items-center justify-between gap-4">
+                        <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
                             {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
                         </p>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary shrink-0" onClick={() => {
+                        <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
                             const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
                             if (addr) {
                                 navigator.clipboard.writeText(addr);
                                 toast({ title: "Address Copied" });
                             }
                         }}>
-                            <Copy className="w-4 h-4" />
+                            <Copy className="w-5 h-5" />
                         </Button>
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Available Tokens</p>
+                <div className="space-y-3">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pl-2">Select token to send</p>
                     <div className="space-y-2">
                         {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
                             const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
@@ -395,9 +402,9 @@ export default function SendPage() {
                                 <button 
                                     key={asset.symbol}
                                     onClick={() => handleTokenSelect(asset)}
-                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors text-left"
+                                    className="w-full flex items-center justify-between p-5 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98] group"
                                 >
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-4">
                                         <TokenLogoDynamic 
                                             logoUrl={asset.iconUrl} 
                                             alt={asset.symbol} 
@@ -406,13 +413,14 @@ export default function SendPage() {
                                             symbol={asset.symbol} 
                                             name={asset.name}
                                         />
-                                        <div className="text-left">
-                                            <p className="font-bold text-sm">{asset.symbol}</p>
-                                            <p className="text-xs text-muted-foreground">{asset.name}</p>
+                                        <div className="text-left leading-tight">
+                                            <p className="font-bold text-base group-hover:text-primary transition-colors">{asset.symbol}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-sm">{asset.balance}</p>
+                                        <p className="font-mono text-sm font-bold">{parseFloat(asset.balance).toFixed(4)}</p>
+                                        <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Available</p>
                                     </div>
                                 </button>
                             );

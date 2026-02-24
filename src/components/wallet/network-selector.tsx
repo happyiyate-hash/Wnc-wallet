@@ -43,25 +43,20 @@ const NetworkRow = ({
     ? `${address.slice(0, 8)}...${address.slice(-8)}`
     : 'Connecting...';
 
-  const cardStyle = {
-    backgroundColor: chain.themeColor ? `${chain.themeColor}20` : 'hsl(var(--muted))',
-    borderColor: chain.themeColor || 'hsl(var(--border))',
-  };
-  
   return (
     <div
-      style={cardStyle}
-      className={cn(
-        'w-full flex items-center gap-3 p-3 rounded-xl text-sm font-medium border transition-colors hover:bg-muted/50 cursor-pointer'
-      )}
       onClick={() => onSelect(chain)}
+      className={cn(
+        'w-full flex items-center gap-3 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98]',
+        isSelected ? "bg-primary/10 border-primary/20" : "bg-white/5 border-white/5 hover:bg-white/10"
+      )}
       role="button"
     >
-      <div className="flex-shrink-0 h-10 w-10 rounded-full bg-background/50 flex items-center justify-center">
+      <div className="flex-shrink-0">
             <TokenLogoDynamic 
                 alt={chain.name} 
                 logoUrl={chain.iconUrl}
-                size={44}
+                size={40}
                 chainId={chain.chainId}
                 name={chain.name}
                 symbol={chain.symbol}
@@ -70,26 +65,24 @@ const NetworkRow = ({
         </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <p className="font-semibold text-base text-foreground">{chain.name}</p>
-          {isSelected && <CheckCircle className="w-4 h-4 text-green-400" />}
+          <p className="font-bold text-base text-foreground">{chain.name}</p>
+          {isSelected && <CheckCircle className="w-4 h-4 text-primary" />}
         </div>
-        <p className="text-xs text-muted-foreground">{shortAddress}</p>
+        <p className="text-xs text-muted-foreground font-mono">{shortAddress}</p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 bg-foreground/5 hover:bg-foreground/10"
-          onClick={(e) => {
-            e.stopPropagation();
-            address && onCopy(address);
-          }}
-          disabled={!address}
-        >
-          <Copy className="h-4 w-4 text-muted-foreground" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-10 w-10 text-muted-foreground hover:text-primary transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          address && onCopy(address);
+        }}
+        disabled={!address}
+      >
+        <Copy className="h-4 w-4" />
+      </Button>
     </div>
   );
 };
@@ -124,11 +117,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
   
   if (!isClient || !isInitialized || !viewingNetwork) {
     return (
-      <Button
-        variant="ghost"
-        className={cn('flex items-center gap-1 p-1 h-auto', className)}
-        disabled
-      >
+      <Button variant="ghost" className={cn('flex items-center gap-1 p-1 h-auto', className)} disabled>
         <Skeleton className="w-6 h-6 rounded-full" />
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </Button>
@@ -140,7 +129,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
       <SheetTrigger asChild>
         <Button
           variant="ghost"
-          className={cn('flex items-center gap-1 p-1 h-auto', className)}
+          className={cn('flex items-center gap-2 p-1 h-auto hover:bg-white/5 rounded-full transition-colors', className)}
           disabled={!isInitialized}
         >
           <TokenLogoDynamic 
@@ -158,30 +147,28 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
 
       <SheetContent
         side="bottom"
-        className="h-[90vh] flex flex-col bg-black text-white rounded-t-2xl p-0"
+        className="h-[90vh] flex flex-col bg-zinc-950 text-white rounded-t-[2.5rem] p-0 border-t border-white/10"
       >
-        <SheetHeader className="p-4 pt-2 text-center border-b border-zinc-800">
+        <SheetHeader className="p-6 pt-4 text-center">
           <SheetTitle className="sr-only">Select a network</SheetTitle>
-          <div className="w-full flex justify-center">
-            <Grip className="h-5 w-10 text-muted-foreground" />
-          </div>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search networks"
-              className="w-full bg-zinc-900 border-zinc-700 pl-9 rounded-xl"
+              placeholder="Search 23+ networks"
+              className="w-full h-14 bg-white/5 border-white/10 pl-11 rounded-2xl focus-visible:ring-primary"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </SheetHeader>
 
-        <p className="px-4 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-          All Networks
+        <p className="px-6 pb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+          Available Blockchains
         </p>
 
         <ScrollArea className="flex-1 px-4">
-          <div className="space-y-3">
+          <div className="space-y-3 pb-8">
             {filteredChains.map((chain) => {
               const displayAddress = wallets ? getAddressForChain(chain, wallets) : null;
               const isSelected = viewingNetwork?.chainId === chain.chainId;
@@ -199,12 +186,6 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             })}
           </div>
         </ScrollArea>
-
-        <div className="p-4 mt-auto border-t border-zinc-800">
-          <Button variant="secondary" className="w-full">
-            Add a custom network
-          </Button>
-        </div>
       </SheetContent>
     </Sheet>
   );

@@ -34,21 +34,14 @@ export default function TokenLogoDynamic({
     async function resolve() {
       setIsLoading(true);
 
-      // 1. Priority: Direct Absolute URL
+      // 1. Check if provided logoUrl is already a full absolute path
       if (logoUrl && logoUrl.startsWith('http')) {
         setResolvedUrl(logoUrl);
         setIsLoading(false);
         return;
       }
 
-      // 2. Relative CDN Path Detection (Handle strings like /api/cdn/logo/...)
-      if (logoUrl && logoUrl.startsWith('/')) {
-        setResolvedUrl(logoUrl);
-        setIsLoading(false);
-        return;
-      }
-
-      // 3. Fallback: Direct lookup via Dedicated Registry (Exact Name -> Symbol)
+      // 2. Perform direct Supabase lookup using Name-first priority
       if (symbol || name) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
@@ -58,8 +51,13 @@ export default function TokenLogoDynamic({
             return;
           }
         } catch (e) {
-          console.warn("Manual logo lookup failed:", e);
+          console.warn("Direct logo lookup failed:", e);
         }
+      }
+
+      // 3. Fallback to relative CDN path if provided
+      if (logoUrl && logoUrl.startsWith('/')) {
+        setResolvedUrl(logoUrl);
       }
 
       setIsLoading(false);

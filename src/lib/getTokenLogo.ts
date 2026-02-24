@@ -5,18 +5,18 @@ import { logoSupabase } from './supabase/logo-client';
 
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
- * Direct lookup via the dedicated metadata Supabase instance (gcghriodmljkusdduhzl).
+ * Direct lookup via the dedicated metadata project.
  */
 
 /**
  * Fetches a token's direct logo URL from Supabase storage.
- * Lookup priorities: Name match -> Symbol match.
+ * Lookup priorities: Name match (ILIKE) -> Symbol match (ILIKE).
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
 
   try {
-    // 1. Prioritize lookup by the full token name for accuracy (Case-insensitive ILIKE)
+    // 1. Prioritize lookup by the full token name for accuracy
     if (tokenName && tokenName.trim()) {
         const { data: nameData } = await logoSupabase
           .from('token_logos')
@@ -30,7 +30,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
         }
     }
 
-    // 2. If no match is found by name, fall back to the symbol (Case-insensitive ILIKE)
+    // 2. Fallback to the symbol
     if (tokenSymbol && tokenSymbol.trim()) {
         const { data: symbolData } = await logoSupabase
           .from('token_logos')
@@ -52,7 +52,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
 }
 
 /**
- * Prepares a logo path prediction for the CDN caching layer.
+ * Prepares a logo path prediction for the internal CDN layer.
  */
 export function getTokenLogoUrl(
     symbol?: string | null,
