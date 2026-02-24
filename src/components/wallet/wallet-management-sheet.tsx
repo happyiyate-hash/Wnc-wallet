@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -20,7 +21,6 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
   const [importInput, setImportInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Real-time feedback states
   const [status, setStatus] = useState<string>('');
   const [timer, setTimer] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -52,6 +52,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     try {
       await generateWallet();
       setStatus('Complete!');
+      setTimeout(() => onOpenChange(false), 800);
     } catch (e: any) {
       setStatus('Failed');
     } finally {
@@ -72,6 +73,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
       setStep('start');
       setImportInput('');
       setStatus('Complete!');
+      setTimeout(() => onOpenChange(false), 800);
     } catch (e: any) {
       setStatus('Invalid Phrase');
     } finally {
@@ -88,7 +90,6 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     setStatus('Connecting...');
     startTimer();
     
-    // Status sequence for real-time feedback
     const statusSequence = [
         { msg: 'Fetching Vault...', delay: 200 },
         { msg: 'Decrypting AES-256...', delay: 1200 },
@@ -104,6 +105,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
     try {
       await restoreFromCloud();
+      setTimeout(() => onOpenChange(false), 3200);
     } catch (e: any) {
       setStatus('Failed');
     } finally {
@@ -129,16 +131,16 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <Lock className="w-4 h-4 text-primary" />
           </div>
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
-          <SheetDescription className="text-xs text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {isProcessing ? (
-                <div className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
+                <span className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
                     <Timer className="w-3 h-3 animate-pulse" />
                     {(timer / 1000).toFixed(3)}s
-                </div>
+                </span>
             ) : (
-                step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'
+                <span>{step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}</span>
             )}
-          </SheetDescription>
+          </div>
         </SheetHeader>
 
         <div className="space-y-2">

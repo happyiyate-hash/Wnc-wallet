@@ -10,6 +10,7 @@ import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
+import { supabase } from '@/lib/supabase/client';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -36,7 +37,6 @@ interface WalletContextType {
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
   infuraApiKey: string | null;
   setInfuraApiKey: (key: string | null) => void;
-  // Visibility & Custom Token Management
   hiddenTokenKeys: Set<string>;
   toggleTokenVisibility: (chainId: number, symbol: string) => void;
   userAddedTokens: AssetRow[];
@@ -49,7 +49,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, loading: authLoading, signOut: authSignOut } = useUser();
+  const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -63,20 +63,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
 
-  // Visibility & Dynamic States
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  // Persistence Refs
   const isBackgroundFetching = useRef(false);
 
-  // 1. Load Initial State from Cache
   useEffect(() => {
     const savedKey = localStorage.getItem('infura_api_key');
     if (savedKey) setInfuraApiKey(savedKey);
 
     if (user) {
-        // Load Balances
         const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
         if (cachedBalances) {
             try {
@@ -86,7 +82,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        // Load Visibility Preferences
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
         if (savedHidden) {
             try {
@@ -94,7 +89,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             } catch (e) {}
         }
 
-        // Load User Added Tokens
         const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
         if (savedCustom) {
             try {
@@ -156,9 +150,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             logo_url: token.logo_url
           }));
         }
-      } catch (e) {
-        // Silent fail for registry
-      }
+      } catch (e) {}
     });
 
     await Promise.all(fetchPromises);
@@ -178,7 +170,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return undefined;
   }, []);
 
-  // Optimized Fetcher: Priority Chain First, then Lazy Background
   const fetchAllBalances = useCallback(async (priorityChainId?: number) => {
     if (!wallets || wallets.length === 0 || !isInitialized || !infuraApiKey) return;
     
@@ -188,7 +179,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const currentBalances = { ...balances };
     const chainsToFetch = [...chainsWithLogos];
 
-    // Priority handling (Move visible chain to front)
     if (priorityChainId) {
         const idx = chainsToFetch.findIndex(c => c.chainId === priorityChainId);
         if (idx > -1) {
@@ -200,8 +190,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       for (const chain of chainsToFetch) {
         const apiTokens = tokenRegistry[chain.chainId] || [];
-        
-        // Merge hardcoded, user-added, and registry tokens
         const baseAssets = getInitialAssets(chain.chainId);
         const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
         
@@ -243,7 +231,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
           currentBalances[chain.chainId] = chainBalances;
           
-          // Partial update UI for visible network immediately
           if (chain.chainId === priorityChainId) {
               setBalances({ ...currentBalances });
           }
@@ -251,10 +238,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           currentBalances[chain.chainId] = combinedAssetsList;
         }
         
-        await delay(priorityChainId === chain.chainId ? 0 : 100);
+        await delay(priorityChainId === chain.chainId ? 0 : 50);
       }
 
-      // Enrichment logic...
       const flatAssets = Object.values(currentBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
       
@@ -276,16 +262,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets, isInitialized, chainsWithLogos, infuraApiKey, tokenRegistry, balances, user, userAddedTokens]);
 
-  // Periodic Refresh
   useEffect(() => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
     const interval = setInterval(() => {
         if (!isRefreshing) fetchAllBalances(viewingNetwork.chainId);
-    }, 50000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchAllBalances, isRefreshing]);
 
-  // Initial Sync
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && !isBackgroundFetching.current) {
         isBackgroundFetching.current = true;
@@ -354,6 +338,67 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [loadWalletFromMnemonic, toast, user]);
 
+  const saveToVault = useCallback(async () => {
+    if (!user || !wallets?.[0]?.privateKey || !supabase) return;
+    
+    const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+    if (!mnemonic) {
+        toast({ variant: "destructive", title: "Backup Error", description: "Mnemonic not found in local memory." });
+        return;
+    }
+
+    try {
+      const response = await fetch('/api/wallet/encrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phrase: mnemonic }),
+      });
+
+      const { encrypted, iv } = await response.json();
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ vault_phrase: encrypted, iv })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      
+      toast({ title: "Vault Sync Complete", description: "Your phrase is now secured in the cloud." });
+      refreshProfile();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Vault Error", description: e.message });
+    }
+  }, [user, wallets, toast, refreshProfile]);
+
+  const restoreFromCloud = useCallback(async () => {
+    if (!user || !profile?.vault_phrase || !profile?.iv) {
+      toast({ variant: "destructive", title: "No Cloud Vault Found", description: "You haven't backed up your phrase yet." });
+      throw new Error("No vault found");
+    }
+
+    try {
+      const response = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          encrypted: profile.vault_phrase, 
+          iv: profile.iv 
+        }),
+      });
+
+      const data = await response.json();
+      if (data.phrase) {
+        await importWallet(data.phrase);
+        toast({ title: "Cloud Restoration Success", description: "Your wallet has been synchronized." });
+      } else {
+        throw new Error(data.message || "Decryption failed");
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Restoration Failed", description: e.message });
+      throw e;
+    }
+  }, [user, profile, importWallet, toast]);
+
   const logout = useCallback(() => {
     if (user) {
         localStorage.removeItem(`wallet_mnemonic_${user.id}`);
@@ -383,7 +428,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const list = balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    // Filter out tokens marked as hidden
     return list.filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [balances, viewingNetwork, hiddenTokenKeys]);
 
@@ -407,8 +451,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: () => fetchAllBalances(viewingNetwork?.chainId),
     generateWallet,
     importWallet,
-    saveToVault: async () => {},
-    restoreFromCloud: async () => {},
+    saveToVault,
+    restoreFromCloud,
     logout,
     deleteWallet,
     fetchError,
