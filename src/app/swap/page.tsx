@@ -429,7 +429,7 @@ export default function SwapPage() {
 
       {/* SELECTION SHEETS */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
-        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 max-h-[85vh] overflow-hidden shadow-2xl">
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden shadow-2xl">
             <div className="absolute inset-0 bg-[#0a0a0c]/60 backdrop-blur-3xl -z-10" />
             <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
             
@@ -438,8 +438,8 @@ export default function SwapPage() {
                 <SheetHeader className="mb-6 px-6 shrink-0">
                     <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
-                <ScrollArea className="flex-1 px-6 pb-8">
-                    <div className="grid grid-cols-1 gap-3 pb-12">
+                <ScrollArea className="flex-1 px-6 pb-12">
+                    <div className="grid grid-cols-1 gap-3 pb-20">
                         {allChains.map((chain) => (
                             <button 
                                 key={chain.chainId}
@@ -478,7 +478,7 @@ export default function SwapPage() {
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl h-full">
             <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
                 <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl mb-4"><ArrowLeft className="w-5 h-5"/></Button>
                 <SheetTitle className="flex items-center gap-3">
@@ -497,7 +497,7 @@ export default function SwapPage() {
                 </SheetTitle>
             </SheetHeader>
             <ScrollArea className="flex-1 p-4">
-                <div className="space-y-3 pb-12">
+                <div className="space-y-3 pb-20">
                     {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
                         const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
                         return (

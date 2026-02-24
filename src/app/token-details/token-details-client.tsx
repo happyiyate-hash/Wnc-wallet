@@ -67,7 +67,14 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
         </Button>
         <div className="flex flex-col items-center">
             <div className="flex items-center gap-2">
-                <TokenLogoDynamic logoUrl={token.iconUrl} alt={token.name} size={24} chainId={token.chainId} />
+                <TokenLogoDynamic 
+                    logoUrl={token.iconUrl} 
+                    alt={token.name} 
+                    size={24} 
+                    chainId={token.chainId} 
+                    name={token.name}
+                    symbol={token.symbol}
+                />
                 <span className="font-semibold">{token.symbol}</span>
             </div>
             <span className="text-xs text-muted-foreground">{network?.name}</span>
@@ -201,7 +208,14 @@ export default function TokenDetailsClientPage() {
             <div className="flex items-center justify-between w-full text-left p-2 -mx-2">
                 <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
-                        <TokenLogoDynamic logoUrl={token.iconUrl} size={40} alt={token.name} chainId={token.chainId} />
+                        <TokenLogoDynamic 
+                            logoUrl={token.iconUrl} 
+                            size={40} 
+                            alt={token.name} 
+                            chainId={token.chainId} 
+                            name={token.name}
+                            symbol={token.symbol}
+                        />
                     </div>
                     <div>
                         <p className="font-semibold text-lg">{token.name}</p>
