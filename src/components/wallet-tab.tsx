@@ -32,9 +32,10 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
 
-const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
+const TokenRow = ({ token, isLoading, themeColor }: { token: AssetRow, isLoading: boolean, themeColor?: string }) => {
   const router = useRouter();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
+  const color = themeColor || '#818cf8';
 
   const handleRowClick = () => {
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
@@ -42,50 +43,54 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 
   return (
     <div
-      className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors"
       onClick={handleRowClick}
+      style={{
+        borderColor: color,
+        borderWidth: '2px',
+        background: `linear-gradient(135deg, ${color}25 0%, rgba(0,0,0,0) 100%)`,
+        boxShadow: `0 10px 30px -10px ${color}30`
+      }}
+      className="flex cursor-pointer items-center justify-between p-5 rounded-[2rem] border mb-4 mx-4 hover:scale-[1.01] active:scale-[0.98] transition-all group relative overflow-hidden"
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4 relative z-10">
         <TokenLogoDynamic 
             alt={token.name} 
             logoUrl={token.iconUrl}
             symbol={token.symbol}
             name={token.name}
-            size={36}
+            size={44}
             chainId={token.chainId}
         />
-        <div>
-          <p className="font-semibold text-sm">{token.name}</p>
+        <div className="flex flex-col">
+          <p className="font-black text-base text-white tracking-tight">{token.name}</p>
           <p
             className={cn(
-              'text-xs',
-              isPositiveChange ? 'text-green-500' : 'text-red-400'
+              'text-[10px] font-black uppercase tracking-[0.1em]',
+              isPositiveChange ? 'text-green-400' : 'text-red-400'
             )}
           >
-            {isPositiveChange ? '+' : ''}
-            {(token.pctChange24h ?? 0).toFixed(2)}%
+            {isPositiveChange ? '▲' : '▼'} {(token.pctChange24h ?? 0).toFixed(2)}%
           </p>
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right relative z-10">
         {isLoading ? (
-          <div className="space-y-1">
-            <Loader2 className="h-3 w-3 animate-spin ml-auto text-primary" />
-            <Skeleton className="h-3 w-16 ml-auto" />
+          <div className="space-y-1.5">
+            <Loader2 className="h-4 w-4 animate-spin ml-auto text-primary" />
+            <Skeleton className="h-3 w-24 ml-auto bg-white/5" />
           </div>
         ) : (
           <>
-            <p className="font-semibold text-sm">
+            <p className="font-black text-lg text-white leading-none">
               {parseFloat(token.balance || '0').toLocaleString('en-US', {
                 maximumFractionDigits: 6,
               })}{' '}
-              {token.symbol}
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold ml-1">{token.symbol}</span>
             </p>
-            <p className="text-xs text-muted-foreground">
-              $
-              {(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
+            <p className="text-[11px] font-bold text-muted-foreground/60 mt-1.5 uppercase tracking-tighter">
+              ≈ ${(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -93,12 +98,15 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
           </>
         )}
       </div>
+      <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
+          <ChevronRight className="w-12 h-12 text-white" />
+      </div>
     </div>
   );
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, allChainsMap, balances } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   
@@ -181,39 +189,38 @@ export default function WalletTab() {
       <Button
         variant="default"
         size="icon"
-        className="bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl"
+        className="bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl shadow-xl shadow-primary/20 transition-transform active:scale-90"
         onClick={onClick}
       >
         <Icon className="w-6 h-6 text-primary-foreground" />
       </Button>
-      <span className="text-xs font-medium text-foreground">{label}</span>
+      <span className="text-[10px] uppercase font-black tracking-widest text-foreground">{label}</span>
     </div>
   );
 
   return (
     <div className="flex flex-col h-full">
       <div className="bg-background pt-8">
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center justify-between px-6">
             <div>
               <h2 className={cn(
-                'font-bold',
+                'font-black tracking-tighter text-white',
                 getBalanceFontSize(Number(totalFiatValue ?? 0))
               )}>
-                US$
-                {(totalFiatValue || 0).toLocaleString('en-US', {
+                US${(totalFiatValue || 0).toLocaleString('en-US', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </h2>
               <p
                 className={cn(
-                  'text-sm mt-1',
+                  'text-sm font-bold mt-1.5 flex items-center gap-2',
                   total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
                 )}
               >
                 {total24hChange >= 0 ? '+' : ''}$
                 {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
-                <span className="text-gray-400 ml-2">
+                <span className="text-gray-500 font-medium">
                   ({total24hChange >= 0 ? '+' : ''}
                   {total24hChange.toFixed(2)}%)
                 </span>
@@ -221,7 +228,7 @@ export default function WalletTab() {
             </div>
         </div>
 
-        <div className="flex justify-center gap-4 my-8">
+        <div className="flex justify-center gap-4 my-10 px-4">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
@@ -231,60 +238,61 @@ export default function WalletTab() {
         
         <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-4">
+              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-6">
                 <TabsTrigger
                   value="tokens"
-                  className="p-0 pb-2 data-[state=active]:text-foreground data-[state=active]:font-bold data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary"
+                  className="p-0 pb-3 text-xs uppercase tracking-[0.2em] font-black data-[state=active]:text-primary data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-4 data-[state=active]:border-primary transition-all"
                 >
                   Tokens
                 </TabsTrigger>
-                <TabsTrigger value="defi" disabled className="p-0 pb-2 text-muted-foreground/50 flex-1">DeFi</TabsTrigger>
-                <TabsTrigger value="nfts" disabled className="p-0 pb-2 text-muted-foreground/50 flex-1">NFTs</TabsTrigger>
+                <TabsTrigger value="defi" disabled className="p-0 pb-3 text-[10px] uppercase tracking-[0.2em] font-black text-muted-foreground/30 flex-1">DeFi</TabsTrigger>
+                <TabsTrigger value="nfts" disabled className="p-0 pb-3 text-[10px] uppercase tracking-[0.2em] font-black text-muted-foreground/30 flex-1">NFTs</TabsTrigger>
               </TabsList>
-              <TabsContent value="tokens" className="px-0">
-                <div className="flex items-center justify-between py-4 px-4">
+              <TabsContent value="tokens" className="px-0 pt-2">
+                <div className="flex items-center justify-between py-6 px-6">
                     <div className="p-[1px] bg-gradient-to-r from-blue-500/50 to-green-500/50 rounded-full">
                         <Button
                             variant="outline"
-                            className="h-10 px-4 bg-background hover:bg-muted/50 rounded-full border-none"
+                            className="h-10 px-5 bg-background hover:bg-muted/50 rounded-full border-none shadow-lg"
                             onClick={() => setIsTokenManagerOpen(true)}
                         >
-                            <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-semibold">Manage Tokens</span>
+                            <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent font-black text-[10px] uppercase tracking-[0.1em]">Manage Assets</span>
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 bg-background rounded-full hover:bg-background/80"
+                            className="h-10 w-10 bg-white/5 rounded-full hover:bg-white/10 active:scale-90 transition-all"
                             onClick={() => refresh()}
                             disabled={isRefreshing}
                         >
-                          {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400"/> : <RefreshCw className="h-4 w-4 text-purple-400"/>}
+                          {isRefreshing ? <Loader2 className="h-5 w-5 animate-spin text-primary"/> : <RefreshCw className="h-5 w-5 text-primary"/>}
                         </Button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto thin-scrollbar">
+                <div className="flex-1 overflow-y-auto thin-scrollbar pb-32">
                   {fetchError && (
                     <div 
-                      className="mx-4 mb-4 p-4 rounded-2xl bg-destructive/10 text-destructive text-xs flex items-center gap-3 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all"
+                      className="mx-6 mb-6 p-5 rounded-3xl bg-destructive/10 text-destructive text-xs flex items-center gap-4 border border-destructive/20 cursor-pointer active:scale-[0.98] transition-all shadow-2xl"
                       onClick={() => setIsApiKeySheetOpen(true)}
                     >
-                      <AlertCircle className="w-5 h-5 shrink-0" />
+                      <AlertCircle className="w-6 h-6 shrink-0" />
                       <div className="flex-1">
-                        <p className="font-bold mb-0.5">Connection Error</p>
-                        <p className="opacity-80">Tap here to fix your Infura API Key and see live balances.</p>
+                        <p className="font-black uppercase tracking-wider mb-0.5">Connection Error</p>
+                        <p className="opacity-80 leading-relaxed">Infrastructure link offline. Tap to restore live balance tracking.</p>
                       </div>
                     </div>
                   )}
 
-                  <div className="divide-y divide-white/5">
+                  <div className="space-y-1">
                     {allAssets.map((token) => (
                       <TokenRow
                         key={`${token.chainId}-${token.address || token.symbol}`}
                         token={token}
                         isLoading={isTokenLoading(token.chainId, token.symbol)}
+                        themeColor={allChainsMap[token.chainId]?.themeColor}
                       />
                     ))}
                   </div>
@@ -360,7 +368,7 @@ export default function WalletTab() {
                 </SheetTitle>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
-                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
+                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2 shadow-inner">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
                         <WalletIcon className="w-3.5 h-3.5" /> Your Address
                     </div>
