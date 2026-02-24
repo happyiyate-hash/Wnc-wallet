@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useWallet } from '@/contexts/wallet-provider';
@@ -78,11 +79,11 @@ export default function ReceivePage() {
                     {address ? (
                         <div className="flex flex-col items-center gap-2 text-zinc-400">
                             <QrCode className="w-24 h-24 opacity-20" />
-                            <span className="text-[10px] font-mono text-center px-4">QR Code Generation Coming Soon</span>
+                            <span className="text-[10px] font-mono text-center px-4">QR System Initializing</span>
                         </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
-                            <span className="text-xs text-muted-foreground font-mono">Generating...</span>
+                            <span className="text-xs text-muted-foreground font-mono">Vault Connecting...</span>
                         </div>
                     )}
                     
@@ -95,6 +96,7 @@ export default function ReceivePage() {
                                     size={32} 
                                     chainId={selectedToken?.chainId} 
                                     symbol={selectedToken?.symbol}
+                                    name={selectedToken?.name}
                                 />
                             </div>
                         </div>
@@ -127,7 +129,7 @@ export default function ReceivePage() {
                 "text-sm font-mono break-all leading-relaxed transition-colors",
                 isCopied ? "text-green-400" : "text-foreground/90"
               )}>
-                {address || 'Configuring vault...'}
+                {address || 'Configuring secure vault...'}
               </p>
             </div>
             <div className={cn(

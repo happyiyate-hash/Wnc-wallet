@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
@@ -68,7 +69,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * DIRECT SUPABASE REGISTRY SYNC
-   * Fetches the entire token_metadata table for each network from the dedicated instance.
+   * Fetches metadata from the dedicated instance for every network.
    */
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
@@ -93,7 +94,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }));
         }
       } catch (e) {
-        console.error(`Metadata sync failed for ${chain.name}:`, e);
+        console.warn(`Metadata sync skipped for ${chain.name}`);
       }
     });
 
@@ -107,7 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
       fetchTokenRegistry();
     }
-  }, [chainsWithLogos, fetchTokenRegistry]);
+  }, [chainsWithLogos, fetchTokenRegistry, viewingNetwork]);
 
   const isTokenLoading = useCallback((chainId: number, symbol: string) => {
     return loadingTokens[`${chainId}:${symbol}`] || false;
@@ -122,7 +123,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic phrase structure.");
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic structure.");
       const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       setWallets([{ 
         address: wallet.address, 
@@ -130,7 +131,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
       }]);
     } catch (e: any) {
-      throw new Error(e.message || "Invalid mnemonic phrase.");
+      throw new Error("Mnemonic validation failed.");
     }
   }, []);
 
@@ -159,7 +160,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
     if (!infuraApiKey) {
-      setFetchError("Connect to a node to fetch balances.");
+      setFetchError("Please provide an Infura API Key to fetch live balances.");
       return;
     }
     
@@ -228,7 +229,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(finalBalances);
     } catch (e: any) {
-      setFetchError("Market data sync issue.");
+      console.warn("Market data sync issue.");
     } finally {
       setIsRefreshing(false);
     }
@@ -247,7 +248,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (mnemonic) {
       loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-      toast({ title: "Wallet Created", description: "Keys saved locally." });
+      toast({ title: "Secure Wallet Generated", description: "Keys saved locally." });
     }
     return mnemonic;
   }, [loadWalletFromMnemonic, toast, user]);
@@ -257,9 +258,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
-      toast({ title: "Wallet Imported", description: "Success!" });
+      toast({ title: "Access Restored", description: "Your wallet has been re-imported successfully." });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Import Error", description: e.message });
+      toast({ variant: "destructive", title: "Import Error", description: "Check your phrase and try again." });
     }
   }, [loadWalletFromMnemonic, toast, user]);
 

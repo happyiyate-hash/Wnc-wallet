@@ -1,11 +1,12 @@
+
 'use client';
 
+import { useEffect, useState } from 'react';
 import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import { useWallet } from '@/contexts/wallet-provider';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
-import { getTokenLogoUrl } from '@/lib/getTokenLogo';
-import { useEffect, useState } from 'react';
+import { getDirectLogoUrl } from '@/lib/getTokenLogo';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -29,46 +30,55 @@ export default function TokenLogoDynamic({
   name,
 }: TokenLogoDynamicProps) {
   const { allChainsMap } = useWallet();
-  const [origin, setOrigin] = useState('');
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+    async function resolve() {
+      // 1. Priority: Direct URL from metadata table or props
+      if (logoUrl && logoUrl.startsWith('http')) {
+        setResolvedUrl(logoUrl);
+        setIsLoading(false);
+        return;
+      }
 
-  if (logoUrl === undefined && !symbol) {
-    return <Skeleton className={`w-[${size}px] h-[${size}px] rounded-full ${className}`} />;
-  }
+      // 2. Fallback: Search the dedicated logo instance directly if symbol/name provided
+      if (symbol || name) {
+        const direct = await getDirectLogoUrl(name || '', symbol || '');
+        if (direct) {
+          setResolvedUrl(direct);
+          setIsLoading(false);
+          return;
+        }
+      }
 
-  let finalUrl = logoUrl;
-  
-  // Handle relative paths from the Wevina CDN API
-  if (finalUrl && finalUrl.startsWith('/api/cdn')) {
-    finalUrl = `${origin}${finalUrl}`;
-  }
+      // 3. Fallback: Native network icon from chain mapping
+      if (chainId && allChainsMap[chainId]) {
+        const chainIcon = allChainsMap[chainId].iconUrl;
+        if (chainIcon) {
+          setResolvedUrl(chainIcon);
+          setIsLoading(false);
+          return;
+        }
+      }
 
-  // Fallback to predicted path if no URL provided but symbol is known
-  if (!finalUrl && symbol) {
-    const predicted = getTokenLogoUrl(symbol, name);
-    if (predicted) {
-        finalUrl = `${origin}${predicted}`;
+      setIsLoading(false);
     }
+
+    resolve();
+  }, [logoUrl, symbol, name, chainId, allChainsMap]);
+
+  if (isLoading) {
+    return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
   }
 
-  // Native token icon fallback from chain config
-  if (!finalUrl && chainId && allChainsMap[chainId]) {
-    const nativeChainIcon = allChainsMap[chainId].iconUrl;
-    if (nativeChainIcon) {
-      finalUrl = nativeChainIcon.startsWith('http') ? nativeChainIcon : `${origin}${nativeChainIcon}`;
-    }
-  }
-
-  if (!finalUrl || finalUrl.includes('undefined')) {
+  if (!resolvedUrl) {
     return FallbackComponent || <GenericCoinIcon size={size} className={className} />;
   }
 
   return (
     <CachedImage
-      src={finalUrl}
+      src={resolvedUrl}
       alt={alt}
       width={size}
       height={size}

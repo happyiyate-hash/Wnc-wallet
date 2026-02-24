@@ -1,3 +1,6 @@
+
+'use client';
+
 import { logoSupabase } from './supabase/logo-client';
 
 /**
@@ -7,45 +10,46 @@ import { logoSupabase } from './supabase/logo-client';
  */
 
 /**
- * Fetches the CDN URL for a token's logo using the metadata database.
- * Priority: Exact name match -> Symbol match.
+ * Fetches a token's direct logo URL from Supabase storage.
+ * lookup priorities: Exact name match -> Symbol match.
  * 
- * @param {string} name - The full name of the token.
- * @param {string} symbol - The symbol of the token.
- * @returns {Promise<string|null>} The logo path or null.
+ * @param {string} tokenName - The full name of the token (e.g., 'Wrapped Ether').
+ * @param {string} tokenSymbol - The symbol of the token (e.g., 'WETH').
+ * @returns {Promise<string|null>} The direct public URL to the logo, or null if not found.
  */
-export async function getLogoUrlFromApi(name: string, symbol: string): Promise<string | null> {
-    if (!logoSupabase) return null;
+export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
+  if (!logoSupabase) return null;
 
-    try {
-        // 1. Prioritize lookup by full name for accuracy
-        const { data: nameData } = await logoSupabase
-            .from('token_logos')
-            .select('public_url')
-            .ilike('name', name)
-            .limit(1)
-            .single();
+  try {
+    // 1. Prioritize lookup by the full token name for accuracy
+    const { data: nameData, error: nameError } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('name', tokenName)
+      .limit(1)
+      .single();
 
-        if (nameData) return nameData.public_url;
-
-        // 2. Fallback to symbol search
-        const { data: symbolData } = await logoSupabase
-            .from('token_logos')
-            .select('public_url')
-            .ilike('symbol', symbol)
-            .limit(1)
-            .single();
-
-        return symbolData ? symbolData.public_url : null;
-    } catch (error) {
-        console.error('Failed to fetch logo from metadata DB:', error);
-        return null;
+    if (nameData) {
+      return nameData.public_url;
     }
+
+    // 2. If no match is found by name, fall back to the symbol
+    const { data: symbolData } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('symbol', tokenSymbol)
+      .limit(1)
+      .single();
+
+    return symbolData ? symbolData.public_url : null;
+  } catch (error) {
+    // Gracefully handle "No rows found" or network issues
+    return null;
+  }
 }
 
 /**
- * Synchronous version for immediate UI rendering.
- * Returns a predicted path while waiting for metadata fetches.
+ * Immediate path prediction for the CDN caching layer.
  */
 export function getTokenLogoUrl(
     symbol?: string | null,
@@ -56,6 +60,5 @@ export function getTokenLogoUrl(
     const sym = symbol.toLowerCase();
     const nameSlug = name ? name.toLowerCase().replace(/\s+/g, '-') : sym;
     
-    // Returns relative path compatible with Wevina CDN layer
     return `/api/cdn/logo/${nameSlug}/${sym}`;
 }
