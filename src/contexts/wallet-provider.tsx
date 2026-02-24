@@ -269,7 +269,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing(true);
     setFetchError(null);
 
-    // Set all tokens to loading
     const initialAssets = getInitialAssets(viewingNetwork.chainId);
     const newLoadingState = initialAssets.reduce((acc, asset) => {
       acc[`${viewingNetwork.chainId}:${asset.symbol}`] = true;
@@ -278,9 +277,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setLoadingTokens(prev => ({ ...prev, ...newLoadingState }));
 
     try {
-      const rpcUrl = PUBLIC_RPC_MAP[viewingNetwork.chainId];
+      const rpcUrl = PUBLIC_RPC_MAP[viewingNetwork.chainId] || viewingNetwork.rpcBase;
       if (!rpcUrl) {
-        throw new Error(`Public RPC not configured for ${viewingNetwork.name}`);
+        throw new Error(`RPC not configured for ${viewingNetwork.name}`);
       }
 
       const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -303,7 +302,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           console.warn(`Balance fetch failed for ${asset.symbol} on ${viewingNetwork.name}:`, e);
           return { ...asset, balance: '0' };
         } finally {
-          // Individual token loading complete
           setLoadingTokens(prev => {
             const next = { ...prev };
             delete next[`${viewingNetwork.chainId}:${asset.symbol}`];
@@ -322,7 +320,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) {
       console.error("Fetch balances failed", e);
       setFetchError(e.message || "Could not fetch balances.");
-      // Clear loading on error
       setLoadingTokens({});
     } finally {
       setIsRefreshing(false);
@@ -344,7 +341,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    // ATOMIC FILTERING: Always show tokens immediately, even if balances aren't loaded
     const initial = getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const live = balances[viewingNetwork.chainId] || [];
     
