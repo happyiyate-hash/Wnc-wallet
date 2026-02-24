@@ -10,8 +10,8 @@ createConfig({
 /**
  * BRIDGE & SWAP QUOTE API (LI.FI SDK v3)
  * 
- * Fetches the best bridge/swap route using functional API approach.
- * Fixed: Removed legacy LiFi class import which caused build errors in v3.
+ * Fetches the best bridge/swap route using the functional API approach.
+ * This fixes the "Export LiFi was not found" compilation error.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
