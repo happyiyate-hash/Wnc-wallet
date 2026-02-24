@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   ArrowLeft, 
-  Search, 
   ChevronRight, 
   AlertCircle, 
   Loader2, 
@@ -16,7 +14,10 @@ import {
   ArrowRight,
   QrCode,
   Users,
-  Fuel
+  Fuel,
+  Search,
+  Copy,
+  Wallet as WalletIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -25,20 +26,29 @@ import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { getInitialAssets } from '@/lib/wallets/balances';
+import type { AssetRow, ChainConfig } from '@/lib/types';
+import { getAddressForChain } from '@/lib/wallets/utils';
 
 export default function SendPage() {
-  const { allAssets, viewingNetwork, wallets } = useWallet();
+  const { allChains, viewingNetwork, wallets, balances } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
-  // Workflow Steps: select -> details -> success
-  const [step, setStep] = useState<'select' | 'details' | 'success'>('select');
-  const [selectedToken, setSelectedToken] = useState(allAssets[0] || null);
+  // Workflow State
+  const [step, setStep] = useState<'details' | 'success'>('details');
+  const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState('');
+
+  // Sheet State
+  const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
+  const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
+  const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
   // Fee Estimation State
   const [networkFee, setNetworkFee] = useState<string | null>(null);
@@ -49,7 +59,17 @@ export default function SendPage() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
 
-  // Estimate Fee when amount or recipient changes
+  // Auto-select first available token on mount if none selected
+  useEffect(() => {
+    if (!selectedToken && viewingNetwork) {
+        const initial = getInitialAssets(viewingNetwork.chainId)[0];
+        if (initial) {
+            setSelectedToken({ ...initial, balance: '0' } as AssetRow);
+        }
+    }
+  }, [viewingNetwork, selectedToken]);
+
+  // Estimate Fee
   useEffect(() => {
     const estimateFee = async () => {
       if (!wallets || !wallets[0].privateKey || !selectedToken || !debouncedAmount || !ethers.isAddress(debouncedRecipient)) {
@@ -59,10 +79,7 @@ export default function SendPage() {
 
       setIsFeeLoading(true);
       try {
-        const rpcUrl = viewingNetwork.rpcBase.includes('infura') 
-          ? `https://rpc.ankr.com/eth` // Fallback to public if infura key is missing
-          : viewingNetwork.rpcBase;
-          
+        const rpcUrl = `https://rpc.ankr.com/${viewingNetwork.name.toLowerCase().replace(' ', '')}`;
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const feeData = await provider.getFeeData();
         const gasPrice = feeData.gasPrice || 0n;
@@ -77,34 +94,14 @@ export default function SendPage() {
         const fee = gasPrice * gasLimit;
         setNetworkFee(ethers.formatEther(fee));
       } catch (e) {
-        console.warn("Fee estimation failed", e);
         setNetworkFee(null);
       } finally {
         setIsFeeLoading(false);
       }
     };
 
-    if (step === 'details') estimateFee();
+    if (step === 'details' && selectedToken) estimateFee();
   }, [debouncedAmount, debouncedRecipient, selectedToken, viewingNetwork, step, wallets]);
-
-  const saveTransaction = async (hash: string) => {
-    if (!user || !selectedToken) return;
-
-    try {
-      const { error } = await supabase.from('transactions').insert({
-        user_id: user.id,
-        tx_hash: hash,
-        type: 'withdrawal',
-        status: 'completed',
-        token_symbol: selectedToken.symbol,
-        amount: parseFloat(amount),
-        timestamp: new Date().toISOString()
-      });
-      if (error) throw error;
-    } catch (e) {
-      console.error("Failed to log transaction:", e);
-    }
-  };
 
   const handleSendRequest = async () => {
     if (!wallets || !wallets[0].privateKey || !selectedToken || !isValidAmount) {
@@ -113,9 +110,7 @@ export default function SendPage() {
     }
     
     setIsSubmitting(true);
-
     try {
-      // Use public RPCs for broadcasting if Infura isn't fully configured
       const rpcUrl = `https://rpc.ankr.com/${viewingNetwork.name.toLowerCase().replace(' ', '')}`;
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
@@ -133,11 +128,9 @@ export default function SendPage() {
       }
 
       setTxHash(tx.hash);
-      await saveTransaction(tx.hash);
       setStep('success');
       toast({ title: "Transaction Sent", description: "Successfully signed and broadcasted." });
     } catch (e: any) {
-      console.error("Local signing failed", e);
       toast({ title: "Signing Failed", description: e.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
@@ -150,46 +143,26 @@ export default function SendPage() {
     return selectedToken?.isNative ? (val + fee).toFixed(6) : val.toFixed(6);
   }, [amount, networkFee, selectedToken]);
 
-  const renderTokenSelect = () => (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-white/5">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search tokens" className="pl-9 bg-secondary/40 border-none rounded-xl h-12" />
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto thin-scrollbar">
-        {allAssets.map((asset) => (
-          <div 
-            key={`${asset.chainId}-${asset.symbol}`}
-            onClick={() => {
-              setSelectedToken(asset);
-              setStep('details');
-            }}
-            className="flex items-center justify-between p-4 hover:bg-secondary/20 cursor-pointer border-b border-white/5 transition-colors group"
-          >
-            <div className="flex items-center gap-3">
-              <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.name} size={40} chainId={asset.chainId} />
-              <div>
-                <p className="font-bold">{asset.name}</p>
-                <p className="text-xs text-muted-foreground">{asset.balance} {asset.symbol}</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const handleTokenSelect = (token: AssetRow) => {
+    setSelectedToken(token);
+    setIsTokenSideSheetOpen(false);
+    setIsNetworkSheetOpen(false);
+  };
 
   const renderDetails = () => (
     <div className="p-6 flex flex-col h-full space-y-6">
-      <div className="flex items-center justify-center gap-3 mb-4">
-         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.name || ''} size={48} chainId={selectedToken?.chainId} />
-         <div className="text-center">
-            <h2 className="text-2xl font-bold">{selectedToken?.symbol}</h2>
-            <p className="text-sm text-muted-foreground">on {viewingNetwork.name}</p>
-         </div>
+      <div className="flex flex-col items-center gap-4 mb-4">
+        <button 
+            onClick={() => setIsNetworkSheetOpen(true)}
+            className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/30 border border-white/5 hover:bg-secondary/50 transition-all group"
+        >
+            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.name || ''} size={40} chainId={selectedToken?.chainId} />
+            <div className="text-left">
+                <h2 className="text-lg font-bold leading-none">{selectedToken?.symbol}</h2>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Change Token</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+        </button>
       </div>
 
       <div className="space-y-4">
@@ -204,9 +177,6 @@ export default function SendPage() {
                     className="h-14 bg-transparent border-none text-base font-mono focus-visible:ring-0 pr-24"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-primary">
-                        <Users className="w-5 h-5" />
-                    </Button>
                     <Button variant="ghost" size="icon" className="h-9 w-9 text-primary">
                         <QrCode className="w-5 h-5" />
                     </Button>
@@ -248,11 +218,7 @@ export default function SendPage() {
                 <Fuel className="w-4 h-4" />
                 Network Fee
             </div>
-            {isFeeLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-                <span className="font-bold">{networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}</span>
-            )}
+            {isFeeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="font-bold">{networkFee ? `~${parseFloat(networkFee).toFixed(6)}` : '0.000'} {viewingNetwork.symbol}</span>}
           </div>
           <div className="h-px bg-white/5" />
           <div className="flex justify-between items-center">
@@ -261,9 +227,9 @@ export default function SendPage() {
           </div>
       </div>
 
-      <div className="mt-auto space-y-4">
+      <div className="mt-auto pb-4">
         {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm border border-destructive/20">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm border border-destructive/20 mb-4">
             <AlertCircle className="w-4 h-4" /> Insufficient balance
           </div>
         )}
@@ -310,17 +276,103 @@ export default function SendPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <header className="p-4 flex items-center gap-2 border-b border-white/5 sticky top-0 bg-background/80 backdrop-blur-xl z-50">
-        <Button variant="ghost" size="icon" onClick={() => step === 'details' ? setStep('select') : router.back()}>
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-bold">
-          {step === 'select' ? 'Select Token' : step === 'details' ? `Send ${selectedToken?.symbol}` : 'Sent'}
-        </h1>
+        <h1 className="text-lg font-bold">{step === 'details' ? 'Send' : 'Success'}</h1>
       </header>
       
       <main className="flex-1 overflow-hidden">
-        {step === 'select' ? renderTokenSelect() : step === 'details' ? renderDetails() : renderSuccess()}
+        {step === 'details' ? renderDetails() : renderSuccess()}
       </main>
+
+      {/* STEP 1: BOTTOM SHEET (NETWORKS) */}
+      <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
+        <SheetContent side="bottom" className="bg-zinc-950 border-white/10 rounded-t-[2.5rem] p-6 max-h-[80vh] overflow-y-auto thin-scrollbar">
+            <SheetHeader className="mb-6">
+                <SheetTitle className="text-xl font-bold">Select Network</SheetTitle>
+            </SheetHeader>
+            <div className="grid grid-cols-1 gap-3">
+                {allChains.map((chain) => (
+                    <button 
+                        key={chain.chainId}
+                        onClick={() => {
+                            setSelectedNetworkForSelection(chain);
+                            setIsTokenSideSheetOpen(true);
+                        }}
+                        className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
+                    >
+                        <div className="flex items-center gap-3">
+                            <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} />
+                            <span className="font-bold">{chain.name}</span>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </button>
+                ))}
+            </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* STEP 2: SIDE SHEET (TOKENS ON NETWORK) */}
+      <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
+        <SheetContent side="right" className="bg-zinc-950 border-white/10 w-full sm:max-w-[400px] p-0 flex flex-col">
+            <SheetHeader className="p-6 border-b border-white/5">
+                <SheetTitle className="flex items-center gap-2">
+                    <TokenLogoDynamic logoUrl={selectedNetworkForSelection?.iconUrl} alt={selectedNetworkForSelection?.name || ''} size={24} chainId={selectedNetworkForSelection?.chainId} />
+                    {selectedNetworkForSelection?.name} Assets
+                </SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto thin-scrollbar p-4 space-y-6">
+                {/* ADDRESS HEADER */}
+                <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
+                        <WalletIcon className="w-3 h-3" /> Your Address
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-mono break-all text-foreground/80">
+                            {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
+                        </p>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary shrink-0" onClick={() => {
+                            const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
+                            if (addr) {
+                                navigator.clipboard.writeText(addr);
+                                toast({ title: "Address Copied" });
+                            }
+                        }}>
+                            <Copy className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Available Tokens</p>
+                    <div className="space-y-2">
+                        {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                            const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
+                            return (
+                                <button 
+                                    key={asset.symbol}
+                                    onClick={() => handleTokenSelect(asset)}
+                                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={36} chainId={asset.chainId} symbol={asset.symbol} />
+                                        <div className="text-left">
+                                            <p className="font-bold text-sm">{asset.symbol}</p>
+                                            <p className="text-xs text-muted-foreground">{asset.name}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-sm">{asset.balance}</p>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

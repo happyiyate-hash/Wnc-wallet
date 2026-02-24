@@ -31,9 +31,9 @@ const SharedGradient = () => (
 export default function MobileNav() {
   const pathname = usePathname();
 
-  // Hide the navigation on specific pages like Swap to allow for full-screen actions
-  const isSwapPage = pathname === '/swap';
-  if (isSwapPage) return null;
+  // Hide the navigation on transaction pages to allow for full-screen focus
+  const isActionPage = pathname === '/swap' || pathname === '/send' || pathname === '/receive';
+  if (isActionPage) return null;
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Wallet', icon: GradientWalletIcon },
@@ -47,7 +47,6 @@ export default function MobileNav() {
     const isActive = pathname === item.href;
     const Icon = item.icon;
     
-    // All navigation items now use a consistent Link component.
     return (
         <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0">
             <Icon className={cn('h-6 w-6 transition-all', isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground')} />
