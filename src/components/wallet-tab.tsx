@@ -32,10 +32,14 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
+import { Skeleton } from './ui/skeleton';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
+
+  // We consider it a "first load" only if it's currently loading AND we have zero price/cached data
+  const isFirstLoad = isLoading && (token.priceUsd === 0 || token.priceUsd === undefined);
 
   const handleRowClick = () => {
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
@@ -53,7 +57,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
             logoUrl={token.iconUrl}
             symbol={token.symbol}
             name={token.name}
-            size={36}
+            size={38}
             chainId={token.chainId}
         />
         <div className="flex flex-col">
@@ -72,21 +76,19 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
         </div>
       </div>
       <div className="text-right">
-        {isLoading ? (
-          <div className="flex flex-col items-end gap-1">
-            <p className="font-bold text-sm text-white leading-none">
-              {parseFloat(token.balance || '0').toLocaleString('en-US', { maximumFractionDigits: 6 })}
-            </p>
-            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+        {isFirstLoad ? (
+          <div className="flex flex-col items-end gap-2">
+            <Skeleton className="h-5 w-24 rounded-lg bg-white/5" />
+            <Skeleton className="h-3 w-16 rounded-lg bg-white/5" />
           </div>
         ) : (
           <>
-            <p className="font-bold text-sm text-white leading-none">
+            <p className="font-bold text-base text-white leading-none">
               {parseFloat(token.balance || '0').toLocaleString('en-US', {
                 maximumFractionDigits: 6,
               })}{' '}
             </p>
-            <p className="text-[10px] font-medium text-muted-foreground/60 mt-1 uppercase">
+            <p className="text-[10px] font-medium text-muted-foreground/60 mt-2 uppercase">
               ≈ ${(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -147,6 +149,8 @@ export default function WalletTab() {
     return (changeValue / totalValueYesterday) * 100;
   }, [allAssets, totalFiatValue]);
 
+  const isInitialWalletLoad = isRefreshing && totalFiatValue === 0;
+
   const getBalanceFontSize = (balance: number) => {
     const val = Number.isFinite(balance) ? balance : 0;
     const s = val.toLocaleString('en-US', { minimumFractionDigits: 2 });
@@ -186,28 +190,37 @@ export default function WalletTab() {
       <div className="bg-background pt-8">
         <div className="flex items-center justify-between px-6">
             <div>
-              <h2 className={cn(
-                'font-black tracking-tighter text-white',
-                getBalanceFontSize(Number(totalFiatValue ?? 0))
-              )}>
-                US${(totalFiatValue || 0).toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </h2>
-              <p
-                className={cn(
-                  'text-sm font-bold mt-1.5 flex items-center gap-2',
-                  total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
-                )}
-              >
-                {total24hChange >= 0 ? '+' : ''}$
-                {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
-                <span className="text-gray-500 font-medium text-xs">
-                  ({total24hChange >= 0 ? '+' : ''}
-                  {total24hChange.toFixed(2)}%)
-                </span>
-              </p>
+              {isInitialWalletLoad ? (
+                <div className="space-y-3">
+                   <Skeleton className="h-10 w-48 rounded-2xl bg-white/5" />
+                   <Skeleton className="h-4 w-32 rounded-lg bg-white/5" />
+                </div>
+              ) : (
+                <>
+                  <h2 className={cn(
+                    'font-black tracking-tighter text-white',
+                    getBalanceFontSize(Number(totalFiatValue ?? 0))
+                  )}>
+                    US${(totalFiatValue || 0).toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </h2>
+                  <p
+                    className={cn(
+                      'text-sm font-bold mt-1.5 flex items-center gap-2',
+                      total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
+                    )}
+                  >
+                    {total24hChange >= 0 ? '+' : ''}$
+                    {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
+                    <span className="text-gray-500 font-medium text-xs">
+                      ({total24hChange >= 0 ? '+' : ''}
+                      {total24hChange.toFixed(2)}%)
+                    </span>
+                  </p>
+                </>
+              )}
             </div>
         </div>
 
@@ -406,3 +419,4 @@ export default function WalletTab() {
     </div>
   );
 }
+
