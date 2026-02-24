@@ -135,6 +135,9 @@ export default function SwapPage() {
     return 'Review Swap Details';
   }, [amount, isInsufficient, isQuoteLoading, fetchError]);
 
+  const fromChain = allChains.find(c => c.chainId === fromToken?.chainId);
+  const toChain = allChains.find(c => c.chainId === toToken?.chainId);
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
@@ -186,7 +189,7 @@ export default function SwapPage() {
               <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={28} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
               <div className="text-left">
                 <p className="font-black leading-none">{fromToken?.symbol}</p>
-                <p className="text-[8px] text-muted-foreground font-bold uppercase">{allChains.find(c => c.chainId === fromToken?.chainId)?.name.split(' ')[0]}</p>
+                <p className="text-[8px] text-muted-foreground font-bold uppercase">{fromChain?.name.split(' ')[0]}</p>
               </div>
             </Button>
           </div>
@@ -229,31 +232,45 @@ export default function SwapPage() {
               <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={28} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
               <div className="text-left">
                 <p className="font-black leading-none">{toToken?.symbol}</p>
-                <p className="text-[8px] text-muted-foreground font-bold uppercase">{allChains.find(c => c.chainId === toToken?.chainId)?.name.split(' ')[0]}</p>
+                <p className="text-[8px] text-muted-foreground font-bold uppercase">{toChain?.name.split(' ')[0]}</p>
               </div>
             </Button>
           </div>
         </div>
 
-        {/* QUOTE VISUALS */}
+        {/* QUOTE VISUALS (SCROLLABLE) */}
         {quoteData && (
             <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/5 space-y-4 mt-4 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     <span className="flex items-center gap-2"><RouteIcon className="w-3.5 h-3.5 text-primary"/> Execution Route</span>
-                    <span className="text-primary/80">{quoteData.tool}</span>
+                    <span className="text-primary font-black uppercase tracking-tight">{quoteData.tool}</span>
                 </div>
                 
                 <div className="flex items-center gap-3 py-2">
                     <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/5">
-                        <TokenLogoDynamic logoUrl={allChains.find(c => c.chainId === fromToken?.chainId)?.iconUrl} size={14} alt="" />
-                        <span className="text-[10px] font-bold">{allChains.find(c => c.chainId === fromToken?.chainId)?.name.split(' ')[0]}</span>
+                        <TokenLogoDynamic 
+                            logoUrl={fromChain?.iconUrl} 
+                            size={16} 
+                            alt="" 
+                            chainId={fromChain?.chainId}
+                            name={fromChain?.name}
+                            symbol={fromChain?.symbol}
+                        />
+                        <span className="text-[10px] font-bold">{fromChain?.name.split(' ')[0]}</span>
                     </div>
                     <ChevronRight className="w-3 h-3 text-muted-foreground/40" />
                     <div className="flex-1 h-[1px] bg-gradient-to-r from-primary/50 to-transparent" />
                     <ChevronRight className="w-3 h-3 text-muted-foreground/40" />
                     <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/5">
-                        <TokenLogoDynamic logoUrl={allChains.find(c => c.chainId === toToken?.chainId)?.iconUrl} size={14} alt="" />
-                        <span className="text-[10px] font-bold">{allChains.find(c => c.chainId === toToken?.chainId)?.name.split(' ')[0]}</span>
+                        <TokenLogoDynamic 
+                            logoUrl={toChain?.iconUrl} 
+                            size={16} 
+                            alt="" 
+                            chainId={toChain?.chainId}
+                            name={toChain?.name}
+                            symbol={toChain?.symbol}
+                        />
+                        <span className="text-[10px] font-bold">{toChain?.name.split(' ')[0]}</span>
                     </div>
                 </div>
 
