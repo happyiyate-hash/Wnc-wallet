@@ -10,11 +10,12 @@ import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-// ANKR MULTICHAIN CONFIGURATION
+// ANKR MULTICHAIN CONFIGURATION (Unified Portfolio API)
 const ANKR_MULTICHAIN_URL = "https://rpc.ankr.com/multichain/";
 
-// Mapping internal Chain IDs to Ankr-specific blockchain names
-const ANKR_CHAIN_MAPPING: Record<number, string> = {
+// Mapping for Ankr Public Tier Supported Chains
+// Including only chains that reliably support ankr_getAccountBalance
+const ANKR_PUBLIC_CHAINS: Record<number, string> = {
   1: 'eth',
   137: 'polygon',
   8453: 'base',
@@ -25,14 +26,7 @@ const ANKR_CHAIN_MAPPING: Record<number, string> = {
   59144: 'linea',
   534352: 'scroll',
   324: 'zksync',
-  81457: 'blast',
-  5000: 'mantle',
-  204: 'opbnb',
-  1329: 'sei',
-  42220: 'celo',
-  130: 'unichain',
-  1750: 'swellchain',
-  1313161554: 'hemi'
+  81457: 'blast'
 };
 
 interface WalletContextType {
@@ -266,8 +260,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * REFACTORED: ANKR MULTICHAIN BALANCE FETCHING (PRO VERSION)
-   * Merges Ankr live data with local metadata to ensure perfect logo and chain resolution.
+   * REFACTORED: SAFE ANKR MULTICHAIN FETCHING
+   * Filters for supported public-tier chains and includes robust error handling.
    */
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
@@ -276,7 +270,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setFetchError(null);
 
     try {
-      const blockchainNames = Object.values(ANKR_CHAIN_MAPPING);
+      const blockchainNames = Object.values(ANKR_PUBLIC_CHAINS);
 
       const response = await fetch(ANKR_MULTICHAIN_URL, {
         method: 'POST',
@@ -293,8 +287,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Ankr Portfolio API error: ${response.status}`);
+      }
+
       const result = await response.json();
-      if (!response.ok || result.error) throw new Error(result.error?.message || "Ankr request failed");
+      
+      if (result.error) {
+        throw new Error(result.error.message || "Ankr request failed");
+      }
 
       const assets = result.result?.assets || [];
       const newBalances: { [key: string]: AssetRow[] } = {};
@@ -313,14 +314,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       // Update balances with Ankr live data
       assets.forEach((ankrAsset: any) => {
-        const chainIdKey = Object.keys(ANKR_CHAIN_MAPPING).find(key => ANKR_CHAIN_MAPPING[Number(key)] === ankrAsset.blockchain);
+        const chainIdKey = Object.keys(ANKR_PUBLIC_CHAINS).find(key => ANKR_PUBLIC_CHAINS[Number(key)] === ankrAsset.blockchain);
         if (!chainIdKey) return;
         
         const chainId = Number(chainIdKey);
         const internalChain = chainsWithLogos.find(c => c.chainId === chainId);
         if (!internalChain) return;
 
-        // Find existing asset in our initial list or create new entry
         const existingIndex = newBalances[chainId].findIndex(a => a.symbol === ankrAsset.tokenSymbol);
         
         const updatedAsset: AssetRow = {
@@ -333,7 +333,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           priceUsd: parseFloat(ankrAsset.tokenPrice || '0'),
           pctChange24h: 0,
           isNative: !ankrAsset.contractAddress,
-          iconUrl: ankrAsset.thumbnail || internalChain.iconUrl // Prefer Ankr thumbnail, fallback to internal chain logo
+          iconUrl: ankrAsset.thumbnail || internalChain.iconUrl
         };
 
         if (existingIndex > -1) {
@@ -345,8 +345,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setBalances(newBalances);
     } catch (e: any) {
-      console.error("Ankr Portfolio Fetch Error:", e);
-      setFetchError(e.message || "Could not retrieve multi-chain portfolio.");
+      console.error("Safe Portfolio Fetch Error:", e);
+      setFetchError(e.message || "Could not retrieve multi-chain portfolio. Falling back to local cache.");
+      
+      // FALLBACK: Initialize balances with zeros if API fails entirely
+      const fallbackBalances: { [key: string]: AssetRow[] } = {};
+      chainsWithLogos.forEach(chain => {
+        fallbackBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
+          ...a,
+          balance: '0',
+          fiatValueUsd: 0,
+          priceUsd: 0,
+          pctChange24h: 0,
+        } as AssetRow));
+      });
+      setBalances(fallbackBalances);
     } finally {
       setIsRefreshing(false);
     }
