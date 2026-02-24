@@ -20,7 +20,8 @@ import {
   ArrowRight,
   Route as RouteIcon,
   Settings2,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -45,7 +46,7 @@ import {
 import { useDebounce } from '@/hooks/use-debounce';
 
 export default function SwapPage() {
-  const { allChains, viewingNetwork, balances, wallets, infuraApiKey } = useWallet();
+  const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
@@ -76,21 +77,19 @@ export default function SwapPage() {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    if (!fromToken) {
+    if (!fromToken && allAssets.length > 0) {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
       const chainIdParam = parseInt(searchParams.get('chainId') || '');
       const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
       
-      const assets = getInitialAssets(targetChainId);
-      const found = assets.find(a => a.symbol === fromSymbol) || assets[0];
-      setFromToken({ ...found, balance: '0' } as AssetRow);
+      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId) || allAssets[0];
+      if (found) setFromToken({ ...found });
     }
-    if (!toToken) {
-      const assets = getInitialAssets(viewingNetwork.chainId);
-      const found = assets[assets.length - 1] || assets[0];
-      setToToken({ ...found, balance: '0' } as AssetRow);
+    if (!toToken && allAssets.length > 0) {
+      const found = allAssets[allAssets.length - 1] || allAssets[0];
+      if (found) setToToken({ ...found });
     }
-  }, [viewingNetwork, searchParams, fromToken, toToken]);
+  }, [allAssets, searchParams, fromToken, toToken, viewingNetwork.chainId]);
 
   // --- QUOTE FETCHING ---
   useEffect(() => {
@@ -121,9 +120,16 @@ export default function SwapPage() {
         });
 
         const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+        
+        // Handle HTML error pages gracefully
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text.includes('<!DOCTYPE') ? 'Service Unavailable (Route Busy)' : text);
+        }
+
         const data = await res.json();
         
-        if (!res.ok || data.error) {
+        if (data.error) {
           throw new Error(data.details || data.error || 'Failed to fetch quote');
         }
 
@@ -232,11 +238,11 @@ export default function SwapPage() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto"
+              className="text-4xl font-bold bg-transparent border-none p-0 focus-visible:ring-0 h-auto flex-1 min-w-0"
             />
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-12 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
+                className="rounded-2xl gap-2 h-14 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
                 onClick={() => {
                     setSelectionType('from');
                     setIsNetworkSheetOpen(true);
@@ -245,13 +251,13 @@ export default function SwapPage() {
               <TokenLogoDynamic 
                 logoUrl={fromToken?.iconUrl} 
                 alt={fromToken?.symbol || ''} 
-                size={28} 
+                size={36} 
                 chainId={fromToken?.chainId}
                 name={fromToken?.name}
                 symbol={fromToken?.symbol}
               />
-              <span className="font-bold">{fromToken?.symbol}</span>
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+              <span className="font-bold">{fromToken?.symbol || 'Select'}</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
           </div>
         </div>
@@ -281,7 +287,7 @@ export default function SwapPage() {
             </div>
             <Button 
                 variant="outline" 
-                className="rounded-2xl gap-2 h-12 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
+                className="rounded-2xl gap-2 h-14 px-4 bg-white/5 border-white/10 hover:bg-white/10 shrink-0 shadow-lg"
                 onClick={() => {
                     setSelectionType('to');
                     setIsNetworkSheetOpen(true);
@@ -290,13 +296,13 @@ export default function SwapPage() {
               <TokenLogoDynamic 
                 logoUrl={toToken?.iconUrl} 
                 alt={toToken?.symbol || ''} 
-                size={28} 
+                size={36} 
                 chainId={toToken?.chainId}
                 name={toToken?.name}
                 symbol={toToken?.symbol}
               />
-              <span className="font-bold">{toToken?.symbol}</span>
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+              <span className="font-bold">{toToken?.symbol || 'Select'}</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
           </div>
         </div>
@@ -580,14 +586,4 @@ export default function SwapPage() {
       </Dialog>
     </div>
   );
-}
-
-// Internal Icon Component
-function ShieldCheck({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-            <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M9 12L11 14L15 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-    );
 }

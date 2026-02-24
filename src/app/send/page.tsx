@@ -29,7 +29,7 @@ import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 
 export default function SendPage() {
-  const { viewingNetwork, wallets, balances, infuraApiKey, allChains } = useWallet();
+  const { viewingNetwork, wallets, balances, infuraApiKey, allChains, allAssets } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,25 +58,16 @@ export default function SendPage() {
 
   // Auto-select token based on query params or defaults
   useEffect(() => {
-    if (!selectedToken) {
+    if (!selectedToken && allAssets.length > 0) {
         const symbol = searchParams.get('symbol');
         const chainId = parseInt(searchParams.get('chainId') || '');
         
-        if (symbol && !isNaN(chainId)) {
-            const assets = getInitialAssets(chainId);
-            const found = assets.find(a => a.symbol === symbol);
-            if (found) {
-                setSelectedToken({ ...found, balance: '0' } as AssetRow);
-                return;
-            }
-        }
-
-        const initial = getInitialAssets(viewingNetwork.chainId)[0];
-        if (initial) {
-            setSelectedToken({ ...initial, balance: '0' } as AssetRow);
+        const found = allAssets.find(a => a.symbol === symbol && a.chainId === chainId) || allAssets[0];
+        if (found) {
+            setSelectedToken({ ...found });
         }
     }
-  }, [viewingNetwork, selectedToken, searchParams]);
+  }, [allAssets, selectedToken, searchParams]);
 
   // Estimate Fee
   useEffect(() => {
@@ -180,13 +171,13 @@ export default function SendPage() {
             <TokenLogoDynamic 
                 logoUrl={selectedToken?.iconUrl} 
                 alt={selectedToken?.name || ''} 
-                size={40} 
+                size={44} 
                 chainId={selectedToken?.chainId}
                 name={selectedToken?.name}
                 symbol={selectedToken?.symbol}
             />
             <div className="text-left">
-                <h2 className="text-lg font-bold leading-none">{selectedToken?.symbol}</h2>
+                <h2 className="text-lg font-bold leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Change Token</p>
             </div>
             <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />

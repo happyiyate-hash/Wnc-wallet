@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -32,20 +31,33 @@ export default function TokenLogoDynamic({
 
   useEffect(() => {
     async function resolve() {
-      // 1. Priority: Direct URL from metadata table or props
+      setIsLoading(true);
+
+      // 1. Priority: Direct Absolute URL
       if (logoUrl && logoUrl.startsWith('http')) {
         setResolvedUrl(logoUrl);
         setIsLoading(false);
         return;
       }
 
-      // 2. Main Logic: Search the dedicated logo project directly if symbol/name provided
+      // 2. Relative CDN Path Detection (Handle strings like /api/cdn/logo/...)
+      if (logoUrl && logoUrl.startsWith('/')) {
+        setResolvedUrl(logoUrl);
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Fallback: Direct lookup via Dedicated Registry (Exact Name -> Symbol)
       if (symbol || name) {
-        const direct = await getDirectLogoUrl(name || '', symbol || '');
-        if (direct) {
-          setResolvedUrl(direct);
-          setIsLoading(false);
-          return;
+        try {
+          const direct = await getDirectLogoUrl(name || '', symbol || '');
+          if (direct) {
+            setResolvedUrl(direct);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn("Manual logo lookup failed:", e);
         }
       }
 
@@ -64,13 +76,15 @@ export default function TokenLogoDynamic({
   }
 
   return (
-    <CachedImage
-      src={resolvedUrl}
-      alt={alt}
-      width={size}
-      height={size}
-      className={`rounded-full object-cover bg-white/5 ${className}`}
-      unoptimized
-    />
+    <div style={{ width: size, height: size }} className="shrink-0 flex items-center justify-center">
+      <CachedImage
+        src={resolvedUrl}
+        alt={alt}
+        width={size}
+        height={size}
+        className={`rounded-full object-cover bg-white/5 ${className}`}
+        unoptimized
+      />
+    </div>
   );
 }

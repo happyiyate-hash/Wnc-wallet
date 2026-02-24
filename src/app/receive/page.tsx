@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useWallet } from '@/contexts/wallet-provider';
@@ -15,7 +14,7 @@ import { cn } from '@/lib/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 
 export default function ReceivePage() {
-  const { wallets, viewingNetwork, allChains } = useWallet();
+  const { wallets, viewingNetwork, allChains, allAssets } = useWallet();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isCopied, copy] = useCopyToClipboard();
@@ -27,19 +26,18 @@ export default function ReceivePage() {
     const chainId = parseInt(searchParams.get('chainId') || '');
     
     if (symbol && !isNaN(chainId)) {
-        const assets = getInitialAssets(chainId);
-        const found = assets.find(a => a.symbol === symbol);
+        const found = allAssets.find(a => a.symbol === symbol && a.chainId === chainId);
         if (found) {
-            setSelectedToken({ ...found, balance: '0' } as AssetRow);
+            setSelectedToken({ ...found });
             return;
         }
     }
 
-    const initial = getInitialAssets(viewingNetwork.chainId)[0];
+    const initial = allAssets.find(a => a.chainId === viewingNetwork.chainId) || allAssets[0];
     if (initial) {
-        setSelectedToken({ ...initial, balance: '0' } as AssetRow);
+        setSelectedToken({ ...initial });
     }
-  }, [viewingNetwork, searchParams]);
+  }, [viewingNetwork, allAssets, searchParams]);
 
   const chain = useMemo(() => 
     allChains.find(c => c.chainId === selectedToken?.chainId) || viewingNetwork,
@@ -59,7 +57,10 @@ export default function ReceivePage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-lg font-bold">Receive {selectedToken?.symbol}</h1>
+        <div className="flex flex-col items-center">
+            <h1 className="text-lg font-bold">Receive {selectedToken?.symbol}</h1>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{chain.name}</span>
+        </div>
         <Button variant="ghost" size="icon">
           <Info className="w-5 h-5" />
         </Button>
@@ -93,7 +94,7 @@ export default function ReceivePage() {
                                 <TokenLogoDynamic 
                                     logoUrl={selectedToken?.iconUrl} 
                                     alt={selectedToken?.symbol || ''} 
-                                    size={32} 
+                                    size={40} 
                                     chainId={selectedToken?.chainId} 
                                     symbol={selectedToken?.symbol}
                                     name={selectedToken?.name}
