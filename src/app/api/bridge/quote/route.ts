@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getQuote, createConfig } from '@lifi/sdk';
 
@@ -11,7 +10,7 @@ createConfig({
  * BRIDGE & SWAP QUOTE API (LI.FI SDK v3)
  * 
  * Fetches the best bridge/swap route using the functional API approach.
- * This fixes the "Export LiFi was not found" compilation error.
+ * This fixes the "Export LiFi was not found" compilation error by avoiding the class-based SDK.
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
