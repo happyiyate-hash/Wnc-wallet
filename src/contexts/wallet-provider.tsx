@@ -9,25 +9,7 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-// ANKR MULTICHAIN CONFIGURATION (Unified Portfolio API)
-const ANKR_MULTICHAIN_URL = "https://rpc.ankr.com/multichain/";
-
-// Mapping for Ankr Public Tier Supported Chains
-// Including only chains that reliably support ankr_getAccountBalance
-const ANKR_PUBLIC_CHAINS: Record<number, string> = {
-  1: 'eth',
-  137: 'polygon',
-  8453: 'base',
-  10: 'optimism',
-  42161: 'arbitrum',
-  56: 'bsc',
-  43114: 'avalanche',
-  59144: 'linea',
-  534352: 'scroll',
-  324: 'zksync',
-  81457: 'blast'
-};
+import { fetchAssetPrices } from '@/lib/coingecko';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -51,6 +33,8 @@ interface WalletContextType {
   deleteWallet: () => void;
   fetchError: string | null;
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
+  infuraApiKey: string | null;
+  setInfuraApiKey: (key: string | null) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -67,6 +51,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
+
+  // Initialize API Key from LocalStorage
+  useEffect(() => {
+    const savedKey = localStorage.getItem('infura_api_key');
+    if (savedKey) setInfuraApiKey(savedKey);
+  }, []);
+
+  const handleSetApiKey = (key: string | null) => {
+    setInfuraApiKey(key);
+    if (key) localStorage.setItem('infura_api_key', key);
+    else localStorage.removeItem('infura_api_key');
+  };
 
   const isTokenLoading = useCallback((chainId: number, symbol: string) => {
     return loadingTokens[`${chainId}:${symbol}`] || false;
@@ -260,110 +257,91 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * REFACTORED: SAFE ANKR MULTICHAIN FETCHING
-   * Filters for supported public-tier chains and includes robust error handling.
+   * REFACTORED: USER-RPC DRIVEN BALANCE FETCHING
+   * Fetches native balances per chain using the user's provided API key.
    */
   const fetchBalances = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !isInitialized) return;
+    if (!infuraApiKey) {
+      setFetchError("Please provide an Infura API Key in Settings to fetch live balances.");
+      return;
+    }
     
     setIsRefreshing(true);
     setFetchError(null);
 
+    const newBalances: { [key: string]: AssetRow[] } = {};
+
     try {
-      const blockchainNames = Object.values(ANKR_PUBLIC_CHAINS);
+      // Fetch native balances for all configured chains in parallel
+      const balancePromises = chainsWithLogos.map(async (chain) => {
+        if (!chain.rpcUrl || chain.chainId === 0) return null;
 
-      const response = await fetch(ANKR_MULTICHAIN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'ankr_getAccountBalance',
-          params: {
-            walletAddress: wallets[0].address,
-            blockchain: blockchainNames,
-            onlyWhitelisted: true
-          },
-          id: 1
-        }),
-      });
+        const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
+        try {
+          const provider = new ethers.JsonRpcProvider(rpcUrl);
+          const balance = await provider.getBalance(wallets[0].address);
+          
+          const initialAssets = getInitialAssets(chain.chainId);
+          const nativeAsset = initialAssets.find(a => a.isNative) || {
+             chainId: chain.chainId,
+             address: 'native',
+             symbol: chain.symbol,
+             name: chain.name,
+             isNative: true
+          };
 
-      if (!response.ok) {
-        throw new Error(`Ankr Portfolio API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error.message || "Ankr request failed");
-      }
-
-      const assets = result.result?.assets || [];
-      const newBalances: { [key: string]: AssetRow[] } = {};
-
-      // Initialize all configured chains with zero-balance initial assets
-      chainsWithLogos.forEach(chain => {
-        newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
-          ...a,
-          balance: '0',
-          fiatValueUsd: 0,
-          priceUsd: 0,
-          pctChange24h: 0,
-          iconUrl: a.iconUrl || null
-        } as AssetRow));
-      });
-
-      // Update balances with Ankr live data
-      assets.forEach((ankrAsset: any) => {
-        const chainIdKey = Object.keys(ANKR_PUBLIC_CHAINS).find(key => ANKR_PUBLIC_CHAINS[Number(key)] === ankrAsset.blockchain);
-        if (!chainIdKey) return;
-        
-        const chainId = Number(chainIdKey);
-        const internalChain = chainsWithLogos.find(c => c.chainId === chainId);
-        if (!internalChain) return;
-
-        const existingIndex = newBalances[chainId].findIndex(a => a.symbol === ankrAsset.tokenSymbol);
-        
-        const updatedAsset: AssetRow = {
-          chainId: chainId,
-          address: ankrAsset.contractAddress || 'native',
-          symbol: ankrAsset.tokenSymbol,
-          name: ankrAsset.tokenName,
-          balance: ankrAsset.balance,
-          fiatValueUsd: parseFloat(ankrAsset.balanceUsd || '0'),
-          priceUsd: parseFloat(ankrAsset.tokenPrice || '0'),
-          pctChange24h: 0,
-          isNative: !ankrAsset.contractAddress,
-          iconUrl: ankrAsset.thumbnail || internalChain.iconUrl
-        };
-
-        if (existingIndex > -1) {
-          newBalances[chainId][existingIndex] = updatedAsset;
-        } else {
-          newBalances[chainId].push(updatedAsset);
+          return {
+            ...nativeAsset,
+            balance: ethers.formatEther(balance),
+            iconUrl: chain.iconUrl
+          } as AssetRow;
+        } catch (e) {
+          console.error(`RPC Error for ${chain.name}:`, e);
+          return null;
         }
       });
 
-      setBalances(newBalances);
-    } catch (e: any) {
-      console.error("Safe Portfolio Fetch Error:", e);
-      setFetchError(e.message || "Could not retrieve multi-chain portfolio. Falling back to local cache.");
+      const results = await Promise.all(balancePromises);
       
-      // FALLBACK: Initialize balances with zeros if API fails entirely
-      const fallbackBalances: { [key: string]: AssetRow[] } = {};
-      chainsWithLogos.forEach(chain => {
-        fallbackBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
-          ...a,
-          balance: '0',
-          fiatValueUsd: 0,
-          priceUsd: 0,
-          pctChange24h: 0,
-        } as AssetRow));
+      // Group results by chainId
+      results.forEach((res) => {
+        if (res) {
+          if (!newBalances[res.chainId]) newBalances[res.chainId] = [];
+          newBalances[res.chainId].push(res);
+        }
       });
-      setBalances(fallbackBalances);
+
+      // Fill in zeros for chains that failed
+      chainsWithLogos.forEach(chain => {
+        if (!newBalances[chain.chainId]) {
+          newBalances[chain.chainId] = getInitialAssets(chain.chainId).map(a => ({
+            ...a,
+            balance: '0',
+            iconUrl: a.iconUrl || chain.iconUrl
+          } as AssetRow));
+        }
+      });
+
+      // Fetch prices for all collected assets
+      const flatAssets = Object.values(newBalances).flat();
+      const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
+      
+      // Regroup priced assets
+      const finalBalances: { [key: string]: AssetRow[] } = {};
+      assetsWithPrices.forEach(asset => {
+        if (!finalBalances[asset.chainId]) finalBalances[asset.chainId] = [];
+        finalBalances[asset.chainId].push(asset);
+      });
+
+      setBalances(finalBalances);
+    } catch (e: any) {
+      console.error("Balance Fetch Error:", e);
+      setFetchError("Failed to communicate with RPC nodes. Check your API key.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [wallets, isInitialized, chainsWithLogos]);
+  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey]);
 
   useEffect(() => {
     if (isInitialized && wallets) {
@@ -407,7 +385,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     logout,
     deleteWallet,
     fetchError,
-    getAddressForChain
+    getAddressForChain,
+    infuraApiKey,
+    setInfuraApiKey: handleSetApiKey
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

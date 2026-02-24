@@ -1,3 +1,4 @@
+
 export interface AssetRow {
   chainId: number;
   address: string;
@@ -30,8 +31,8 @@ export interface ChainConfig {
     chainId: number;
     name: string;
     symbol: string;
-    rpcBase: string;
-    explorer: string;
+    rpcUrl: string;
+    explorer?: string;
     iconUrl?: string | null;
     coingeckoId?: string;
     themeColor?: string;
