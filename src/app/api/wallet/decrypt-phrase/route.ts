@@ -48,6 +48,11 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Decryption failed. Check your ENCRYPTION_KEY.' }, { status: 500 });
+        
+        if (error.message === 'ENCRYPTION_KEY_MISSING') {
+            return NextResponse.json({ message: 'Server Configuration Error: ENCRYPTION_KEY not set.' }, { status: 500 });
+        }
+
+        return NextResponse.json({ message: 'Decryption failed. Ensure you are using the correct key.' }, { status: 500 });
     }
 }

@@ -4,7 +4,7 @@ import crypto from 'crypto';
  * CANONICAL UNIVERSAL ENCRYPTION SYSTEM (AES-256-CBC)
  * 
  * This utility ensures perfect compatibility across all applications
- * sharing the SmarterSeller vault.
+ * sharing the vault.
  */
 
 const ALGORITHM = 'aes-256-cbc';
@@ -13,13 +13,12 @@ const IV_LENGTH = 16;
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
-    throw new Error("CRITICAL: ENCRYPTION_KEY environment variable is not set.");
+    throw new Error("ENCRYPTION_KEY_MISSING");
   }
 
-  // Interpret the 64-character hex string as a raw 32-byte Buffer
-  const buffer = Buffer.from(key, 'hex');
-  if (buffer.length === 32) {
-    return buffer;
+  // Handle 64-character hex string as raw 32-byte Buffer
+  if (/^[0-9a-fA-F]{64}$/.test(key)) {
+    return Buffer.from(key, 'hex');
   }
 
   // Fallback: SHA-256 derivation to ensure an exact 32-byte key

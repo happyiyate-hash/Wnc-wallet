@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -131,15 +130,18 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
             <Lock className="w-4 h-4 text-primary" />
           </div>
           <SheetTitle className="text-lg font-bold">Secure Your Assets</SheetTitle>
-          {/* Use a div instead of SheetDescription to avoid paragraph nesting issues */}
           <div className="text-xs text-muted-foreground mt-2">
             {isProcessing ? (
                 <div className="flex items-center justify-center gap-2 text-primary font-mono text-[10px] tracking-tighter">
                     <Timer className="w-3 h-3 animate-pulse" />
                     {(timer / 1000).toFixed(3)}s
+                    <span className="ml-1 opacity-60">|</span>
+                    <span className="ml-1">{status}</span>
                 </div>
             ) : (
-                <div>{step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}</div>
+                <div className="text-muted-foreground opacity-60">
+                    {step === 'import' ? 'Enter secret phrase' : 'Choose a setup method'}
+                </div>
             )}
           </div>
         </SheetHeader>
@@ -155,7 +157,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 {isProcessing && status.includes('Generating') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="animate-pulse">{status}</span>
+                        <span className="animate-pulse">Generating...</span>
                     </div>
                 ) : (
                     <><Plus className="w-4 h-4" /> Create New Wallet</>
@@ -182,7 +184,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                   {isProcessing && !status.includes('Generating') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-[10px] font-mono">{status}</span>
+                        <span className="text-[10px] font-mono">Restoring...</span>
                     </div>
                   ) : (
                     <><CloudDownload className="w-4 h-4" /> Restore from Cloud Vault</>
