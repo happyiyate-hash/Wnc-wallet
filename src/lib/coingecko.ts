@@ -3,6 +3,27 @@ import type { AssetRow } from '@/lib/types';
 const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
 /**
+ * CoinGecko Platform IDs mapped from Chain IDs
+ */
+export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
+    1: 'ethereum',
+    137: 'polygon-pos',
+    10: 'optimistic-ethereum',
+    42161: 'arbitrum-one',
+    8453: 'base',
+    56: 'binance-smart-chain',
+    43114: 'avalanche',
+    59144: 'linea',
+    250: 'fantom',
+    42220: 'celo',
+    324: 'zksync',
+    534352: 'scroll',
+    5000: 'mantle',
+    1329: 'sei-network',
+    130: 'unichain'
+};
+
+/**
  * A generic fetcher function for CoinGecko API.
  */
 async function fetcher(url: string) {
@@ -22,12 +43,10 @@ async function fetcher(url: string) {
 
 /**
  * Fetches a map of prices and 24h changes for a list of CoinGecko IDs.
- * Independent of balances or chains.
  */
 export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { usd: number, usd_24h_change: number } }> {
     if (ids.length === 0) return {};
     
-    // Remove duplicates and empty strings
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
     
     try {
@@ -40,27 +59,31 @@ export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { us
 }
 
 /**
- * DEPRECATED: Use fetchPriceMap for independent price fetching.
- * Kept for backward compatibility if needed by other components.
+ * Fetches prices for tokens on a specific platform using contract addresses.
  */
-export async function fetchAssetPrices(
-    baseAssets: Omit<AssetRow, 'priceUsd' | 'fiatValueUsd' | 'pctChange24h'>[]
-): Promise<AssetRow[]> {
-    const ids = baseAssets.map(a => a.coingeckoId).filter(Boolean) as string[];
-    const pricesData = await fetchPriceMap(ids);
+export async function fetchPricesByContract(platformId: string, addresses: string[]): Promise<{ [address: string]: { usd: number, usd_24h_change: number } }> {
+    if (!platformId || addresses.length === 0) return {};
+    
+    const cleanAddresses = addresses.filter(addr => addr && addr.startsWith('0x')).join(',');
+    if (!cleanAddresses) return {};
 
-    return baseAssets.map((asset) => {
-        const priceInfo = asset.coingeckoId ? pricesData[asset.coingeckoId] : null;
-        const priceUsd = priceInfo?.usd ?? 0;
-        const balance = parseFloat(asset.balance);
-
-        return {
-            ...asset,
-            priceUsd: priceUsd,
-            fiatValueUsd: balance * priceUsd,
-            pctChange24h: priceInfo?.usd_24h_change ?? 0,
-        };
-    }) as AssetRow[];
+    try {
+        const url = `${COINGECKO_API_URL}/simple/token_price/${platformId}?contract_addresses=${cleanAddresses}&vs_currencies=usd&include_24hr_change=true`;
+        const data = await fetcher(url);
+        
+        // Normalize response to match the simple price format
+        const result: any = {};
+        Object.entries(data).forEach(([addr, info]: [string, any]) => {
+            result[addr.toLowerCase()] = {
+                usd: info.usd,
+                usd_24h_change: info.usd_24h_change
+            };
+        });
+        return result;
+    } catch (e) {
+        console.warn(`CoinGecko contract fetch failed for ${platformId}:`, e);
+        return {};
+    }
 }
 
 /**

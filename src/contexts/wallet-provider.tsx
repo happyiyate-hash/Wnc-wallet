@@ -10,7 +10,7 @@ import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
-import { fetchPriceMap } from '@/lib/coingecko';
+import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
@@ -64,7 +64,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
-  const [prices, setPrices] = useState<{ [coingeckoId: string]: PriceInfo }>({});
+  const [prices, setPrices] = useState<{ [key: string]: PriceInfo }>({});
   const [tokenRegistry, setTokenRegistry] = useState<{ [chainId: number]: any[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -190,22 +190,53 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const fetchGlobalPrices = useCallback(async () => {
     if (!isInitialized) return;
-    const ids = new Set<string>();
+    
+    const coingeckoIds = new Set<string>();
+    const contractLookups: { [chainId: number]: Set<string> } = {};
+
+    // 1. Collect all assets that might need pricing
+    const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
-        getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) ids.add(a.coingeckoId); });
+        allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({...a, balance: '0'} as AssetRow)));
     });
-    userAddedTokens.forEach(t => { if (t.coingeckoId) ids.add(t.coingeckoId); });
-    const idList = Array.from(ids);
-    if (idList.length === 0) return;
+    allKnownAssets.push(...userAddedTokens);
+
+    allKnownAssets.forEach(asset => {
+        if (asset.coingeckoId) {
+            coingeckoIds.add(asset.coingeckoId);
+        } else if (asset.address && asset.address.startsWith('0x')) {
+            if (!contractLookups[asset.chainId]) contractLookups[asset.chainId] = new Set();
+            contractLookups[asset.chainId].add(asset.address.toLowerCase());
+        }
+    });
+
+    const newPrices: { [key: string]: PriceInfo } = {};
+
     try {
-        const priceMap = await fetchPriceMap(idList);
-        const newPrices: { [id: string]: PriceInfo } = {};
-        Object.entries(priceMap).forEach(([id, data]) => {
-            newPrices[id] = { price: data.usd, change: data.usd_24h_change };
+        // 2. Fetch by ID (Native tokens & Major assets)
+        if (coingeckoIds.size > 0) {
+            const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
+            Object.entries(priceMap).forEach(([id, data]) => {
+                newPrices[id] = { price: data.usd, change: data.usd_24h_change };
+            });
+        }
+
+        // 3. Fetch by Contract (CDN Discovered Assets)
+        const contractPromises = Object.entries(contractLookups).map(async ([chainId, addresses]) => {
+            const platformId = COINGECKO_PLATFORM_MAP[parseInt(chainId)];
+            if (platformId) {
+                const results = await fetchPricesByContract(platformId, Array.from(addresses));
+                Object.entries(results).forEach(([addr, info]) => {
+                    newPrices[addr.toLowerCase()] = info;
+                });
+            }
         });
+
+        await Promise.all(contractPromises);
+        
         setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (e) {
-        console.warn("Global Price Engine Error:", e);
+        console.warn("Universal Price Engine Error:", e);
     }
   }, [isInitialized, chainsWithLogos, userAddedTokens]);
 
@@ -449,7 +480,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
-            const market = asset.coingeckoId ? prices[asset.coingeckoId] : null;
+            const market = (asset.coingeckoId ? prices[asset.coingeckoId] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
             const price = market?.price ?? 0;
             const balanceNum = parseFloat(asset.balance || '0');
             return {
