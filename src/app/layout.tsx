@@ -1,15 +1,29 @@
-
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
 import MobileNav from '@/components/wallet/mobile-nav';
 import { Web3Provider } from '@/components/providers/web3-provider';
+import PWARegister from '@/components/pwa-register';
 
 export const metadata: Metadata = {
   title: 'Wevina v2 - Your Secure Custodial Wallet',
   description: 'A programmable custodial wallet platform.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Wevina',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#673AB7',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -28,6 +42,7 @@ export default function RootLayout({
         <Web3Provider>
           <UserProvider>
             <WalletProvider>
+              <PWARegister />
               {children}
               <MobileNav />
             </WalletProvider>
