@@ -49,9 +49,10 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
   const handleCreate = async () => {
     setIsProcessing(true);
     setError(null);
-    setStatus('Checking Cloud Vault...');
+    setStatus('Syncing Keys...');
     startTimer();
     try {
+      // Near-instant now because WalletProvider uses the pre-fetched profile
       await generateWallet();
       setStatus('Complete!');
       setTimeout(() => onOpenChange(false), 800);
@@ -170,10 +171,10 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 onClick={handleCreate}
                 disabled={isProcessing}
               >
-                {isProcessing && status.includes('Checking') ? (
+                {isProcessing ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="animate-pulse">Checking Vault...</span>
+                        <span className="animate-pulse">{status}</span>
                     </div>
                 ) : (
                     <><Plus className="w-4 h-4" /> Create New Wallet</>
@@ -197,7 +198,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                   onClick={handleRestore}
                   disabled={isProcessing}
                 >
-                  {isProcessing && !status.includes('Checking') ? (
+                  {isProcessing ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-[10px] font-mono">Restoring...</span>

@@ -338,26 +338,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const generateWallet = useCallback(async () => {
-    if (!user || !supabase) return '';
-    const { data } = await supabase.from('profiles').select('vault_phrase').eq('id', user.id).single();
-    if (data?.vault_phrase) throw new Error("CLOUDV_EXISTS");
+    if (!user) return '';
+    
+    // Check local profile state first to avoid redundant hanging Supabase calls
+    if (profile?.vault_phrase) {
+      throw new Error("CLOUDV_EXISTS");
+    }
+
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
+    
     if (mnemonic) {
       await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-      toast({ title: "Generated" });
+      toast({ title: "Institution Vault Generated" });
     }
     return mnemonic;
-  }, [loadWalletFromMnemonic, toast, user]);
+  }, [loadWalletFromMnemonic, toast, user, profile]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) return;
     try {
       await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
-      toast({ title: "Imported" });
-    } catch (e) { toast({ variant: "destructive", title: "Failed" }); }
+      toast({ title: "Vault Restored" });
+    } catch (e) { toast({ variant: "destructive", title: "Invalid Phrase" }); }
   }, [loadWalletFromMnemonic, toast, user]);
 
   const saveToVault = useCallback(async () => {
@@ -387,7 +392,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       if (Object.keys(payload).length > 0) {
           await supabase.from('profiles').update(payload).eq('id', user.id);
-          toast({ title: "Vault Synced" });
+          toast({ title: "Cloud Vault Synced" });
           refreshProfile();
       }
     } catch (e) {}
@@ -397,7 +402,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const encryptedPhrase = profile?.vault_phrase || user?.user_metadata?.vault_phrase;
     const encryptionIv = profile?.iv || user?.user_metadata?.iv;
     if (!user || !encryptedPhrase) {
-      toast({ variant: "destructive", title: "No backup" });
+      toast({ variant: "destructive", title: "No Cloud Backup Found" });
       throw new Error("No vault");
     }
     try {
@@ -409,7 +414,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
       const data = await response.json();
       if (response.ok && data.phrase) await importWallet(data.phrase);
-      toast({ title: "Restored" });
+      toast({ title: "Restored from Cloud" });
     } catch (e) { throw e; }
   }, [user, profile, importWallet, toast]);
 
