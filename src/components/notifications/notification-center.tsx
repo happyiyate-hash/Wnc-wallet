@@ -1,9 +1,9 @@
+
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { useCollection, useFirestore } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase/client';
 import { ShieldAlert, Info, Bell, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -14,18 +14,51 @@ interface NotificationCenterProps {
 }
 
 export default function NotificationCenter({ isOpen, onOpenChange, userId }: NotificationCenterProps) {
-  const db = useFirestore();
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const alertsQuery = useMemo(() => {
-    if (!db || !userId) return null;
-    return query(
-      collection(db, 'users', userId, 'alerts'),
-      orderBy('timestamp', 'desc'),
-      limit(20)
-    );
-  }, [db, userId]);
+  useEffect(() => {
+    if (!isOpen || !userId || !supabase) return;
 
-  const { data: alerts, loading } = useCollection<any>(alertsQuery);
+    const fetchAlerts = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('alerts')
+          .select('*')
+          .eq('user_id', userId)
+          .order('timestamp', { ascending: false })
+          .limit(20);
+
+        if (!error && data) {
+          setAlerts(data);
+        }
+      } catch (e) {
+        console.error("Alerts fetch error", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAlerts();
+
+    // Subscribe to new alerts real-time
+    const subscription = supabase
+      .channel('alerts-channel')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'alerts',
+        filter: `user_id=eq.${userId}`
+      }, (payload) => {
+        setAlerts(prev => [payload.new, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [isOpen, userId]);
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -60,7 +93,7 @@ export default function NotificationCenter({ isOpen, onOpenChange, userId }: Not
                     <p className="text-sm font-bold">{alert.title}</p>
                     <p className="text-xs text-muted-foreground leading-relaxed">{alert.message}</p>
                     <p className="text-[10px] text-muted-foreground pt-1">
-                      {alert.timestamp?.toDate ? formatDistanceToNow(alert.timestamp.toDate(), { addSuffix: true }) : 'Just now'}
+                      {alert.timestamp ? formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true }) : 'Just now'}
                     </p>
                   </div>
                 </div>
