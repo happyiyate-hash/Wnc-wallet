@@ -2,11 +2,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from '@/contexts/wallet-provider';
-import { Plane, Timer, Fuel, ChevronDown, Loader2 } from 'lucide-react';
+import { Plane, Timer, Fuel, Loader2, X } from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
 import { ethers } from 'ethers';
@@ -65,54 +64,54 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     fetchQuickQuote();
   }, [debouncedAmount, fromToken, toToken, wallets, infuraApiKey]);
 
-  // Defensive check for toAmount to prevent TypeErrors
   const estimatedReceived = quote?.estimate?.toAmount 
     ? ethers.formatUnits(quote.estimate.toAmount, 18) 
     : '0';
 
   return (
-    <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent 
-        side="top" 
-        className="bg-black/90 backdrop-blur-2xl border-b border-white/5 p-0 rounded-b-[2.5rem] shadow-2xl overflow-hidden"
-      >
-        {/* Added Title for accessibility, visually hidden to maintain design */}
-        <div className="sr-only">
-          <SheetHeader>
-            <SheetTitle>Quick Institutional Swap</SheetTitle>
-          </SheetHeader>
-        </div>
+    <div 
+        className={cn(
+            "fixed top-4 left-4 right-4 z-[100] transition-all duration-500 ease-in-out pointer-events-none",
+            isOpen ? "translate-y-0 opacity-100" : "-translate-y-[120%] opacity-0"
+        )}
+    >
+        <div className="bg-zinc-950/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-4 max-w-sm mx-auto pointer-events-auto relative overflow-hidden group">
+            {/* Header / Tiny Close */}
+            <div className="flex items-center justify-between mb-3">
+                <span className="text-[8px] font-black uppercase tracking-[0.2em] text-primary/80">Institutional Quick Exchange</span>
+                <button 
+                    onClick={() => onOpenChange(false)}
+                    className="p-1 rounded-full hover:bg-white/10 transition-colors"
+                >
+                    <X className="w-3 h-3 text-muted-foreground" />
+                </button>
+            </div>
 
-        <div className="p-6 pt-10 space-y-8 max-w-lg mx-auto">
-            {/* Header / Assets Row */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            {/* Assets Row - Ultra Small */}
+            <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
                     <TokenLogoDynamic 
                         logoUrl={fromToken?.iconUrl} 
                         alt={fromToken?.symbol || ''} 
-                        size={40} 
+                        size={24} 
                         chainId={fromToken?.chainId}
                         name={fromToken?.name}
                         symbol={fromToken?.symbol}
                     />
-                    <div className="text-left">
-                        <p className="text-xs font-black uppercase tracking-widest text-white">{fromToken?.name || fromToken?.symbol}</p>
-                    </div>
+                    <span className="text-[10px] font-black text-white uppercase">{fromToken?.symbol}</span>
                 </div>
 
-                <div className="flex-1 flex items-center justify-center px-4 relative">
-                    <div className="absolute inset-x-0 h-px border-t border-dashed border-white/10" />
-                    <Plane className="w-5 h-5 text-primary relative z-10" />
+                <div className="flex-1 flex items-center justify-center relative">
+                    <div className="absolute inset-x-0 h-[1px] border-t border-dashed border-white/5" />
+                    <Plane className="w-3 h-3 text-primary relative z-10" />
                 </div>
 
-                <div className="flex items-center gap-3 text-right">
-                    <div className="text-right">
-                        <p className="text-xs font-black uppercase tracking-widest text-white">{toToken?.name || toToken?.symbol}</p>
-                    </div>
+                <div className="flex items-center gap-2 text-right">
+                    <span className="text-[10px] font-black text-white uppercase">{toToken?.symbol}</span>
                     <TokenLogoDynamic 
                         logoUrl={toToken?.iconUrl} 
                         alt={toToken?.symbol || ''} 
-                        size={40} 
+                        size={24} 
                         chainId={toToken?.chainId}
                         name={toToken?.name}
                         symbol={toToken?.symbol}
@@ -120,60 +119,50 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 </div>
             </div>
 
-            {/* Amounts Row */}
-            <div className="flex items-baseline justify-between gap-4">
-                <Input 
-                    type="number"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="bg-transparent border-none text-4xl font-black p-0 h-auto focus-visible:ring-0 tracking-tighter text-white placeholder:text-zinc-800"
-                />
-                <div className="text-4xl font-black text-white/40 tracking-tighter transition-all">
-                    {isQuoteLoading ? <Loader2 className="w-8 h-8 animate-spin inline-block" /> : parseFloat(estimatedReceived).toFixed(6)}
+            {/* Values - Reduced Size */}
+            <div className="flex items-center justify-between gap-4 px-1">
+                <div className="flex-1 min-w-0">
+                    <p className="text-[7px] font-black text-muted-foreground uppercase mb-1 tracking-widest">Amount</p>
+                    <Input 
+                        type="number"
+                        placeholder="0.00"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="bg-transparent border-none text-lg font-black p-0 h-auto focus-visible:ring-0 tracking-tighter text-white placeholder:text-zinc-800"
+                    />
+                </div>
+                <div className="text-right">
+                    <p className="text-[7px] font-black text-muted-foreground uppercase mb-1 tracking-widest">Receive</p>
+                    <div className="text-lg font-black text-white/40 tracking-tighter transition-all tabular-nums">
+                        {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin inline-block" /> : parseFloat(estimatedReceived).toFixed(4)}
+                    </div>
                 </div>
             </div>
 
-            <div className="h-px bg-white/5" />
+            <div className="h-[1px] bg-white/5 my-3" />
 
-            {/* Meta Stats Row */}
-            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-white/20">EST</span>
-                        <span className="text-primary">RELAYDEPOSITORY</span>
+            {/* Mini Stats */}
+            <div className="flex items-center justify-between text-[7px] font-black uppercase tracking-[0.1em] text-muted-foreground/40 mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                        <Timer className="w-2.5 h-2.5 text-primary/50" />
+                        <span>{Math.ceil((quote?.estimate?.executionDuration || 300) / 60)}m</span>
                     </div>
-                    <div className="flex items-center gap-1 text-primary/80">
-                        <TokenLogoDynamic size={12} logoUrl={fromToken?.iconUrl} chainId={fromToken?.chainId} alt="asset" />
-                        <span>{Math.ceil((quote?.estimate?.executionDuration || 300) / 60)}s</span>
+                    <div className="flex items-center gap-1">
+                        <Fuel className="w-2.5 h-2.5 text-primary/50" />
+                        <span>0% Fee</span>
                     </div>
                 </div>
-
-                <div className="flex items-center gap-6">
-                    <div className="flex flex-col items-end">
-                        <span className="text-[7px] mb-0.5 opacity-40">FFEE</span>
-                        <span className="text-white">0%</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                        <span className="text-[7px] mb-0.5 opacity-40">SLIPPAGE</span>
-                        <span className="text-white">0.5%</span>
-                    </div>
-                </div>
+                <span>Slippage 0.5%</span>
             </div>
 
             <Button 
-                className="w-full h-14 rounded-2xl font-black text-base shadow-xl shadow-primary/20 active:scale-[0.98] transition-all"
+                className="w-full h-9 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/10 active:scale-[0.98] transition-all bg-primary"
                 disabled={!amount || isQuoteLoading}
             >
-                {isQuoteLoading ? "Fetching Quote..." : "Quick Execute"}
+                {isQuoteLoading ? "Fetching..." : "Quick Swap"}
             </Button>
         </div>
-        
-        {/* Grabber */}
-        <div className="pb-4 pt-2">
-            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto" />
-        </div>
-      </SheetContent>
-    </Sheet>
+    </div>
   );
 }
