@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from '@/contexts/wallet-provider';
-import { Plane, Timer, Fuel, Loader2, X, ChevronRight, ArrowLeft, Zap, ShieldCheck } from 'lucide-react';
+import { Plane, Timer, Fuel, Loader2, X, ChevronRight, ArrowLeft, Zap, ShieldCheck, Search } from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
 import { ethers } from 'ethers';
@@ -95,6 +95,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     ? ethers.formatUnits(quote.estimate.toAmount, 18) 
     : '0.00';
 
+  const bestRouteName = quote?.tool?.toUpperCase() || 'INSTITUTIONAL';
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
   return (
@@ -115,7 +116,9 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
                         <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
-                        <span className="text-[8px] font-black uppercase tracking-widest text-primary">Best Price Found: LI.FI Aggregator</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-primary">
+                            Best Route: {bestRouteName} via Wevina Aggregator
+                        </span>
                     </div>
                     <button 
                         onClick={() => onOpenChange(false)}
@@ -186,7 +189,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                         </div>
                         <div className="flex items-center gap-1">
                             <Fuel className="w-2.5 h-2.5" />
-                            <span>{quote ? `$${(quote.estimate.gasCosts?.[0]?.amountUsd || 0).toFixed(2)}` : '--'}</span>
+                            <span>{quote?.estimate?.gasCosts?.[0] ? `$${parseFloat(quote.estimate.gasCosts[0].amountUsd || '0').toFixed(2)}` : '--'}</span>
                         </div>
                     </div>
 
@@ -194,9 +197,9 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                         size="sm"
                         className={cn(
                             "h-7 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all",
-                            !amount || isQuoteLoading || fetchError ? "bg-zinc-800 text-zinc-500 opacity-50" : "bg-primary hover:bg-primary/90"
+                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50" : "bg-primary hover:bg-primary/90"
                         )}
-                        disabled={!amount || isQuoteLoading || !!fetchError}
+                        disabled={!amount || isQuoteLoading || !!fetchError || !quote}
                     >
                         {isQuoteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Execute Swap"}
                     </Button>

@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Info,
   Zap,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -126,10 +127,10 @@ export default function SwapPage() {
   const buttonState = useMemo(() => {
     if (!amount || parseFloat(amount) <= 0) return { text: 'Enter Amount', disabled: true };
     if (parseFloat(amount) > parseFloat(fromToken?.balance || '0')) return { text: 'Insufficient Balance', disabled: true, variant: 'destructive' as const };
-    if (isQuoteLoading) return { text: 'Institutional Routing...', disabled: true };
+    if (isQuoteLoading) return { text: 'Comparing Liquidity...', disabled: true };
     if (fetchError) return { text: 'No Routes Found', disabled: true };
     if (!quoteData) return { text: 'Fetching Best Price...', disabled: true };
-    return { text: 'Execute Institutional Swap', disabled: false };
+    return { text: `Swap via ${quoteData.tool?.toUpperCase() || 'Institutional'}`, disabled: false };
   }, [amount, fromToken, isQuoteLoading, fetchError, quoteData]);
 
   return (
@@ -137,10 +138,10 @@ export default function SwapPage() {
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center">
-            <h1 className="text-sm font-black uppercase tracking-widest leading-none">Exchange</h1>
+            <h1 className="text-sm font-black uppercase tracking-widest leading-none">Institutional Exchange</h1>
             <div className="flex items-center gap-1.5 mt-1">
                 <ShieldCheck className="w-2.5 h-2.5 text-primary fill-primary/20" />
-                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Verified Institutional Liquidity</span>
+                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Meta-Aggregator Active</span>
             </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
@@ -149,9 +150,9 @@ export default function SwapPage() {
       <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4">
         {/* AGGREGATOR BADGE */}
         <div className="flex justify-center mb-4">
-            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1 rounded-full border border-primary/20 animate-pulse">
+            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                 <Zap className="w-3 h-3 text-primary fill-primary" />
-                <span className="text-[9px] font-black uppercase tracking-widest text-primary">Searching 40+ Liquidity Sources...</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-primary">Searching 40+ sources...</span>
             </div>
         </div>
 
@@ -232,7 +233,7 @@ export default function SwapPage() {
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
             <div className="text-right leading-none">
-                <span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40">Est. Receive</span>
+                <span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40">Best Route Found</span>
             </div>
           </div>
 
@@ -271,7 +272,9 @@ export default function SwapPage() {
                     
                     <div className="flex-1 flex items-center justify-center px-4 relative">
                         <div className="absolute inset-x-0 h-[1px] border-t border-dashed border-white/10" />
-                        <Plane className="w-3.5 h-3.5 relative z-10 text-primary rotate-90" />
+                        <div className="relative z-10 bg-primary/20 px-2 py-0.5 rounded-full border border-primary/30">
+                            <span className="text-[7px] font-black text-primary uppercase">{quoteData.tool}</span>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2 text-right">
@@ -298,7 +301,7 @@ export default function SwapPage() {
                     <div className="flex items-center gap-4">
                         <div className="flex flex-col items-end">
                             <span className="text-muted-foreground/50 text-[7px] mb-0.5">EST. FEE</span>
-                            <span className="text-white font-mono">$ {quoteData.estimate.gasCosts?.[0]?.amountUsd || '0.00'}</span>
+                            <span className="text-white font-mono">$ {parseFloat(quoteData.estimate.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-muted-foreground/50 text-[7px] mb-0.5">SLIPPAGE</span>
@@ -311,8 +314,8 @@ export default function SwapPage() {
 
         {fetchError && !isQuoteLoading && (
           <div className="mx-2 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-3">
-            <Info className="w-3.5 h-3.5 shrink-0" />
-            No path found for this route.
+            <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+            Liquidity source not responding. Try another route.
           </div>
         )}
 
@@ -339,7 +342,7 @@ export default function SwapPage() {
             <div className="flex flex-col h-full relative z-10">
                 <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
-                    <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Target Network</SheetTitle>
+                    <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest">Select Network</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6 pb-12">
                     <div className="grid grid-cols-1 gap-2 pb-24">
