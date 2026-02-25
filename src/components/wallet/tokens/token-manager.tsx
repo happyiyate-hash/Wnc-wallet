@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -47,7 +46,8 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             iconUrl: t.logo_url,
             balance: '0',
             isNative: false,
-            priceSource: 'coingecko' // Default to coingecko for mapping
+            priceSource: t.token_details.priceSource || 'coingecko',
+            coingeckoId: t.token_details.priceId || t.token_details.coingeckoId
           } as AssetRow));
           setDbTokens(formatted);
         }

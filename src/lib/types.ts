@@ -1,4 +1,3 @@
-
 export interface AssetRow {
   chainId: number;
   address: string;
