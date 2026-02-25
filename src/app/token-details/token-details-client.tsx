@@ -7,7 +7,6 @@ import { useWallet } from "@/contexts/wallet-provider";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight,
-  GitFork,
   ArrowLeftRight,
   QrCode,
   DollarSign,
@@ -101,7 +100,6 @@ export default function TokenDetailsClientPage() {
 
   const coingeckoId = token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
-  const isEvmChain = typeof token?.chainId === 'number' && token?.chainId > 0;
 
   if (!token) {
      return (
@@ -139,7 +137,8 @@ export default function TokenDetailsClientPage() {
           </div>
         </div>
 
-        <div className="h-64 relative">
+        {/* FULL BLEED CHART - NO HORIZONTAL PADDING */}
+        <div className="h-64 relative w-full overflow-hidden">
           <RechartsChart coingeckoId={coingeckoId} days={chartRange} isNegative={isNegativeChange}/>
         </div>
 
@@ -161,7 +160,7 @@ export default function TokenDetailsClientPage() {
         <div className="flex items-center justify-around my-10 px-4">
             <ActionButton icon={<DollarSign className="w-6 h-6 text-primary" />} label="Buy" onClick={() => handleAction('/buy')} />
             <ActionButton icon={<ArrowLeftRight className="w-6 h-6 text-primary" />} label="Swap" onClick={() => handleAction('/swap')} />
-            <ActionButton icon={<GitFork className="w-6 h-6 text-primary" />} label="Bridge" onClick={() => {}} disabled={!isEvmChain} />
+            {/* Bridge Button Removed as Requested */}
             <ActionButton icon={<ArrowUpRight className="w-6 h-6 text-primary" />} label="Send" onClick={() => handleAction('/send')} />
             <ActionButton icon={<QrCode className="w-6 h-6 text-primary" />} label="Receive" onClick={() => handleAction('/receive')} />
         </div>
