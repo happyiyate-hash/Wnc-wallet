@@ -11,6 +11,7 @@ export interface AssetRow {
   iconUrl?: string | null;
   isNative?: boolean;
   coingeckoId?: string;
+  updatedAt?: number; // Last successful sync timestamp
 }
 
 export interface WalletWithMetadata {

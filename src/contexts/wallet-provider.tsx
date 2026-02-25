@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -32,7 +33,7 @@ interface WalletContextType {
   isTokenLoading: (chainId: number, symbol: string) => boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
-  refresh: () => Promise<void>;
+  refresh: () => Promise<void>; // Layer 3: Scoped Manual Refresh
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
@@ -51,7 +52,7 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
@@ -72,7 +73,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  const isBackgroundFetching = useRef(false);
+  // Engine refs to prevent duplicate fetch workers
+  const isBackgroundSyncRunning = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('infura_api_key');
@@ -108,10 +111,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setInfuraApiKey(key);
     if (key) {
         localStorage.setItem('infura_api_key', key);
-        // Background Cloud Sync if wallet exists
-        if (wallets && user) {
-            saveToVault();
-        }
+        if (wallets && user) saveToVault();
     } else {
         localStorage.removeItem('infura_api_key');
     }
@@ -124,7 +124,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const key = `${chainId}:${symbol}`;
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        
         localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(next)));
         return next;
     });
@@ -144,7 +143,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const fetchTokenRegistry = useCallback(async () => {
     if (!logoSupabase) return;
     const registry: { [chainId: number]: any[] } = {};
-
     const fetchPromises = chainsWithLogos.map(async (chain) => {
       try {
         const networkSlug = chain.name.split(' ')[0].toLowerCase();
@@ -152,7 +150,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           .from('token_metadata')
           .select('token_details, contract_address, network, logo_url')
           .eq('network', networkSlug);
-
         if (!error && data) {
           registry[chain.chainId] = data.map(token => ({
             symbol: token.token_details.symbol,
@@ -165,7 +162,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {}
     });
-
     await Promise.all(fetchPromises);
     setTokenRegistry(registry);
   }, [chainsWithLogos]);
@@ -178,194 +174,158 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, fetchTokenRegistry, viewingNetwork]);
 
-  const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]): string | undefined => {
-    return getAddressForChainUtil(chain, wallets);
-  }, []);
-
-  const fetchAllBalances = useCallback(async (priorityChainId?: number) => {
-    if (!wallets || wallets.length === 0 || !isInitialized || !infuraApiKey) return;
+  const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
+    if (!wallets || !infuraApiKey) return [];
     
+    const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
+    if (!walletForChain) return [];
+
+    const apiTokens = tokenRegistry[chain.chainId] || [];
+    const baseAssets = getInitialAssets(chain.chainId);
+    const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
+    
+    const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
+        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+        return acc;
+    }, [] as any[]).map(a => {
+        const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+        const cachedAsset = balances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
+        return {
+            ...a,
+            balance: cachedAsset?.balance || '0',
+            name: apiMeta?.name || a.name,
+            iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
+            priceUsd: cachedAsset?.priceUsd || 0,
+            pctChange24h: cachedAsset?.pctChange24h || 0,
+            fiatValueUsd: cachedAsset?.fiatValueUsd || 0,
+            updatedAt: cachedAsset?.updatedAt || 0
+        } as AssetRow;
+    });
+
+    let adapter = null;
+    if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
+    else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
+    else adapter = evmAdapterFactory(chain, infuraApiKey);
+
+    if (adapter) {
+        const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+        const resultsWithPrices = await fetchAssetPrices(results as any);
+        const final = resultsWithPrices.map(r => ({
+            ...r,
+            updatedAt: Date.now(),
+            fiatValueUsd: parseFloat(r.balance) * (r.priceUsd || 0)
+        }));
+        return final;
+    }
+    return combinedAssetsList;
+  }, [wallets, infuraApiKey, tokenRegistry, userAddedTokens, balances]);
+
+  // Layer 3: Manual Scoped Refresh
+  const manualRefresh = useCallback(async () => {
+    if (!viewingNetwork || !infuraApiKey || !wallets) return;
     setIsRefreshing(true);
-    setFetchError(null);
-
-    const chainsToFetch = [...chainsWithLogos];
-
-    if (priorityChainId) {
-        const idx = chainsToFetch.findIndex(c => c.chainId === priorityChainId);
-        if (idx > -1) {
-            const priority = chainsToFetch.splice(idx, 1)[0];
-            chainsToFetch.unshift(priority);
-        }
-    }
-
     try {
-      const updatedBalances: { [key: string]: AssetRow[] } = {};
-
-      for (const chain of chainsToFetch) {
-        const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
-        if (!walletForChain) continue;
-
-        const apiTokens = tokenRegistry[chain.chainId] || [];
-        const baseAssets = getInitialAssets(chain.chainId);
-        const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
-        
-        const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
-            if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
-            return acc;
-        }, [] as any[]).map(a => {
-            const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
-            const cachedAsset = balances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
-            return {
-                ...a,
-                balance: cachedAsset?.balance || '0',
-                name: apiMeta?.name || a.name,
-                iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
-                priceUsd: cachedAsset?.priceUsd || 0,
-                pctChange24h: cachedAsset?.pctChange24h || 0,
-                fiatValueUsd: cachedAsset?.fiatValueUsd || 0
-            } as AssetRow;
+        const fresh = await fetchBalancesForChain(viewingNetwork);
+        setBalances(prev => {
+            const next = { ...prev, [viewingNetwork.chainId]: fresh };
+            if (user) localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
+            return next;
         });
-
-        // Modular Adapter Dispatch
-        let adapter = null;
-        if (chain.type === 'xrp') {
-            adapter = xrpAdapterFactory(chain);
-        } else if (chain.type === 'polkadot') {
-            adapter = polkadotAdapterFactory(chain);
-        } else {
-            adapter = evmAdapterFactory(chain, infuraApiKey);
-        }
-
-        if (adapter) {
-            const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-            updatedBalances[chain.chainId] = results;
-            setBalances(prev => ({ ...prev, [chain.chainId]: results }));
-        } else {
-            updatedBalances[chain.chainId] = combinedAssetsList;
-        }
-        
-        await delay(priorityChainId === chain.chainId ? 0 : 50);
-      }
-
-      const flatAssets = Object.values(updatedBalances).flat();
-      const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
-      
-      const finalBalances: { [key: string]: AssetRow[] } = {};
-      assetsWithPrices.forEach(asset => {
-        const existing = balances[asset.chainId]?.find(eb => eb.symbol === asset.symbol);
-        
-        const finalAsset = {
-            ...asset,
-            priceUsd: asset.priceUsd > 0 ? asset.priceUsd : (existing?.priceUsd || 0),
-            pctChange24h: asset.pctChange24h !== 0 ? asset.pctChange24h : (existing?.pctChange24h || 0),
-        };
-        
-        finalAsset.fiatValueUsd = parseFloat(finalAsset.balance) * (finalAsset.priceUsd || 0);
-
-        if (!finalBalances[asset.chainId]) finalBalances[asset.chainId] = [];
-        finalBalances[asset.chainId].push(finalAsset);
-      });
-
-      setBalances(finalBalances);
-      if (user) {
-          localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(finalBalances));
-      }
-    } catch (e: any) {
-      console.warn("Refresh issue:", e.message);
-      setFetchError("Connection limited. Check API key.");
+    } catch (e) {
+        setFetchError("Limited connection.");
     } finally {
-      setIsRefreshing(false);
+        setIsRefreshing(false);
     }
-  }, [wallets, isInitialized, chainsWithLogos, infuraApiKey, tokenRegistry, balances, user, userAddedTokens]);
+  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, user]);
 
-  useEffect(() => {
+  // Layer 1 & 2 Engine
+  const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
-    const interval = setInterval(() => {
-        if (!isRefreshing) fetchAllBalances(viewingNetwork.chainId);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchAllBalances, isRefreshing]);
+    
+    // LAYER 1: PRIORITY UI SYNC
+    setIsRefreshing(true);
+    try {
+        const priorityBalances = await fetchBalancesForChain(viewingNetwork);
+        setBalances(prev => {
+            const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
+            if (user) localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
+            return next;
+        });
+    } catch (e) {} finally {
+        setIsRefreshing(false);
+    }
+
+    // LAYER 2: BACKGROUND LAZY SYNC
+    if (isBackgroundSyncRunning.current) return;
+    isBackgroundSyncRunning.current = true;
+
+    const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
+    
+    for (const chain of backgroundChains) {
+        // Simple idle check
+        await new Promise(r => setTimeout(res => r(res), 500));
+        try {
+            const bgBalances = await fetchBalancesForChain(chain);
+            setBalances(prev => {
+                const next = { ...prev, [chain.chainId]: bgBalances };
+                if (user) localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
+                return next;
+            });
+        } catch (e) {}
+    }
+    isBackgroundSyncRunning.current = false;
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user]);
 
   useEffect(() => {
-    if (isInitialized && wallets && infuraApiKey && !isBackgroundFetching.current) {
-        isBackgroundFetching.current = true;
-        fetchAllBalances(viewingNetwork?.chainId);
+    if (isInitialized && wallets && infuraApiKey) {
+        startEngine();
     }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork?.chainId, fetchAllBalances]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!cleanMnemonic || !ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
-      
+      if (!cleanMnemonic || !ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid.");
       const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
-
       await cryptoWaitReady();
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
-
       setWallets([
-        { 
-          address: evmWallet.address, 
-          privateKey: evmWallet.privateKey,
-          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${evmWallet.address}`,
-          type: 'evm'
-        },
-        {
-          address: xrpWallet.address,
-          seed: xrpWallet.seed,
-          type: 'xrp'
-        },
-        {
-          address: dotWallet.address,
-          type: 'polkadot'
-        }
+        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
+        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
+        { address: dotWallet.address, type: 'polkadot' }
       ]);
-    } catch (e: any) {
-      console.error("Wallet loading error:", e);
-      throw new Error("Validation failed.");
-    }
+    } catch (e) { throw new Error("Validation failed."); }
   }, []);
 
   useEffect(() => {
-    const initWallet = async () => {
+    const init = async () => {
       if (!authLoading) {
         if (user) {
-          const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-          if (savedMnemonic) {
-            try {
-              await loadWalletFromMnemonic(savedMnemonic);
-            } catch (e) {
-              localStorage.removeItem(`wallet_mnemonic_${user.id}`);
-            }
+          const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+          if (saved) {
+            try { await loadWalletFromMnemonic(saved); } 
+            catch (e) { localStorage.removeItem(`wallet_mnemonic_${user.id}`); }
           }
-        } else {
-          setWallets(null);
-          setBalances({});
         }
         setIsWalletLoading(false);
       }
     };
-    initWallet();
+    init();
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const generateWallet = useCallback(async () => {
     if (!user || !supabase) return '';
-
-    // Safety check: Don't overwrite if cloud backup exists
-    const { data: existing } = await supabase.from('profiles').select('vault_phrase').eq('id', user.id).single();
-    if (existing?.vault_phrase) {
-        throw new Error("CLOUDV_EXISTS");
-    }
-
+    const { data } = await supabase.from('profiles').select('vault_phrase').eq('id', user.id).single();
+    if (data?.vault_phrase) throw new Error("CLOUDV_EXISTS");
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
       await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-      toast({ title: "Secure Wallet Generated" });
+      toast({ title: "Generated" });
     }
     return mnemonic;
   }, [loadWalletFromMnemonic, toast, user]);
@@ -375,23 +335,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
-      toast({ title: "Access Restored" });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Import Error" });
-    }
+      toast({ title: "Imported" });
+    } catch (e) { toast({ variant: "destructive", title: "Failed" }); }
   }, [loadWalletFromMnemonic, toast, user]);
 
   const saveToVault = useCallback(async () => {
     if (!user || !supabase || !wallets) return;
-    
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     const currentApiKey = localStorage.getItem('infura_api_key');
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
       const payload: any = {};
-
       if (mnemonic) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
@@ -399,10 +353,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({ phrase: mnemonic }),
           });
           const { encrypted, iv } = await res.json();
-          payload.vault_phrase = encrypted;
-          payload.iv = iv;
+          payload.vault_phrase = encrypted; payload.iv = iv;
       }
-
       if (currentApiKey) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
@@ -410,96 +362,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({ phrase: currentApiKey }),
           });
           const { encrypted, iv } = await res.json();
-          payload.vault_infura_key = encrypted;
-          payload.infura_iv = iv;
+          payload.vault_infura_key = encrypted; payload.infura_iv = iv;
       }
-
       if (Object.keys(payload).length > 0) {
-          await Promise.all([
-            supabase.from('profiles').update(payload).eq('id', user.id),
-            supabase.auth.updateUser({ data: payload })
-          ]);
-          toast({ title: "Cloud Vault Synced" });
+          await supabase.from('profiles').update(payload).eq('id', user.id);
+          toast({ title: "Vault Synced" });
           refreshProfile();
       }
-    } catch (e: any) {
-      console.warn("Vault Sync issue:", e.message);
-    }
+    } catch (e) {}
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
     const encryptedPhrase = profile?.vault_phrase || user?.user_metadata?.vault_phrase;
     const encryptionIv = profile?.iv || user?.user_metadata?.iv;
-    
-    const encryptedApiKey = profile?.vault_infura_key || user?.user_metadata?.vault_infura_key;
-    const apiKeyIv = profile?.infura_iv || user?.user_metadata?.infura_iv;
-
-    if (!user || (!encryptedPhrase && !encryptedApiKey)) {
-      toast({ variant: "destructive", title: "Vault Not Found", description: "No backup found in cloud." });
-      throw new Error("No vault data");
+    if (!user || !encryptedPhrase) {
+      toast({ variant: "destructive", title: "No backup" });
+      throw new Error("No vault");
     }
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      // Restore Mnemonic
-      if (encryptedPhrase && encryptionIv) {
-          const response = await fetch('/api/wallet/decrypt-phrase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-            body: JSON.stringify({ encrypted: encryptedPhrase, iv: encryptionIv }),
-          });
-          const data = await response.json();
-          if (response.ok && data.phrase) {
-            await importWallet(data.phrase);
-          }
-      }
-
-      // Restore Infura Key
-      if (encryptedApiKey && apiKeyIv) {
-          const response = await fetch('/api/wallet/decrypt-phrase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-            body: JSON.stringify({ encrypted: encryptedApiKey, iv: apiKeyIv }),
-          });
-          const data = await response.json();
-          if (response.ok && data.phrase) {
-            handleSetApiKey(data.phrase);
-          }
-      }
-
-      toast({ title: "Cloud Backup Restored" });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Restoration Failed", description: e.message });
-      throw e;
-    }
-  }, [user, profile, importWallet, toast, handleSetApiKey]);
-
-  const logout = useCallback(() => {
-    if (user) {
-        localStorage.removeItem(`wallet_mnemonic_${user.id}`);
-        localStorage.removeItem(`wallet_balances_${user.id}`);
-    }
-    setWallets(null);
-    setBalances({});
-    authSignOut();
-  }, [user, authSignOut]);
-
-  const deleteWallet = useCallback(() => {
-    if (user) {
-        localStorage.removeItem(`wallet_mnemonic_${user.id}`);
-        localStorage.removeItem(`wallet_balances_${user.id}`);
-    }
-    setWallets(null);
-    setBalances({});
-  }, [user]);
-
-  const allChainsMap = useMemo(() => {
-    return chainsWithLogos.reduce((acc, chain) => {
-      acc[chain.chainId] = chain;
-      return acc;
-    }, {} as { [key: number]: ChainConfig });
-  }, [chainsWithLogos]);
+      const response = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ encrypted: encryptedPhrase, iv: encryptionIv }),
+      });
+      const data = await response.json();
+      if (response.ok && data.phrase) await importWallet(data.phrase);
+      toast({ title: "Restored" });
+    } catch (e) { throw e; }
+  }, [user, profile, importWallet, toast]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
@@ -512,27 +403,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
     hasNewNotifications: false,
-    viewingNetwork: viewingNetwork || (chainsWithLogos.length > 0 ? chainsWithLogos[0] : {} as ChainConfig),
-    setNetwork: (net) => {
-        setViewingNetwork(net);
-        setFetchError(null);
-    },
+    viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
+    setNetwork: (net) => { setViewingNetwork(net); setFetchError(null); },
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
-    allChainsMap,
+    allChainsMap: chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {}),
     isRefreshing,
     isTokenLoading: (cid, sym) => loadingTokens[`${cid}:${sym}`] || false,
     wallets,
     balances,
-    refresh: () => fetchAllBalances(viewingNetwork?.chainId),
+    refresh: manualRefresh,
     generateWallet,
     importWallet,
     saveToVault,
     restoreFromCloud,
-    logout,
-    deleteWallet,
+    logout: () => { if (user) { localStorage.removeItem(`wallet_mnemonic_${user.id}`); localStorage.removeItem(`wallet_balances_${user.id}`); } setWallets(null); setBalances({}); authSignOut(); },
+    deleteWallet: () => { if (user) { localStorage.removeItem(`wallet_mnemonic_${user.id}`); localStorage.removeItem(`wallet_balances_${user.id}`); } setWallets(null); setBalances({}); },
     fetchError,
-    getAddressForChain,
+    getAddressForChain: (chain, w) => getAddressForChainUtil(chain, w),
     infuraApiKey,
     setInfuraApiKey: handleSetApiKey,
     hiddenTokenKeys,
