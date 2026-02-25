@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,6 @@ import {
   AlertCircle, 
   Loader2, 
   CheckCircle2, 
-  QrCode,
   Fuel
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -85,96 +85,130 @@ export default function SendPage() {
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
+  const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
+
+  const canSend = recipient.length > 0 && isValidAmount && !isSubmitting && !!infuraApiKey;
 
   const renderDetails = () => (
-    <div className="p-6 flex flex-col h-full space-y-4">
-      <div className="flex flex-col items-center gap-4 mb-2">
-        <button 
-            onClick={() => setIsNetworkSheetOpen(true)}
-            className="flex items-center gap-3 p-2.5 rounded-[2rem] bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all group shadow-xl"
-        >
-            <TokenLogoDynamic 
-                logoUrl={selectedToken?.iconUrl} 
-                alt={selectedToken?.name || ''} 
-                size={32} 
-                chainId={selectedToken?.chainId}
-                name={selectedToken?.name}
-                symbol={selectedToken?.symbol}
-            />
-            <div className="text-left">
-                <h2 className="text-sm font-black leading-none">{selectedToken?.symbol || 'Select Asset'}</h2>
-                <p className="text-[8px] text-muted-foreground uppercase tracking-widest mt-1 font-bold">Change</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform ml-1" />
-        </button>
-      </div>
+    <div className="flex flex-col h-full">
+      <ScrollArea className="flex-1">
+        <div className="p-6 space-y-8 pb-40">
+          {/* Token Selector Pill */}
+          <div className="flex flex-col items-center">
+            <button 
+                onClick={() => setIsNetworkSheetOpen(true)}
+                className="flex items-center gap-3 p-2 rounded-[2rem] bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all group shadow-[0_0_30px_rgba(129,140,248,0.1)] active:scale-95"
+            >
+                <div className="p-1">
+                    <TokenLogoDynamic 
+                        logoUrl={selectedToken?.iconUrl} 
+                        alt={selectedToken?.name || ''} 
+                        size={36} 
+                        chainId={selectedToken?.chainId}
+                        name={selectedToken?.name}
+                        symbol={selectedToken?.symbol}
+                    />
+                </div>
+                <div className="text-left pr-4">
+                    <h2 className="text-sm font-black leading-none text-white uppercase tracking-tight">{selectedToken?.symbol || 'Select Asset'}</h2>
+                    <p className="text-[8px] text-muted-foreground uppercase tracking-widest mt-1 font-bold opacity-60">Change</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform mr-2" />
+            </button>
+          </div>
 
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-4">Recipient</Label>
-          <div className="bg-primary/10 border border-primary/20 rounded-[2rem] p-1.5 backdrop-blur-xl">
-                <Input 
-                    placeholder="0x... or ENS" 
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value)}
-                    className="h-14 bg-transparent border-none text-sm font-mono focus-visible:ring-0"
-                />
+          {/* Form Fields */}
+          <div className="space-y-6">
+            {/* Recipient Card */}
+            <div className="space-y-3">
+              <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pl-4 opacity-60">Recipient</Label>
+              <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-2 backdrop-blur-xl">
+                    <Input 
+                        placeholder="0x... or ENS" 
+                        value={recipient}
+                        onChange={(e) => setRecipient(e.target.value)}
+                        className="h-14 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700"
+                    />
+              </div>
+            </div>
+
+            {/* Amount Card */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-4">
+                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] opacity-60">Amount</Label>
+                <span className="text-[9px] text-primary font-black uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/10">
+                    Balance: {balance.toFixed(4)}
+                </span>
+              </div>
+              <div className="bg-primary/5 border border-primary/10 rounded-[2.5rem] p-6 backdrop-blur-xl relative group">
+                    <div className="flex items-baseline justify-between gap-4">
+                        <Input 
+                            type="number"
+                            placeholder="0.00" 
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            className="bg-transparent border-none text-[clamp(1.5rem,8vw,2.5rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800"
+                        />
+                        <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-primary font-black hover:bg-primary/10 rounded-xl text-[10px] uppercase tracking-widest h-10 px-4"
+                            onClick={() => setAmount(balance.toString())}
+                        >
+                            MAX
+                        </Button>
+                    </div>
+                    <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic">
+                        ≈ ${amountUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                    </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fee Breakdown Card */}
+          <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-muted-foreground font-black text-[9px] uppercase tracking-[0.2em] opacity-60">
+                    <Fuel className="w-3.5 h-3.5 text-primary" />
+                    Network Fee
+                </div>
+                <span className="font-bold font-mono text-xs text-white">~0.000 {viewingNetwork.symbol}</span>
+              </div>
+              <div className="h-px bg-white/5" />
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-60">Total to pay</span>
+                <span className="text-2xl font-black text-primary tracking-tighter">{amount || '0.00'} {selectedToken?.symbol}</span>
+              </div>
           </div>
         </div>
+      </ScrollArea>
 
-        <div className="space-y-2">
-          <div className="flex justify-between items-end px-4">
-            <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount</Label>
-            <span className="text-[9px] text-muted-foreground font-mono bg-white/5 px-2 py-0.5 rounded-full">Balance: {selectedToken?.balance}</span>
-          </div>
-          <div className="bg-primary/10 border border-primary/20 rounded-[2rem] p-1.5 backdrop-blur-xl relative">
-                <Input 
-                    type="number"
-                    placeholder="0.00" 
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="h-16 bg-transparent border-none text-3xl font-black pr-20 focus-visible:ring-0 tracking-tighter"
-                />
-                <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-black hover:bg-primary/10 rounded-xl text-[10px]"
-                    onClick={() => setAmount(selectedToken?.balance || '0')}
-                >
-                    MAX
-                </Button>
-          </div>
+      {/* Sticky Bottom Action Bar */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-md z-40">
+        <div className="max-w-md mx-auto">
+            {amount && parseFloat(amount) > balance && (
+              <div className="flex items-center gap-2 p-3 rounded-2xl bg-destructive/10 text-destructive text-[10px] border border-destructive/20 mb-4 font-black uppercase tracking-widest justify-center animate-in fade-in slide-in-from-bottom-2">
+                <AlertCircle className="w-3.5 h-3.5" /> Insufficient {selectedToken?.symbol} balance
+              </div>
+            )}
+            <Button 
+              className={cn(
+                "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4",
+                canSend 
+                    ? "bg-primary hover:bg-primary/90 border-primary/50 shadow-primary/30" 
+                    : "bg-zinc-800 border-zinc-900 opacity-50 grayscale cursor-not-allowed text-zinc-500 shadow-none"
+              )}
+              disabled={!canSend}
+              onClick={handleSendRequest}
+            >
+              {isSubmitting ? (
+                <div className="flex items-center gap-3">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="animate-pulse">Signing Transaction...</span>
+                </div>
+              ) : "Sign & Send"}
+            </Button>
         </div>
-      </div>
-
-      <div className="p-5 rounded-[2.5rem] bg-white/5 border border-white/10 space-y-3 mt-4">
-          <div className="flex justify-between items-center text-xs">
-            <div className="flex items-center gap-2 text-muted-foreground font-black text-[9px] uppercase tracking-widest">
-                <Fuel className="w-3.5 h-3.5 text-primary" />
-                Fee
-            </div>
-            <span className="font-bold font-mono text-white">~0.000 {viewingNetwork.symbol}</span>
-          </div>
-          <div className="h-px bg-white/5" />
-          <div className="flex justify-between items-center">
-            <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total</span>
-            <span className="text-xl font-black text-primary">{amount || '0.00'} {selectedToken?.symbol}</span>
-          </div>
-      </div>
-
-      <div className="mt-auto pb-4">
-        {amount && parseFloat(amount) > balance && (
-          <div className="flex items-center gap-2 p-3 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20 mb-4 font-black">
-            <AlertCircle className="w-4 h-4" /> Insufficient balance
-          </div>
-        )}
-        <Button 
-          className="w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl shadow-primary/30 border-b-4 border-primary/50"
-          disabled={!recipient || !isValidAmount || isSubmitting || !infuraApiKey}
-          onClick={handleSendRequest}
-        >
-          {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Send"}
-        </Button>
       </div>
     </div>
   );
@@ -185,19 +219,25 @@ export default function SendPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-sm font-black uppercase tracking-widest">Send Assets</h1>
+        <h1 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Send Assets</h1>
       </header>
       
       <main className="flex-1 overflow-hidden">
         {step === 'details' ? renderDetails() : (
             <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-full">
-                <CheckCircle2 className="w-16 h-16 text-green-500" />
-                <h2 className="text-2xl font-black">Transaction Sent!</h2>
-                <Button className="w-full h-14 rounded-xl" onClick={() => router.push('/')}>Return Home</Button>
+                <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-12 h-12 text-green-500" />
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-3xl font-black tracking-tight">Transaction Sent!</h2>
+                    <p className="text-sm text-muted-foreground font-medium">Your assets are being broadcasted to the network.</p>
+                </div>
+                <Button className="w-full h-14 rounded-2xl font-black text-base mt-8" onClick={() => router.push('/')}>Return Home</Button>
             </div>
         )}
       </main>
 
+      {/* Shared Network & Token Sheets */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
             <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />

@@ -3,7 +3,7 @@
 
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Copy, Share2, Info, CheckCircle2, QrCode } from 'lucide-react';
+import { ArrowLeft, Copy, Share2, Info, CheckCircle2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import type { AssetRow } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { cn } from '@/lib/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
+import QRCode from "react-qr-code";
 
 export default function ReceivePage() {
   const { wallets, viewingNetwork, allChains, allAssets } = useWallet();
@@ -47,6 +48,12 @@ export default function ReceivePage() {
     wallets ? getAddressForChain(chain, wallets) : null,
   [chain, wallets]);
 
+  const qrValue = useMemo(() => {
+    if (!address) return "";
+    // Using EIP-681 standard for Ethereum URIs if it's an EVM chain
+    return `ethereum:${address}`;
+  }, [address]);
+
   const handleCopy = () => {
     if (address) copy(address);
   };
@@ -57,7 +64,7 @@ export default function ReceivePage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center text-center">
             <h1 className="text-lg font-black uppercase tracking-tight">Receive {selectedToken?.symbol}</h1>
             <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-black">{chain.name}</span>
         </div>
@@ -76,11 +83,18 @@ export default function ReceivePage() {
         <div className="relative group">
             <div className="absolute -inset-6 bg-primary/20 rounded-[4rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
             <Card className="p-10 bg-white rounded-[3.5rem] shadow-2xl relative z-10 flex flex-col items-center gap-6">
-                <div className="bg-zinc-50 p-4 rounded-[2.5rem] border border-zinc-100 relative w-[240px] h-[240px] flex items-center justify-center">
+                <div className="bg-white p-4 rounded-[2.5rem] relative w-[240px] h-[240px] flex items-center justify-center">
                     {address ? (
-                        <div className="flex flex-col items-center gap-3 text-zinc-400">
-                            <QrCode className="w-28 h-28 opacity-20" />
-                            <span className="text-[10px] font-mono text-center px-6 leading-tight">Secure Multi-Chain<br/>Vault Ready</span>
+                        <div className="animate-in fade-in zoom-in duration-500">
+                            <QRCode
+                                value={qrValue}
+                                size={200}
+                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                viewBox={`0 0 256 256`}
+                                fgColor="#000000"
+                                bgColor="#FFFFFF"
+                                level="H"
+                            />
                         </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
@@ -90,11 +104,11 @@ export default function ReceivePage() {
                     
                     {address && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="p-3 bg-white rounded-2xl shadow-2xl border border-zinc-100">
+                            <div className="p-2 bg-white rounded-2xl shadow-2xl border border-zinc-100 animate-in fade-in zoom-in delay-300 duration-500">
                                 <TokenLogoDynamic 
                                     logoUrl={selectedToken?.iconUrl} 
                                     alt={selectedToken?.symbol || ''} 
-                                    size={48} 
+                                    size={44} 
                                     chainId={selectedToken?.chainId} 
                                     symbol={selectedToken?.symbol}
                                     name={selectedToken?.name}
