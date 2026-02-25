@@ -11,13 +11,18 @@ import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAssetPrices } from '@/lib/coingecko';
+import { fetchPriceMap } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
+
+interface PriceInfo {
+    price: number;
+    change: number;
+}
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -60,6 +65,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
+  const [prices, setPrices] = useState<{ [coingeckoId: string]: PriceInfo }>({});
   const [tokenRegistry, setTokenRegistry] = useState<{ [chainId: number]: any[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -70,7 +76,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  // Engine refs to prevent duplicate fetch workers and loops
+  // Engine refs
   const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -81,23 +87,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
         if (cachedBalances) {
-            try {
-                setBalances(JSON.parse(cachedBalances));
-            } catch (e) {}
+            try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
         }
-
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
         if (savedHidden) {
-            try {
-                setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
-            } catch (e) {}
+            try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
         }
-
         const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
         if (savedCustom) {
-            try {
-                setUserAddedTokens(JSON.parse(savedCustom));
-            } catch (e) {}
+            try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
         }
     }
   }, [user]);
@@ -169,7 +167,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, fetchTokenRegistry]);
 
-  // STABLE FETCHER: Removed 'balances' dependency to prevent infinite loops
+  /**
+   * GLOBAL INDEPENDENT PRICE ENGINE
+   * Fetches market data for all unique tokens across all chains at once.
+   */
+  const fetchGlobalPrices = useCallback(async () => {
+    if (!isInitialized) return;
+
+    // Collect all unique Coingecko IDs
+    const ids = new Set<string>();
+    chainsWithLogos.forEach(chain => {
+        getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) ids.add(a.coingeckoId); });
+    });
+    userAddedTokens.forEach(t => { if (t.coingeckoId) ids.add(t.coingeckoId); });
+
+    const idList = Array.from(ids);
+    if (idList.length === 0) return;
+
+    try {
+        const priceMap = await fetchPriceMap(idList);
+        const newPrices: { [id: string]: PriceInfo } = {};
+        Object.entries(priceMap).forEach(([id, data]) => {
+            newPrices[id] = { price: data.usd, change: data.usd_24h_change };
+        });
+        setPrices(prev => ({ ...prev, ...newPrices }));
+    } catch (e) {
+        console.warn("Global Price Engine Error:", e);
+    }
+  }, [isInitialized, chainsWithLogos, userAddedTokens]);
+
+  /**
+   * PURE BALANCE FETCH ENGINE
+   * Scoped to RPC calls for a specific chain. No price logic here.
+   */
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || !infuraApiKey) return [];
     
@@ -190,9 +220,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             balance: '0',
             name: apiMeta?.name || a.name,
             iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
-            priceUsd: 0,
-            pctChange24h: 0,
-            fiatValueUsd: 0,
             updatedAt: 0
         } as AssetRow;
     });
@@ -205,14 +232,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (adapter) {
         try {
             const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-            const resultsWithPrices = await fetchAssetPrices(results as any);
-            return resultsWithPrices.map(r => ({
-                ...r,
-                updatedAt: Date.now(),
-                fiatValueUsd: parseFloat(r.balance) * (r.priceUsd || 0)
-            }));
+            return results.map(r => ({ ...r, updatedAt: Date.now() }));
         } catch (e) {
-            console.warn(`Balance engine error for ${chain.name}:`, e);
+            console.warn(`RPC Balance Engine error for ${chain.name}:`, e);
             return combinedAssetsList;
         }
     }
@@ -223,30 +245,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!viewingNetwork || !infuraApiKey || !wallets) return;
     setIsRefreshing(true);
     try {
-        const fresh = await fetchBalancesForChain(viewingNetwork);
+        const [freshBalances] = await Promise.all([
+            fetchBalancesForChain(viewingNetwork),
+            fetchGlobalPrices()
+        ]);
         setBalances(prev => {
-            const next = { ...prev, [viewingNetwork.chainId]: fresh };
+            const next = { ...prev, [viewingNetwork.chainId]: freshBalances };
             if (user) localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
             return next;
         });
     } catch (e) {
-        setFetchError("Limited connection.");
+        setFetchError("Connection limited.");
     } finally {
         setIsRefreshing(false);
     }
-  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, user]);
+  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, fetchGlobalPrices, user]);
 
-  // ENGINE: Centralized sync logic with protection against redundant cycles
+  // SMART ENGINE MANAGER
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
     
-    // Stop any existing syncs
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
 
-    // LAYER 1: PRIORITY UI SYNC
+    // LAYER 1: PRIORITY UI SYNC + PRICES
     setIsRefreshing(true);
     try {
+        await fetchGlobalPrices(); // Independent global price sync
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -262,12 +287,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isBackgroundSyncRunning.current = true;
 
     const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
-    
     for (const chain of backgroundChains) {
         if (abortControllerRef.current?.signal.aborted) break;
-        // Small idle delay to keep main thread snappy
-        await new Promise(r => setTimeout(r, 800));
-        
+        await new Promise(r => setTimeout(r, 1000)); // Idle delay
         try {
             const bgBalances = await fetchBalancesForChain(chain);
             setBalances(prev => {
@@ -278,23 +300,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) {}
     }
     isBackgroundSyncRunning.current = false;
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, fetchGlobalPrices, user]);
 
-  // Only trigger engine on identity or viewing target changes
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) {
         startEngine();
     }
-    return () => {
-        if (abortControllerRef.current) abortControllerRef.current.abort();
-    };
+    return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!cleanMnemonic || !ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid.");
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid.");
       const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
       await cryptoWaitReady();
@@ -309,19 +328,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const init = async () => {
-      if (!authLoading) {
-        if (user) {
-          const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-          if (saved) {
-            try { await loadWalletFromMnemonic(saved); } 
-            catch (e) { localStorage.removeItem(`wallet_mnemonic_${user.id}`); }
-          }
-        }
-        setIsWalletLoading(false);
+    if (!authLoading) {
+      if (user) {
+        const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        if (saved) loadWalletFromMnemonic(saved).catch(() => localStorage.removeItem(`wallet_mnemonic_${user.id}`));
       }
-    };
-    init();
+      setIsWalletLoading(false);
+    }
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const generateWallet = useCallback(async () => {
@@ -400,11 +413,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) { throw e; }
   }, [user, profile, importWallet, toast]);
 
+  /**
+   * ASSET COMPOSER
+   * Merges independent RPC balances with independent Global Prices.
+   */
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const list = balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    return list.filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [balances, viewingNetwork, hiddenTokenKeys]);
+    
+    return list
+        .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
+        .map(asset => {
+            const market = asset.coingeckoId ? prices[asset.coingeckoId] : null;
+            const price = market?.price ?? 0;
+            const balanceNum = parseFloat(asset.balance || '0');
+            return {
+                ...asset,
+                priceUsd: price,
+                pctChange24h: market?.change ?? 0,
+                fiatValueUsd: balanceNum * price
+            };
+        });
+  }, [balances, viewingNetwork, hiddenTokenKeys, prices]);
 
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
