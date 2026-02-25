@@ -13,7 +13,8 @@ import {
   AlertCircle,
   ChevronRight,
   Wallet as WalletIcon,
-  Copy
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -34,11 +35,19 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
 
+// Utility to determine text contrast
+const getContrastColor = (hex: string) => {
+  if (!hex || hex.length < 7) return '#ffffff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#000000' : '#ffffff';
+};
+
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
-
-  // We consider it a "first load" only if it's currently loading AND we have zero price/cached data
   const isFirstLoad = isLoading && (token.priceUsd === 0 || token.priceUsd === undefined);
 
   const handleRowClick = () => {
@@ -307,31 +316,35 @@ export default function WalletTab() {
                 </SheetHeader>
                 <ScrollArea className="flex-1 px-6">
                     <div className="grid grid-cols-2 gap-3 pb-24 pt-2">
-                        {allChains.map((chain) => (
-                            <button 
-                                key={chain.chainId}
-                                onClick={() => {
-                                    setSelectedNetworkForSelection(chain);
-                                    setIsTokenSideSheetOpen(true);
-                                }}
-                                style={{
-                                    borderColor: chain.themeColor || '#818cf8',
-                                    borderWidth: '2px',
-                                    background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}25 0%, rgba(0,0,0,0) 100%)`,
-                                }}
-                                className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center group"
-                            >
-                                <TokenLogoDynamic 
-                                    logoUrl={chain.iconUrl} 
-                                    alt={chain.name} 
-                                    size={40} 
-                                    chainId={chain.chainId} 
-                                    name={chain.name} 
-                                    symbol={chain.symbol}
-                                />
-                                <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
-                            </button>
-                        ))}
+                        {allChains.map((chain) => {
+                            const themeColor = chain.themeColor || '#818cf8';
+                            const textColor = getContrastColor(themeColor);
+                            return (
+                                <button 
+                                    key={chain.chainId}
+                                    onClick={() => {
+                                        setSelectedNetworkForSelection(chain);
+                                        setIsTokenSideSheetOpen(true);
+                                    }}
+                                    style={{
+                                        borderColor: themeColor,
+                                        borderWidth: '2px',
+                                        background: `linear-gradient(135deg, ${themeColor} 0%, rgba(0,0,0,0.8) 100%)`,
+                                    }}
+                                    className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center group"
+                                >
+                                    <TokenLogoDynamic 
+                                        logoUrl={chain.iconUrl} 
+                                        alt={chain.name} 
+                                        size={40} 
+                                        chainId={chain.chainId} 
+                                        name={chain.name} 
+                                        symbol={chain.symbol}
+                                    />
+                                    <p className="font-black text-[11px] uppercase tracking-tight line-clamp-1" style={{ color: textColor }}>{chain.name}</p>
+                                </button>
+                            );
+                        })}
                     </div>
                 </ScrollArea>
             </div>
@@ -419,4 +432,3 @@ export default function WalletTab() {
     </div>
   );
 }
-

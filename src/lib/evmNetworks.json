@@ -33,7 +33,7 @@
     "chainId": 59144,
     "rpcUrl": "https://linea-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#121212",
+    "themeColor": "#000000",
     "type": "evm"
   },
   "10": {
@@ -91,12 +91,12 @@
     "type": "evm"
   },
   "324": {
-    "name": "ZKsync",
+    "name": "zkSync",
     "symbol": "ZKS",
     "chainId": 324,
     "rpcUrl": "https://zksync-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#1E1E1E",
+    "themeColor": "#FFFFFF",
     "type": "evm"
   },
   "534352": {
@@ -105,7 +105,7 @@
     "chainId": 534352,
     "rpcUrl": "https://scroll-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#000000",
+    "themeColor": "#FFFDD0",
     "type": "evm"
   },
   "1329": {
@@ -123,7 +123,7 @@
     "chainId": 5000,
     "rpcUrl": "https://mantle-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "mantle",
-    "themeColor": "#000000",
+    "themeColor": "#FFFFFF",
     "type": "evm"
   },
   "204": {
@@ -159,7 +159,7 @@
     "chainId": 1923,
     "rpcUrl": "https://swellchain-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "swell-network",
-    "themeColor": "#000000",
+    "themeColor": "#0052FF",
     "type": "evm"
   },
   "130": {
@@ -177,7 +177,7 @@
     "chainId": 9991,
     "rpcUrl": "https://megaeth-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "megaeth",
-    "themeColor": "#000000",
+    "themeColor": "#FFFDD0",
     "type": "evm"
   },
   "9992": {

@@ -16,7 +16,6 @@ import { useWallet } from '@/contexts/wallet-provider';
 import type { ChainConfig } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
-import { getAddressForChain } from '@/lib/wallets/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { Skeleton } from '../ui/skeleton';
@@ -24,6 +23,16 @@ import { Skeleton } from '../ui/skeleton';
 interface NetworkSelectorProps {
   className?: string;
 }
+
+// Utility to determine text contrast
+const getContrastColor = (hex: string) => {
+  if (!hex || hex.length < 7) return '#ffffff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#000000' : '#ffffff';
+};
 
 const NetworkRow = ({
   chain,
@@ -35,6 +44,7 @@ const NetworkRow = ({
   onSelect: (chain: ChainConfig) => void;
 }) => {
   const themeColor = chain.themeColor || '#818cf8';
+  const textColor = getContrastColor(themeColor);
 
   return (
     <div
@@ -42,11 +52,11 @@ const NetworkRow = ({
       style={{
         borderColor: themeColor,
         borderWidth: '2px',
-        background: `linear-gradient(135deg, ${themeColor}25 0%, rgba(0,0,0,0) 100%)`,
+        background: `linear-gradient(135deg, ${themeColor} 0%, rgba(0,0,0,0.8) 100%)`,
       }}
       className={cn(
         'w-full flex flex-col items-center gap-2 p-4 rounded-2xl text-sm font-medium border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden',
-        isSelected && "shadow-lg bg-white/5"
+        isSelected && "shadow-lg"
       )}
       role="button"
     >
@@ -62,10 +72,10 @@ const NetworkRow = ({
         />
       </div>
       <div className="text-center relative z-10">
-        <p className="font-black text-[11px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
+        <p className="font-black text-[11px] uppercase tracking-tight line-clamp-1" style={{ color: textColor }}>{chain.name}</p>
         {isSelected && (
           <div className="flex items-center justify-center mt-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-primary fill-primary/10" />
+            <CheckCircle2 className="w-3.5 h-3.5" style={{ color: textColor, fill: `${textColor}20` }} />
           </div>
         )}
       </div>
@@ -74,7 +84,7 @@ const NetworkRow = ({
 };
 
 export default function NetworkSelector({ className }: NetworkSelectorProps) {
-  const { viewingNetwork, setNetwork, wallets, isInitialized, allChains } = useWallet();
+  const { viewingNetwork, setNetwork, isInitialized, allChains } = useWallet();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isClient, setIsClient] = useState(false);
