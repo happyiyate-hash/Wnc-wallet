@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -16,6 +15,7 @@ import { logoSupabase } from '@/lib/supabase/logo-client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
+import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -171,9 +171,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos, fetchTokenRegistry, viewingNetwork]);
 
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]): string | undefined => {
-    if (!wallets) return undefined;
-    const found = wallets.find(w => w.type === (chain.type || 'evm'));
-    return found?.address;
+    return getAddressForChainUtil(chain, wallets);
   }, []);
 
   const fetchAllBalances = useCallback(async (priorityChainId?: number) => {

@@ -1,12 +1,10 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Copy, Bell, Expand, Link2, User } from 'lucide-react';
+import { Copy, Bell, Link2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useWallet } from '@/contexts/wallet-provider';
-import { getAddressForChain } from '@/lib/wallets/utils';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useUser } from '@/contexts/user-provider';
 import NetworkSelector from './network-selector';
@@ -20,9 +18,10 @@ export default function WalletHeader({
   const router = useRouter();
   const [isCopied, copy] = useCopyToClipboard();
 
-  const { viewingNetwork, wallets, hasNewNotifications } = useWallet();
+  const { viewingNetwork, wallets, hasNewNotifications, getAddressForChain } = useWallet();
   const { profile } = useUser();
 
+  // Resolve the native address for the current viewing network (XRP, DOT, EVM, etc.)
   const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
   const username = profile?.username || profile?.name || 'User';
 
