@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -52,8 +51,8 @@ const NetworkRow = ({
     <div
       onClick={() => onSelect(chain)}
       style={{
-        borderColor: `${themeColor}80`, // Even brighter border
-        background: `linear-gradient(135deg, ${themeColor}40 0%, rgba(0,0,0,0.7) 100%)`, // More vibrant background
+        borderColor: `${themeColor}80`,
+        background: `linear-gradient(135deg, ${themeColor}40 0%, rgba(0,0,0,0.7) 100%)`,
       }}
       className={cn(
         'w-full flex items-center justify-between py-3 px-4 rounded-[1.5rem] border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden mb-2',
@@ -66,7 +65,7 @@ const NetworkRow = ({
             <TokenLogoDynamic 
                 alt={chain.name} 
                 logoUrl={chain.iconUrl}
-                size={32} // Scaled down icon for slimer profile
+                size={32}
                 chainId={chain.chainId}
                 name={chain.name}
                 symbol={chain.symbol}
@@ -109,7 +108,6 @@ const NetworkRow = ({
         )}
       </div>
       
-      {/* Subtle background glow */}
       <div 
         className="absolute -right-4 -top-4 w-20 h-20 blur-2xl opacity-30 transition-opacity group-hover:opacity-50"
         style={{ backgroundColor: themeColor }}
@@ -171,21 +169,20 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
         side="bottom"
         className="h-[90vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
       >
-        {/* Deep immersive background */}
         <div className="absolute inset-0 bg-black/95 backdrop-blur-3xl -z-10" />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black/80 -z-10" />
 
         <div className="flex flex-col h-full relative z-10 overflow-hidden">
-            <SheetHeader className="p-6 pt-10 text-center shrink-0">
-              <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8" />
-              <SheetTitle className="text-3xl font-black uppercase tracking-[0.15em] mb-8 text-white">Select Network</SheetTitle>
+            <SheetHeader className="p-6 pt-6 text-center shrink-0">
+              <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-4" />
+              <SheetTitle className="text-xl font-black uppercase tracking-[0.15em] mb-4 text-white">Select Network</SheetTitle>
               <div className="relative px-2">
-                <div className="p-[1px] bg-gradient-to-r from-primary/40 via-purple-500/40 to-primary/40 rounded-2xl">
-                    <div className="relative bg-zinc-900/90 backdrop-blur-2xl rounded-2xl">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
+                <div className="p-[1px] bg-gradient-to-r from-primary/40 via-purple-500/40 to-primary/40 rounded-xl">
+                    <div className="relative bg-zinc-900/90 backdrop-blur-2xl rounded-xl">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                         <Input
-                          placeholder="Search 21+ networks..."
-                          className="w-full h-16 bg-transparent border-none pl-12 rounded-2xl focus-visible:ring-0 text-lg placeholder:text-white/20"
+                          placeholder="Search networks..."
+                          className="w-full h-12 bg-transparent border-none pl-11 rounded-xl focus-visible:ring-0 text-sm placeholder:text-white/20"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -195,7 +192,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
             </SheetHeader>
 
             <ScrollArea className="flex-1 px-3">
-              <div className="pb-32 pt-4">
+              <div className="pb-32 pt-2">
                 {filteredChains.map((chain) => (
                     <NetworkRow
                       key={chain.chainId}
