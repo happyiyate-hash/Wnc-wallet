@@ -139,7 +139,7 @@ export default function SwapPage() {
 
       <main className="flex-1 w-full space-y-2 overflow-y-auto pb-40 pt-6 px-4">
         {/* FROM CARD */}
-        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 shadow-2xl">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-2xl space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}
@@ -191,7 +191,7 @@ export default function SwapPage() {
         </div>
 
         {/* TO CARD */}
-        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 shadow-2xl">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-2xl space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}
@@ -224,53 +224,58 @@ export default function SwapPage() {
           </div>
         </section>
 
-        {/* COMPACT REVIEW CARD (Matches user screenshot) */}
+        {/* COMPACT REVIEW CARD (Redesigned for Slimness & Path Visibility) */}
         {quoteData && (
-            <div className="mx-2 mt-6 p-6 rounded-[2.5rem] bg-zinc-900/90 border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                {/* Header: Logos & Plane */}
+            <div className="mx-2 mt-4 p-4 rounded-xl bg-zinc-900/90 border border-white/5 space-y-4 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                {/* Header: Path with Icons Only */}
                 <div className="flex items-center justify-between px-2">
-                    <div className="flex items-center gap-3">
-                        <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="" size={28} />
-                        <span className="font-black text-xs uppercase tracking-widest text-white">{fromToken?.symbol}</span>
+                    <div className="flex items-center gap-2">
+                        <TokenLogoDynamic 
+                            logoUrl={fromToken?.iconUrl} 
+                            alt={fromToken?.symbol || ''} 
+                            size={24} 
+                            chainId={fromToken?.chainId}
+                            name={fromToken?.name}
+                            symbol={fromToken?.symbol}
+                        />
+                        <span className="font-black text-[10px] uppercase tracking-widest text-white">{fromToken?.symbol}</span>
                     </div>
-                    <div className="flex-1 flex items-center justify-center px-6 relative">
-                        <div className="absolute inset-x-0 h-[1px] bg-white/5 border-t border-dashed border-white/10" />
-                        <Plane className="w-5 h-5 relative z-10 text-white fill-white rotate-90" />
+                    
+                    <div className="flex-1 flex items-center justify-center px-4 relative">
+                        <div className="absolute inset-x-0 h-[1px] border-t border-dashed border-white/10" />
+                        <Plane className="w-4 h-4 relative z-10 text-primary rotate-90" />
                     </div>
-                    <div className="flex items-center gap-3 text-right">
-                        <span className="font-black text-xs uppercase tracking-widest text-white">{toToken?.symbol}</span>
-                        <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="" size={28} />
-                    </div>
-                </div>
 
-                {/* Body: Large Amounts */}
-                <div className="flex items-center justify-between px-2">
-                    <span className="text-3xl font-black tracking-tighter text-white">{amount}</span>
-                    <span className="text-3xl font-black tracking-tighter text-white">{estimatedReceivedAmount.toFixed(6)}</span>
+                    <div className="flex items-center gap-2 text-right">
+                        <span className="font-black text-[10px] uppercase tracking-widest text-white">{toToken?.symbol}</span>
+                        <TokenLogoDynamic 
+                            logoUrl={toToken?.iconUrl} 
+                            alt={toToken?.symbol || ''} 
+                            size={24} 
+                            chainId={toToken?.chainId}
+                            name={toToken?.name}
+                            symbol={toToken?.symbol}
+                        />
+                    </div>
                 </div>
 
                 <div className="h-px bg-white/5 mx-2" />
 
-                {/* Footer: Protocol Stats */}
-                <div className="flex items-end justify-between px-2 text-[10px] font-black uppercase tracking-widest">
-                    <div className="space-y-2.5">
-                        <p className="text-muted-foreground/40 font-bold">EST · {quoteData.tool?.toUpperCase()} · BEST ROUTE</p>
-                        <div className="flex items-center gap-3">
-                            <Timer className="w-3.5 h-3.5 text-primary" />
-                            <div className="h-[2px] w-8 bg-primary rounded-full" />
-                            <span className="text-primary">{quoteData.tool?.toUpperCase()}</span>
-                            <TokenLogoDynamic logoUrl={fromToken?.iconUrl} size={14} chainId={fromToken?.chainId} />
-                            <span className="text-white/80">{Math.ceil((quoteData.estimate.executionDuration || 300) / 60)}m</span>
-                        </div>
+                {/* Footer: Stats (Time on Left, Fee on Right) */}
+                <div className="flex items-center justify-between px-2 text-[10px] font-black uppercase tracking-widest">
+                    <div className="flex items-center gap-2 text-primary">
+                        <Timer className="w-3.5 h-3.5" />
+                        <span>{Math.ceil((quoteData.estimate.executionDuration || 300) / 60)} MIN</span>
                     </div>
-                    <div className="flex gap-8 text-right">
-                        <div>
-                            <p className="text-muted-foreground/40 mb-1.5">FEE</p>
-                            <p className="text-white font-mono">0%</p>
+                    
+                    <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                            <span className="text-muted-foreground/50 text-[8px] mb-0.5">FEE</span>
+                            <span className="text-white font-mono">0.00 {viewingNetwork.symbol}</span>
                         </div>
-                        <div>
-                            <p className="text-muted-foreground/40 mb-1.5">SLIPPAGE</p>
-                            <p className="text-white font-mono">{slippage}%</p>
+                        <div className="flex flex-col items-end">
+                            <span className="text-muted-foreground/50 text-[8px] mb-0.5">SLIPPAGE</span>
+                            <span className="text-white font-mono">{slippage}%</span>
                         </div>
                     </div>
                 </div>
@@ -278,7 +283,7 @@ export default function SwapPage() {
         )}
 
         {fetchError && !isQuoteLoading && (
-          <div className="mx-2 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-center gap-3">
+          <div className="mx-2 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-center gap-3">
             <Info className="w-4 h-4 shrink-0" />
             No path found for this route.
           </div>
