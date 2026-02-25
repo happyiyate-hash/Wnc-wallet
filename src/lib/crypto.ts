@@ -1,36 +1,40 @@
 import crypto from 'crypto';
 
 /**
- * CANONICAL UNIVERSAL ENCRYPTION SYSTEM (AES-256-CBC)
+ * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL
+ * Version: 2.0.0
+ * Algorithm: AES-256-CBC
+ * Key Derivation: SHA-256 Hash of Environment Secret
  * 
- * This utility ensures perfect compatibility across all applications
- * sharing the vault.
+ * USE THIS EXACT LOGIC IN EXTERNAL APPS TO ENSURE VAULT COMPATIBILITY.
  */
 
 const ALGORITHM = 'aes-256-cbc';
-const IV_LENGTH = 16;
+const IV_LENGTH = 16; // 16 bytes for AES-CBC
 
-function getEncryptionKey(): Buffer {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key) {
+/**
+ * Derives a strictly 32-byte key from any input secret.
+ * This is the "Magic Link" that allows Smarter Seller and Wevina to share data.
+ */
+function getInstitutionalKey(): Buffer {
+  const secret = process.env.ENCRYPTION_KEY;
+  if (!secret) {
     throw new Error("ENCRYPTION_KEY_MISSING");
   }
 
-  // Handle 64-character hex string as raw 32-byte Buffer
-  if (/^[0-9a-fA-F]{64}$/.test(key)) {
-    return Buffer.from(key, 'hex');
-  }
-
-  // Fallback: SHA-256 derivation to ensure an exact 32-byte key
-  return crypto.createHash('sha256').update(key).digest();
+  // We hash the secret to ensure it is always exactly 32 bytes (256 bits)
+  // regardless of how long the input string is.
+  return crypto.createHash('sha256').update(secret).digest();
 }
 
 /**
- * Encrypts a plaintext string into a hex ciphertext and IV.
+ * Encrypts a plaintext string into a hex ciphertext and hex IV.
+ * @param text The data to protect (e.g. mnemonic)
  */
 export function encryptPhrase(text: string): { encrypted: string; iv: string } {
-  const key = getEncryptionKey();
+  const key = getInstitutionalKey();
   const iv = crypto.randomBytes(IV_LENGTH);
+  
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   
   let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -43,20 +47,27 @@ export function encryptPhrase(text: string): { encrypted: string; iv: string } {
 }
 
 /**
- * Decrypts a hex ciphertext using the provided hex IV.
+ * Decrypts hex ciphertext using a provided hex IV.
+ * @param encryptedText The hex string from 'vault_phrase' or 'vault_infura_key'
+ * @param ivHex The hex string from 'iv' or 'infura_iv'
  */
 export function decryptPhrase(encryptedText: string, ivHex: string): string {
-  const key = getEncryptionKey();
-  const iv = Buffer.from(ivHex, 'hex');
-  
-  if (iv.length !== IV_LENGTH) {
-    throw new Error(`Invalid IV length: ${iv.length} bytes. Expected ${IV_LENGTH}.`);
+  try {
+    const key = getInstitutionalKey();
+    const iv = Buffer.from(ivHex, 'hex');
+    
+    if (iv.length !== IV_LENGTH) {
+      throw new Error(`IV length mismatch: expected ${IV_LENGTH}, got ${iv.length}`);
+    }
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  } catch (error: any) {
+    console.error("CANONICAL_DECRYPT_FAILURE:", error.message);
+    throw new Error("DECRYPTION_FAILED");
   }
-
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-
-  return decrypted;
 }
