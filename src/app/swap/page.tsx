@@ -141,42 +141,40 @@ export default function SwapPage() {
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-4 px-0">
+      <main className="flex-1 w-full space-y-2 overflow-y-auto pb-40 pt-6 px-4">
         {/* FROM CARD */}
-        <section className="w-full bg-gradient-to-b from-zinc-900/50 to-zinc-950/50 border-y border-white/5 p-6 space-y-6 relative group transition-all">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 relative group transition-all shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}
-                className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-2xl border border-white/5 transition-all active:scale-95"
+                className="flex items-center gap-2.5 bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded-2xl border border-white/5 transition-all active:scale-95"
             >
-                <div className="p-1 bg-black/40 rounded-full shadow-inner">
-                  <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={28} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
+                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={24} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
+                <div className="text-left leading-none">
+                  <span className="font-black text-sm block">{fromToken?.symbol}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-tighter">{allChainsMap[fromToken?.chainId!]?.name}</span>
                 </div>
-                <div className="text-left">
-                  <span className="font-black text-sm block leading-tight">{fromToken?.symbol}</span>
-                  <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">{allChainsMap[fromToken?.chainId!]?.name}</span>
-                </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" />
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
-            <div className="text-right">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block opacity-60">Available</span>
-                <span className="text-xs font-mono font-bold text-white">{parseFloat(fromToken?.balance || '0').toFixed(4)}</span>
+            <div className="text-right leading-none">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block opacity-60 mb-1">Available</span>
+                <span className="text-sm font-mono font-bold text-white">{parseFloat(fromToken?.balance || '0').toFixed(4)}</span>
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <Input 
                 type="number" 
                 placeholder="0.00" 
                 value={amount} 
                 onChange={(e) => setAmount(e.target.value)} 
-                className="text-[clamp(2rem,8vw,3.5rem)] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter" 
+                className="text-[clamp(1.5rem,6vw,2.5rem)] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter" 
             />
             <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-muted-foreground/60">≈ ${fromUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                 <button 
                     onClick={() => setAmount(fromToken?.balance || '0')}
-                    className="text-[10px] font-black text-primary uppercase bg-primary/10 px-3 py-1 rounded-lg hover:bg-primary/20 transition-all active:scale-95"
+                    className="text-[9px] font-black text-primary uppercase bg-primary/10 px-2.5 py-1 rounded-lg hover:bg-primary/20 transition-all active:scale-95"
                 >
                     MAX
                 </button>
@@ -185,51 +183,44 @@ export default function SwapPage() {
         </section>
 
         {/* DIRECTIONAL INDICATOR */}
-        <div className="relative h-12 flex items-center justify-center z-10 pointer-events-none">
-            <div className="absolute inset-x-0 h-px bg-white/5" />
-            <div className="relative px-6 bg-[#050505] flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-primary/20 animate-pulse" />
-                <div className="w-10 h-[2px] bg-gradient-to-r from-primary/50 to-transparent rounded-full animate-pulse" />
+        <div className="relative h-10 flex items-center justify-center z-10 pointer-events-none">
+            <div className="relative px-6 bg-[#050505] flex items-center gap-2">
                 <div 
                     onClick={handleReverse}
-                    className="w-10 h-10 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl pointer-events-auto hover:scale-110 active:rotate-180 transition-all duration-500 group"
+                    className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl pointer-events-auto hover:scale-110 active:rotate-180 transition-all duration-500 group"
                 >
                     <Plane className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
                 </div>
-                <div className="w-10 h-[2px] bg-gradient-to-l from-primary/50 to-transparent rounded-full animate-pulse" />
-                <div className="w-2 h-2 rounded-full bg-primary/20 animate-pulse" />
             </div>
         </div>
 
         {/* TO CARD */}
-        <section className="w-full bg-gradient-to-t from-zinc-900/50 to-zinc-950/50 border-y border-white/5 p-6 space-y-6 relative transition-all">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 relative transition-all shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}
-                className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-2xl border border-white/5 transition-all active:scale-95"
+                className="flex items-center gap-2.5 bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded-2xl border border-white/5 transition-all active:scale-95"
             >
-                <div className="p-1 bg-black/40 rounded-full shadow-inner">
-                  <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={28} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
+                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={24} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
+                <div className="text-left leading-none">
+                  <span className="font-black text-sm block">{toToken?.symbol}</span>
+                  <span className="text-[8px] text-muted-foreground uppercase font-bold tracking-tighter">{allChainsMap[toToken?.chainId!]?.name}</span>
                 </div>
-                <div className="text-left">
-                  <span className="font-black text-sm block leading-tight">{toToken?.symbol}</span>
-                  <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">{allChainsMap[toToken?.chainId!]?.name}</span>
-                </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground ml-1" />
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
-            <div className="text-right">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block opacity-60">Estimated Receive</span>
+            <div className="text-right leading-none">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block opacity-60">Est. Receive</span>
             </div>
           </div>
 
-          <div className="space-y-1 min-h-[5rem] flex flex-col justify-center">
+          <div className="space-y-0.5 min-h-[3.5rem] flex flex-col justify-center">
             {isQuoteLoading ? (
-                <div className="flex items-center gap-4">
-                    <Loader2 className="animate-spin text-primary w-8 h-8" />
-                    <span className="text-2xl font-black text-zinc-700 animate-pulse">Routing best price...</span>
+                <div className="flex items-center gap-3">
+                    <Loader2 className="animate-spin text-primary w-6 h-6" />
+                    <span className="text-xl font-black text-zinc-700 animate-pulse">Routing...</span>
                 </div>
             ) : (
-                <div className="text-[clamp(2rem,8vw,3.5rem)] font-black truncate tracking-tighter">
+                <div className="text-[clamp(1.5rem,6vw,2.5rem)] font-black truncate tracking-tighter">
                     {quoteData ? estimatedReceivedAmount.toFixed(6) : '0.00'}
                 </div>
             )}
@@ -239,44 +230,44 @@ export default function SwapPage() {
 
         {/* ROUTE INFO */}
         {quoteData && (
-            <div className="px-6 py-8 space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-3xl bg-white/5 border border-white/5">
+            <div className="px-2 py-4 space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/5">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                            <RouteIcon className="w-5 h-5"/>
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                            <RouteIcon className="w-4 h-4"/>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Protocol</span>
-                            <div className="text-sm font-bold text-white uppercase">{quoteData.tool} Bridge</div>
+                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Protocol</span>
+                            <div className="text-xs font-bold text-white uppercase">{quoteData.tool}</div>
                         </div>
                     </div>
                     <div className="text-right">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Time Est.</span>
-                        <div className="flex items-center justify-end gap-1.5 text-primary font-bold text-xs mt-0.5">
-                            <Timer className="w-4 h-4" />
-                            {Math.ceil((quoteData.estimate.executionDuration || 300) / 60)} min
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Time</span>
+                        <div className="flex items-center justify-end gap-1.5 text-primary font-bold text-[10px] mt-0.5">
+                            <Timer className="w-3 h-3" />
+                            {Math.ceil((quoteData.estimate.executionDuration || 300) / 60)}m
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2 mb-2">
-                            <Fuel className="w-3.5 h-3.5 text-primary" /> Gas Fee
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="p-4 rounded-[2rem] bg-white/5 border border-white/5">
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 mb-1.5">
+                            <Fuel className="w-3 h-3 text-primary" /> Gas
                         </span>
-                        <p className="font-bold text-sm text-white">${parseFloat(quoteData.estimate.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</p>
+                        <p className="font-bold text-xs text-white">${parseFloat(quoteData.estimate.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</p>
                     </div>
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-2">Max Slippage</span>
-                        <p className="font-bold text-sm text-white">{slippage}%</p>
+                    <div className="p-4 rounded-[2rem] bg-white/5 border border-white/5">
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block mb-1.5">Slippage</span>
+                        <p className="font-bold text-xs text-white">{slippage}%</p>
                     </div>
                 </div>
             </div>
         )}
 
         {fetchError && !isQuoteLoading && (
-          <div className="mx-6 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-bold flex items-center gap-3">
-            <RouteIcon className="w-5 h-5 shrink-0" />
+          <div className="mx-2 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-center gap-3">
+            <RouteIcon className="w-4 h-4 shrink-0" />
             No path found for this route.
           </div>
         )}
@@ -285,7 +276,7 @@ export default function SwapPage() {
             <Button 
                 variant={buttonState.variant || 'default'}
                 className={cn(
-                    "w-full h-16 rounded-2xl font-black text-lg shadow-[0_0_40px_rgba(129,140,248,0.2)] transition-all active:scale-95 border-b-4 border-primary/50",
+                    "w-full h-16 rounded-[2rem] font-black text-lg shadow-[0_0_40px_rgba(129,140,248,0.2)] transition-all active:scale-95 border-b-4 border-primary/50",
                     buttonState.disabled && "opacity-50 border-b-0 shadow-none grayscale"
                 )}
                 disabled={buttonState.disabled}
