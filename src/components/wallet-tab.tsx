@@ -266,8 +266,8 @@ export default function WalletTab() {
             </div>
         </div>
 
-        {/* COMPACT LEFT-ALIGNED ACTION GROUP */}
-        <div className="flex justify-start gap-2.5 my-10 px-8">
+        {/* GROUPED AND CENTERED ACTION BUTTONS */}
+        <div className="flex justify-center gap-2.5 my-10 px-4">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
