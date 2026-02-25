@@ -15,6 +15,7 @@ import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
+import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -219,71 +220,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             } as AssetRow;
         });
 
-        // Adapters for non-EVM chains
+        // Modular Adapter Dispatch
+        let adapter = null;
         if (chain.type === 'xrp') {
-            const adapter = xrpAdapterFactory(chain);
-            if (adapter) {
-                const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-                updatedBalances[chain.chainId] = results;
-                setBalances(prev => ({ ...prev, [chain.chainId]: results }));
-                continue;
-            }
+            adapter = xrpAdapterFactory(chain);
+        } else if (chain.type === 'polkadot') {
+            adapter = polkadotAdapterFactory(chain);
+        } else {
+            adapter = evmAdapterFactory(chain, infuraApiKey);
         }
 
-        if (chain.type === 'polkadot') {
-            const adapter = polkadotAdapterFactory(chain);
-            if (adapter) {
-                const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-                updatedBalances[chain.chainId] = results;
-                setBalances(prev => ({ ...prev, [chain.chainId]: results }));
-                continue;
-            }
-        }
-
-        // Dynamic RPC construction
-        const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
-        try {
-          const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-          
-          const chainBalances = await Promise.all(combinedAssetsList.map(async (asset) => {
-            try {
-              let balance;
-              if (asset.isNative) {
-                balance = await provider.getBalance(walletForChain.address);
-              } else {
-                const abi = ["function balanceOf(address owner) view returns (uint256)"];
-                const contract = new ethers.Contract(asset.address, abi, provider);
-                balance = await contract.balanceOf(walletForChain.address);
-              }
-              const balanceStr = ethers.formatUnits(balance, 18);
-              return {
-                ...asset,
-                balance: balanceStr,
-              } as AssetRow;
-            } catch (e) {
-              return asset;
-            }
-          }));
-
-          updatedBalances[chain.chainId] = chainBalances;
-          
-          setBalances(prev => ({
-            ...prev,
-            [chain.chainId]: chainBalances.map(nb => {
-              const existing = prev[chain.chainId]?.find(eb => eb.symbol === nb.symbol);
-              return {
-                ...nb,
-                priceUsd: existing?.priceUsd || 0,
-                pctChange24h: existing?.pctChange24h || 0,
-                fiatValueUsd: parseFloat(nb.balance) * (existing?.priceUsd || 0)
-              };
-            })
-          }));
-        } catch (e) {
-          updatedBalances[chain.chainId] = combinedAssetsList;
+        if (adapter) {
+            const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+            updatedBalances[chain.chainId] = results;
+            setBalances(prev => ({ ...prev, [chain.chainId]: results }));
+        } else {
+            updatedBalances[chain.chainId] = combinedAssetsList;
         }
         
-        // Small delay between chains to avoid rate limits
         await delay(priorityChainId === chain.chainId ? 0 : 50);
       }
 
