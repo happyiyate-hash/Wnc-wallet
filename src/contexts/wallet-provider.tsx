@@ -104,6 +104,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setInfuraApiKey(key);
     if (key) {
         localStorage.setItem('infura_api_key', key);
+        // Automatically sync to cloud if a wallet exists
         if (wallets && user) saveToVault();
     } else {
         localStorage.removeItem('infura_api_key');
@@ -167,23 +168,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, fetchTokenRegistry]);
 
-  /**
-   * GLOBAL INDEPENDENT PRICE ENGINE
-   * Fetches market data for all unique tokens across all chains at once.
-   */
   const fetchGlobalPrices = useCallback(async () => {
     if (!isInitialized) return;
-
-    // Collect all unique Coingecko IDs
     const ids = new Set<string>();
     chainsWithLogos.forEach(chain => {
         getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) ids.add(a.coingeckoId); });
     });
     userAddedTokens.forEach(t => { if (t.coingeckoId) ids.add(t.coingeckoId); });
-
     const idList = Array.from(ids);
     if (idList.length === 0) return;
-
     try {
         const priceMap = await fetchPriceMap(idList);
         const newPrices: { [id: string]: PriceInfo } = {};
@@ -196,20 +189,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [isInitialized, chainsWithLogos, userAddedTokens]);
 
-  /**
-   * PURE BALANCE FETCH ENGINE
-   * Scoped to RPC calls for a specific chain. No price logic here.
-   */
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || !infuraApiKey) return [];
-    
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
     if (!walletForChain) return [];
-
     const apiTokens = tokenRegistry[chain.chainId] || [];
     const baseAssets = getInitialAssets(chain.chainId);
     const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
-    
     const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
         return acc;
@@ -223,12 +209,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             updatedAt: 0
         } as AssetRow;
     });
-
     let adapter = null;
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
-
     if (adapter) {
         try {
             const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
@@ -261,17 +245,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, fetchGlobalPrices, user]);
 
-  // SMART ENGINE MANAGER
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
-    
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
-
-    // LAYER 1: PRIORITY UI SYNC + PRICES
     setIsRefreshing(true);
     try {
-        await fetchGlobalPrices(); // Independent global price sync
+        await fetchGlobalPrices();
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -281,15 +261,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally {
         setIsRefreshing(false);
     }
-
-    // LAYER 2: BACKGROUND LAZY SYNC
     if (isBackgroundSyncRunning.current) return;
     isBackgroundSyncRunning.current = true;
-
     const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
     for (const chain of backgroundChains) {
         if (abortControllerRef.current?.signal.aborted) break;
-        await new Promise(r => setTimeout(r, 1000)); // Idle delay
+        await new Promise(r => setTimeout(r, 1000));
         try {
             const bgBalances = await fetchBalancesForChain(chain);
             setBalances(prev => {
@@ -339,15 +316,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const generateWallet = useCallback(async () => {
     if (!user) return '';
-    
-    // Check local profile state first to avoid redundant hanging Supabase calls
-    if (profile?.vault_phrase) {
-      throw new Error("CLOUDV_EXISTS");
-    }
-
+    if (profile?.vault_phrase) throw new Error("CLOUDV_EXISTS");
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
-    
     if (mnemonic) {
       await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
@@ -369,63 +340,103 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user || !supabase || !wallets) return;
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     const currentApiKey = localStorage.getItem('infura_api_key');
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const payload: any = {};
+
+      // 1. Encrypt & Prepare Mnemonic
       if (mnemonic) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
             body: JSON.stringify({ phrase: mnemonic }),
           });
-          const { encrypted, iv } = await res.json();
-          payload.vault_phrase = encrypted; payload.iv = iv;
+          const data = await res.json();
+          if (res.ok) {
+            payload.vault_phrase = data.encrypted; 
+            payload.iv = data.iv;
+          }
       }
+
+      // 2. Encrypt & Prepare Infura Key
       if (currentApiKey) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
             body: JSON.stringify({ phrase: currentApiKey }),
           });
-          const { encrypted, iv } = await res.json();
-          payload.vault_infura_key = encrypted; payload.infura_iv = iv;
+          const data = await res.json();
+          if (res.ok) {
+            payload.vault_infura_key = data.encrypted; 
+            payload.infura_iv = data.iv;
+          }
       }
+
+      // 3. Perform atomic update
       if (Object.keys(payload).length > 0) {
           await supabase.from('profiles').update(payload).eq('id', user.id);
           toast({ title: "Cloud Vault Synced" });
           refreshProfile();
       }
-    } catch (e) {}
+    } catch (e) {
+        console.error("Vault sync failed:", e);
+    }
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
-    const encryptedPhrase = profile?.vault_phrase || user?.user_metadata?.vault_phrase;
-    const encryptionIv = profile?.iv || user?.user_metadata?.iv;
-    if (!user || !encryptedPhrase) {
+    if (!user || !supabase) return;
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    const encryptedPhrase = profile?.vault_phrase;
+    const phraseIv = profile?.iv;
+    const encryptedInfura = profile?.vault_infura_key;
+    const infuraIv = profile?.infura_iv;
+
+    if (!encryptedPhrase && !encryptedInfura) {
       toast({ variant: "destructive", title: "No Cloud Backup Found" });
       throw new Error("No vault");
     }
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ encrypted: encryptedPhrase, iv: encryptionIv }),
-      });
-      const data = await response.json();
-      if (response.ok && data.phrase) await importWallet(data.phrase);
-      toast({ title: "Restored from Cloud" });
-    } catch (e) { throw e; }
-  }, [user, profile, importWallet, toast]);
 
-  /**
-   * ASSET COMPOSER
-   * Merges independent RPC balances with independent Global Prices.
-   */
+    try {
+      // Restore Mnemonic
+      if (encryptedPhrase && phraseIv) {
+          const res = await fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ encrypted: encryptedPhrase, iv: phraseIv }),
+          });
+          const data = await res.json();
+          if (res.ok && data.phrase) {
+              await loadWalletFromMnemonic(data.phrase);
+              localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
+          }
+      }
+
+      // Restore Infura API Key
+      if (encryptedInfura && infuraIv) {
+          const res = await fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ encrypted: encryptedInfura, iv: infuraIv }),
+          });
+          const data = await res.json();
+          if (res.ok && data.phrase) {
+              setInfuraApiKey(data.phrase);
+              localStorage.setItem('infura_api_key', data.phrase);
+          }
+      }
+
+      toast({ title: "Restored from Cloud" });
+    } catch (e) {
+        console.error("Cloud restoration error:", e);
+        throw e;
+    }
+  }, [user, profile, loadWalletFromMnemonic, toast]);
+
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const list = balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
