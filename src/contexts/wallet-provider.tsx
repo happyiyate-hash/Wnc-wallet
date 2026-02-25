@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -290,7 +291,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
+      if (!cleanMnemonic || !ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
       
       const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
       const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
@@ -368,7 +369,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user]);
 
   const saveToVault = useCallback(async () => {
-    if (!user || !supabase || !wallets?.[0]?.privateKey) return;
+    if (!user || !supabase || !wallets) return;
     
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (!mnemonic) {
@@ -377,20 +378,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ phrase: mnemonic }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Encryption failed');
+      }
+
       const { encrypted, iv } = await response.json();
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ vault_phrase: encrypted, iv })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      // Redundancy: Save to both profiles and auth user metadata
+      await Promise.all([
+        supabase.from('profiles').update({ vault_phrase: encrypted, iv }).eq('id', user.id),
+        supabase.auth.updateUser({ data: { vault_phrase: encrypted, iv } })
+      ]);
       
       toast({ title: "Vault Sync Complete" });
       refreshProfile();
@@ -400,30 +409,42 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
-    if (!user || !profile?.vault_phrase || !profile?.iv) {
-      toast({ variant: "destructive", title: "Vault Not Found" });
-      throw new Error("No vault");
+    // Check both Profile and Auth user_metadata (the "authentication table")
+    const encryptedPhrase = profile?.vault_phrase || user?.user_metadata?.vault_phrase;
+    const encryptionIv = profile?.iv || user?.user_metadata?.iv;
+
+    if (!user || !encryptedPhrase || !encryptionIv) {
+      toast({ variant: "destructive", title: "Vault Not Found", description: "No backup found in cloud." });
+      throw new Error("No vault data");
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ 
-          encrypted: profile.vault_phrase, 
-          iv: profile.iv 
+          encrypted: encryptedPhrase, 
+          iv: encryptionIv 
         }),
       });
 
       const data = await response.json();
-      if (data.phrase) {
+      if (response.ok && data.phrase) {
         await importWallet(data.phrase);
         toast({ title: "Vault Restored" });
       } else {
-        throw new Error(data.message || "Decryption failed");
+        throw new Error(data.message || "Decryption failed. Ensure ENCRYPTION_KEY is set.");
       }
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Restoration Failed" });
+      toast({ 
+        variant: "destructive", 
+        title: "Restoration Failed", 
+        description: e.message 
+      });
       throw e;
     }
   }, [user, profile, importWallet, toast]);
