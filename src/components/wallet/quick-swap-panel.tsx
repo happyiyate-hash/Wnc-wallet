@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -14,7 +13,8 @@ import {
   Zap, 
   ArrowLeft,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  ShieldAlert
 } from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -31,11 +31,12 @@ interface QuickSwapPanelProps {
 }
 
 export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelProps) {
-  const { allAssets, wallets, infuraApiKey, allChains, balances, allChainsMap, getAvailableAssetsForChain } = useWallet();
+  const { allAssets, wallets, infuraApiKey, allChains, balances, allChainsMap, getAvailableAssetsForChain, prices } = useWallet();
   const [fromToken, setFromToken] = useState<AssetRow | null>(null);
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
   const debouncedAmount = useDebounce(amount, 600);
+  
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quote, setQuote] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     }
   }, [isOpen, allAssets, fromToken]);
 
+  // UNIFIED QUOTE ENGINE (SHARED WITH SWAP PAGE)
   useEffect(() => {
     const fetchQuickQuote = async () => {
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
@@ -65,10 +67,13 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
       setFetchError(null);
       
       try {
+        const sourceChainConfig = allChainsMap[fromToken.chainId];
+        // Resolve correct source identity for the bridge/swap
+        const sourceWallets = wallets?.filter(w => w.type === (sourceChainConfig.type || 'evm')) || [];
+        const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
+
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
-        const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
-
         const fromDecimals = fromToken.decimals || 18;
         const formattedAmount = ethers.parseUnits(debouncedAmount, fromDecimals).toString();
 
@@ -85,27 +90,49 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         const res = await fetch(`/api/bridge/quote?${params.toString()}`);
         const data = await res.json();
         
-        if (data.error) throw new Error(data.details || data.error);
-        if (!data.estimate?.toAmount || data.estimate.toAmount === "0") throw new Error("No liquidity");
+        if (data.error || !data.estimate?.toAmount || data.estimate.toAmount === "0") {
+            throw new Error(data.details || data.error || "No liquidity");
+        }
 
         setQuote(data);
       } catch (e: any) {
-        setFetchError(e.message);
-        setQuote(null);
+        // INSTITUTIONAL FALLBACK (SHARED WITH SWAP PAGE)
+        const fromPriceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
+        const toPriceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
+        const fromPrice = fromPriceId ? prices[fromPriceId]?.price : 0;
+        const toPrice = toPriceId ? prices[toPriceId]?.price : 0;
+
+        if (fromPrice && toPrice) {
+            const valIn = parseFloat(debouncedAmount);
+            const rawOut = (valIn * fromPrice) / toPrice;
+            const safeOut = rawOut * 0.97; // 3% safety discount
+            
+            setQuote({
+                isFallback: true,
+                tool: 'Market Estimate',
+                estimate: {
+                    toAmount: ethers.parseUnits(safeOut.toFixed(toToken.decimals || 18), toToken.decimals || 18).toString(),
+                    executionDuration: 300,
+                }
+            });
+        } else {
+            setFetchError("Route unavailable.");
+            setQuote(null);
+        }
       } finally {
         setIsQuoteLoading(false);
       }
     };
 
     fetchQuickQuote();
-  }, [debouncedAmount, fromToken, toToken, wallets, infuraApiKey]);
+  }, [debouncedAmount, fromToken, toToken, wallets, infuraApiKey, allChainsMap, prices]);
 
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken(token);
     else setToToken(token);
     setIsTokenSideSheetOpen(false);
     setIsNetworkSheetOpen(false);
-    setQuote(null);
+    setQuote(null); // Clear to trigger skeleton on pair change
   };
 
   const estimatedReceived = quote?.estimate?.toAmount 
@@ -134,7 +161,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     <div className="flex items-center gap-2 bg-primary/10 px-3 py-0.5 rounded-full border border-primary/20">
                         <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
                         <span className="text-[7px] font-black uppercase tracking-[0.15em] text-primary">
-                            BEST ROUTE: {quote?.tool?.toUpperCase() || 'SEARCHING 40+ SOURCES...'}
+                            {quote?.isFallback ? 'INSTITUTIONAL ESTIMATE' : `BEST ROUTE: ${quote?.tool?.toUpperCase() || 'SEARCHING AGGREGATORS...'}`}
                         </span>
                     </div>
                     <button onClick={() => onOpenChange(false)} className="p-1 rounded-full hover:bg-white/10 transition-colors">
@@ -171,11 +198,12 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     </div>
 
                     <div className="flex-1 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-xl h-10 px-3 gap-2 overflow-hidden">
-                        {isQuoteLoading ? (
+                        {isQuoteLoading && !quote ? (
                             <Skeleton className="h-3 w-16 bg-white/10 rounded" />
                         ) : (
                             <span className={cn(
-                                "text-xs font-black tracking-tight tabular-nums truncate",
+                                "text-xs font-black tracking-tight tabular-nums truncate transition-all duration-300",
+                                isQuoteLoading ? "opacity-40" : "opacity-100",
                                 estimatedReceived ? "text-white" : "text-white/20"
                             )}>
                                 {estimatedReceived ? parseFloat(estimatedReceived).toFixed(4) : '0.0000'}
@@ -207,17 +235,23 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                             <Fuel className="w-2.5 h-2.5 text-primary" />
                             <span>{quote?.estimate?.gasCosts?.[0] ? `$${parseFloat(quote.estimate.gasCosts[0].amountUsd || '0').toFixed(2)}` : '--'}</span>
                         </div>
+                        {quote?.isFallback && (
+                            <div className="flex items-center gap-1 text-primary/60">
+                                <ShieldAlert className="w-2.5 h-2.5" />
+                                <span>3% Safety Buffer</span>
+                            </div>
+                        )}
                     </div>
 
                     <Button 
                         size="sm"
                         className={cn(
                             "h-7 px-4 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all shadow-lg active:scale-95",
-                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed grayscale" : "bg-primary hover:bg-primary/90 shadow-primary/20"
+                            !amount || isQuoteLoading || !!fetchError || !quote || quote?.isFallback ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed grayscale" : "bg-primary hover:bg-primary/90 shadow-primary/20"
                         )}
-                        disabled={!amount || isQuoteLoading || !!fetchError || !quote}
+                        disabled={!amount || isQuoteLoading || !!fetchError || !quote || quote?.isFallback}
                     >
-                        {isQuoteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Execute Swap"}
+                        {isQuoteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : quote?.isFallback ? "No Pool" : "Execute Swap"}
                     </Button>
                 </div>
             </div>

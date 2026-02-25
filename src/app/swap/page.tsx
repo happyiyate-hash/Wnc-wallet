@@ -83,7 +83,9 @@ function SwapClient() {
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
-        const userAddr = wallets ? getAddressForChain(sourceChainConfig, wallets) : '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
+        // Dynamic identity resolution based on source chain ecosystem
+        const sourceWallets = wallets?.filter(w => w.type === (sourceChainConfig.type || 'evm')) || [];
+        const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
         
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
@@ -95,7 +97,7 @@ function SwapClient() {
           fromToken: fromAddr,
           toToken: toAddr,
           fromAmount: ethers.parseUnits(debouncedAmount, fromDecimals).toString(),
-          fromAddress: userAddr || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045',
+          fromAddress: userAddr,
           slippage: (parseFloat(slippage) / 100).toString()
         });
 
@@ -111,13 +113,13 @@ function SwapClient() {
         // INSTITUTIONAL FALLBACK (Oracle Based)
         const fromPriceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
         const toPriceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
-        const fromPrice = prices[fromPriceId]?.price || 0;
-        const toPrice = prices[toPriceId]?.price || 0;
+        const fromPrice = fromPriceId ? prices[fromPriceId]?.price : 0;
+        const toPrice = toPriceId ? prices[toPriceId]?.price : 0;
 
         if (fromPrice && toPrice) {
             const amountIn = parseFloat(debouncedAmount);
             const rawEstimatedOut = (amountIn * fromPrice) / toPrice;
-            const safetyBuffer = 0.97; // 3% Safety Buffer
+            const safetyBuffer = 0.97; // 3% Institutional Safety Buffer
             const safeEstimatedOut = rawEstimatedOut * safetyBuffer;
             
             setQuoteData({
@@ -153,8 +155,7 @@ function SwapClient() {
     else setToToken(token);
     setIsTokenSideSheetOpen(false);
     setIsNetworkSheetOpen(false);
-    // Clear quote on token change to show skeleton for new pair
-    setQuoteData(null);
+    setQuoteData(null); // Explicit clear on pair change to trigger skeleton
   };
 
   // Resolve Real-time Price and Balance for display
@@ -257,7 +258,7 @@ function SwapClient() {
             {isQuoteLoading && !quoteData ? (
                 <div className="space-y-2"><Skeleton className="h-8 w-3/4 bg-white/5 rounded-xl" /><Skeleton className="h-3 w-1/4 bg-white/5 rounded-lg" /></div>
             ) : (
-                <div className={cn("transition-opacity duration-300", isQuoteLoading ? "opacity-50" : "opacity-100")}>
+                <div className={cn("transition-all duration-300", isQuoteLoading ? "opacity-40" : "opacity-100")}>
                     <div className="text-[clamp(1.5rem,6vw,2.2rem)] font-black truncate tracking-tighter">{estimatedReceivedAmount > 0 ? estimatedReceivedAmount.toFixed(6) : '0.00'}</div>
                     <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                 </div>
@@ -265,11 +266,11 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* ROUTE SUMMARY CARD (MINIATURE DASHBOARD) */}
+        {/* ROUTE SUMMARY CARD */}
         {quoteData && (
             <div className={cn(
                 "mx-2 mt-6 p-5 rounded-[2.5rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
-                isQuoteLoading && "opacity-60 grayscale-[0.5]"
+                isQuoteLoading && "opacity-60"
             )}>
                 <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
