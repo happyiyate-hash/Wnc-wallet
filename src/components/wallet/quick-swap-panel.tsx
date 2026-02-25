@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -46,13 +47,17 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
+  // 1. Initialize Tokens on Open
   useEffect(() => {
-    if (allAssets.length >= 2 && !fromToken) {
-        setFromToken(allAssets[0]);
-        setToToken(allAssets.find(a => a.symbol !== allAssets[0].symbol) || allAssets[1]);
+    if (isOpen && allAssets.length >= 2 && !fromToken) {
+        const initialFrom = allAssets[0];
+        const initialTo = allAssets.find(a => a.symbol !== initialFrom.symbol) || allAssets[1];
+        setFromToken(initialFrom);
+        setToToken(initialTo);
     }
-  }, [allAssets, fromToken]);
+  }, [isOpen, allAssets, fromToken]);
 
+  // 2. Fetch Logic (Synchronized with Main Swap Page)
   useEffect(() => {
     const fetchQuickQuote = async () => {
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
@@ -66,6 +71,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
       try {
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
+        
+        // Ensure we have a valid EVM address for LI.FI quote
         const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0x0000000000000000000000000000000000000000';
 
         const params = new URLSearchParams({
@@ -84,12 +91,14 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         if (data.error) throw new Error(data.details || data.error);
         setQuote(data);
       } catch (e: any) {
+        console.warn("Quick Quote Error:", e.message);
         setFetchError(e.message);
         setQuote(null);
       } finally {
         setIsQuoteLoading(false);
       }
     };
+
     fetchQuickQuote();
   }, [debouncedAmount, fromToken, toToken, wallets, infuraApiKey]);
 
@@ -121,84 +130,101 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     borderColor: `${fromChainColor}40`,
                     boxShadow: `0 20px 50px -12px ${fromChainColor}30`
                 }}
-                className="bg-black/90 backdrop-blur-3xl border rounded-[1.5rem] p-3 max-w-lg mx-auto pointer-events-auto relative overflow-hidden"
+                className="bg-black/90 backdrop-blur-3xl border rounded-[1.8rem] p-2.5 max-w-lg mx-auto pointer-events-auto relative overflow-hidden"
             >
-                <div className="flex items-center justify-between mb-2">
+                {/* ACCESSIBILITY HIDDEN TITLE */}
+                <h2 className="sr-only">Quick Swap Panel</h2>
+
+                <div className="flex items-center justify-between mb-2 px-1">
                     <div className="flex items-center gap-1.5 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                        <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
-                        <span className="text-[8px] font-black uppercase tracking-widest text-primary">
-                            Best Route: {bestRouteName} via Wevina Aggregator
+                        <Zap className="w-2 h-2 text-primary fill-primary" />
+                        <span className="text-[7px] font-black uppercase tracking-[0.2em] text-primary">
+                            Best Route: {bestRouteName} (Institutional Aggregator)
                         </span>
                     </div>
                     <button 
                         onClick={() => onOpenChange(false)}
                         className="p-1 rounded-full hover:bg-white/10 transition-colors"
                     >
-                        <X className="w-3.5 h-3.5 text-muted-foreground" />
+                        <X className="w-3 h-3 text-muted-foreground" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
-                    <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-2xl border border-white/5">
-                        <button onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }} className="shrink-0 active:scale-90 transition-transform">
-                            <TokenLogoDynamic 
-                                logoUrl={fromToken?.iconUrl} 
-                                alt={fromToken?.symbol || ''} 
-                                size={22} 
-                                chainId={fromToken?.chainId}
-                                name={fromToken?.name}
-                                symbol={fromToken?.symbol}
-                            />
-                        </button>
-                        <div className="flex-1 min-w-0">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 mb-3 px-1">
+                    {/* FROM INPUT */}
+                    <div className="relative group">
+                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20">
+                            <button 
+                                onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }} 
+                                className="w-6 h-6 rounded-full bg-zinc-950 border border-white/20 flex items-center justify-center shadow-xl active:scale-90 transition-all hover:border-primary/50"
+                            >
+                                <TokenLogoDynamic 
+                                    logoUrl={fromToken?.iconUrl} 
+                                    alt={fromToken?.symbol || ''} 
+                                    size={16} 
+                                    chainId={fromToken?.chainId}
+                                    name={fromToken?.name}
+                                    symbol={fromToken?.symbol}
+                                />
+                            </button>
+                        </div>
+                        <div className="w-full bg-white/[0.03] border border-white/5 rounded-2xl h-10 flex flex-col items-center justify-center px-2 pt-1">
                             <Input 
                                 type="number"
                                 placeholder="0.00"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                className="bg-transparent border-none text-sm font-black p-0 h-auto focus-visible:ring-0 tracking-tighter text-white placeholder:text-zinc-800"
+                                className="bg-transparent border-none text-[13px] font-black p-0 h-auto focus-visible:ring-0 tracking-tight text-white placeholder:text-zinc-800 text-center"
                             />
+                            <span className="text-[6px] text-muted-foreground uppercase font-black opacity-40">Send Amount</span>
                         </div>
                     </div>
 
-                    <div className="w-6 h-6 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center shadow-lg">
+                    <div className="w-7 h-7 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center shadow-lg mb-1.5">
                         <Plane className="w-3 h-3 text-primary" />
                     </div>
 
-                    <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-2xl border border-white/5 text-right">
-                        <div className="flex-1 min-w-0">
+                    {/* TO INPUT */}
+                    <div className="relative group">
+                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20">
+                            <button 
+                                onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }} 
+                                className="w-6 h-6 rounded-full bg-zinc-950 border border-white/20 flex items-center justify-center shadow-xl active:scale-90 transition-all hover:border-primary/50"
+                            >
+                                <TokenLogoDynamic 
+                                    logoUrl={toToken?.iconUrl} 
+                                    alt={toToken?.symbol || ''} 
+                                    size={16} 
+                                    chainId={toToken?.chainId}
+                                    name={toToken?.name}
+                                    symbol={toToken?.symbol}
+                                />
+                            </button>
+                        </div>
+                        <div className="w-full bg-white/[0.03] border border-white/5 rounded-2xl h-10 flex flex-col items-center justify-center px-2 pt-1">
                             {isQuoteLoading ? (
-                                <Skeleton className="h-4 w-12 bg-white/10 rounded ml-auto" />
+                                <Skeleton className="h-3 w-12 bg-white/5 rounded" />
                             ) : (
                                 <span className={cn(
-                                    "text-sm font-black tracking-tighter tabular-nums block truncate",
+                                    "text-[13px] font-black tracking-tight tabular-nums block truncate text-center",
                                     quote ? "text-white" : "text-white/20"
                                 )}>
                                     {parseFloat(estimatedReceived).toFixed(4)}
                                 </span>
                             )}
+                            <span className="text-[6px] text-muted-foreground uppercase font-black opacity-40">Estimated Received</span>
                         </div>
-                        <button onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }} className="shrink-0 active:scale-90 transition-transform">
-                            <TokenLogoDynamic 
-                                logoUrl={toToken?.iconUrl} 
-                                alt={toToken?.symbol || ''} 
-                                size={22} 
-                                chainId={toToken?.chainId}
-                                name={toToken?.name}
-                                symbol={toToken?.symbol}
-                            />
-                        </button>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 text-[7px] font-black uppercase tracking-[0.15em] text-muted-foreground/50 px-1">
+                <div className="flex items-center justify-between gap-2 px-1">
+                    <div className="flex items-center gap-3 text-[7px] font-black uppercase tracking-[0.1em] text-muted-foreground/50">
                         <div className="flex items-center gap-1">
-                            <Timer className="w-2.5 h-2.5" />
+                            <Timer className="w-2 h-2" />
                             <span>{quote?.estimate?.executionDuration ? `${Math.ceil(quote.estimate.executionDuration / 60)}M` : '--'}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <Fuel className="w-2.5 h-2.5" />
+                            <Fuel className="w-2 h-2" />
                             <span>{quote?.estimate?.gasCosts?.[0] ? `$${parseFloat(quote.estimate.gasCosts[0].amountUsd || '0').toFixed(2)}` : '--'}</span>
                         </div>
                     </div>
@@ -206,12 +232,12 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     <Button 
                         size="sm"
                         className={cn(
-                            "h-7 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all",
-                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50" : "bg-primary hover:bg-primary/90"
+                            "h-7 px-4 rounded-xl font-black text-[8px] uppercase tracking-[0.15em] transition-all",
+                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90"
                         )}
                         disabled={!amount || isQuoteLoading || !!fetchError || !quote}
                     >
-                        {isQuoteLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Execute Swap"}
+                        {isQuoteLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Execute Swap"}
                     </Button>
                 </div>
             </div>
@@ -261,7 +287,9 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
             <SheetContent side="right" className="bg-black/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[400px] p-0 flex flex-col h-full z-[120]">
                 <SheetHeader className="p-6 border-b border-white/5 shrink-0">
-                    <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="mb-4"><ArrowLeft className="w-5 h-5"/></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="mb-4">
+                        <ArrowLeft className="w-5 h-5"/>
+                    </Button>
                     <SheetTitle className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="flex-1 p-4">
