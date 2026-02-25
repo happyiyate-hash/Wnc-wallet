@@ -33,7 +33,7 @@ interface WalletContextType {
   isTokenLoading: (chainId: number, symbol: string) => boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
-  refresh: () => Promise<void>; // Layer 3: Scoped Manual Refresh
+  refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
@@ -52,8 +52,6 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile } = useUser();
@@ -64,7 +62,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [tokenRegistry, setTokenRegistry] = useState<{ [chainId: number]: any[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [isWalletLoading, setIsWalletLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -73,7 +70,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  // Engine refs to prevent duplicate fetch workers
+  // Engine refs to prevent duplicate fetch workers and loops
   const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -86,9 +83,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (cachedBalances) {
             try {
                 setBalances(JSON.parse(cachedBalances));
-            } catch (e) {
-                console.warn("Failed to parse cached balances");
-            }
+            } catch (e) {}
         }
 
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
@@ -172,8 +167,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
       fetchTokenRegistry();
     }
-  }, [chainsWithLogos, fetchTokenRegistry, viewingNetwork]);
+  }, [chainsWithLogos, fetchTokenRegistry]);
 
+  // STABLE FETCHER: Removed 'balances' dependency to prevent infinite loops
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || !infuraApiKey) return [];
     
@@ -189,16 +185,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return acc;
     }, [] as any[]).map(a => {
         const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
-        const cachedAsset = balances[chain.chainId]?.find(oa => oa.symbol === a.symbol);
         return {
             ...a,
-            balance: cachedAsset?.balance || '0',
+            balance: '0',
             name: apiMeta?.name || a.name,
             iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
-            priceUsd: cachedAsset?.priceUsd || 0,
-            pctChange24h: cachedAsset?.pctChange24h || 0,
-            fiatValueUsd: cachedAsset?.fiatValueUsd || 0,
-            updatedAt: cachedAsset?.updatedAt || 0
+            priceUsd: 0,
+            pctChange24h: 0,
+            fiatValueUsd: 0,
+            updatedAt: 0
         } as AssetRow;
     });
 
@@ -208,19 +203,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else adapter = evmAdapterFactory(chain, infuraApiKey);
 
     if (adapter) {
-        const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-        const resultsWithPrices = await fetchAssetPrices(results as any);
-        const final = resultsWithPrices.map(r => ({
-            ...r,
-            updatedAt: Date.now(),
-            fiatValueUsd: parseFloat(r.balance) * (r.priceUsd || 0)
-        }));
-        return final;
+        try {
+            const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+            const resultsWithPrices = await fetchAssetPrices(results as any);
+            return resultsWithPrices.map(r => ({
+                ...r,
+                updatedAt: Date.now(),
+                fiatValueUsd: parseFloat(r.balance) * (r.priceUsd || 0)
+            }));
+        } catch (e) {
+            console.warn(`Balance engine error for ${chain.name}:`, e);
+            return combinedAssetsList;
+        }
     }
     return combinedAssetsList;
-  }, [wallets, infuraApiKey, tokenRegistry, userAddedTokens, balances]);
+  }, [wallets, infuraApiKey, tokenRegistry, userAddedTokens]);
 
-  // Layer 3: Manual Scoped Refresh
   const manualRefresh = useCallback(async () => {
     if (!viewingNetwork || !infuraApiKey || !wallets) return;
     setIsRefreshing(true);
@@ -238,10 +236,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, user]);
 
-  // Layer 1 & 2 Engine
+  // ENGINE: Centralized sync logic with protection against redundant cycles
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
     
+    // Stop any existing syncs
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     // LAYER 1: PRIORITY UI SYNC
     setIsRefreshing(true);
     try {
@@ -262,8 +264,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
     
     for (const chain of backgroundChains) {
-        // Simple idle check
-        await new Promise(r => setTimeout(res => r(res), 500));
+        if (abortControllerRef.current?.signal.aborted) break;
+        // Small idle delay to keep main thread snappy
+        await new Promise(r => setTimeout(r, 800));
+        
         try {
             const bgBalances = await fetchBalancesForChain(chain);
             setBalances(prev => {
@@ -276,11 +280,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isBackgroundSyncRunning.current = false;
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user]);
 
+  // Only trigger engine on identity or viewing target changes
   useEffect(() => {
-    if (isInitialized && wallets && infuraApiKey) {
+    if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) {
         startEngine();
     }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork?.chainId, startEngine]);
+    return () => {
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return;
@@ -409,7 +417,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap: chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {}),
     isRefreshing,
-    isTokenLoading: (cid, sym) => loadingTokens[`${cid}:${sym}`] || false,
+    isTokenLoading: () => false,
     wallets,
     balances,
     refresh: manualRefresh,
