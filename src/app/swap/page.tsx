@@ -50,6 +50,7 @@ function SwapClient() {
   const [quoteData, setQuoteData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Initialize selected tokens based on URL or defaults
   useEffect(() => {
     if (!fromToken && allAssets.length > 0) {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
@@ -58,23 +59,27 @@ function SwapClient() {
       const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId) || allAssets[0];
       if (found) setFromToken({ ...found });
     }
-    if (!toToken && allAssets.length > 0) {
+    if (!toToken && allAssets.length > 0 && fromToken) {
       const found = allAssets.find(a => a.symbol !== fromToken?.symbol) || allAssets[allAssets.length - 1];
       if (found) setToToken({ ...found });
     }
-  }, [allAssets, searchParams, fromToken, toToken, viewingNetwork.chainId]);
+  }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
 
+  // PROFESSIONAL TIERED QUOTE ENGINE
   useEffect(() => {
-    const getQuote = async () => {
+    const fetchTieredQuote = async () => {
       const userAddr = wallets ? getAddressForChain(viewingNetwork, wallets) : '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
       
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
         setQuoteData(null);
         return;
       }
+
       setIsQuoteLoading(true);
       setFetchError(null);
+
       try {
+        // TIER 1: LI.FI Aggregator (Executable Route)
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
         const fromDecimals = fromToken.decimals || 18;
@@ -88,6 +93,7 @@ function SwapClient() {
           fromAddress: userAddr,
           slippage: (parseFloat(slippage) / 100).toString()
         });
+
         const res = await fetch(`/api/bridge/quote?${params.toString()}`);
         const data = await res.json();
         
@@ -97,31 +103,31 @@ function SwapClient() {
         
         setQuoteData(data);
       } catch (e: any) {
-        // --- INSTITUTIONAL FALLBACK QUOTE ENGINE ---
-        // If live liquidity fails, estimate based on global market prices with a safety buffer.
+        // TIER 2: Institutional Fallback (Market Price ratio)
         if (fromToken.priceUsd && toToken.priceUsd) {
             const amountIn = parseFloat(debouncedAmount);
             const rawEstimatedOut = (amountIn * fromToken.priceUsd) / toToken.priceUsd;
-            const safetyBuffer = 0.97; // 3% institutional discount for slippage/liquidity risk
+            const safetyBuffer = 0.97; // 3% Institutional Safety Buffer
             const safeEstimatedOut = rawEstimatedOut * safetyBuffer;
             
             setQuoteData({
                 isFallback: true,
-                tool: 'Institutional Estimate',
+                tool: 'Institutional Oracle',
                 estimate: {
                     toAmount: ethers.parseUnits(safeEstimatedOut.toFixed(toToken.decimals || 18), toToken.decimals || 18).toString(),
                     executionDuration: 300,
                 }
             });
         } else {
-            setFetchError(e.message);
+            setFetchError("Market data unavailable for this pair.");
             setQuoteData(null);
         }
       } finally {
         setIsQuoteLoading(false);
       }
     };
-    getQuote();
+
+    fetchTieredQuote();
   }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork, slippage, infuraApiKey]);
 
   const handleReverse = () => {
@@ -166,13 +172,14 @@ function SwapClient() {
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">Institutional Exchange</h1>
             <div className="flex items-center gap-1.5 mt-1.5">
                 <ShieldCheck className="w-2.5 h-2.5 text-primary" />
-                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Aggregator Active</span>
+                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Multi-Tier Engine Active</span>
             </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4">
+      <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4 thin-scrollbar">
+        {/* YOU PAY SECTION */}
         <section 
             style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30`, boxShadow: `0 10px 40px -15px ${fromChainColor}25` }}
             className="w-full border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
@@ -194,12 +201,14 @@ function SwapClient() {
           </div>
         </section>
 
+        {/* REVERSE BUTTON */}
         <div className="relative h-6 flex items-center justify-center z-10">
             <div onClick={handleReverse} className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl hover:scale-110 active:rotate-180 transition-all duration-500 group cursor-pointer">
                 <Plane className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </div>
         </div>
 
+        {/* YOU RECEIVE SECTION */}
         <section 
             style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30`, boxShadow: `0 10px 40px -15px ${toChainColor}25` }}
             className="w-full border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
@@ -224,8 +233,10 @@ function SwapClient() {
           </div>
         </section>
 
+        {/* INSTITUTIONAL ROUTE SUMMARY (SCREENSHOT ACCURATE) */}
         {quoteData && (
             <div className="mx-2 mt-6 p-5 rounded-[2rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                {/* Route Header */}
                 <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
                         <div className="p-0.5 rounded-full bg-white/5">
@@ -262,6 +273,7 @@ function SwapClient() {
                     </div>
                 </div>
 
+                {/* Received Amount Counter */}
                 <div className="flex items-center justify-between px-2">
                     <div className="text-xl font-black text-white tracking-tighter tabular-nums">
                         {estimatedReceivedAmount.toFixed(6)}
@@ -269,13 +281,14 @@ function SwapClient() {
                     <div className="text-xl font-black text-white/10 tracking-tighter tabular-nums">0</div>
                 </div>
 
+                {/* Metadata Footer */}
                 <div className="pt-5 border-t border-white/5 flex items-center justify-between px-2">
                     <div className="space-y-1.5">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">EST</p>
                         <div className="flex items-center gap-2">
                             <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />
                             <span className="text-[9px] font-black uppercase text-primary tracking-tight">
-                                {quoteData.tool?.toUpperCase() || 'INSTITUTIONAL'}
+                                {quoteData.tool?.toUpperCase() || 'LIFI'}
                             </span>
                             <TokenLogoDynamic 
                                 logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
@@ -299,6 +312,7 @@ function SwapClient() {
                     </div>
                 </div>
 
+                {/* Fallback Warning */}
                 {quoteData.isFallback && (
                     <div className="pt-4 border-t border-white/5 flex items-center gap-2 text-primary">
                         <ShieldAlert className="w-3 h-3" />
@@ -308,12 +322,14 @@ function SwapClient() {
             </div>
         )}
 
+        {/* ERROR DISPLAY */}
         {fetchError && !isQuoteLoading && (
           <div className="mx-2 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-3">
-            <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> Route not available for this pair.
+            <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> {fetchError}
           </div>
         )}
 
+        {/* EXECUTION BUTTON */}
         <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
             <Button 
                 variant={buttonState.variant || 'default'}
@@ -325,6 +341,7 @@ function SwapClient() {
         </div>
       </main>
 
+      {/* NETWORK SELECTION SHEET */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
             <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
@@ -351,6 +368,7 @@ function SwapClient() {
         </SheetContent>
       </Sheet>
 
+      {/* TOKEN SELECTION SHEET */}
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="right" className="bg-[#050505]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full">
             <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
@@ -377,6 +395,7 @@ function SwapClient() {
         </SheetContent>
       </Sheet>
 
+      {/* SLIPPAGE SETTINGS SHEET */}
       <Sheet open={isSlippageSheetOpen} onOpenChange={setIsSlippageSheetOpen}>
         <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[2.5rem] p-8 h-auto overflow-hidden">
             <div className="space-y-6">
