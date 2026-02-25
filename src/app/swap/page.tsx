@@ -15,7 +15,8 @@ import {
   ChevronDown,
   ShieldCheck,
   ShieldAlert,
-  Info
+  Info,
+  Fuel
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -50,7 +51,7 @@ function SwapClient() {
   const [quoteData, setQuoteData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Initialize selected tokens based on URL or defaults
+  // Initialize selected tokens
   useEffect(() => {
     if (!fromToken && allAssets.length > 0) {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
@@ -79,7 +80,8 @@ function SwapClient() {
       setFetchError(null);
 
       try {
-        // TIER 1: LI.FI Aggregator (Executable Route)
+        // TIER 1: LI.FI Aggregator
+        // Using the standard 0xeeee... placeholder for native ETH/MATIC/etc.
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
         const fromDecimals = fromToken.decimals || 18;
@@ -98,7 +100,7 @@ function SwapClient() {
         const data = await res.json();
         
         if (data.error || !data.estimate?.toAmount || data.estimate.toAmount === "0") {
-            throw new Error(data.details || data.error || "No route");
+            throw new Error(data.details || data.error || "No route found");
         }
         
         setQuoteData(data);
@@ -112,14 +114,14 @@ function SwapClient() {
             
             setQuoteData({
                 isFallback: true,
-                tool: 'Institutional Oracle',
+                tool: 'Market Estimate',
                 estimate: {
                     toAmount: ethers.parseUnits(safeEstimatedOut.toFixed(toToken.decimals || 18), toToken.decimals || 18).toString(),
                     executionDuration: 300,
                 }
             });
         } else {
-            setFetchError("Market data unavailable for this pair.");
+            setFetchError("Liquidity route not found for this pair.");
             setQuoteData(null);
         }
       } finally {
@@ -131,9 +133,9 @@ function SwapClient() {
   }, [debouncedAmount, fromToken, toToken, wallets, viewingNetwork, slippage, infuraApiKey]);
 
   const handleReverse = () => {
-    const temp = fromToken;
+    const tempFrom = fromToken;
     setFromToken(toToken);
-    setToToken(temp);
+    setToToken(tempFrom);
     setAmount('');
     setQuoteData(null);
   };
@@ -155,14 +157,15 @@ function SwapClient() {
   const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
   const buttonState = useMemo(() => {
+    if (!infuraApiKey) return { text: 'Connect to Blockchain', disabled: true };
     if (!amount || parseFloat(amount) <= 0) return { text: 'Enter Amount', disabled: true };
     if (parseFloat(amount) > parseFloat(fromToken?.balance || '0')) return { text: 'Insufficient Balance', disabled: true, variant: 'destructive' as const };
     if (isQuoteLoading) return { text: 'Fetching Route...', disabled: true };
     if (fetchError) return { text: 'No Routes Found', disabled: true };
     if (!quoteData) return { text: 'Loading...', disabled: true };
     if (quoteData.isFallback) return { text: 'No Liquidity Route', disabled: true, variant: 'secondary' as const };
-    return { text: `Swap via ${quoteData.tool?.toUpperCase() || 'Institutional'}`, disabled: false };
-  }, [amount, fromToken, isQuoteLoading, fetchError, quoteData]);
+    return { text: `Swap via ${quoteData.tool?.toUpperCase() || 'LIFI'}`, disabled: false };
+  }, [amount, fromToken, isQuoteLoading, fetchError, quoteData, infuraApiKey]);
 
   return (
     <div className="flex flex-col h-screen bg-[#050505] text-foreground">
@@ -172,14 +175,14 @@ function SwapClient() {
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">Institutional Exchange</h1>
             <div className="flex items-center gap-1.5 mt-1.5">
                 <ShieldCheck className="w-2.5 h-2.5 text-primary" />
-                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Multi-Tier Engine Active</span>
+                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Verified Routing Active</span>
             </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
       <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4 thin-scrollbar">
-        {/* YOU PAY SECTION */}
+        {/* INPUT SECTION */}
         <section 
             style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30`, boxShadow: `0 10px 40px -15px ${fromChainColor}25` }}
             className="w-full border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
@@ -201,14 +204,14 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* REVERSE BUTTON */}
+        {/* REVERSE */}
         <div className="relative h-6 flex items-center justify-center z-10">
             <div onClick={handleReverse} className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl hover:scale-110 active:rotate-180 transition-all duration-500 group cursor-pointer">
                 <Plane className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </div>
         </div>
 
-        {/* YOU RECEIVE SECTION */}
+        {/* OUTPUT SECTION */}
         <section 
             style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30`, boxShadow: `0 10px 40px -15px ${toChainColor}25` }}
             className="w-full border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
@@ -233,103 +236,90 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INSTITUTIONAL ROUTE SUMMARY (SCREENSHOT ACCURATE) */}
+        {/* INSTITUTIONAL ROUTE SUMMARY (MINIATURE DASHBOARD) */}
         {quoteData && (
             <div className="mx-2 mt-6 p-5 rounded-[2rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                {/* Route Header */}
                 <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
-                        <div className="p-0.5 rounded-full bg-white/5">
-                            <TokenLogoDynamic 
-                                logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
-                                alt="" 
-                                size={22} 
-                                chainId={fromToken?.chainId} 
-                            />
-                        </div>
-                        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white opacity-80">
+                        <TokenLogoDynamic 
+                            logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
+                            alt="" 
+                            size={18} 
+                            chainId={fromToken?.chainId} 
+                        />
+                        <span className="text-[8px] font-black uppercase tracking-[0.15em] text-white opacity-60">
                             {allChainsMap[fromToken?.chainId || 1]?.name}
                         </span>
                     </div>
                     
-                    <div className="flex-1 flex items-center justify-center gap-1.5 px-4 opacity-30">
+                    <div className="flex-1 flex items-center justify-center gap-1.5 px-4 opacity-20">
                         <div className="h-px flex-1 border-t border-dotted border-white/40" />
-                        <Plane className="w-3.5 h-3.5 text-white transform -rotate-45" />
+                        <Plane className="w-3 h-3 text-white transform -rotate-45" />
                         <div className="h-px flex-1 border-t border-dotted border-white/40" />
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white opacity-80">
+                        <span className="text-[8px] font-black uppercase tracking-[0.15em] text-white opacity-60">
                             {allChainsMap[toToken?.chainId || 1]?.name}
                         </span>
-                        <div className="p-0.5 rounded-full bg-white/5">
-                            <TokenLogoDynamic 
-                                logoUrl={allChainsMap[toToken?.chainId || 1]?.iconUrl} 
-                                alt="" 
-                                size={22} 
-                                chainId={toToken?.chainId} 
-                            />
-                        </div>
+                        <TokenLogoDynamic 
+                            logoUrl={allChainsMap[toToken?.chainId || 1]?.iconUrl} 
+                            alt="" 
+                            size={18} 
+                            chainId={toToken?.chainId} 
+                        />
                     </div>
                 </div>
 
-                {/* Received Amount Counter */}
                 <div className="flex items-center justify-between px-2">
                     <div className="text-xl font-black text-white tracking-tighter tabular-nums">
                         {estimatedReceivedAmount.toFixed(6)}
                     </div>
-                    <div className="text-xl font-black text-white/10 tracking-tighter tabular-nums">0</div>
+                    <div className="text-xl font-black text-white/5 tracking-tighter tabular-nums">0</div>
                 </div>
 
-                {/* Metadata Footer */}
                 <div className="pt-5 border-t border-white/5 flex items-center justify-between px-2">
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">EST</p>
                         <div className="flex items-center gap-2">
                             <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />
                             <span className="text-[9px] font-black uppercase text-primary tracking-tight">
-                                {quoteData.tool?.toUpperCase() || 'LIFI'}
+                                {quoteData.tool?.toUpperCase() || 'AGGREGATOR'}
                             </span>
-                            <TokenLogoDynamic 
-                                logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
-                                size={10} 
-                                alt="" 
-                            />
-                            <span className="text-[9px] font-bold text-white/60">
+                            <Fuel className="w-2.5 h-2.5 text-white/20" />
+                            <span className="text-[9px] font-bold text-white/40">
                                 {Math.ceil((quoteData.estimate?.executionDuration || 300) / 60)}m
                             </span>
                         </div>
                     </div>
 
-                    <div className="text-right space-y-1.5">
+                    <div className="text-right space-y-1">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">FFEE</p>
                         <p className="text-[10px] font-black text-white">0%</p>
                     </div>
 
-                    <div className="text-right space-y-1.5">
+                    <div className="text-right space-y-1">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">SLIPPAGE</p>
                         <p className="text-[10px] font-black text-white">{slippage}%</p>
                     </div>
                 </div>
 
-                {/* Fallback Warning */}
                 {quoteData.isFallback && (
-                    <div className="pt-4 border-t border-white/5 flex items-center gap-2 text-primary">
-                        <ShieldAlert className="w-3 h-3" />
-                        <span className="text-[8px] font-black uppercase tracking-widest">Route not available. Showing market estimate.</span>
+                    <div className="pt-4 border-t border-white/5 flex items-center gap-2 text-primary/60">
+                        <ShieldAlert className="w-2.5 h-2.5" />
+                        <span className="text-[7px] font-black uppercase tracking-widest">Live route unavailable. Showing market estimate.</span>
                     </div>
                 )}
             </div>
         )}
 
-        {/* ERROR DISPLAY */}
         {fetchError && !isQuoteLoading && (
           <div className="mx-2 p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-bold flex items-center gap-3">
             <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> {fetchError}
           </div>
         )}
 
-        {/* EXECUTION BUTTON */}
+        {/* EXECUTION */}
         <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
             <Button 
                 variant={buttonState.variant || 'default'}
@@ -341,12 +331,11 @@ function SwapClient() {
         </div>
       </main>
 
-      {/* NETWORK SELECTION SHEET */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
             <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
             <div className="flex flex-col h-full relative z-10">
-                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+                <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                 <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
                     <SheetTitle className="sr-only">Select Network</SheetTitle>
                     <div className="text-2xl font-black text-center uppercase tracking-widest text-white">Select Network</div>
@@ -368,7 +357,6 @@ function SwapClient() {
         </SheetContent>
       </Sheet>
 
-      {/* TOKEN SELECTION SHEET */}
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="right" className="bg-[#050505]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full">
             <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
@@ -395,13 +383,12 @@ function SwapClient() {
         </SheetContent>
       </Sheet>
 
-      {/* SLIPPAGE SETTINGS SHEET */}
       <Sheet open={isSlippageSheetOpen} onOpenChange={setIsSlippageSheetOpen}>
         <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[2.5rem] p-8 h-auto overflow-hidden">
             <div className="space-y-6">
-                <SheetHeader><SheetTitle className="sr-only">Trading Rules</SheetTitle><div className="text-xl font-black uppercase tracking-widest text-white">Trading Rules</div></SheetHeader>
-                <div className="grid grid-cols-4 gap-2">
-                    {['0.5', '1.0', '3.0'].map((val) => (<Button key={val} variant={slippage === val ? 'default' : 'outline'} className="h-12 rounded-2xl font-black" onClick={() => setSlippage(val)}>{val}%</Button>))}
+                <SheetHeader><SheetTitle className="sr-only">Trading Rules</SheetTitle><div className="text-xl font-black uppercase tracking-widest text-white text-center">Trading Rules</div></SheetHeader>
+                <div className="grid grid-cols-3 gap-3">
+                    {['0.5', '1.0', '3.0'].map((val) => (<Button key={val} variant={slippage === val ? 'default' : 'outline'} className="h-14 rounded-2xl font-black text-lg" onClick={() => setSlippage(val)}>{val}%</Button>))}
                 </div>
                 <Button className="w-full h-14 rounded-2xl font-black text-lg" onClick={() => setIsSlippageSheetOpen(false)}>Apply Settings</Button>
             </div>
