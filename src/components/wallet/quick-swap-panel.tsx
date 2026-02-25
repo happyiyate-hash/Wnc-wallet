@@ -68,9 +68,11 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
       try {
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
-        const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0x0000000000000000000000000000000000000000';
+        
+        // Use real address if available, otherwise simulation address to ensure quote fetches
+        const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
 
-        // Use standard 18 decimals for quote fetching in MVP
+        // MVP standardizing on 18 decimals for institutional comparison
         const formattedAmount = ethers.parseUnits(debouncedAmount, 18).toString();
 
         const params = new URLSearchParams({
@@ -87,6 +89,12 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         const data = await res.json();
         
         if (data.error) throw new Error(data.details || data.error);
+        
+        // Final safety check: if toAmount is missing or 0, it's a failed route
+        if (!data.estimate?.toAmount || data.estimate.toAmount === "0") {
+            throw new Error("No liquidity found");
+        }
+
         setQuote(data);
       } catch (e: any) {
         console.warn("Quick Quote Error:", e.message);
@@ -105,12 +113,12 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     else setToToken(token);
     setIsTokenSideSheetOpen(false);
     setIsNetworkSheetOpen(false);
-    setQuote(null); // Reset quote on pair change
+    setQuote(null);
   };
 
   const estimatedReceived = quote?.estimate?.toAmount 
     ? ethers.formatUnits(quote.estimate.toAmount, 18) 
-    : '0.0000';
+    : null;
 
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
@@ -124,27 +132,27 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         >
             <div 
                 style={{ 
-                    boxShadow: `0 10px 50px -10px ${fromChainColor}40`,
-                    borderColor: `${fromChainColor}30`,
-                    background: `linear-gradient(180deg, #050505 0%, ${fromChainColor}05 100%)`
+                    boxShadow: `0 8px 40px -10px ${fromChainColor}60`,
+                    borderColor: `${fromChainColor}40`,
+                    background: `linear-gradient(180deg, #050505 0%, ${fromChainColor}10 100%)`
                 }}
-                className="backdrop-blur-3xl border rounded-[2rem] p-3 max-w-lg mx-auto pointer-events-auto shadow-2xl relative overflow-hidden transition-all duration-500"
+                className="backdrop-blur-3xl border rounded-[2.2rem] p-3 max-w-lg mx-auto pointer-events-auto shadow-2xl relative overflow-hidden transition-all duration-500"
             >
-                <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-2 bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                        <Zap className="w-3 h-3 text-primary fill-primary" />
-                        <span className="text-[8px] font-black uppercase tracking-[0.1em] text-primary">
-                            BEST ROUTE: {quote?.tool?.toUpperCase() || 'INSTITUTIONAL AGGREGATOR'}
+                <div className="flex items-center justify-between mb-2.5 px-1">
+                    <div className="flex items-center gap-2 bg-primary/10 px-3 py-0.5 rounded-full border border-primary/20">
+                        <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
+                        <span className="text-[7px] font-black uppercase tracking-[0.15em] text-primary">
+                            ROUTE: {quote?.tool?.toUpperCase() || 'SEARCHING 40+ SOURCES...'}
                         </span>
                     </div>
                     <button onClick={() => onOpenChange(false)} className="p-1 rounded-full hover:bg-white/10 transition-colors">
-                        <X className="w-4 h-4 text-muted-foreground" />
+                        <X className="w-3.5 h-3.5 text-muted-foreground" />
                     </button>
                 </div>
 
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-1.5 mb-2.5">
                     {/* SEND INPUT */}
-                    <div className="flex-1 flex items-center bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2 group focus-within:border-primary/30 transition-all">
+                    <div className="flex-1 flex items-center bg-white/[0.03] border border-white/5 rounded-2xl h-10 px-3 gap-2 group focus-within:border-primary/30 transition-all">
                         <button 
                             onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }} 
                             className="shrink-0 active:scale-90 transition-all"
@@ -152,7 +160,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                             <TokenLogoDynamic 
                                 logoUrl={fromToken?.iconUrl} 
                                 alt={fromToken?.symbol || ''} 
-                                size={22} 
+                                size={20} 
                                 chainId={fromToken?.chainId}
                                 name={fromToken?.name}
                                 symbol={fromToken?.symbol}
@@ -163,24 +171,24 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                             placeholder="0.00"
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
-                            className="bg-transparent border-none text-sm font-black p-0 h-auto focus-visible:ring-0 text-white placeholder:text-zinc-800"
+                            className="bg-transparent border-none text-xs font-black p-0 h-auto focus-visible:ring-0 text-white placeholder:text-zinc-800 tracking-tight"
                         />
                     </div>
 
-                    <div className="shrink-0 w-8 h-8 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center shadow-xl">
+                    <div className="shrink-0 w-7 h-7 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center shadow-xl">
                         <Plane className="w-3 h-3 text-primary" />
                     </div>
 
                     {/* RECEIVE DISPLAY */}
-                    <div className="flex-1 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2 overflow-hidden">
+                    <div className="flex-1 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-2xl h-10 px-3 gap-2 overflow-hidden">
                         {isQuoteLoading ? (
-                            <Skeleton className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+                            <Skeleton className="h-3 w-16 bg-white/10 rounded animate-pulse" />
                         ) : (
                             <span className={cn(
-                                "text-sm font-black tracking-tight tabular-nums truncate",
-                                quote ? "text-white" : "text-white/20"
+                                "text-xs font-black tracking-tight tabular-nums truncate",
+                                estimatedReceived ? "text-white" : "text-white/20"
                             )}>
-                                {parseFloat(estimatedReceived).toFixed(4)}
+                                {estimatedReceived ? parseFloat(estimatedReceived).toFixed(4) : '0.0000'}
                             </span>
                         )}
                         <button 
@@ -190,7 +198,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                             <TokenLogoDynamic 
                                 logoUrl={toToken?.iconUrl} 
                                 alt={toToken?.symbol || ''} 
-                                size={22} 
+                                size={20} 
                                 chainId={toToken?.chainId}
                                 name={toToken?.name}
                                 symbol={toToken?.symbol}
@@ -200,13 +208,13 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 </div>
 
                 <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-4 text-[9px] font-black uppercase text-muted-foreground/50">
-                        <div className="flex items-center gap-1.5">
-                            <Timer className="w-3 h-3 text-primary" />
+                    <div className="flex items-center gap-3 text-[8px] font-black uppercase text-muted-foreground/50">
+                        <div className="flex items-center gap-1">
+                            <Timer className="w-2.5 h-2.5 text-primary" />
                             <span>{quote?.estimate?.executionDuration ? `${Math.ceil(quote.estimate.executionDuration / 60)}M` : '--'}</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                            <Fuel className="w-3 h-3 text-primary" />
+                        <div className="flex items-center gap-1">
+                            <Fuel className="w-2.5 h-2.5 text-primary" />
                             <span>{quote?.estimate?.gasCosts?.[0] ? `$${parseFloat(quote.estimate.gasCosts[0].amountUsd || '0').toFixed(2)}` : '--'}</span>
                         </div>
                     </div>
@@ -214,7 +222,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     <Button 
                         size="sm"
                         className={cn(
-                            "h-8 px-5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-lg active:scale-95",
+                            "h-7 px-4 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all shadow-lg active:scale-95",
                             !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed grayscale" : "bg-primary hover:bg-primary/90 shadow-primary/20"
                         )}
                         disabled={!amount || isQuoteLoading || !!fetchError || !quote}
@@ -232,7 +240,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 <div className="flex flex-col h-full relative z-10">
                     <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                     <SheetHeader className="mb-6 px-6 shrink-0">
-                        <SheetTitle className="text-xl font-black text-center uppercase tracking-widest text-white">Target Network</SheetTitle>
+                        <SheetTitle className="text-xl font-black text-center uppercase tracking-widest text-white">Select Network</SheetTitle>
                     </SheetHeader>
                     <ScrollArea className="flex-1 px-6 pb-12">
                         <div className="grid grid-cols-1 gap-2 pb-24">
