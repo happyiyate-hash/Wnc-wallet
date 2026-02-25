@@ -12,6 +12,7 @@ import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
+import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
@@ -367,7 +368,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user]);
 
   const saveToVault = useCallback(async () => {
-    if (!user || !wallets?.[0]?.privateKey) return;
+    if (!user || !supabase || !wallets?.[0]?.privateKey) return;
     
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (!mnemonic) {
@@ -384,7 +385,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const { encrypted, iv } = await response.json();
 
-      const { error } = await logoSupabase
+      const { error } = await supabase
         .from('profiles')
         .update({ vault_phrase: encrypted, iv })
         .eq('id', user.id);
