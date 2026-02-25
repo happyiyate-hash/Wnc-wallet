@@ -1,35 +1,32 @@
 
 import type { AssetRow } from '@/lib/types';
+import evmNetworks from '@/lib/evmNetworks.json';
 
 /**
- * MOCK_USER_ASSETS
- * Synchronized with supported networks.
+ * Dynamic Asset Initialization
+ * Generates the native token for any supported chain.
  */
-const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] } = {
-  1: [ // Ethereum Mainnet
-    { chainId: 1, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Ethereum Mainnet', symbol: 'ETH', isNative: true, coingeckoId: 'ethereum' },
-    { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin' },
-  ],
-  144: [ // XRP Ledger
-    { chainId: 144, address: 'XRP', name: 'XRP Ledger', symbol: 'XRP', isNative: true, coingeckoId: 'ripple' },
-  ],
-  137: [ // Polygon
-    { chainId: 137, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Polygon', symbol: 'MATIC', isNative: true, coingeckoId: 'polygon-ecosystem-token' },
-  ],
-  8453: [ // Base
-    { chainId: 8453, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Base', symbol: 'BASE', isNative: true, coingeckoId: 'ethereum' },
-  ],
-  10: [ // Optimism
-    { chainId: 10, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Optimism', symbol: 'OP', isNative: true, coingeckoId: 'ethereum' },
-  ],
-  42161: [ // Arbitrum One
-    { chainId: 42161, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Arbitrum One', symbol: 'ARB', isNative: true, coingeckoId: 'ethereum' },
-  ],
-  1000: [ // Polkadot
-    { chainId: 1000, address: 'DOT', name: 'Polkadot', symbol: 'DOT', isNative: true, coingeckoId: 'polkadot' },
-  ]
-};
-
 export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'priceUsd' | 'fiatValueUsd' | 'pctChange24h' | 'iconUrl'>[] {
-    return MOCK_USER_ASSETS[chainId] || [];
+    const networks = evmNetworks as any;
+    const config = networks[chainId];
+    
+    if (!config) return [];
+
+    // Base mock assets for specific chains
+    const MOCK_EXTRAS: { [key: number]: any[] } = {
+      1: [
+        { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin' },
+      ]
+    };
+
+    const nativeAsset = {
+        chainId: config.chainId,
+        address: config.type === 'evm' ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : config.symbol,
+        name: config.name,
+        symbol: config.symbol,
+        isNative: true,
+        coingeckoId: config.coingeckoId
+    };
+
+    return [nativeAsset, ...(MOCK_EXTRAS[chainId] || [])];
 }

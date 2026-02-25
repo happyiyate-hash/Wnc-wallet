@@ -13,7 +13,6 @@ import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
-import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 
@@ -241,6 +240,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
         }
 
+        // Dynamic RPC construction
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
@@ -283,7 +283,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           updatedBalances[chain.chainId] = combinedAssetsList;
         }
         
-        await delay(priorityChainId === chain.chainId ? 0 : 20);
+        // Small delay between chains to avoid rate limits
+        await delay(priorityChainId === chain.chainId ? 0 : 50);
       }
 
       const flatAssets = Object.values(updatedBalances).flat();
@@ -338,13 +339,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cleanMnemonic = mnemonic.trim();
       if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
       
-      // Derive EVM
       const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      
-      // Derive XRP (using BIP44 path)
       const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
 
-      // Derive Polkadot
       await cryptoWaitReady();
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
@@ -418,7 +415,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletFromMnemonic, toast, user]);
 
   const saveToVault = useCallback(async () => {
-    if (!user || !wallets?.[0]?.privateKey || !supabase) return;
+    if (!user || !wallets?.[0]?.privateKey) return;
     
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (!mnemonic) {
@@ -427,19 +424,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phrase: mnemonic }),
       });
 
       const { encrypted, iv } = await response.json();
 
-      const { error } = await supabase
+      const { error } = await logoSupabase
         .from('profiles')
         .update({ vault_phrase: encrypted, iv })
         .eq('id', user.id);
@@ -454,19 +447,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
-    if (!user || !profile?.vault_phrase || !profile?.iv || !supabase) {
+    if (!user || !profile?.vault_phrase || !profile?.iv) {
       toast({ variant: "destructive", title: "Vault Not Found" });
       throw new Error("No vault");
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           encrypted: profile.vault_phrase, 
           iv: profile.iv 

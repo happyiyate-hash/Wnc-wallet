@@ -1,7 +1,7 @@
 
 {
   "1": {
-    "name": "Ethereum Mainnet",
+    "name": "Ethereum",
     "symbol": "ETH",
     "chainId": 1,
     "rpcUrl": "https://mainnet.infura.io/v3/{API_KEY}",
@@ -27,15 +27,6 @@
     "themeColor": "#0052FF",
     "type": "evm"
   },
-  "144": {
-    "name": "XRP Ledger",
-    "symbol": "XRP",
-    "chainId": 144,
-    "rpcUrl": "wss://xrplcluster.com",
-    "coingeckoId": "ripple",
-    "themeColor": "#23292F",
-    "type": "xrp"
-  },
   "59144": {
     "name": "Linea",
     "symbol": "LINEA",
@@ -55,13 +46,157 @@
     "type": "evm"
   },
   "42161": {
-    "name": "Arbitrum One",
+    "name": "Arbitrum",
     "symbol": "ARB",
     "chainId": 42161,
     "rpcUrl": "https://arbitrum-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
     "themeColor": "#28A0F0",
     "type": "evm"
+  },
+  "81457": {
+    "name": "Blast",
+    "symbol": "BLAST",
+    "chainId": 81457,
+    "rpcUrl": "https://blast-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "ethereum",
+    "themeColor": "#FCFC03",
+    "type": "evm"
+  },
+  "43114": {
+    "name": "Avalanche C-Chain",
+    "symbol": "AVAX",
+    "chainId": 43114,
+    "rpcUrl": "https://avalanche-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "avalanche-2",
+    "themeColor": "#E84142",
+    "type": "evm"
+  },
+  "56": {
+    "name": "BSC",
+    "symbol": "BNB",
+    "chainId": 56,
+    "rpcUrl": "https://bsc-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "binancecoin",
+    "themeColor": "#F3BA2F",
+    "type": "evm"
+  },
+  "42220": {
+    "name": "Celo",
+    "symbol": "CELO",
+    "chainId": 42220,
+    "rpcUrl": "https://celo-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "celo",
+    "themeColor": "#35D07F",
+    "type": "evm"
+  },
+  "324": {
+    "name": "ZKsync",
+    "symbol": "ZKS",
+    "chainId": 324,
+    "rpcUrl": "https://zksync-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "ethereum",
+    "themeColor": "#1E1E1E",
+    "type": "evm"
+  },
+  "534352": {
+    "name": "Scroll",
+    "symbol": "SCR",
+    "chainId": 534352,
+    "rpcUrl": "https://scroll-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "ethereum",
+    "themeColor": "#000000",
+    "type": "evm"
+  },
+  "1329": {
+    "name": "Sei",
+    "symbol": "SEI",
+    "chainId": 1329,
+    "rpcUrl": "https://sei-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "sei-network",
+    "themeColor": "#B22222",
+    "type": "evm"
+  },
+  "5000": {
+    "name": "Mantle",
+    "symbol": "MNT",
+    "chainId": 5000,
+    "rpcUrl": "https://mantle-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "mantle",
+    "themeColor": "#000000",
+    "type": "evm"
+  },
+  "204": {
+    "name": "opBNB",
+    "symbol": "BNB",
+    "chainId": 204,
+    "rpcUrl": "https://opbnb-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "binancecoin",
+    "themeColor": "#F3BA2F",
+    "type": "evm"
+  },
+  "11297108109": {
+    "name": "Palm",
+    "symbol": "PALM",
+    "chainId": 11297108109,
+    "rpcUrl": "https://palm-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "palm",
+    "themeColor": "#00E5FF",
+    "type": "evm"
+  },
+  "43111": {
+    "name": "Hemi",
+    "symbol": "HEMI",
+    "chainId": 43111,
+    "rpcUrl": "https://hemi-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "hemi",
+    "themeColor": "#FFD700",
+    "type": "evm"
+  },
+  "1923": {
+    "name": "Swellchain",
+    "symbol": "SWELL",
+    "chainId": 1923,
+    "rpcUrl": "https://swellchain-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "swell-network",
+    "themeColor": "#000000",
+    "type": "evm"
+  },
+  "130": {
+    "name": "Unichain",
+    "symbol": "UNI",
+    "chainId": 130,
+    "rpcUrl": "https://unichain-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "uniswap",
+    "themeColor": "#FF007A",
+    "type": "evm"
+  },
+  "9991": {
+    "name": "MegaETH",
+    "symbol": "MEGA",
+    "chainId": 9991,
+    "rpcUrl": "https://megaeth-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "megaeth",
+    "themeColor": "#000000",
+    "type": "evm"
+  },
+  "9992": {
+    "name": "Monad",
+    "symbol": "MON",
+    "chainId": 9992,
+    "rpcUrl": "https://monad-mainnet.infura.io/v3/{API_KEY}",
+    "coingeckoId": "monad",
+    "themeColor": "#8A2BE2",
+    "type": "evm"
+  },
+  "144": {
+    "name": "XRP Ledger",
+    "symbol": "XRP",
+    "chainId": 144,
+    "rpcUrl": "wss://xrplcluster.com",
+    "coingeckoId": "ripple",
+    "themeColor": "#23292F",
+    "type": "xrp"
   },
   "1000": {
     "name": "Polkadot",
