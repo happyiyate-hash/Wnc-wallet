@@ -4,7 +4,17 @@ import { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from '@/contexts/wallet-provider';
-import { Plane, Timer, Fuel, Loader2, X, ChevronRight, ArrowLeft, Zap, ShieldCheck, Search } from 'lucide-react';
+import { 
+  Plane, 
+  Timer, 
+  Fuel, 
+  Loader2, 
+  X, 
+  ChevronRight, 
+  Zap, 
+  ShieldCheck,
+  ArrowLeft 
+} from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
 import { ethers } from 'ethers';

@@ -118,7 +118,9 @@ export default function SwapPage() {
   };
 
   const fromUsd = (parseFloat(amount) || 0) * (fromToken?.priceUsd || 0);
-  const estimatedReceivedAmount = quoteData?.estimate?.toAmount ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) : 0;
+  const estimatedReceivedAmount = quoteData?.estimate?.toAmount 
+    ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) 
+    : 0;
   const toUsd = estimatedReceivedAmount * (toToken?.priceUsd || 0);
 
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
@@ -295,13 +297,13 @@ export default function SwapPage() {
                 <div className="flex items-center justify-between px-2 text-[9px] font-black uppercase tracking-widest">
                     <div className="flex items-center gap-2 text-primary">
                         <Timer className="w-3 h-3" />
-                        <span>{Math.ceil((quoteData.estimate.executionDuration || 300) / 60)} MIN</span>
+                        <span>{Math.ceil((quoteData?.estimate?.executionDuration || 300) / 60)} MIN</span>
                     </div>
                     
                     <div className="flex items-center gap-4">
                         <div className="flex flex-col items-end">
                             <span className="text-muted-foreground/50 text-[7px] mb-0.5">EST. FEE</span>
-                            <span className="text-white font-mono">$ {parseFloat(quoteData.estimate.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</span>
+                            <span className="text-white font-mono">$ {parseFloat(quoteData?.estimate?.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-muted-foreground/50 text-[7px] mb-0.5">SLIPPAGE</span>
