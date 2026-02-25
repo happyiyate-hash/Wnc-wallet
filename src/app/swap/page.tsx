@@ -27,6 +27,7 @@ import { getAddressForChain } from '@/lib/wallets/utils';
 import { ethers } from 'ethers';
 import { useDebounce } from '@/hooks/use-debounce';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function SwapPage() {
   const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets, allChainsMap } = useWallet();
@@ -141,30 +142,29 @@ export default function SwapPage() {
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      <main className="flex-1 w-full space-y-1.5 overflow-y-auto pb-40 pt-6 px-4">
+      <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4">
         {/* FROM CARD */}
         <section 
             style={{ 
-                backgroundColor: `${fromChainColor}15`, 
-                borderColor: `${fromChainColor}30` 
+                backgroundColor: `${fromChainColor}12`, 
+                borderColor: `${fromChainColor}25` 
             }}
-            className="w-full backdrop-blur-xl border p-4 rounded-3xl space-y-2 shadow-2xl transition-colors duration-500"
+            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 shadow-2xl transition-colors duration-500"
         >
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}
-                className="flex items-center gap-2.5 bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded-full border border-white/5 transition-all active:scale-95"
+                className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-2 py-1 rounded-full border border-white/10 transition-all active:scale-95 shadow-inner"
             >
-                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={24} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
-                <div className="text-left leading-none">
-                  <span className="font-black text-xs block">{fromToken?.symbol}</span>
-                  <span className="text-[7px] text-muted-foreground uppercase font-bold tracking-tighter">{allChainsMap[fromToken?.chainId!]?.name}</span>
+                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} name={fromToken?.name} symbol={fromToken?.symbol} />
+                <div className="text-left leading-none pr-1">
+                  <span className="font-black text-[10px] block text-white uppercase">{fromToken?.symbol}</span>
                 </div>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
             <div className="text-right leading-none">
-                <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest block opacity-60 mb-1">Available</span>
-                <span className="text-xs font-mono font-bold text-white">{parseFloat(fromToken?.balance || '0').toFixed(4)}</span>
+                <span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40 mb-0.5">Available</span>
+                <span className="text-[10px] font-mono font-bold text-white/80">{parseFloat(fromToken?.balance || '0').toFixed(4)}</span>
             </div>
           </div>
 
@@ -189,7 +189,7 @@ export default function SwapPage() {
         </section>
 
         {/* DIRECTIONAL INDICATOR */}
-        <div className="relative h-8 flex items-center justify-center z-10">
+        <div className="relative h-6 flex items-center justify-center z-10">
             <div 
                 onClick={handleReverse}
                 className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl hover:scale-110 active:rotate-180 transition-all duration-500 group cursor-pointer"
@@ -201,40 +201,41 @@ export default function SwapPage() {
         {/* TO CARD */}
         <section 
             style={{ 
-                backgroundColor: `${toChainColor}15`, 
-                borderColor: `${toChainColor}30` 
+                backgroundColor: `${toChainColor}12`, 
+                borderColor: `${toChainColor}25` 
             }}
-            className="w-full backdrop-blur-xl border p-4 rounded-3xl space-y-2 shadow-2xl transition-colors duration-500"
+            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 shadow-2xl transition-colors duration-500"
         >
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}
-                className="flex items-center gap-2.5 bg-black/40 hover:bg-black/60 px-3 py-1.5 rounded-full border border-white/5 transition-all active:scale-95"
+                className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-2 py-1 rounded-full border border-white/10 transition-all active:scale-95 shadow-inner"
             >
-                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={24} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
-                <div className="text-left leading-none">
-                  <span className="font-black text-xs block">{toToken?.symbol}</span>
-                  <span className="text-[7px] text-muted-foreground uppercase font-bold tracking-tighter">{allChainsMap[toToken?.chainId!]?.name}</span>
+                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} name={toToken?.name} symbol={toToken?.symbol} />
+                <div className="text-left leading-none pr-1">
+                  <span className="font-black text-[10px] block text-white uppercase">{toToken?.symbol}</span>
                 </div>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
             <div className="text-right leading-none">
-                <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest block opacity-60">Est. Receive</span>
+                <span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40">Est. Receive</span>
             </div>
           </div>
 
-          <div className="space-y-0.5 min-h-[3rem] flex flex-col justify-center">
+          <div className="space-y-0.5 min-h-[3.5rem] flex flex-col justify-center">
             {isQuoteLoading ? (
-                <div className="flex items-center gap-3">
-                    <Loader2 className="animate-spin text-primary w-5 h-5" />
-                    <span className="text-lg font-black text-zinc-700 animate-pulse">Routing...</span>
+                <div className="space-y-2 animate-in fade-in duration-500">
+                    <Skeleton className="h-8 w-3/4 bg-white/5 rounded-xl" />
+                    <Skeleton className="h-3 w-1/4 bg-white/5 rounded-lg" />
                 </div>
             ) : (
-                <div className="text-[clamp(1.5rem,6vw,2.2rem)] font-black truncate tracking-tighter">
-                    {quoteData ? estimatedReceivedAmount.toFixed(6) : '0.00'}
-                </div>
+                <>
+                    <div className="text-[clamp(1.5rem,6vw,2.2rem)] font-black truncate tracking-tighter">
+                        {quoteData ? estimatedReceivedAmount.toFixed(6) : '0.00'}
+                    </div>
+                    <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </>
             )}
-            <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
           </div>
         </section>
 
@@ -377,7 +378,7 @@ export default function SwapPage() {
                                 <div className="flex items-center gap-4">
                                     <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
                                     <div className="text-left leading-tight">
-                                        <p className="font-black text-base text-white">{asset.symbol}</p>
+                                        <p className="font-bold text-base text-white">{asset.symbol}</p>
                                         <p className="text-xs text-muted-foreground">{asset.name}</p>
                                     </div>
                                 </div>
