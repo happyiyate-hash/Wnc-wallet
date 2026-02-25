@@ -33,13 +33,11 @@ export default function SwapPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // UI State
   const [fromToken, setFromToken] = useState<AssetRow | null>(null);
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
   const debouncedAmount = useDebounce(amount, 600);
   const [slippage, setSlippage] = useState('0.5');
-  const [customSlippage, setCustomSlippage] = useState('');
   
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
@@ -47,12 +45,10 @@ export default function SwapPage() {
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
   const [isSlippageSheetOpen, setIsSlippageSheetOpen] = useState(false);
 
-  // Data State
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quoteData, setQuoteData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Initialization
   useEffect(() => {
     if (!fromToken && allAssets.length > 0) {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
@@ -143,7 +139,7 @@ export default function SwapPage() {
 
       <main className="flex-1 w-full space-y-2 overflow-y-auto pb-40 pt-6 px-4">
         {/* FROM CARD */}
-        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 relative group transition-all shadow-2xl">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }}
@@ -183,11 +179,11 @@ export default function SwapPage() {
         </section>
 
         {/* DIRECTIONAL INDICATOR */}
-        <div className="relative h-10 flex items-center justify-center z-10 pointer-events-none">
+        <div className="relative h-10 flex items-center justify-center z-10">
             <div className="relative px-6 bg-[#050505] flex items-center gap-2">
                 <div 
                     onClick={handleReverse}
-                    className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl pointer-events-auto hover:scale-110 active:rotate-180 transition-all duration-500 group"
+                    className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl hover:scale-110 active:rotate-180 transition-all duration-500 group cursor-pointer"
                 >
                     <Plane className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
                 </div>
@@ -195,7 +191,7 @@ export default function SwapPage() {
         </div>
 
         {/* TO CARD */}
-        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 relative transition-all shadow-2xl">
+        <section className="w-full bg-primary/10 backdrop-blur-xl border border-primary/20 p-5 rounded-[2.5rem] space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
             <button 
                 onClick={() => { setSelectionType('to'); setIsNetworkSheetOpen(true); }}
@@ -371,37 +367,19 @@ export default function SwapPage() {
                     <h3 className="text-xl font-black uppercase tracking-widest">Trading Rules</h3>
                     <p className="text-sm text-muted-foreground">Adjust slippage tolerance for volatile market conditions.</p>
                 </div>
-
                 <div className="grid grid-cols-4 gap-2">
                     {['0.5', '1.0', '3.0'].map((val) => (
                         <Button 
                             key={val}
                             variant={slippage === val ? 'default' : 'outline'}
                             className="h-12 rounded-2xl font-black"
-                            onClick={() => { setSlippage(val); setCustomSlippage(''); }}
+                            onClick={() => setSlippage(val)}
                         >
                             {val}%
                         </Button>
                     ))}
-                    <div className="relative">
-                        <Input 
-                            placeholder="Custom"
-                            value={customSlippage}
-                            onChange={(e) => {
-                                setCustomSlippage(e.target.value);
-                                setSlippage(e.target.value || '0.5');
-                            }}
-                            className="h-12 rounded-2xl bg-white/5 border-white/10 text-center font-black"
-                        />
-                    </div>
                 </div>
-
-                <Button 
-                    className="w-full h-14 rounded-2xl font-black text-lg"
-                    onClick={() => setIsSlippageSheetOpen(false)}
-                >
-                    Apply Settings
-                </Button>
+                <Button className="w-full h-14 rounded-2xl font-black text-lg" onClick={() => setIsSlippageSheetOpen(false)}>Apply Settings</Button>
             </div>
         </SheetContent>
       </Sheet>
