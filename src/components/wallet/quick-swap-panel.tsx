@@ -11,7 +11,8 @@ import {
   Loader2, 
   X, 
   Zap, 
-  ArrowLeft 
+  ArrowLeft,
+  ChevronRight 
 } from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
+  // Initialize tokens
   useEffect(() => {
     if (isOpen && allAssets.length >= 2 && !fromToken) {
         const initialFrom = allAssets[0];
@@ -52,6 +54,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     }
   }, [isOpen, allAssets, fromToken]);
 
+  // Fetch Live Quote
   useEffect(() => {
     const fetchQuickQuote = async () => {
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0 || !infuraApiKey) {
@@ -67,12 +70,15 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
         const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0x0000000000000000000000000000000000000000';
 
+        // Use standard 18 decimals for quote fetching in MVP
+        const formattedAmount = ethers.parseUnits(debouncedAmount, 18).toString();
+
         const params = new URLSearchParams({
           fromChain: fromToken.chainId.toString(),
           toChain: toToken.chainId.toString(),
           fromToken: fromAddr,
           toToken: toAddr,
-          fromAmount: ethers.parseUnits(debouncedAmount, 18).toString(),
+          fromAmount: formattedAmount,
           fromAddress: userAddr,
           slippage: '0.005'
         });
@@ -83,6 +89,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         if (data.error) throw new Error(data.details || data.error);
         setQuote(data);
       } catch (e: any) {
+        console.warn("Quick Quote Error:", e.message);
         setFetchError(e.message);
         setQuote(null);
       } finally {
@@ -98,7 +105,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     else setToToken(token);
     setIsTokenSideSheetOpen(false);
     setIsNetworkSheetOpen(false);
-    setQuote(null);
+    setQuote(null); // Reset quote on pair change
   };
 
   const estimatedReceived = quote?.estimate?.toAmount 
@@ -116,13 +123,18 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
             )}
         >
             <div 
-                className="bg-[#050505] backdrop-blur-3xl border border-white/10 rounded-[2rem] p-3 max-w-lg mx-auto pointer-events-auto shadow-2xl relative overflow-hidden"
+                style={{ 
+                    boxShadow: `0 10px 50px -10px ${fromChainColor}40`,
+                    borderColor: `${fromChainColor}30`,
+                    background: `linear-gradient(180deg, #050505 0%, ${fromChainColor}05 100%)`
+                }}
+                className="backdrop-blur-3xl border rounded-[2rem] p-3 max-w-lg mx-auto pointer-events-auto shadow-2xl relative overflow-hidden transition-all duration-500"
             >
                 <div className="flex items-center justify-between mb-3 px-1">
                     <div className="flex items-center gap-2 bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                         <Zap className="w-3 h-3 text-primary fill-primary" />
                         <span className="text-[8px] font-black uppercase tracking-[0.1em] text-primary">
-                            BEST ROUTE: INSTITUTIONAL VIA WEVINA AGGREGATOR
+                            BEST ROUTE: {quote?.tool?.toUpperCase() || 'INSTITUTIONAL AGGREGATOR'}
                         </span>
                     </div>
                     <button onClick={() => onOpenChange(false)} className="p-1 rounded-full hover:bg-white/10 transition-colors">
@@ -131,8 +143,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 </div>
 
                 <div className="flex items-center gap-2 mb-3">
-                    {/* FROM INPUT */}
-                    <div className="flex-1 flex items-center bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2">
+                    {/* SEND INPUT */}
+                    <div className="flex-1 flex items-center bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2 group focus-within:border-primary/30 transition-all">
                         <button 
                             onClick={() => { setSelectionType('from'); setIsNetworkSheetOpen(true); }} 
                             className="shrink-0 active:scale-90 transition-all"
@@ -155,14 +167,14 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                         />
                     </div>
 
-                    <div className="shrink-0 w-8 h-8 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center">
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center shadow-xl">
                         <Plane className="w-3 h-3 text-primary" />
                     </div>
 
-                    {/* TO INPUT */}
-                    <div className="flex-1 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2">
+                    {/* RECEIVE DISPLAY */}
+                    <div className="flex-1 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-2xl h-11 px-3 gap-2 overflow-hidden">
                         {isQuoteLoading ? (
-                            <Skeleton className="h-4 w-16 bg-white/5 rounded" />
+                            <Skeleton className="h-4 w-16 bg-white/10 rounded animate-pulse" />
                         ) : (
                             <span className={cn(
                                 "text-sm font-black tracking-tight tabular-nums truncate",
@@ -190,11 +202,11 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 <div className="flex items-center justify-between px-1">
                     <div className="flex items-center gap-4 text-[9px] font-black uppercase text-muted-foreground/50">
                         <div className="flex items-center gap-1.5">
-                            <Timer className="w-3 h-3" />
+                            <Timer className="w-3 h-3 text-primary" />
                             <span>{quote?.estimate?.executionDuration ? `${Math.ceil(quote.estimate.executionDuration / 60)}M` : '--'}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <Fuel className="w-3 h-3" />
+                            <Fuel className="w-3 h-3 text-primary" />
                             <span>{quote?.estimate?.gasCosts?.[0] ? `$${parseFloat(quote.estimate.gasCosts[0].amountUsd || '0').toFixed(2)}` : '--'}</span>
                         </div>
                     </div>
@@ -202,8 +214,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     <Button 
                         size="sm"
                         className={cn(
-                            "h-8 px-5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all",
-                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90"
+                            "h-8 px-5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-lg active:scale-95",
+                            !amount || isQuoteLoading || !!fetchError || !quote ? "bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed grayscale" : "bg-primary hover:bg-primary/90 shadow-primary/20"
                         )}
                         disabled={!amount || isQuoteLoading || !!fetchError || !quote}
                     >
@@ -292,4 +304,3 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     </>
   );
 }
-import { ChevronRight } from 'lucide-react';
