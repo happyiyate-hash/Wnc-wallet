@@ -190,12 +190,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos]);
 
   useEffect(() => {
-    if (chainsWithLogos.length > 0) {
-      if (!viewingNetwork) setViewingNetwork(chainsWithLogos[0]);
+    if (chainsWithLogos.length > 0 && !isInitialized) {
+      // Restore last viewed network from storage
+      const savedChainId = localStorage.getItem('last_viewed_chain_id');
+      const restoredChain = savedChainId 
+        ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) 
+        : null;
+
+      setViewingNetwork(restoredChain || chainsWithLogos[0]);
       setIsInitialized(true);
       fetchTokenRegistry();
     }
-  }, [chainsWithLogos, fetchTokenRegistry]);
+  }, [chainsWithLogos, fetchTokenRegistry, isInitialized]);
+
+  // Persist viewing network choice whenever it changes
+  useEffect(() => {
+    if (viewingNetwork) {
+      localStorage.setItem('last_viewed_chain_id', viewingNetwork.chainId.toString());
+    }
+  }, [viewingNetwork]);
 
   const fetchGlobalPrices = useCallback(async () => {
     if (!isInitialized) return;
