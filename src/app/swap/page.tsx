@@ -153,6 +153,8 @@ function SwapClient() {
     else setToToken(token);
     setIsTokenSideSheetOpen(false);
     setIsNetworkSheetOpen(false);
+    // Clear quote on token change to show skeleton for new pair
+    setQuoteData(null);
   };
 
   // Resolve Real-time Price and Balance for display
@@ -180,11 +182,11 @@ function SwapClient() {
     if (!infuraApiKey) return { text: 'Connect to Blockchain', disabled: true };
     if (!amount || parseFloat(amount) <= 0) return { text: 'Enter Amount', disabled: true };
     if (parseFloat(amount) > parseFloat(fromToken?.balance || '0')) return { text: 'Insufficient Balance', disabled: true, variant: 'destructive' as const };
-    if (isQuoteLoading) return { text: 'Searching Routes...', disabled: true };
+    if (isQuoteLoading && !quoteData) return { text: 'Searching Routes...', disabled: true };
     if (fetchError) return { text: 'No Liquidity Found', disabled: true };
-    if (!quoteData) return { text: 'Loading Quote...', disabled: true };
-    if (quoteData.isFallback) return { text: 'No Liquidity Route', disabled: true, variant: 'secondary' as const };
-    return { text: isCrossChain ? `Bridge via ${quoteData.tool?.toUpperCase() || 'LIFI'}` : `Swap via ${quoteData.tool?.toUpperCase() || 'LIFI'}`, disabled: false };
+    if (!quoteData && isQuoteLoading) return { text: 'Loading Quote...', disabled: true };
+    if (quoteData?.isFallback) return { text: 'No Liquidity Route', disabled: true, variant: 'secondary' as const };
+    return { text: isCrossChain ? `Bridge via ${quoteData?.tool?.toUpperCase() || 'LIFI'}` : `Swap via ${quoteData?.tool?.toUpperCase() || 'LIFI'}`, disabled: false };
   }, [amount, fromToken, isQuoteLoading, fetchError, quoteData, infuraApiKey, isCrossChain]);
 
   return (
@@ -252,20 +254,23 @@ function SwapClient() {
             </div>
           </div>
           <div className="space-y-0.5 min-h-[3.5rem] flex flex-col justify-center">
-            {isQuoteLoading ? (
+            {isQuoteLoading && !quoteData ? (
                 <div className="space-y-2"><Skeleton className="h-8 w-3/4 bg-white/5 rounded-xl" /><Skeleton className="h-3 w-1/4 bg-white/5 rounded-lg" /></div>
             ) : (
-                <>
+                <div className={cn("transition-opacity duration-300", isQuoteLoading ? "opacity-50" : "opacity-100")}>
                     <div className="text-[clamp(1.5rem,6vw,2.2rem)] font-black truncate tracking-tighter">{estimatedReceivedAmount > 0 ? estimatedReceivedAmount.toFixed(6) : '0.00'}</div>
                     <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
-                </>
+                </div>
             )}
           </div>
         </section>
 
         {/* ROUTE SUMMARY CARD (MINIATURE DASHBOARD) */}
         {quoteData && (
-            <div className="mx-2 mt-6 p-5 rounded-[2.5rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+            <div className={cn(
+                "mx-2 mt-6 p-5 rounded-[2.5rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
+                isQuoteLoading && "opacity-60 grayscale-[0.5]"
+            )}>
                 <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
                         <TokenLogoDynamic 
