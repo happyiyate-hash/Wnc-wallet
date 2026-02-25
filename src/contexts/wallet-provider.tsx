@@ -79,6 +79,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('infura_api_key');
@@ -202,7 +203,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const coingeckoIds = new Set<string>();
     const contractLookups: { [chainId: number]: Set<string> } = {};
 
-    // 1. Collect all assets from all supported chains + user custom tokens
     const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({...a, balance: '0'} as AssetRow)));
@@ -210,12 +210,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allKnownAssets.push(...userAddedTokens);
 
     allKnownAssets.forEach(asset => {
-        // Priority 1: Direct ID Match (Best for Native/Majors)
         const effectiveId = asset.priceId || asset.coingeckoId;
         if (effectiveId) {
             coingeckoIds.add(effectiveId.toLowerCase());
         } 
-        // Priority 2: Contract-based lookup (For long-tail discovered tokens)
         else if (asset.address && asset.address.startsWith('0x')) {
             const chainId = asset.chainId;
             if (COINGECKO_PLATFORM_MAP[chainId]) {
@@ -228,7 +226,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const newPrices: { [key: string]: PriceInfo } = {};
 
     try {
-        // Step A: Fetch by ID
         if (coingeckoIds.size > 0) {
             const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
             Object.entries(priceMap).forEach(([id, data]) => {
@@ -236,7 +233,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             });
         }
 
-        // Step B: Fetch by Contract (Parallel per platform)
         const contractPromises = Object.entries(contractLookups).map(async ([chainId, addresses]) => {
             const platformId = COINGECKO_PLATFORM_MAP[parseInt(chainId)];
             if (platformId) {
@@ -249,11 +245,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await Promise.all(contractPromises);
         
+        // Atomic merge to prevent jumping
         setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (e) {
-        console.warn("Universal Price Engine Error:", e);
+        console.warn("Master Price Engine Failure:", e);
     }
   }, [isInitialized, chainsWithLogos, userAddedTokens]);
+
+  // Master 10-second Price Pulse
+  useEffect(() => {
+    if (isInitialized) {
+        fetchGlobalPrices(); // Initial pulse
+        if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
+        priceIntervalRef.current = setInterval(() => {
+            fetchGlobalPrices();
+        }, 10000);
+    }
+    return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
+  }, [isInitialized, fetchGlobalPrices]);
 
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || !infuraApiKey) return [];
@@ -335,7 +344,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
     try {
-        await fetchGlobalPrices();
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -361,7 +369,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) {}
     }
     isBackgroundSyncRunning.current = false;
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, fetchGlobalPrices, user]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user]);
 
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) {

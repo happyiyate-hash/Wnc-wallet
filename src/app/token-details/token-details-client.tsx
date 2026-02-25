@@ -85,7 +85,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 
 export default function TokenDetailsClientPage() {
-  const { allAssets, viewingNetwork, isInitialized } = useWallet();
+  const { allAssets, viewingNetwork, isInitialized, prices } = useWallet();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -93,6 +93,9 @@ export default function TokenDetailsClientPage() {
 
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
+  // Dynamically find the token in allAssets. 
+  // Since allAssets reactively updates when the global prices pulse, 
+  // this token object will automatically stay current without re-fetches.
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
     return allAssets.find(a => a.symbol === tokenSymbol && a.chainId === viewingNetwork.chainId);
@@ -128,11 +131,11 @@ export default function TokenDetailsClientPage() {
       <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-8 pb-4">
           <div className="flex items-center justify-center gap-2">
-            <h2 className="text-4xl font-black tracking-tight text-white">
+            <h2 className="text-4xl font-black tracking-tight text-white transition-all duration-500">
               ${formatDisplayPrice(price)}
             </h2>
           </div>
-          <div className={cn("mt-1 text-sm font-bold", isNegativeChange ? "text-red-400" : "text-green-400")}>
+          <div className={cn("mt-1 text-sm font-bold transition-colors duration-500", isNegativeChange ? "text-red-400" : "text-green-400")}>
             {priceChange24h !== null ? `${priceChange24h >= 0 ? "+" : ""}${priceChange24h.toFixed(2)}%` : "..."}
           </div>
         </div>
@@ -160,7 +163,6 @@ export default function TokenDetailsClientPage() {
         <div className="flex items-center justify-around my-10 px-4">
             <ActionButton icon={<DollarSign className="w-6 h-6 text-primary" />} label="Buy" onClick={() => handleAction('/buy')} />
             <ActionButton icon={<ArrowLeftRight className="w-6 h-6 text-primary" />} label="Swap" onClick={() => handleAction('/swap')} />
-            {/* Bridge Button Removed as Requested */}
             <ActionButton icon={<ArrowUpRight className="w-6 h-6 text-primary" />} label="Send" onClick={() => handleAction('/send')} />
             <ActionButton icon={<QrCode className="w-6 h-6 text-primary" />} label="Receive" onClick={() => handleAction('/receive')} />
         </div>

@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 import { fetchSingleTokenDetails } from '@/lib/coingecko';
 
+/**
+ * Hook to fetch market metadata for a specific token.
+ * Optimized for "Silent Refresh" to prevent UI skeletons during background updates.
+ */
 export function useSingleTokenDetails(coingeckoId: string | null | undefined) {
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -15,7 +19,8 @@ export function useSingleTokenDetails(coingeckoId: string | null | undefined) {
         };
 
         const fetchDetails = async () => {
-            setIsLoading(true);
+            // Only show loader if we have zero data. Subsequent fetches are silent.
+            if (!data) setIsLoading(true);
             setError(null);
             try {
                 const result = await fetchSingleTokenDetails(coingeckoId);
@@ -28,6 +33,10 @@ export function useSingleTokenDetails(coingeckoId: string | null | undefined) {
         };
 
         fetchDetails();
+        
+        // Background refresh every 30 seconds for market metadata (stats)
+        const interval = setInterval(fetchDetails, 30000);
+        return () => clearInterval(interval);
     }, [coingeckoId]);
 
     return { data, isLoading, error };
