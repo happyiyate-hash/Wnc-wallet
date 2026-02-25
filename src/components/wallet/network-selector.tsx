@@ -52,55 +52,68 @@ const NetworkRow = ({
     <div
       onClick={() => onSelect(chain)}
       style={{
-        borderColor: `${themeColor}40`,
-        background: `linear-gradient(135deg, ${themeColor}15 0%, rgba(0,0,0,0.4) 100%)`,
+        borderColor: `${themeColor}60`, // Brighter border
+        background: `linear-gradient(135deg, ${themeColor}30 0%, rgba(0,0,0,0.6) 100%)`, // Brighter background
       }}
       className={cn(
-        'w-full flex items-center justify-between p-4 rounded-[2rem] border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden mb-2',
-        isSelected && "border-primary/50 shadow-[0_0_20px_rgba(129,140,248,0.1)]"
+        'w-full flex items-center justify-between p-5 rounded-[2.5rem] border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden mb-3',
+        isSelected && "border-primary/80 shadow-[0_0_30px_rgba(129,140,248,0.2)]"
       )}
       role="button"
     >
       <div className="flex items-center gap-4 relative z-10">
-        <TokenLogoDynamic 
-            alt={chain.name} 
-            logoUrl={chain.iconUrl}
-            size={44}
-            chainId={chain.chainId}
-            name={chain.name}
-            symbol={chain.symbol}
-            FallbackComponent={<GenericCoinIcon />}
-        />
+        <div className="p-1 rounded-full bg-white/5">
+            <TokenLogoDynamic 
+                alt={chain.name} 
+                logoUrl={chain.iconUrl}
+                size={48}
+                chainId={chain.chainId}
+                name={chain.name}
+                symbol={chain.symbol}
+                FallbackComponent={<GenericCoinIcon />}
+            />
+        </div>
         <div className="flex flex-col text-left">
           <div className="flex items-center gap-2">
-            <p className="font-black text-base text-white tracking-tight leading-none">{chain.name}</p>
-            <span className="text-[9px] text-muted-foreground/40 font-mono">ID: {chain.chainId}</span>
+            <p className="font-black text-lg text-white tracking-tight leading-none">{chain.name}</p>
+            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">ID: {chain.chainId}</span>
           </div>
-          <div className="flex items-center gap-2 mt-1.5">
-            <p className="font-mono text-[10px] text-muted-foreground/60 tracking-tight">
+          <div className="flex items-center gap-2 mt-2">
+            <p className={cn(
+                "font-mono text-xs tracking-tight transition-colors",
+                isCopied ? "text-green-400" : "text-white/40"
+            )}>
                 {shortAddress}
             </p>
             {address && (
                 <button 
                     onClick={handleCopy}
-                    className="p-1 rounded-md hover:bg-white/10 transition-colors text-primary"
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-primary"
                 >
-                    <Copy className="w-3 h-3" />
+                    {isCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 relative z-10">
+      <div className="flex items-center gap-3 relative z-10 pr-2">
         {isSelected ? (
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-            <CheckCircle2 className="w-4 h-4 text-primary" />
+          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
+            <CheckCircle2 className="w-5 h-5 text-primary" />
           </div>
         ) : (
-          <ChevronRight className="w-5 h-5 text-muted-foreground/30 group-hover:text-muted-foreground group-hover:translate-x-1 transition-all" />
+          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center opacity-40 group-hover:opacity-100 transition-opacity">
+            <ChevronRight className="w-5 h-5 text-white group-hover:translate-x-0.5 transition-transform" />
+          </div>
         )}
       </div>
+      
+      {/* Subtle background glow */}
+      <div 
+        className="absolute -right-4 -top-4 w-24 h-24 blur-3xl opacity-20 transition-opacity group-hover:opacity-40"
+        style={{ backgroundColor: themeColor }}
+      />
     </div>
   );
 };
@@ -156,22 +169,23 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
 
       <SheetContent
         side="bottom"
-        className="h-[85vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
+        className="h-[90vh] flex flex-col bg-transparent text-white rounded-t-[3.5rem] p-0 border-t border-primary/20 overflow-hidden shadow-2xl"
       >
-        <div className="absolute inset-0 bg-[#0a0a0c]/90 backdrop-blur-3xl -z-10" />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-transparent to-black/80 -z-10" />
+        {/* Deep immersive background */}
+        <div className="absolute inset-0 bg-black/95 backdrop-blur-3xl -z-10" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black/80 -z-10" />
 
         <div className="flex flex-col h-full relative z-10 overflow-hidden">
-            <SheetHeader className="p-6 pt-8 text-center shrink-0">
-              <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6" />
-              <SheetTitle className="text-2xl font-black uppercase tracking-widest mb-6">Select Network</SheetTitle>
-              <div className="relative px-4">
-                <div className="p-[1px] bg-gradient-to-r from-primary/50 to-purple-500/50 rounded-2xl">
-                    <div className="relative bg-zinc-950/80 backdrop-blur-xl rounded-2xl">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <SheetHeader className="p-6 pt-10 text-center shrink-0">
+              <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8" />
+              <SheetTitle className="text-3xl font-black uppercase tracking-[0.15em] mb-8 text-white">Select Network</SheetTitle>
+              <div className="relative px-2">
+                <div className="p-[1px] bg-gradient-to-r from-primary/40 via-purple-500/40 to-primary/40 rounded-2xl">
+                    <div className="relative bg-zinc-900/90 backdrop-blur-2xl rounded-2xl">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
                         <Input
-                          placeholder="Search 23+ networks..."
-                          className="w-full h-14 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-base"
+                          placeholder="Search 21+ networks..."
+                          className="w-full h-16 bg-transparent border-none pl-12 rounded-2xl focus-visible:ring-0 text-lg placeholder:text-white/20"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -180,8 +194,8 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
               </div>
             </SheetHeader>
 
-            <ScrollArea className="flex-1 px-6">
-              <div className="pb-32 pt-2">
+            <ScrollArea className="flex-1 px-3">
+              <div className="pb-32 pt-4">
                 {filteredChains.map((chain) => (
                     <NetworkRow
                       key={chain.chainId}
