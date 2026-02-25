@@ -31,8 +31,8 @@ const SharedGradient = () => (
 export default function MobileNav() {
   const pathname = usePathname();
 
-  // Hide the navigation on transaction pages to allow for full-screen focus
-  const isActionPage = pathname === '/swap' || pathname === '/send' || pathname === '/receive';
+  // Hide the navigation on action-oriented pages to allow for full-screen focus
+  const isActionPage = pathname === '/swap' || pathname === '/send' || pathname === '/receive' || pathname === '/buy';
   if (isActionPage) return null;
 
   const navItems: NavItem[] = [

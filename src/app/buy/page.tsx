@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,36 +12,57 @@ import {
   ShieldCheck, 
   Sparkles,
   Zap,
-  Info
+  Info,
+  Loader2
 } from "lucide-react";
 import { useWallet } from '@/contexts/wallet-provider';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-
-const FEATURED_BUY_ASSETS = [
-    { symbol: 'ETH', name: 'Ethereum', chainId: 1, coingeckoId: 'ethereum' },
-    { symbol: 'USDT', name: 'Tether', chainId: 1, coingeckoId: 'tether' },
-    { symbol: 'USDC', name: 'USD Coin', chainId: 1, coingeckoId: 'usd-coin' },
-    { symbol: 'BTC', name: 'Bitcoin (Wrapped)', chainId: 1, coingeckoId: 'bitcoin' },
-    { symbol: 'SOL', name: 'Solana', chainId: 1, coingeckoId: 'solana' },
-    { symbol: 'POL', name: 'Polygon', chainId: 137, coingeckoId: 'polygon-ecosystem-token' },
-];
+import { useToast } from '@/hooks/use-toast';
+import type { AssetRow, ChainConfig } from '@/lib/types';
 
 export default function BuyPage() {
     const router = useRouter();
-    const { prices } = useWallet();
+    const { toast } = useToast();
+    const { allAssets, allChains, prices, viewingNetwork, getAvailableAssetsForChain, balances } = useWallet();
+    
     const [amount, setAmount] = useState('100');
-    const [selectedAsset, setSelectedAsset] = useState(FEATURED_BUY_ASSETS[0]);
-    const [isAssetSheetOpen, setIsAssetSheetOpen] = useState(false);
+    const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank'>('card');
+    
+    const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
+    const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
+    const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
-    const currentPrice = prices[selectedAsset.coingeckoId]?.price || 0;
+    // Sync initial asset
+    useEffect(() => {
+        if (!selectedAsset && allAssets.length > 0) {
+            const initial = allAssets.find(a => a.chainId === viewingNetwork.chainId) || allAssets[0];
+            setSelectedAsset(initial);
+        }
+    }, [allAssets, selectedAsset, viewingNetwork.chainId]);
+
+    const currentPrice = useMemo(() => {
+        if (!selectedAsset) return 0;
+        const priceId = (selectedAsset.priceId || selectedAsset.coingeckoId || selectedAsset.address)?.toLowerCase();
+        return prices[priceId]?.price || 0;
+    }, [selectedAsset, prices]);
+
     const cryptoAmount = (parseFloat(amount) || 0) / (currentPrice || 1);
 
     const handleBuy = () => {
-        alert("Institutional payment gateway requested. Contact your provider.");
+        toast({
+            title: "Coming Soon",
+            description: "Institutional fiat on-ramp is being finalized. This feature will be available shortly.",
+        });
+    };
+
+    const handleTokenSelect = (token: AssetRow) => {
+        setSelectedAsset(token);
+        setIsTokenSideSheetOpen(false);
+        setIsNetworkSheetOpen(false);
     };
 
     return (
@@ -77,7 +98,7 @@ export default function BuyPage() {
                         </div>
                         <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 w-fit mx-auto">
                             <Zap className="w-3 h-3 text-primary" />
-                            <span className="text-[10px] font-bold text-primary">You will receive ≈ {cryptoAmount.toFixed(6)} {selectedAsset.symbol}</span>
+                            <span className="text-[10px] font-bold text-primary">You will receive ≈ {cryptoAmount.toFixed(6)} {selectedAsset?.symbol}</span>
                         </div>
                     </div>
                 </section>
@@ -86,21 +107,21 @@ export default function BuyPage() {
                 <section className="space-y-4">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2">Receive Asset</p>
                     <button 
-                        onClick={() => setIsAssetSheetOpen(true)}
+                        onClick={() => setIsNetworkSheetOpen(true)}
                         className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
                     >
                         <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
-                                logoUrl={null} 
-                                alt={selectedAsset.symbol} 
+                                logoUrl={selectedAsset?.iconUrl} 
+                                alt={selectedAsset?.symbol || ''} 
                                 size={40} 
-                                chainId={selectedAsset.chainId} 
-                                symbol={selectedAsset.symbol} 
-                                name={selectedAsset.name} 
+                                chainId={selectedAsset?.chainId} 
+                                symbol={selectedAsset?.symbol} 
+                                name={selectedAsset?.name} 
                             />
                             <div className="text-left">
-                                <p className="font-bold text-base text-white">{selectedAsset.symbol}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{selectedAsset.name}</p>
+                                <p className="font-bold text-base text-white">{selectedAsset?.symbol || 'Select Asset'}</p>
+                                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{selectedAsset?.name}</p>
                             </div>
                         </div>
                         <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
@@ -147,45 +168,69 @@ export default function BuyPage() {
                     className="w-full h-16 rounded-full font-black text-lg shadow-2xl transition-all active:scale-95 border-b-4 border-primary/50 shadow-primary/30"
                     onClick={handleBuy}
                 >
-                    Buy {selectedAsset.symbol} Now
+                    Buy {selectedAsset?.symbol || 'Crypto'} Now
                 </Button>
             </div>
 
-            <Sheet open={isAssetSheetOpen} onOpenChange={setIsAssetSheetOpen}>
-                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3rem] p-0 h-[70vh] overflow-hidden">
-                    <div className="flex flex-col h-full">
+            {/* NETWORK SELECTION SHEET */}
+            <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
+                <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
+                    <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
+                    <div className="flex flex-col h-full relative z-10">
                         <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                        <SheetHeader className="px-6 mb-6">
-                            <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Asset to Buy</SheetTitle>
+                        <SheetHeader className="mb-6 px-6 pt-4">
+                            <SheetTitle className="sr-only">Select Network</SheetTitle>
+                            <div className="text-2xl font-black text-center uppercase tracking-widest text-white">Select Network</div>
                         </SheetHeader>
                         <ScrollArea className="flex-1 px-6">
-                            <div className="space-y-2 pb-12">
-                                {FEATURED_BUY_ASSETS.map((asset) => (
+                            <div className="grid grid-cols-2 gap-3 pb-24">
+                                {allChains.map((chain) => (
                                     <button 
-                                        key={asset.symbol}
-                                        onClick={() => { setSelectedAsset(asset); setIsAssetSheetOpen(false); }}
-                                        className="w-full flex items-center justify-between p-4 rounded-[1.5rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-95"
+                                        key={chain.chainId} 
+                                        onClick={() => { setSelectedNetworkForSelection(chain); setIsTokenSideSheetOpen(true); }} 
+                                        style={{ borderColor: `${chain.themeColor || '#818cf8'}40`, background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}15 0%, rgba(0,0,0,0) 100%)` }} 
+                                        className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center"
                                     >
-                                        <div className="flex items-center gap-4">
-                                            <TokenLogoDynamic 
-                                                logoUrl={null} 
-                                                alt={asset.symbol} 
-                                                size={32} 
-                                                chainId={asset.chainId} 
-                                                symbol={asset.symbol} 
-                                                name={asset.name} 
-                                            />
-                                            <div className="text-left">
-                                                <p className="font-bold text-sm">{asset.symbol}</p>
-                                                <p className="text-[10px] text-muted-foreground uppercase font-black">{asset.name}</p>
-                                            </div>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                        <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                                        <p className="font-black text-[11px] uppercase tracking-tight text-white">{chain.name}</p>
                                     </button>
                                 ))}
                             </div>
                         </ScrollArea>
                     </div>
+                </SheetContent>
+            </Sheet>
+
+            {/* TOKEN SELECTION SHEET */}
+            <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
+                <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full">
+                    <SheetHeader className="p-6 border-b border-white/5 shrink-0">
+                        <SheetTitle className="sr-only">Select Token</SheetTitle>
+                        <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="mb-4"><ArrowLeft className="w-5 h-5"/></Button>
+                        <div className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</div>
+                    </SheetHeader>
+                    <ScrollArea className="flex-1 p-4">
+                        <div className="space-y-2 pb-20">
+                            {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => { 
+                                const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow; 
+                                return (
+                                    <button 
+                                        key={asset.symbol} 
+                                        onClick={() => handleTokenSelect(asset)} 
+                                        className="w-full flex items-center justify-between p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-left"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
+                                            <div>
+                                                <p className="font-black text-base text-white">{asset.symbol}</p>
+                                                <p className="text-xs text-muted-foreground">{asset.name}</p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </ScrollArea>
                 </SheetContent>
             </Sheet>
         </div>
