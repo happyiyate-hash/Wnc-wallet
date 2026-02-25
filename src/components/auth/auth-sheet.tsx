@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase/client";
@@ -63,14 +63,15 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
         className="rounded-t-[2.5rem] bg-[#121218] border-t border-white/10 p-5 pb-8 max-h-[340px] overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="flex flex-col items-center text-center space-y-1 mb-4">
-          <h2 className="text-lg font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+        <SheetHeader className="mb-4">
+          <SheetTitle className="text-lg font-extrabold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent text-center">
             {mode === 'login' ? 'Login' : 'Join Wevina'}
-          </h2>
-        </div>
+          </SheetTitle>
+        </SheetHeader>
 
         <div className="bg-[#1c1c24] p-1 rounded-2xl flex mb-4 max-w-[280px] mx-auto">
           <button 
+            type="button"
             onClick={() => setMode('login')}
             className={cn(
                 "flex-1 py-2 rounded-xl text-xs font-bold transition-all",
@@ -80,6 +81,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
             Login
           </button>
           <button 
+            type="button"
             onClick={() => setMode('signup')}
             className={cn(
                 "flex-1 py-2 rounded-xl text-xs font-bold transition-all",
