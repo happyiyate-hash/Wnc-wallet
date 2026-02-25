@@ -203,22 +203,82 @@ function SwapClient() {
           </div>
         </section>
 
+        {/* Institutional Route Summary (Image Matching) */}
         {quoteData && (
-            <div className="mx-2 mt-4 p-4 rounded-2xl bg-zinc-900/90 border border-white/5 space-y-4 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center justify-between px-2 text-[9px] font-black uppercase tracking-widest">
-                    <div className="flex items-center gap-2 text-primary">
-                        <Timer className="w-3 h-3" />
-                        <span>{Math.ceil((quoteData?.estimate?.executionDuration || 300) / 60)} MIN</span>
+            <div className="mx-2 mt-6 p-5 rounded-[2rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                {/* Header: Route Path */}
+                <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-2">
+                        <div className="p-0.5 rounded-full bg-white/5">
+                            <TokenLogoDynamic 
+                                logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
+                                alt="" 
+                                size={22} 
+                                chainId={fromToken?.chainId} 
+                            />
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white opacity-80">
+                            {allChainsMap[fromToken?.chainId || 1]?.name}
+                        </span>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                            <span className="text-muted-foreground/50 text-[7px] mb-0.5">EST. FEE</span>
-                            <span className="text-white font-mono">$ {parseFloat(quoteData?.estimate?.gasCosts?.[0]?.amountUsd || '0').toFixed(2)}</span>
+                    
+                    <div className="flex-1 flex items-center justify-center gap-1.5 px-4 opacity-30">
+                        <div className="h-px flex-1 border-t border-dotted border-white/40" />
+                        <Plane className="w-3.5 h-3.5 text-white transform -rotate-45" />
+                        <div className="h-px flex-1 border-t border-dotted border-white/40" />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white opacity-80">
+                            {allChainsMap[toToken?.chainId || 1]?.name}
+                        </span>
+                        <div className="p-0.5 rounded-full bg-white/5">
+                            <TokenLogoDynamic 
+                                logoUrl={allChainsMap[toToken?.chainId || 1]?.iconUrl} 
+                                alt="" 
+                                size={22} 
+                                chainId={toToken?.chainId} 
+                            />
                         </div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-muted-foreground/50 text-[7px] mb-0.5">SLIPPAGE</span>
-                            <span className="text-white font-mono">{slippage}%</span>
+                    </div>
+                </div>
+
+                {/* Amount Row */}
+                <div className="flex items-center justify-between px-2">
+                    <div className="text-xl font-black text-white tracking-tighter tabular-nums">
+                        {estimatedReceivedAmount.toFixed(6)}
+                    </div>
+                    <div className="text-xl font-black text-white/10 tracking-tighter tabular-nums">0</div>
+                </div>
+
+                {/* Footer Row: Metadata Labels */}
+                <div className="pt-5 border-t border-white/5 flex items-center justify-between px-2">
+                    <div className="space-y-1.5">
+                        <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">EST</p>
+                        <div className="flex items-center gap-2">
+                            <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />
+                            <span className="text-[9px] font-black uppercase text-primary tracking-tight">
+                                {quoteData.tool?.toUpperCase() || 'INSTITUTIONAL'}
+                            </span>
+                            <TokenLogoDynamic 
+                                logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
+                                size={10} 
+                                alt="" 
+                            />
+                            <span className="text-[9px] font-bold text-white/60">
+                                {Math.ceil((quoteData.estimate?.executionDuration || 300) / 60)}m
+                            </span>
                         </div>
+                    </div>
+
+                    <div className="text-right space-y-1.5">
+                        <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">FFEE</p>
+                        <p className="text-[10px] font-black text-white">0%</p>
+                    </div>
+
+                    <div className="text-right space-y-1.5">
+                        <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">SLIPPAGE</p>
+                        <p className="text-[10px] font-black text-white">{slippage}%</p>
                     </div>
                 </div>
             </div>
