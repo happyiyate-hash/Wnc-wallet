@@ -62,6 +62,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           setError("You already have a secret phrase in the cloud. Please retrieve it or delete it manually before creating a new one.");
       } else {
           setStatus('Failed');
+          setError(e.message || "Wallet generation failed.");
       }
     } finally {
       setTimeout(() => {
@@ -87,6 +88,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
       }, 800);
     } catch (e: any) {
       setStatus('Invalid Phrase');
+      setError("Please check your secret phrase and try again.");
     } finally {
       setTimeout(() => {
         setIsProcessing(false);
@@ -102,34 +104,30 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     setStatus('Connecting...');
     startTimer();
     
-    // Status flares for institutional feel
-    const statusSequence = [
-        { msg: 'Fetching Vault...', delay: 200 },
-        { msg: 'Decrypting AES-256...', delay: 1000 },
-        { msg: 'Restoring Keys...', delay: 1800 },
-        { msg: 'Access Restored!', delay: 2500 }
-    ];
-
-    statusSequence.forEach(({ msg, delay }) => {
-        setTimeout(() => {
-            if (isProcessing) setStatus(msg);
-        }, delay);
-    });
-
     try {
+      setStatus('Fetching Vault...');
+      // Small pause for UX feel
+      await new Promise(r => setTimeout(r, 600));
+      
+      // Perform actual restoration
       await restoreFromCloud();
-      // Ensure the flare finishes then close
-      setTimeout(() => {
-        onOpenChange(false);
-      }, 2800);
+      
+      setStatus('Decrypting AES-256...');
+      await new Promise(r => setTimeout(r, 800));
+      
+      setStatus('Restoring Keys...');
+      await new Promise(r => setTimeout(r, 400));
+      
+      setStatus('Access Restored!');
+      // The parent Home component useEffect will automatically close 
+      // the sheet once 'wallets' state changes in WalletProvider.
     } catch (e: any) {
+      console.error("Vault restoration error:", e);
       setStatus('Failed');
+      setError(e.message || "Cloud restoration failed. Check your connection.");
     } finally {
-      setTimeout(() => {
-        setIsProcessing(false);
-        stopTimer();
-        setStatus('');
-      }, 3000);
+      setIsProcessing(false);
+      stopTimer();
     }
   };
 
@@ -139,7 +137,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom"
-        className="rounded-t-[2.5rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[420px]"
+        className="rounded-t-[2.5rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[450px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <SheetHeader className="text-center space-y-1 mb-4">
@@ -153,7 +151,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                     <Timer className="w-3 h-3 animate-pulse" />
                     {(timer / 1000).toFixed(3)}s
                     <span className="ml-1 opacity-60">|</span>
-                    <span className="ml-1">{status}</span>
+                    <span className="ml-1 uppercase">{status}</span>
                 </div>
             ) : (
                 <div className="text-xs text-muted-foreground opacity-60">
@@ -174,14 +172,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
           {step === 'start' && (
             <>
               <Button 
-                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90" 
+                className="w-full h-12 text-sm font-bold rounded-xl gap-3 bg-primary hover:bg-primary/90 shadow-xl shadow-primary/10" 
                 onClick={handleCreate}
                 disabled={isProcessing}
               >
-                {isProcessing ? (
+                {isProcessing && status.includes('Syncing') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="animate-pulse">{status}</span>
+                        <span className="animate-pulse">Generating...</span>
                     </div>
                 ) : (
                     <><Plus className="w-4 h-4" /> Create New Wallet</>
@@ -201,14 +199,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
               {hasCloudBackup && (
                 <Button 
                   variant="outline"
-                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5" 
+                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5 shadow-lg shadow-primary/5" 
                   onClick={handleRestore}
                   disabled={isProcessing}
                 >
-                  {isProcessing ? (
+                  {isProcessing && !status.includes('Syncing') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-[10px] font-mono">Restoring...</span>
+                        <span className="text-[10px] font-mono">{status}</span>
                     </div>
                   ) : (
                     <><CloudDownload className="w-4 h-4" /> Restore from Cloud Vault</>

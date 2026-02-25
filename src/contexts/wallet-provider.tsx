@@ -387,29 +387,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const restoreFromCloud = useCallback(async () => {
     if (!user || !supabase) return;
     
+    // 1. Mandatory Cold Fetch from Supabase
     const { data: { session } } = await supabase.auth.getSession();
-    const encryptedPhrase = profile?.vault_phrase;
-    const phraseIv = profile?.iv;
-    const encryptedInfura = profile?.vault_infura_key;
-    const infuraIv = profile?.infura_iv;
+    const { data: freshProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-    if (!encryptedPhrase && !encryptedInfura) {
-      toast({ variant: "destructive", title: "No Cloud Backup Found" });
-      throw new Error("No vault");
+    if (profileError || !freshProfile) {
+        throw new Error("Could not retrieve cloud profile. Check connection.");
     }
 
+    const encryptedPhrase = freshProfile.vault_phrase;
+    const phraseIv = freshProfile.iv;
+    const encryptedInfura = freshProfile.vault_infura_key;
+    const infuraIv = freshProfile.infura_iv;
+
+    if (!encryptedPhrase && !encryptedInfura) {
+      throw new Error("No vault backup found in this cloud account.");
+    }
+
+    // 2. Atomic Decryption & State Injection
     try {
       // Restore Mnemonic
       if (encryptedPhrase && phraseIv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${session?.access_token}` 
+            },
             body: JSON.stringify({ encrypted: encryptedPhrase, iv: phraseIv }),
           });
           const data = await res.json();
           if (res.ok && data.phrase) {
               await loadWalletFromMnemonic(data.phrase);
               localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
+          } else {
+              throw new Error("Mnemonic decryption failed.");
           }
       }
 
@@ -417,7 +433,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (encryptedInfura && infuraIv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${session?.access_token}` 
+            },
             body: JSON.stringify({ encrypted: encryptedInfura, iv: infuraIv }),
           });
           const data = await res.json();
@@ -427,12 +446,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
       }
 
-      toast({ title: "Restored from Cloud" });
-    } catch (e) {
-        console.error("Cloud restoration error:", e);
+      toast({ title: "Institution Access Restored" });
+      refreshProfile(); // Sync local profile state
+    } catch (e: any) {
+        console.error("Vault reconstruction failed:", e.message);
         throw e;
     }
-  }, [user, profile, loadWalletFromMnemonic, toast]);
+  }, [user, loadWalletFromMnemonic, toast, refreshProfile]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
