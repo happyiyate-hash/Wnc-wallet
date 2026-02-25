@@ -48,17 +48,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
-    "LedgerEntry": {
-      "title": "LedgerEntry",
-      "description": "Audit trail for every balance change.",
+    "UserVault": {
+      "title": "UserVault",
+      "description": "Encrypted secure data for a user.",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "assetId": { "type": "string" },
-        "amount": { "type": "number" },
-        "type": { "enum": ["deposit", "withdrawal", "swap", "fee"], "type": "string" },
-        "txHash": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "encryptedMnemonic": { "type": "string" },
+        "mnemonicIv": { "type": "string" },
+        "encryptedInfuraKey": { "type": "string" },
+        "infuraIv": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -82,9 +82,9 @@
       "schema": "Balance",
       "description": "User's internal ledger balances."
     },
-    "/users/{userId}/ledger/{entryId}": {
-      "schema": "LedgerEntry",
-      "description": "Full audit history for the user."
+    "/users/{userId}/vault": {
+      "schema": "UserVault",
+      "description": "User's encrypted secret data."
     }
   }
 }

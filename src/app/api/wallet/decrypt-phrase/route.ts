@@ -5,9 +5,8 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 /**
- * SECURE DECRYPTION ENDPOINT
- * 
- * Verification Priority: Bearer Token -> Session Cookies
+ * GENERIC SECURE DECRYPTION ENDPOINT
+ * Decrypts a provided encrypted payload.
  */
 
 export async function POST(req: NextRequest) {

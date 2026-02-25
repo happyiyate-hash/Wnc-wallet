@@ -1,12 +1,12 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { encryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 /**
- * SECURE ENCRYPTION ENDPOINT
- * 
- * Next.js 15 Compatibility: Uses awaited cookies and authenticated session validation.
+ * GENERIC SECURE ENCRYPTION ENDPOINT
+ * Encrypts a provided payload string.
  */
 
 export async function POST(req: NextRequest) {
@@ -37,10 +37,10 @@ export async function POST(req: NextRequest) {
 
         const { phrase } = await req.json();
         if (!phrase) {
-            return NextResponse.json({ message: 'Plaintext phrase required.' }, { status: 400 });
+            return NextResponse.json({ message: 'Plaintext data required.' }, { status: 400 });
         }
 
-        // Canonical encryption
+        // Canonical encryption for any sensitive string
         const { encrypted, iv } = encryptPhrase(phrase);
 
         return NextResponse.json({ encrypted, iv });

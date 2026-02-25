@@ -48,8 +48,10 @@ export interface UserProfile {
     photo_url?: string;
     wnc_earnings?: number;
     tokens?: number;
-    vault_phrase?: string; // Encrypted
-    iv?: string; // IV for encryption
+    vault_phrase?: string; // Encrypted mnemonic
+    iv?: string; // IV for mnemonic
+    vault_infura_key?: string; // Encrypted Infura Key
+    infura_iv?: string; // IV for infura key
 }
 
 export interface IWalletAdapter {

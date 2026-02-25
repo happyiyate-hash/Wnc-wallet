@@ -107,8 +107,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const handleSetApiKey = (key: string | null) => {
     setInfuraApiKey(key);
-    if (key) localStorage.setItem('infura_api_key', key);
-    else localStorage.removeItem('infura_api_key');
+    if (key) {
+        localStorage.setItem('infura_api_key', key);
+        // Background Cloud Sync if wallet exists
+        if (wallets && user) {
+            saveToVault();
+        }
+    } else {
+        localStorage.removeItem('infura_api_key');
+    }
   };
 
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
@@ -346,7 +353,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const generateWallet = useCallback(async () => {
-    if (!user) return '';
+    if (!user || !supabase) return '';
+
+    // Safety check: Don't overwrite if cloud backup exists
+    const { data: existing } = await supabase.from('profiles').select('vault_phrase').eq('id', user.id).single();
+    if (existing?.vault_phrase) {
+        throw new Error("CLOUDV_EXISTS");
+    }
+
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
@@ -372,82 +386,95 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user || !supabase || !wallets) return;
     
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-    if (!mnemonic) {
-        toast({ variant: "destructive", title: "Backup Error", description: "Mnemonic not found." });
-        return;
-    }
+    const currentApiKey = localStorage.getItem('infura_api_key');
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/wallet/encrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify({ phrase: mnemonic }),
-      });
+      
+      const payload: any = {};
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Encryption failed');
+      if (mnemonic) {
+          const res = await fetch('/api/wallet/encrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ phrase: mnemonic }),
+          });
+          const { encrypted, iv } = await res.json();
+          payload.vault_phrase = encrypted;
+          payload.iv = iv;
       }
 
-      const { encrypted, iv } = await response.json();
+      if (currentApiKey) {
+          const res = await fetch('/api/wallet/encrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ phrase: currentApiKey }),
+          });
+          const { encrypted, iv } = await res.json();
+          payload.vault_infura_key = encrypted;
+          payload.infura_iv = iv;
+      }
 
-      // Redundancy: Save to both profiles and auth user metadata
-      await Promise.all([
-        supabase.from('profiles').update({ vault_phrase: encrypted, iv }).eq('id', user.id),
-        supabase.auth.updateUser({ data: { vault_phrase: encrypted, iv } })
-      ]);
-      
-      toast({ title: "Vault Sync Complete" });
-      refreshProfile();
+      if (Object.keys(payload).length > 0) {
+          await Promise.all([
+            supabase.from('profiles').update(payload).eq('id', user.id),
+            supabase.auth.updateUser({ data: payload })
+          ]);
+          toast({ title: "Cloud Vault Synced" });
+          refreshProfile();
+      }
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Vault Error", description: e.message });
+      console.warn("Vault Sync issue:", e.message);
     }
   }, [user, wallets, toast, refreshProfile]);
 
   const restoreFromCloud = useCallback(async () => {
-    // Check both Profile and Auth user_metadata (the "authentication table")
     const encryptedPhrase = profile?.vault_phrase || user?.user_metadata?.vault_phrase;
     const encryptionIv = profile?.iv || user?.user_metadata?.iv;
+    
+    const encryptedApiKey = profile?.vault_infura_key || user?.user_metadata?.vault_infura_key;
+    const apiKeyIv = profile?.infura_iv || user?.user_metadata?.infura_iv;
 
-    if (!user || !encryptedPhrase || !encryptionIv) {
+    if (!user || (!encryptedPhrase && !encryptedApiKey)) {
       toast({ variant: "destructive", title: "Vault Not Found", description: "No backup found in cloud." });
       throw new Error("No vault data");
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify({ 
-          encrypted: encryptedPhrase, 
-          iv: encryptionIv 
-        }),
-      });
-
-      const data = await response.json();
-      if (response.ok && data.phrase) {
-        await importWallet(data.phrase);
-        toast({ title: "Vault Restored" });
-      } else {
-        throw new Error(data.message || "Decryption failed. Ensure ENCRYPTION_KEY is set.");
+      
+      // Restore Mnemonic
+      if (encryptedPhrase && encryptionIv) {
+          const response = await fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ encrypted: encryptedPhrase, iv: encryptionIv }),
+          });
+          const data = await response.json();
+          if (response.ok && data.phrase) {
+            await importWallet(data.phrase);
+          }
       }
+
+      // Restore Infura Key
+      if (encryptedApiKey && apiKeyIv) {
+          const response = await fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: JSON.stringify({ encrypted: encryptedApiKey, iv: apiKeyIv }),
+          });
+          const data = await response.json();
+          if (response.ok && data.phrase) {
+            handleSetApiKey(data.phrase);
+          }
+      }
+
+      toast({ title: "Cloud Backup Restored" });
     } catch (e: any) {
-      toast({ 
-        variant: "destructive", 
-        title: "Restoration Failed", 
-        description: e.message 
-      });
+      toast({ variant: "destructive", title: "Restoration Failed", description: e.message });
       throw e;
     }
-  }, [user, profile, importWallet, toast]);
+  }, [user, profile, importWallet, toast, handleSetApiKey]);
 
   const logout = useCallback(() => {
     if (user) {
@@ -486,7 +513,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
     hasNewNotifications: false,
-    viewingNetwork: viewingNetwork || chainsWithLogos[0],
+    viewingNetwork: viewingNetwork || (chainsWithLogos.length > 0 ? chainsWithLogos[0] : {} as ChainConfig),
     setNetwork: (net) => {
         setViewingNetwork(net);
         setFetchError(null);

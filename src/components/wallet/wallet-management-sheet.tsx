@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
-import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download, Timer } from 'lucide-react';
+import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download, Timer, AlertCircle } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 
 interface WalletManagementSheetProps {
@@ -22,6 +22,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
   const [isProcessing, setIsProcessing] = useState(false);
   
   const [status, setStatus] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [timer, setTimer] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -47,25 +48,31 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
   const handleCreate = async () => {
     setIsProcessing(true);
-    setStatus('Generating Keypair...');
+    setError(null);
+    setStatus('Checking Cloud Vault...');
     startTimer();
     try {
       await generateWallet();
       setStatus('Complete!');
       setTimeout(() => onOpenChange(false), 800);
     } catch (e: any) {
-      setStatus('Failed');
+      if (e.message === 'CLOUDV_EXISTS') {
+          setError("You already have a secret phrase in the cloud. Please retrieve it or delete it manually before creating a new one.");
+      } else {
+          setStatus('Failed');
+      }
     } finally {
       setTimeout(() => {
         setIsProcessing(false);
         stopTimer();
-        setStatus('');
+        if (!error) setStatus('');
       }, 1000);
     }
   };
 
   const handleImport = async () => {
     setIsProcessing(true);
+    setError(null);
     setStatus('Verifying Phrase...');
     startTimer();
     try {
@@ -87,13 +94,14 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
   const handleRestore = async () => {
     setIsProcessing(true);
+    setError(null);
     setStatus('Connecting...');
     startTimer();
     
     const statusSequence = [
         { msg: 'Fetching Vault...', delay: 200 },
         { msg: 'Decrypting AES-256...', delay: 1200 },
-        { msg: 'Validating Mnemonic...', delay: 2000 },
+        { msg: 'Restoring Keys...', delay: 2000 },
         { msg: 'Access Restored!', delay: 2800 }
     ];
 
@@ -117,13 +125,13 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     }
   };
 
-  const hasCloudBackup = !!profile?.vault_phrase;
+  const hasCloudBackup = !!(profile?.vault_phrase || profile?.vault_infura_key);
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent 
         side="bottom"
-        className="rounded-t-[2.5rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[380px]"
+        className="rounded-t-[2.5rem] bg-[#0a0a0c] p-6 pt-4 pb-8 border-t border-white/5 max-h-[420px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <SheetHeader className="text-center space-y-1 mb-4">
@@ -148,6 +156,13 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
         </SheetHeader>
 
         <div className="space-y-2">
+          {error && (
+              <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 flex gap-3 animate-in fade-in slide-in-from-top-2 mb-2">
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+                  <p className="text-xs text-destructive leading-relaxed font-medium">{error}</p>
+              </div>
+          )}
+
           {step === 'start' && (
             <>
               <Button 
@@ -155,10 +170,10 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 onClick={handleCreate}
                 disabled={isProcessing}
               >
-                {isProcessing && status.includes('Generating') ? (
+                {isProcessing && status.includes('Checking') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="animate-pulse">Generating...</span>
+                        <span className="animate-pulse">Checking Vault...</span>
                     </div>
                 ) : (
                     <><Plus className="w-4 h-4" /> Create New Wallet</>
@@ -182,7 +197,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                   onClick={handleRestore}
                   disabled={isProcessing}
                 >
-                  {isProcessing && !status.includes('Generating') ? (
+                  {isProcessing && !status.includes('Checking') ? (
                     <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-[10px] font-mono">Restoring...</span>
@@ -204,7 +219,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 onChange={(e) => setImportInput(e.target.value)}
               />
               <div className="flex gap-2">
-                <Button variant="ghost" className="flex-1 h-10 rounded-xl text-xs" onClick={() => setStep('start')}>
+                <Button variant="ghost" className="flex-1 h-10 rounded-xl text-xs" onClick={() => { setStep('start'); setError(null); }}>
                   Back
                 </Button>
                 <Button 
