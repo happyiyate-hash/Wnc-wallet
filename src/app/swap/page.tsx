@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo } from 'react';
@@ -32,7 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function SwapClient() {
-  const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets, allChainsMap, getAvailableAssetsForChain } = useWallet();
+  const { allChains, viewingNetwork, balances, prices, wallets, infuraApiKey, allAssets, allChainsMap, getAvailableAssetsForChain } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,11 +82,9 @@ function SwapClient() {
       setFetchError(null);
 
       try {
-        // Resolve user address for the SOURCE chain
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const userAddr = wallets ? getAddressForChain(sourceChainConfig, wallets) : '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
         
-        // Normalize addresses for Aggregator (Standard 0xeeee... for native)
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
         const fromDecimals = fromToken.decimals || 18;
@@ -112,10 +109,15 @@ function SwapClient() {
         setQuoteData(data);
       } catch (e: any) {
         // INSTITUTIONAL FALLBACK (Oracle Based)
-        if (fromToken.priceUsd && toToken.priceUsd) {
+        const fromPriceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
+        const toPriceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
+        const fromPrice = prices[fromPriceId]?.price || 0;
+        const toPrice = prices[toPriceId]?.price || 0;
+
+        if (fromPrice && toPrice) {
             const amountIn = parseFloat(debouncedAmount);
-            const rawEstimatedOut = (amountIn * fromToken.priceUsd) / toToken.priceUsd;
-            const safetyBuffer = 0.97; // 3% Safety Buffer for market volatility
+            const rawEstimatedOut = (amountIn * fromPrice) / toPrice;
+            const safetyBuffer = 0.97; // 3% Safety Buffer
             const safeEstimatedOut = rawEstimatedOut * safetyBuffer;
             
             setQuoteData({
@@ -136,7 +138,7 @@ function SwapClient() {
     };
 
     fetchUnifiedQuote();
-  }, [debouncedAmount, fromToken, toToken, wallets, slippage, infuraApiKey, allChainsMap]);
+  }, [debouncedAmount, fromToken, toToken, wallets, slippage, infuraApiKey, allChainsMap, prices]);
 
   const handleReverse = () => {
     const tempFrom = fromToken;
@@ -153,14 +155,26 @@ function SwapClient() {
     setIsNetworkSheetOpen(false);
   };
 
-  const fromUsd = (parseFloat(amount) || 0) * (fromToken?.priceUsd || 0);
+  // Resolve Real-time Price and Balance for display
+  const fromPriceId = (fromToken?.priceId || fromToken?.coingeckoId || fromToken?.address)?.toLowerCase();
+  const toPriceId = (toToken?.priceId || toToken?.coingeckoId || toToken?.address)?.toLowerCase();
+  const currentFromPrice = fromPriceId ? prices[fromPriceId]?.price || 0 : 0;
+  const currentToPrice = toPriceId ? prices[toPriceId]?.price || 0 : 0;
+
+  const fromUsd = (parseFloat(amount) || 0) * currentFromPrice;
   const estimatedReceivedAmount = quoteData?.estimate?.toAmount 
     ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, toToken?.decimals || 18)) 
     : 0;
-  const toUsd = estimatedReceivedAmount * (toToken?.priceUsd || 0);
+  const toUsd = estimatedReceivedAmount * currentToPrice;
 
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
+
+  const toTokenBalance = useMemo(() => {
+    if (!toToken) return '0.0000';
+    const b = balances[toToken.chainId]?.find(asset => asset.symbol === toToken.symbol);
+    return parseFloat(b?.balance || '0').toFixed(4);
+  }, [balances, toToken]);
 
   const buttonState = useMemo(() => {
     if (!infuraApiKey) return { text: 'Connect to Blockchain', disabled: true };
@@ -210,7 +224,7 @@ function SwapClient() {
           </div>
           <div className="space-y-0.5">
             <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-[clamp(1.5rem,6vw,2.2rem)] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter" />
-            <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${fromUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${fromUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
           </div>
         </section>
 
@@ -232,7 +246,10 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40">To {allChainsMap[toToken?.chainId || 1]?.name}</span></div>
+            <div className="text-right">
+                <span className="text-[7px] font-black text-muted-foreground uppercase tracking-widest block opacity-40">To {allChainsMap[toToken?.chainId || 1]?.name}</span>
+                <span className="text-[10px] font-mono font-bold text-white/80">{toTokenBalance}</span>
+            </div>
           </div>
           <div className="space-y-0.5 min-h-[3.5rem] flex flex-col justify-center">
             {isQuoteLoading ? (
@@ -240,7 +257,7 @@ function SwapClient() {
             ) : (
                 <>
                     <div className="text-[clamp(1.5rem,6vw,2.2rem)] font-black truncate tracking-tighter">{estimatedReceivedAmount > 0 ? estimatedReceivedAmount.toFixed(6) : '0.00'}</div>
-                    <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground/60">≈ ${toUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                 </>
             )}
           </div>
@@ -253,9 +270,11 @@ function SwapClient() {
                     <div className="flex items-center gap-2">
                         <TokenLogoDynamic 
                             logoUrl={allChainsMap[fromToken?.chainId || 1]?.iconUrl} 
-                            alt="" 
+                            alt={allChainsMap[fromToken?.chainId || 1]?.name || ''} 
                             size={18} 
                             chainId={fromToken?.chainId} 
+                            name={allChainsMap[fromToken?.chainId || 1]?.name}
+                            symbol={allChainsMap[fromToken?.chainId || 1]?.symbol}
                         />
                         <span className="text-[8px] font-black uppercase tracking-[0.15em] text-white opacity-60">
                             {allChainsMap[fromToken?.chainId || 1]?.name}
@@ -274,9 +293,11 @@ function SwapClient() {
                         </span>
                         <TokenLogoDynamic 
                             logoUrl={allChainsMap[toToken?.chainId || 1]?.iconUrl} 
-                            alt="" 
+                            alt={allChainsMap[toToken?.chainId || 1]?.name || ''} 
                             size={18} 
                             chainId={toToken?.chainId} 
+                            name={allChainsMap[toToken?.chainId || 1]?.name}
+                            symbol={allChainsMap[toToken?.chainId || 1]?.symbol}
                         />
                     </div>
                 </div>
@@ -291,7 +312,7 @@ function SwapClient() {
                 </div>
 
                 <div className="pt-5 border-t border-white/5 flex items-center justify-between px-2">
-                    <div className="space-y-1">
+                    <div className="space-y-1 text-left">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">PROVIDER</p>
                         <div className="flex items-center gap-2">
                             <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />

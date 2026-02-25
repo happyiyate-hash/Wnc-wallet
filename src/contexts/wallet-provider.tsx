@@ -37,6 +37,7 @@ interface WalletContextType {
   isTokenLoading: (chainId: number, symbol: string) => boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
+  prices: { [key: string]: PriceInfo };
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
@@ -538,6 +539,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isTokenLoading: () => false,
     wallets,
     balances,
+    prices,
     refresh: manualRefresh,
     generateWallet,
     importWallet,
