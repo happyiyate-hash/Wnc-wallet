@@ -24,6 +24,9 @@ const MOCK_USER_ASSETS: { [key: number]: Omit<AssetRow, 'balance' | 'priceUsd' |
   ],
   42161: [ // Arbitrum One
     { chainId: 42161, address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', name: 'Arbitrum One', symbol: 'ARB', isNative: true, coingeckoId: 'ethereum' },
+  ],
+  1000: [ // Polkadot
+    { chainId: 1000, address: 'DOT', name: 'Polkadot', symbol: 'DOT', isNative: true, coingeckoId: 'polkadot' },
   ]
 };
 

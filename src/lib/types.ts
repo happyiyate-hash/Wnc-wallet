@@ -19,7 +19,7 @@ export interface WalletWithMetadata {
   avatarUrl?: string;
   privateKey?: string;
   seed?: string; // For XRP
-  type: 'evm' | 'xrp';
+  type: 'evm' | 'xrp' | 'polkadot';
 }
 
 export interface Chain {
@@ -38,7 +38,7 @@ export interface ChainConfig {
     iconUrl?: string | null;
     coingeckoId?: string;
     themeColor?: string;
-    type?: 'evm' | 'xrp';
+    type?: 'evm' | 'xrp' | 'polkadot';
 }
 
 export interface UserProfile {

@@ -18,6 +18,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
+import { ApiPromise, WsProvider } from '@polkadot/api';
+import { Keyring } from '@polkadot/keyring';
+import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
@@ -84,6 +87,32 @@ export default function SendPage() {
           throw new Error("XRP Transaction Failed");
         }
         await client.disconnect();
+      } else if (viewingNetwork.type === 'polkadot') {
+        await cryptoWaitReady();
+        const provider = new WsProvider(viewingNetwork.rpcUrl);
+        const api = await ApiPromise.create({ provider });
+        
+        const mnemonic = localStorage.getItem(`wallet_mnemonic_${recipient}`); // This is simplified for MVP
+        // In a real app we'd use the stored mnemonic from the provider context
+        const keyring = new Keyring({ type: 'sr25519' });
+        const userMnemonic = localStorage.getItem(`wallet_mnemonic_${(wallets.find(w => w.type === 'evm'))?.address}`); // Fallback to derive
+        
+        // Correct way: retrieve mnemonic from where it's stored securely
+        const storedMnemonic = typeof window !== 'undefined' ? localStorage.getItem(`wallet_mnemonic_${(await (await supabase?.auth.getUser())?.data.user?.id)}`) : null;
+        
+        if (!storedMnemonic) throw new Error("Mnemonic not found for signing.");
+        
+        const wallet = keyring.addFromMnemonic(storedMnemonic);
+        
+        // 1 DOT = 10^10 planck
+        const amountPlanck = BigInt(Math.floor(parseFloat(amount) * 10_000_000_000));
+        
+        const transfer = api.tx.balances.transferKeepAlive(recipient, amountPlanck);
+        const hash = await transfer.signAndSend(wallet);
+        
+        setTxHash(hash.toHex());
+        setStep('success');
+        await api.disconnect();
       } else {
         // EVM Flow
         if (!infuraApiKey) throw new Error("Infura API Key required for EVM.");
@@ -156,7 +185,11 @@ export default function SendPage() {
               <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pl-4 opacity-60">Recipient</Label>
               <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-2 backdrop-blur-xl">
                     <Input 
-                        placeholder={viewingNetwork.type === 'xrp' ? "rAddress..." : "0x... or ENS"} 
+                        placeholder={
+                          viewingNetwork.type === 'xrp' ? "rAddress..." : 
+                          viewingNetwork.type === 'polkadot' ? "SS58 Address..." :
+                          "0x... or ENS"
+                        } 
                         value={recipient}
                         onChange={(e) => setRecipient(e.target.value)}
                         className="h-14 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700"
@@ -202,7 +235,13 @@ export default function SendPage() {
                     <Fuel className="w-3.5 h-3.5 text-primary" />
                     Network Fee
                 </div>
-                <span className="font-bold font-mono text-xs text-white">~{viewingNetwork.type === 'xrp' ? '0.000012' : '0.000'} {viewingNetwork.symbol}</span>
+                <span className="font-bold font-mono text-xs text-white">
+                  ~{
+                    viewingNetwork.type === 'xrp' ? '0.000012' : 
+                    viewingNetwork.type === 'polkadot' ? '0.01' :
+                    '0.000'
+                  } {viewingNetwork.symbol}
+                </span>
               </div>
               <div className="h-px bg-white/5" />
               <div className="flex justify-between items-center">

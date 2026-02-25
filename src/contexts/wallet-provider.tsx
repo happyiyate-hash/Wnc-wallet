@@ -6,6 +6,8 @@ import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
+import { Keyring } from '@polkadot/keyring';
+import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +15,7 @@ import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
+import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -217,9 +220,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             } as AssetRow;
         });
 
-        // Use Adapter pattern for non-EVM chains
+        // Adapters for non-EVM chains
         if (chain.type === 'xrp') {
             const adapter = xrpAdapterFactory(chain);
+            if (adapter) {
+                const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+                updatedBalances[chain.chainId] = results;
+                setBalances(prev => ({ ...prev, [chain.chainId]: results }));
+                continue;
+            }
+        }
+
+        if (chain.type === 'polkadot') {
+            const adapter = polkadotAdapterFactory(chain);
             if (adapter) {
                 const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
                 updatedBalances[chain.chainId] = results;
@@ -319,7 +332,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork?.chainId, fetchAllBalances]);
 
-  const loadWalletFromMnemonic = useCallback((mnemonic: string) => {
+  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return;
     try {
       const cleanMnemonic = mnemonic.trim();
@@ -330,6 +343,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       // Derive XRP (using BIP44 path)
       const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
+
+      // Derive Polkadot
+      await cryptoWaitReady();
+      const keyring = new Keyring({ type: 'sr25519' });
+      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
 
       setWallets([
         { 
@@ -342,9 +360,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           address: xrpWallet.address,
           seed: xrpWallet.seed,
           type: 'xrp'
+        },
+        {
+          address: dotWallet.address,
+          type: 'polkadot'
         }
       ]);
     } catch (e: any) {
+      console.error("Wallet loading error:", e);
       throw new Error("Validation failed.");
     }
   }, []);
@@ -356,7 +379,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
           if (savedMnemonic) {
             try {
-              loadWalletFromMnemonic(savedMnemonic);
+              await loadWalletFromMnemonic(savedMnemonic);
             } catch (e) {
               localStorage.removeItem(`wallet_mnemonic_${user.id}`);
             }
@@ -376,7 +399,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const wallet = ethers.Wallet.createRandom();
     const mnemonic = wallet.mnemonic?.phrase || '';
     if (mnemonic) {
-      loadWalletFromMnemonic(mnemonic);
+      await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
       toast({ title: "Secure Wallet Generated" });
     }
@@ -386,7 +409,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) return;
     try {
-      loadWalletFromMnemonic(mnemonic);
+      await loadWalletFromMnemonic(mnemonic);
       localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
       toast({ title: "Access Restored" });
     } catch (e: any) {

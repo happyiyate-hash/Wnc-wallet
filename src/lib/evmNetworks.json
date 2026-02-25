@@ -62,5 +62,14 @@
     "coingeckoId": "ethereum",
     "themeColor": "#28A0F0",
     "type": "evm"
+  },
+  "1000": {
+    "name": "Polkadot",
+    "symbol": "DOT",
+    "chainId": 1000,
+    "rpcUrl": "wss://rpc.polkadot.io",
+    "coingeckoId": "polkadot",
+    "themeColor": "#E6007A",
+    "type": "polkadot"
   }
 }
