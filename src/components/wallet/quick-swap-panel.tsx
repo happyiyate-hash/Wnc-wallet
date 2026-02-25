@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWallet } from '@/contexts/wallet-provider';
@@ -65,7 +65,10 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     fetchQuickQuote();
   }, [debouncedAmount, fromToken, toToken, wallets, infuraApiKey]);
 
-  const estimatedReceived = quote ? ethers.formatUnits(quote.estimate.toAmount, 18) : '0';
+  // Defensive check for toAmount to prevent TypeErrors
+  const estimatedReceived = quote?.estimate?.toAmount 
+    ? ethers.formatUnits(quote.estimate.toAmount, 18) 
+    : '0';
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -73,6 +76,13 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         side="top" 
         className="bg-black/90 backdrop-blur-2xl border-b border-white/5 p-0 rounded-b-[2.5rem] shadow-2xl overflow-hidden"
       >
+        {/* Added Title for accessibility, visually hidden to maintain design */}
+        <div className="sr-only">
+          <SheetHeader>
+            <SheetTitle>Quick Institutional Swap</SheetTitle>
+          </SheetHeader>
+        </div>
+
         <div className="p-6 pt-10 space-y-8 max-w-lg mx-auto">
             {/* Header / Assets Row */}
             <div className="flex items-center justify-between">
