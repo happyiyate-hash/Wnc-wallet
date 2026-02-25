@@ -43,6 +43,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             address: t.contract_address,
             symbol: t.token_details.symbol,
             name: t.token_details.name,
+            decimals: t.token_details.decimals || 18,
             iconUrl: t.logo_url,
             balance: '0',
             isNative: false

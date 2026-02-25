@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -22,7 +23,6 @@ import { useDebounce } from '@/hooks/use-debounce';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { getInitialAssets } from '@/lib/wallets/balances';
 import { Skeleton } from '../ui/skeleton';
 
 interface QuickSwapPanelProps {
@@ -31,7 +31,7 @@ interface QuickSwapPanelProps {
 }
 
 export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelProps) {
-  const { allAssets, wallets, infuraApiKey, allChains, balances, allChainsMap } = useWallet();
+  const { allAssets, wallets, infuraApiKey, allChains, balances, allChainsMap, getAvailableAssetsForChain } = useWallet();
   const [fromToken, setFromToken] = useState<AssetRow | null>(null);
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
@@ -69,7 +69,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
         const userAddr = wallets?.find(w => w.type === 'evm')?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
 
-        const formattedAmount = ethers.parseUnits(debouncedAmount, 18).toString();
+        const fromDecimals = fromToken.decimals || 18;
+        const formattedAmount = ethers.parseUnits(debouncedAmount, fromDecimals).toString();
 
         const params = new URLSearchParams({
           fromChain: fromToken.chainId.toString(),
@@ -108,7 +109,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   };
 
   const estimatedReceived = quote?.estimate?.toAmount 
-    ? ethers.formatUnits(quote.estimate.toAmount, 18) 
+    ? ethers.formatUnits(quote.estimate.toAmount, toToken?.decimals || 18) 
     : null;
 
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
@@ -125,7 +126,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 style={{ 
                     boxShadow: `0 8px 40px -10px ${fromChainColor}60`,
                     borderColor: `${fromChainColor}40`,
-                    backgroundColor: '#050505' // Solid, opaque black
+                    backgroundColor: '#050505'
                 }}
                 className="border rounded-[2rem] p-3.5 max-w-lg mx-auto pointer-events-auto shadow-2xl relative overflow-hidden transition-all duration-500"
             >
@@ -273,7 +274,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 </SheetHeader>
                 <ScrollArea className="flex-1 p-4">
                     <div className="space-y-2 pb-20">
-                        {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                        {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => {
                             const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
                             return (
                                 <button 

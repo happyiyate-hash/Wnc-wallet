@@ -15,7 +15,7 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
     // Base mock assets for specific chains
     const MOCK_EXTRAS: { [key: number]: any[] } = {
       1: [
-        { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin' },
+        { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: 'USDC', symbol: 'USDC', coingeckoId: 'usd-coin', decimals: 6 },
       ]
     };
 
@@ -25,7 +25,8 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
         name: config.name,
         symbol: config.symbol,
         isNative: true,
-        coingeckoId: config.coingeckoId
+        coingeckoId: config.coingeckoId,
+        decimals: 18
     };
 
     return [nativeAsset, ...(MOCK_EXTRAS[chainId] || [])];

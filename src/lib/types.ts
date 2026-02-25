@@ -12,6 +12,7 @@ export interface AssetRow {
   isNative?: boolean;
   coingeckoId?: string;
   updatedAt?: number; // Last successful sync timestamp
+  decimals?: number;
 }
 
 export interface WalletWithMetadata {

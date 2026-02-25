@@ -31,7 +31,6 @@ import MoreActionsSheet from './wallet/more-actions-sheet';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
@@ -113,7 +112,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances } = useWallet();
+  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances, getAvailableAssetsForChain } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   
@@ -143,7 +142,6 @@ export default function WalletTab() {
     }
   }, [isInitialized, wallets, infuraApiKey]);
 
-  // Timer logic for balance fetching
   useEffect(() => {
     if (isRefreshing) {
       setFetchStartTime(Date.now());
@@ -196,8 +194,8 @@ export default function WalletTab() {
         setIsQuickSwapOpen(true);
         return;
     }
-    // Navigate directly to pages as requested
-    router.push(`/${type}`);
+    setActionType(type);
+    setIsActionSheetOpen(true);
   };
 
   const handleTokenSelect = (token: AssetRow) => {
@@ -430,7 +428,7 @@ export default function WalletTab() {
                     <div className="space-y-3">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2">Available Assets</p>
                         <div className="space-y-2 pb-12">
-                            {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                            {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => {
                                 const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
                                 return (
                                     <button 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -52,6 +53,7 @@ interface WalletContextType {
   toggleTokenVisibility: (chainId: number, symbol: string) => void;
   userAddedTokens: AssetRow[];
   addUserToken: (token: AssetRow) => void;
+  getAvailableAssetsForChain: (chainId: number) => AssetRow[];
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -244,26 +246,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !infuraApiKey) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
     if (!walletForChain) return [];
+    
     const apiTokens = tokenRegistry[chain.chainId] || [];
-    const baseAssets = getInitialAssets(chain.chainId);
+    const baseAssets = getInitialAssets(chain.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
+    
     const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
         return acc;
-    }, [] as any[]).map(a => {
+    }, [] as AssetRow[]).map(a => {
         const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
         return {
             ...a,
-            balance: '0',
             name: apiMeta?.name || a.name,
+            decimals: apiMeta?.decimals || a.decimals || 18,
             iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
             updatedAt: 0
         } as AssetRow;
     });
+
     let adapter = null;
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
+
     if (adapter) {
         try {
             const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
@@ -275,6 +281,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     return combinedAssetsList;
   }, [wallets, infuraApiKey, tokenRegistry, userAddedTokens]);
+
+  const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
+    const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    const custom = userAddedTokens.filter(t => t.chainId === chainId);
+    const combined = [...base, ...custom];
+    
+    return combined.reduce((acc, curr) => {
+        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+        return acc;
+    }, [] as AssetRow[]);
+  }, [userAddedTokens]);
 
   const manualRefresh = useCallback(async () => {
     if (!viewingNetwork || !infuraApiKey || !wallets) return;
@@ -400,7 +417,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           if (res.ok) {
             payload.vault_infura_key = data.encrypted; 
-            payload.infura_iv = data.iv;
+            payload.iv = data.iv; // Canonical protocol sync
           }
       }
 
@@ -431,7 +448,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const encryptedPhrase = freshProfile.vault_phrase;
     const phraseIv = freshProfile.iv;
     const encryptedInfura = freshProfile.vault_infura_key;
-    const infuraIv = freshProfile.infura_iv;
+    const infuraIv = freshProfile.infura_iv || freshProfile.iv; // IV protocol compatibility
 
     if (!encryptedPhrase && !encryptedInfura) {
       throw new Error("No vault backup found in this cloud account.");
@@ -461,8 +478,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           });
           const data = await res.json();
           if (res.ok && data.phrase) {
-              setInfuraApiKey(data.phrase);
-              localStorage.setItem('infura_api_key', data.phrase);
+              handleSetApiKey(data.phrase);
           }
       }
 
@@ -476,7 +492,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    const list = balances[viewingNetwork.chainId] || getInitialAssets(viewingNetwork.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    const list = balances[viewingNetwork.chainId] || getAvailableAssetsForChain(viewingNetwork.chainId);
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
@@ -490,7 +506,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 fiatValueUsd: balanceNum * price
             };
         });
-  }, [balances, viewingNetwork, hiddenTokenKeys, prices]);
+  }, [balances, viewingNetwork, hiddenTokenKeys, prices, getAvailableAssetsForChain]);
 
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
@@ -520,7 +536,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hiddenTokenKeys,
     toggleTokenVisibility,
     userAddedTokens,
-    addUserToken
+    addUserToken,
+    getAvailableAssetsForChain
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

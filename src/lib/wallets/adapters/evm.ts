@@ -32,21 +32,22 @@ class EvmAdapter implements IWalletAdapter {
         const balancePromises = assets.map(async (asset): Promise<AssetRow> => {
             try {
                 let balanceBigInt: bigint;
+                const decimals = asset.decimals || 18;
+
                 if (asset.isNative) {
                     balanceBigInt = await this.provider!.getBalance(ownerAddress);
                     return {
                         ...asset,
-                        balance: ethers.formatEther(balanceBigInt),
+                        balance: ethers.formatUnits(balanceBigInt, decimals),
                     } as AssetRow;
                 } else {
                     const abi = ["function balanceOf(address owner) view returns (uint256)"];
                     const contract = new ethers.Contract(asset.address, abi, this.provider!);
                     balanceBigInt = await contract.balanceOf(ownerAddress);
-                    // Standardizing to 18 decimals for MVP balance display, 
-                    // though real production would fetch decimals() from contract.
+                    
                     return {
                         ...asset,
-                        balance: ethers.formatUnits(balanceBigInt, 18),
+                        balance: ethers.formatUnits(balanceBigInt, decimals),
                     } as AssetRow;
                 }
             } catch (error) {

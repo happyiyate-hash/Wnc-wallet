@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo } from 'react';
@@ -29,7 +30,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 
 function SendClient() {
-  const { viewingNetwork, wallets, balances, infuraApiKey, allChains, allAssets } = useWallet();
+  const { viewingNetwork, wallets, balances, infuraApiKey, allChains, allAssets, getAvailableAssetsForChain } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -84,7 +85,12 @@ function SendClient() {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
-        let tx = selectedToken.isNative ? await wallet.sendTransaction({ to: recipient, value: ethers.parseEther(amount) }) : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(recipient, ethers.parseUnits(amount, 18));
+        const decimals = selectedToken.decimals || 18;
+        
+        let tx = selectedToken.isNative 
+          ? await wallet.sendTransaction({ to: recipient, value: ethers.parseUnits(amount, decimals) }) 
+          : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(recipient, ethers.parseUnits(amount, decimals));
+        
         setTxHash(tx.hash);
         setStep('success');
       }
@@ -129,7 +135,7 @@ function SendClient() {
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden"><div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" /><div className="flex flex-col h-full relative z-10"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" /><SheetHeader className="mb-6 px-6 pt-4"><SheetTitle className="sr-only">Select Network</SheetTitle><div className="text-2xl font-black text-center uppercase tracking-widest text-white">Select Network</div></SheetHeader><ScrollArea className="flex-1 px-6"><div className="grid grid-cols-2 gap-3 pb-24">{allChains.map((chain) => (<button key={chain.chainId} onClick={() => { setSelectedNetworkForSelection(chain); setIsTokenSideSheetOpen(true); }} style={{ borderColor: `${chain.themeColor || '#818cf8'}40`, background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}15 0%, rgba(0,0,0,0) 100%)` }} className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center"><TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} /><p className="font-black text-[11px] uppercase tracking-tight text-white">{chain.name}</p></button>))}</div></ScrollArea></div></SheetContent>
       </Sheet>
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full"><SheetHeader className="p-6 border-b border-white/5 shrink-0"><SheetTitle className="sr-only">Select Token</SheetTitle><Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="mb-4"><ArrowLeft className="w-5 h-5"/></Button><div className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</div></SheetHeader><ScrollArea className="flex-1 p-4"><div className="space-y-2 pb-20">{selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => { const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow; return (<button key={asset.symbol} onClick={() => handleTokenSelect(asset)} className="w-full flex items-center justify-between p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-left"><div className="flex items-center gap-4"><TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} /><div><p className="font-black text-base text-white">{asset.symbol}</p><p className="text-xs text-muted-foreground">{asset.name}</p></div></div><p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p></button>);})}</div></ScrollArea></SheetContent>
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full"><SheetHeader className="p-6 border-b border-white/5 shrink-0"><SheetTitle className="sr-only">Select Token</SheetTitle><Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="mb-4"><ArrowLeft className="w-5 h-5"/></Button><div className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</div></SheetHeader><ScrollArea className="flex-1 p-4"><div className="space-y-2 pb-20">{selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => { const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow; return (<button key={asset.symbol} onClick={() => handleTokenSelect(asset)} className="w-full flex items-center justify-between p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-left"><div className="flex items-center gap-4"><TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} /><div><p className="font-black text-base text-white">{asset.symbol}</p><p className="text-xs text-muted-foreground">{asset.name}</p></div></div><p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p></button>);})}</div></ScrollArea></SheetContent>
       </Sheet>
     </div>
   );

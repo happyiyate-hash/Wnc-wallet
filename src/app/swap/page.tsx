@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo } from 'react';
@@ -30,7 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function SwapClient() {
-  const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets, allChainsMap } = useWallet();
+  const { allChains, viewingNetwork, balances, wallets, infuraApiKey, allAssets, allChainsMap, getAvailableAssetsForChain } = useWallet();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,12 +79,14 @@ function SwapClient() {
       try {
         const fromAddr = fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address;
         const toAddr = toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address;
+        const fromDecimals = fromToken.decimals || 18;
+        
         const params = new URLSearchParams({
           fromChain: fromToken.chainId.toString(),
           toChain: toToken.chainId.toString(),
           fromToken: fromAddr,
           toToken: toAddr,
-          fromAmount: ethers.parseUnits(debouncedAmount, 18).toString(),
+          fromAmount: ethers.parseUnits(debouncedAmount, fromDecimals).toString(),
           fromAddress: userAddr,
           slippage: (parseFloat(slippage) / 100).toString()
         });
@@ -121,7 +124,7 @@ function SwapClient() {
 
   const fromUsd = (parseFloat(amount) || 0) * (fromToken?.priceUsd || 0);
   const estimatedReceivedAmount = quoteData?.estimate?.toAmount 
-    ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) 
+    ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, toToken?.decimals || 18)) 
     : 0;
   const toUsd = estimatedReceivedAmount * (toToken?.priceUsd || 0);
 
@@ -203,10 +206,8 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* Institutional Route Summary (Image Matching) */}
         {quoteData && (
             <div className="mx-2 mt-6 p-5 rounded-[2rem] bg-[#0a0a0c] border border-white/5 space-y-6 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                {/* Header: Route Path */}
                 <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
                         <div className="p-0.5 rounded-full bg-white/5">
@@ -243,7 +244,6 @@ function SwapClient() {
                     </div>
                 </div>
 
-                {/* Amount Row */}
                 <div className="flex items-center justify-between px-2">
                     <div className="text-xl font-black text-white tracking-tighter tabular-nums">
                         {estimatedReceivedAmount.toFixed(6)}
@@ -251,7 +251,6 @@ function SwapClient() {
                     <div className="text-xl font-black text-white/10 tracking-tighter tabular-nums">0</div>
                 </div>
 
-                {/* Footer Row: Metadata Labels */}
                 <div className="pt-5 border-t border-white/5 flex items-center justify-between px-2">
                     <div className="space-y-1.5">
                         <p className="text-[7px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">EST</p>
@@ -336,7 +335,7 @@ function SwapClient() {
             </SheetHeader>
             <ScrollArea className="flex-1 p-4">
                 <div className="space-y-2 pb-20">
-                    {selectedNetworkForSelection && getInitialAssets(selectedNetworkForSelection.chainId).map((token) => {
+                    {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => {
                         const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
                         return (
                             <button key={asset.symbol} onClick={() => handleTokenSelect(asset)} className="w-full flex items-center justify-between p-4 rounded-3xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-[0.98]">
