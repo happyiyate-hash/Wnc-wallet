@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import MoreActionsSheet from './wallet/more-actions-sheet';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
+import QuickSwapPanel from './wallet/quick-swap-panel';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { getAddressForChain } from '@/lib/wallets/utils';
@@ -120,6 +121,7 @@ export default function WalletTab() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
+  const [isQuickSwapOpen, setIsQuickSwapOpen] = useState(false);
   
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
   const [actionType, setActionType] = useState<'send' | 'receive' | 'swap'>('send');
@@ -191,7 +193,7 @@ export default function WalletTab() {
 
   const openAction = (type: 'send' | 'receive' | 'swap') => {
     if (type === 'swap') {
-        // Swap button at top is coming soon, bottom nav one works
+        setIsQuickSwapOpen(true);
         return;
     }
     // Navigate directly to pages as requested
@@ -269,7 +271,7 @@ export default function WalletTab() {
         <div className="flex justify-center gap-4 my-10 px-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
-          <ActionButton icon={Repeat} label="Coming Soon" onClick={() => openAction('swap')} disabled />
+          <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
           <ActionButton icon={Sparkles} label="Buy" onClick={() => router.push('/buy')} />
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
@@ -336,6 +338,7 @@ export default function WalletTab() {
       <ApiKeyRequestSheet isOpen={isApiKeySheetOpen} onOpenChange={setIsApiKeySheetOpen} />
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
+      <QuickSwapPanel isOpen={isQuickSwapOpen} onOpenChange={setIsQuickSwapOpen} />
 
       <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] flex flex-col overflow-hidden shadow-2xl">
