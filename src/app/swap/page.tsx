@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,7 +13,9 @@ import {
   Timer,
   Plane,
   ChevronDown,
-  Info
+  Info,
+  Zap,
+  ShieldCheck
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -116,7 +117,7 @@ export default function SwapPage() {
   };
 
   const fromUsd = (parseFloat(amount) || 0) * (fromToken?.priceUsd || 0);
-  const estimatedReceivedAmount = quoteData ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) : 0;
+  const estimatedReceivedAmount = quoteData?.estimate?.toAmount ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, 18)) : 0;
   const toUsd = estimatedReceivedAmount * (toToken?.priceUsd || 0);
 
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
@@ -125,10 +126,10 @@ export default function SwapPage() {
   const buttonState = useMemo(() => {
     if (!amount || parseFloat(amount) <= 0) return { text: 'Enter Amount', disabled: true };
     if (parseFloat(amount) > parseFloat(fromToken?.balance || '0')) return { text: 'Insufficient Balance', disabled: true, variant: 'destructive' as const };
-    if (isQuoteLoading) return { text: 'Finding Best Route...', disabled: true };
+    if (isQuoteLoading) return { text: 'Institutional Routing...', disabled: true };
     if (fetchError) return { text: 'No Routes Found', disabled: true };
-    if (!quoteData) return { text: 'Review Swap Details', disabled: true };
-    return { text: 'Swap Assets', disabled: false };
+    if (!quoteData) return { text: 'Fetching Best Price...', disabled: true };
+    return { text: 'Execute Institutional Swap', disabled: false };
   }, [amount, fromToken, isQuoteLoading, fetchError, quoteData]);
 
   return (
@@ -137,19 +138,31 @@ export default function SwapPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center">
             <h1 className="text-sm font-black uppercase tracking-widest leading-none">Exchange</h1>
-            <span className="text-[10px] text-primary font-black uppercase tracking-tighter mt-1">Institutional Liquidity</span>
+            <div className="flex items-center gap-1.5 mt-1">
+                <ShieldCheck className="w-2.5 h-2.5 text-primary fill-primary/20" />
+                <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Verified Institutional Liquidity</span>
+            </div>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsSlippageSheetOpen(true)}><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
       <main className="flex-1 w-full space-y-1 overflow-y-auto pb-40 pt-6 px-4">
+        {/* AGGREGATOR BADGE */}
+        <div className="flex justify-center mb-4">
+            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1 rounded-full border border-primary/20 animate-pulse">
+                <Zap className="w-3 h-3 text-primary fill-primary" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-primary">Searching 40+ Liquidity Sources...</span>
+            </div>
+        </div>
+
         {/* FROM CARD */}
         <section 
             style={{ 
                 backgroundColor: `${fromChainColor}12`, 
-                borderColor: `${fromChainColor}25` 
+                borderColor: `${fromChainColor}25`,
+                boxShadow: `0 10px 40px -15px ${fromChainColor}20`
             }}
-            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 shadow-2xl transition-colors duration-500"
+            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
         >
           <div className="flex items-center justify-between">
             <button 
@@ -202,9 +215,10 @@ export default function SwapPage() {
         <section 
             style={{ 
                 backgroundColor: `${toChainColor}12`, 
-                borderColor: `${toChainColor}25` 
+                borderColor: `${toChainColor}25`,
+                boxShadow: `0 10px 40px -15px ${toChainColor}20`
             }}
-            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 shadow-2xl transition-colors duration-500"
+            className="w-full backdrop-blur-xl border p-4 rounded-[2rem] space-y-2 transition-all duration-500"
         >
           <div className="flex items-center justify-between">
             <button 
@@ -283,8 +297,8 @@ export default function SwapPage() {
                     
                     <div className="flex items-center gap-4">
                         <div className="flex flex-col items-end">
-                            <span className="text-muted-foreground/50 text-[7px] mb-0.5">FEE</span>
-                            <span className="text-white font-mono">0.00 {viewingNetwork.symbol}</span>
+                            <span className="text-muted-foreground/50 text-[7px] mb-0.5">EST. FEE</span>
+                            <span className="text-white font-mono">$ {quoteData.estimate.gasCosts?.[0]?.amountUsd || '0.00'}</span>
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-muted-foreground/50 text-[7px] mb-0.5">SLIPPAGE</span>
