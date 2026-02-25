@@ -211,12 +211,12 @@ export default function WalletTab() {
         size="icon"
         disabled={disabled}
         className={cn(
-            "bg-primary hover:bg-primary/90 w-12 h-12 rounded-2xl shadow-lg transition-transform active:scale-90",
+            "bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl shadow-lg transition-transform active:scale-90",
             disabled && "opacity-50 grayscale"
         )}
         onClick={onClick}
       >
-        <Icon className="w-5 h-5 text-primary-foreground" />
+        <Icon className="w-6 h-6 text-primary-foreground" />
       </Button>
       <span className="text-[9px] uppercase font-bold tracking-widest text-muted-foreground">{label}</span>
     </div>
@@ -266,7 +266,8 @@ export default function WalletTab() {
             </div>
         </div>
 
-        <div className="flex justify-center gap-4 my-10 px-8">
+        {/* COMPACT LEFT-ALIGNED ACTION GROUP */}
+        <div className="flex justify-start gap-2.5 my-10 px-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
