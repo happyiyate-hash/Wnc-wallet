@@ -2,34 +2,26 @@ import crypto from 'crypto';
 
 /**
  * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL
- * Version: 2.0.0
+ * Version: 2.1.0 (SmarterSeller Interop)
  * Algorithm: AES-256-CBC
- * Key Derivation: SHA-256 Hash of Environment Secret
- * 
- * USE THIS EXACT LOGIC IN EXTERNAL APPS TO ENSURE VAULT COMPATIBILITY.
+ * Key Derivation: SHA-256 Hash of Master Key HEX
  */
 
 const ALGORITHM = 'aes-256-cbc';
-const IV_LENGTH = 16; // 16 bytes for AES-CBC
+const IV_LENGTH = 16;
+// Standardized Master Key for cross-app compatibility
+const MASTER_KEY_HEX = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
 
 /**
- * Derives a strictly 32-byte key from any input secret.
- * This is the "Magic Link" that allows Smarter Seller and Wevina to share data.
+ * Derives the 32-byte AES key using the SHA-256 hash of the Master Key.
  */
 function getInstitutionalKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY;
-  if (!secret) {
-    throw new Error("ENCRYPTION_KEY_MISSING");
-  }
-
-  // We hash the secret to ensure it is always exactly 32 bytes (256 bits)
-  // regardless of how long the input string is.
-  return crypto.createHash('sha256').update(secret).digest();
+  return crypto.createHash('sha256').update(MASTER_KEY_HEX).digest();
 }
 
 /**
  * Encrypts a plaintext string into a hex ciphertext and hex IV.
- * @param text The data to protect (e.g. mnemonic)
+ * Compatible with SmarterSeller profiles table logic.
  */
 export function encryptPhrase(text: string): { encrypted: string; iv: string } {
   const key = getInstitutionalKey();
@@ -47,14 +39,13 @@ export function encryptPhrase(text: string): { encrypted: string; iv: string } {
 }
 
 /**
- * Decrypts hex ciphertext using a provided hex IV.
- * @param encryptedText The hex string from 'vault_phrase' or 'vault_infura_key'
- * @param ivHex The hex string from 'iv' or 'infura_iv'
+ * Decrypts hex ciphertext using a provided hex IV and the Master Key.
  */
 export function decryptPhrase(encryptedText: string, ivHex: string): string {
   try {
     const key = getInstitutionalKey();
     const iv = Buffer.from(ivHex, 'hex');
+    const encryptedData = Buffer.from(encryptedText, 'hex');
     
     if (iv.length !== IV_LENGTH) {
       throw new Error(`IV length mismatch: expected ${IV_LENGTH}, got ${iv.length}`);
@@ -62,7 +53,7 @@ export function decryptPhrase(encryptedText: string, ivHex: string): string {
 
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;

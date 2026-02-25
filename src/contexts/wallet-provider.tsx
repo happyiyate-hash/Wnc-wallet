@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -76,7 +75,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  // Engine refs
   const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -100,11 +98,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
+    if (!mnemonic) return;
+    try {
+      const cleanMnemonic = mnemonic.trim();
+      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
+      
+      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
+      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
+      await cryptoWaitReady();
+      const keyring = new Keyring({ type: 'sr25519' });
+      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
+      
+      setWallets([
+        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
+        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
+        { address: dotWallet.address, type: 'polkadot' }
+      ]);
+    } catch (e: any) {
+      console.error("Wallet Derivation Error:", e.message);
+      throw e;
+    }
+  }, []);
+
   const handleSetApiKey = (key: string | null) => {
     setInfuraApiKey(key);
     if (key) {
         localStorage.setItem('infura_api_key', key);
-        // Automatically sync to cloud if a wallet exists
         if (wallets && user) saveToVault();
     } else {
         localStorage.removeItem('infura_api_key');
@@ -286,24 +306,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
-  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
-    if (!mnemonic) return;
-    try {
-      const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid.");
-      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
-      await cryptoWaitReady();
-      const keyring = new Keyring({ type: 'sr25519' });
-      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
-      setWallets([
-        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
-        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
-        { address: dotWallet.address, type: 'polkadot' }
-      ]);
-    } catch (e) { throw new Error("Validation failed."); }
-  }, []);
-
   useEffect(() => {
     if (!authLoading) {
       if (user) {
@@ -345,7 +347,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       const payload: any = {};
 
-      // 1. Encrypt & Prepare Mnemonic
       if (mnemonic) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
@@ -359,7 +360,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
       }
 
-      // 2. Encrypt & Prepare Infura Key
       if (currentApiKey) {
           const res = await fetch('/api/wallet/encrypt-phrase', {
             method: 'POST',
@@ -373,7 +373,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
       }
 
-      // 3. Perform atomic update
       if (Object.keys(payload).length > 0) {
           await supabase.from('profiles').update(payload).eq('id', user.id);
           toast({ title: "Cloud Vault Synced" });
@@ -387,7 +386,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const restoreFromCloud = useCallback(async () => {
     if (!user || !supabase) return;
     
-    // 1. Mandatory Cold Fetch from Supabase
     const { data: { session } } = await supabase.auth.getSession();
     const { data: freshProfile, error: profileError } = await supabase
         .from('profiles')
@@ -408,16 +406,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       throw new Error("No vault backup found in this cloud account.");
     }
 
-    // 2. Atomic Decryption & State Injection
     try {
-      // Restore Mnemonic
       if (encryptedPhrase && phraseIv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${session?.access_token}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
             body: JSON.stringify({ encrypted: encryptedPhrase, iv: phraseIv }),
           });
           const data = await res.json();
@@ -429,14 +422,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
       }
 
-      // Restore Infura API Key
       if (encryptedInfura && infuraIv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${session?.access_token}` 
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
             body: JSON.stringify({ encrypted: encryptedInfura, iv: infuraIv }),
           });
           const data = await res.json();
@@ -447,7 +436,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       toast({ title: "Institution Access Restored" });
-      refreshProfile(); // Sync local profile state
+      refreshProfile();
     } catch (e: any) {
         console.error("Vault reconstruction failed:", e.message);
         throw e;
