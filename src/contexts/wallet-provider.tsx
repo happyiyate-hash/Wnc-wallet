@@ -5,12 +5,14 @@ import React, { createContext, useContext, useState, ReactNode, useMemo, useEffe
 import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
+import * as xrpl from 'xrpl';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAssetPrices } from '@/lib/coingecko';
 import { logoSupabase } from '@/lib/supabase/logo-client';
 import { supabase } from '@/lib/supabase/client';
+import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -166,8 +168,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos, fetchTokenRegistry, viewingNetwork]);
 
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]): string | undefined => {
-    if (wallets && wallets.length > 0) return wallets[0].address;
-    return undefined;
+    if (!wallets) return undefined;
+    const found = wallets.find(w => w.type === (chain.type || 'evm'));
+    return found?.address;
   }, []);
 
   const fetchAllBalances = useCallback(async (priorityChainId?: number) => {
@@ -190,6 +193,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const updatedBalances: { [key: string]: AssetRow[] } = {};
 
       for (const chain of chainsToFetch) {
+        const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
+        if (!walletForChain) continue;
+
         const apiTokens = tokenRegistry[chain.chainId] || [];
         const baseAssets = getInitialAssets(chain.chainId);
         const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
@@ -211,6 +217,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             } as AssetRow;
         });
 
+        // Use Adapter pattern for non-EVM chains
+        if (chain.type === 'xrp') {
+            const adapter = xrpAdapterFactory(chain);
+            if (adapter) {
+                const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+                updatedBalances[chain.chainId] = results;
+                setBalances(prev => ({ ...prev, [chain.chainId]: results }));
+                continue;
+            }
+        }
+
         const rpcUrl = chain.rpcUrl.replace('{API_KEY}', infuraApiKey);
         try {
           const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
@@ -219,11 +236,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             try {
               let balance;
               if (asset.isNative) {
-                balance = await provider.getBalance(wallets[0].address);
+                balance = await provider.getBalance(walletForChain.address);
               } else {
                 const abi = ["function balanceOf(address owner) view returns (uint256)"];
                 const contract = new ethers.Contract(asset.address, abi, provider);
-                balance = await contract.balanceOf(wallets[0].address);
+                balance = await contract.balanceOf(walletForChain.address);
               }
               const balanceStr = ethers.formatUnits(balance, 18);
               return {
@@ -237,7 +254,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
           updatedBalances[chain.chainId] = chainBalances;
           
-          // Incremental state update to preserve cache during loop
           setBalances(prev => ({
             ...prev,
             [chain.chainId]: chainBalances.map(nb => {
@@ -257,7 +273,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await delay(priorityChainId === chain.chainId ? 0 : 20);
       }
 
-      // Final price sync
       const flatAssets = Object.values(updatedBalances).flat();
       const assetsWithPrices = await fetchAssetPrices(flatAssets as any);
       
@@ -267,7 +282,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         const finalAsset = {
             ...asset,
-            // Only update price if we got a valid non-zero price back, else preserve cache
             priceUsd: asset.priceUsd > 0 ? asset.priceUsd : (existing?.priceUsd || 0),
             pctChange24h: asset.pctChange24h !== 0 ? asset.pctChange24h : (existing?.pctChange24h || 0),
         };
@@ -310,12 +324,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const cleanMnemonic = mnemonic.trim();
       if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid mnemonic.");
-      const wallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      setWallets([{ 
-        address: wallet.address, 
-        privateKey: wallet.privateKey,
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${wallet.address}`
-      }]);
+      
+      // Derive EVM
+      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
+      
+      // Derive XRP (using BIP44 path)
+      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
+
+      setWallets([
+        { 
+          address: evmWallet.address, 
+          privateKey: evmWallet.privateKey,
+          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${evmWallet.address}`,
+          type: 'evm'
+        },
+        {
+          address: xrpWallet.address,
+          seed: xrpWallet.seed,
+          type: 'xrp'
+        }
+      ]);
     } catch (e: any) {
       throw new Error("Validation failed.");
     }

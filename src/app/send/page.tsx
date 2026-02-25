@@ -17,6 +17,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
+import * as xrpl from 'xrpl';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getInitialAssets } from '@/lib/wallets/balances';
@@ -51,25 +52,59 @@ export default function SendPage() {
   }, [allAssets, selectedToken, searchParams]);
 
   const handleSendRequest = async () => {
-    if (!wallets || !wallets[0].privateKey || !selectedToken || !infuraApiKey) {
+    if (!wallets || !selectedToken) {
       toast({ title: "Configuration Error", description: "Missing wallet or key.", variant: "destructive" });
       return;
     }
+    
     setIsSubmitting(true);
     try {
-      const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
-      const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-      const wallet = new ethers.Wallet(wallets[0].privateKey, provider);
-      let tx;
-      if (selectedToken.isNative) {
-        tx = await wallet.sendTransaction({ to: recipient, value: ethers.parseEther(amount) });
+      if (viewingNetwork.type === 'xrp') {
+        const xrpWalletData = wallets.find(w => w.type === 'xrp');
+        if (!xrpWalletData?.seed) throw new Error("XRP Seed missing.");
+
+        const client = new xrpl.Client(viewingNetwork.rpcUrl);
+        await client.connect();
+        
+        const wallet = xrpl.Wallet.fromSeed(xrpWalletData.seed);
+        const prepared = await client.autofill({
+          TransactionType: "Payment",
+          Account: wallet.address,
+          Amount: xrpl.xrpToDrops(amount),
+          Destination: recipient
+        });
+
+        const signed = wallet.sign(prepared);
+        const result = await client.submitAndWait(signed.tx_blob);
+        
+        if (result.result.meta && typeof result.result.meta !== 'string' && result.result.meta.TransactionResult === "tesSUCCESS") {
+          setTxHash(result.result.hash);
+          setStep('success');
+        } else {
+          throw new Error("XRP Transaction Failed");
+        }
+        await client.disconnect();
       } else {
-        const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
-        const contract = new ethers.Contract(selectedToken.address, abi, wallet);
-        tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
+        // EVM Flow
+        if (!infuraApiKey) throw new Error("Infura API Key required for EVM.");
+        const evmWalletData = wallets.find(w => w.type === 'evm');
+        if (!evmWalletData?.privateKey) throw new Error("EVM Private Key missing.");
+
+        const rpcUrl = viewingNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey);
+        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+        const wallet = new ethers.Wallet(evmWalletData.privateKey, provider);
+        
+        let tx;
+        if (selectedToken.isNative) {
+          tx = await wallet.sendTransaction({ to: recipient, value: ethers.parseEther(amount) });
+        } else {
+          const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
+          const contract = new ethers.Contract(selectedToken.address, abi, wallet);
+          tx = await contract.transfer(recipient, ethers.parseUnits(amount, 18));
+        }
+        setTxHash(tx.hash);
+        setStep('success');
       }
-      setTxHash(tx.hash);
-      setStep('success');
     } catch (e: any) {
       toast({ title: "Send Failed", description: e.message, variant: "destructive" });
     } finally {
@@ -87,13 +122,12 @@ export default function SendPage() {
   const isValidAmount = parseFloat(amount) > 0 && parseFloat(amount) <= balance;
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
 
-  const canSend = recipient.length > 0 && isValidAmount && !isSubmitting && !!infuraApiKey;
+  const canSend = recipient.length > 0 && isValidAmount && !isSubmitting;
 
   const renderDetails = () => (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1">
         <div className="p-6 space-y-8 pb-40">
-          {/* Token Selector Pill */}
           <div className="flex flex-col items-center">
             <button 
                 onClick={() => setIsNetworkSheetOpen(true)}
@@ -117,14 +151,12 @@ export default function SendPage() {
             </button>
           </div>
 
-          {/* Form Fields */}
           <div className="space-y-6">
-            {/* Recipient Card */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pl-4 opacity-60">Recipient</Label>
               <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-2 backdrop-blur-xl">
                     <Input 
-                        placeholder="0x... or ENS" 
+                        placeholder={viewingNetwork.type === 'xrp' ? "rAddress..." : "0x... or ENS"} 
                         value={recipient}
                         onChange={(e) => setRecipient(e.target.value)}
                         className="h-14 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700"
@@ -132,7 +164,6 @@ export default function SendPage() {
               </div>
             </div>
 
-            {/* Amount Card */}
             <div className="space-y-3">
               <div className="flex justify-between items-center px-4">
                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] opacity-60">Amount</Label>
@@ -165,14 +196,13 @@ export default function SendPage() {
             </div>
           </div>
 
-          {/* Fee Breakdown Card */}
           <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2 text-muted-foreground font-black text-[9px] uppercase tracking-[0.2em] opacity-60">
                     <Fuel className="w-3.5 h-3.5 text-primary" />
                     Network Fee
                 </div>
-                <span className="font-bold font-mono text-xs text-white">~0.000 {viewingNetwork.symbol}</span>
+                <span className="font-bold font-mono text-xs text-white">~{viewingNetwork.type === 'xrp' ? '0.000012' : '0.000'} {viewingNetwork.symbol}</span>
               </div>
               <div className="h-px bg-white/5" />
               <div className="flex justify-between items-center">
@@ -183,7 +213,6 @@ export default function SendPage() {
         </div>
       </ScrollArea>
 
-      {/* Sticky Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent backdrop-blur-md z-40">
         <div className="max-w-md mx-auto">
             {amount && parseFloat(amount) > balance && (
@@ -231,13 +260,13 @@ export default function SendPage() {
                 <div className="space-y-2">
                     <h2 className="text-3xl font-black tracking-tight">Transaction Sent!</h2>
                     <p className="text-sm text-muted-foreground font-medium">Your assets are being broadcasted to the network.</p>
+                    {txHash && <p className="text-[10px] font-mono text-primary/60 break-all px-10">{txHash}</p>}
                 </div>
                 <Button className="w-full h-14 rounded-2xl font-black text-base mt-8" onClick={() => router.push('/')}>Return Home</Button>
             </div>
         )}
       </main>
 
-      {/* Shared Network & Token Sheets */}
       <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
         <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
             <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />

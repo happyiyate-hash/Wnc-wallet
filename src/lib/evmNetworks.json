@@ -6,15 +6,8 @@
     "chainId": 1,
     "rpcUrl": "https://mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#627EEA"
-  },
-  "59144": {
-    "name": "Linea",
-    "symbol": "LINEA",
-    "chainId": 59144,
-    "rpcUrl": "https://linea-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "ethereum",
-    "themeColor": "#121212"
+    "themeColor": "#627EEA",
+    "type": "evm"
   },
   "137": {
     "name": "Polygon",
@@ -22,7 +15,8 @@
     "chainId": 137,
     "rpcUrl": "https://polygon-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "polygon-ecosystem-token",
-    "themeColor": "#8247E5"
+    "themeColor": "#8247E5",
+    "type": "evm"
   },
   "8453": {
     "name": "Base",
@@ -30,15 +24,26 @@
     "chainId": 8453,
     "rpcUrl": "https://base-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#0052FF"
+    "themeColor": "#0052FF",
+    "type": "evm"
   },
-  "81457": {
-    "name": "Blast",
-    "symbol": "BLAST",
-    "chainId": 81457,
-    "rpcUrl": "https://blast-mainnet.infura.io/v3/{API_KEY}",
+  "144": {
+    "name": "XRP Ledger",
+    "symbol": "XRP",
+    "chainId": 144,
+    "rpcUrl": "wss://xrplcluster.com",
+    "coingeckoId": "ripple",
+    "themeColor": "#23292F",
+    "type": "xrp"
+  },
+  "59144": {
+    "name": "Linea",
+    "symbol": "LINEA",
+    "chainId": 59144,
+    "rpcUrl": "https://linea-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#FCFC03"
+    "themeColor": "#121212",
+    "type": "evm"
   },
   "10": {
     "name": "Optimism",
@@ -46,7 +51,8 @@
     "chainId": 10,
     "rpcUrl": "https://optimism-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#FF0420"
+    "themeColor": "#FF0420",
+    "type": "evm"
   },
   "42161": {
     "name": "Arbitrum One",
@@ -54,130 +60,7 @@
     "chainId": 42161,
     "rpcUrl": "https://arbitrum-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
-    "themeColor": "#28A0F0"
-  },
-  "11297108109": {
-    "name": "Palm",
-    "symbol": "PALM",
-    "chainId": 11297108109,
-    "rpcUrl": "https://palm-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "palm",
-    "themeColor": "#00A98F"
-  },
-  "43114": {
-    "name": "Avalanche C-Chain",
-    "symbol": "AVAX",
-    "chainId": 43114,
-    "rpcUrl": "https://avalanche-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "avalanche-2",
-    "themeColor": "#E84142"
-  },
-  "42220": {
-    "name": "Celo",
-    "symbol": "CELO",
-    "chainId": 42220,
-    "rpcUrl": "https://celo-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "celo",
-    "themeColor": "#35D07F"
-  },
-  "324": {
-    "name": "ZKsync Era",
-    "symbol": "ZKS",
-    "chainId": 324,
-    "rpcUrl": "https://zksync-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "ethereum",
-    "themeColor": "#383838"
-  },
-  "56": {
-    "name": "BSC",
-    "symbol": "BNB",
-    "chainId": 56,
-    "rpcUrl": "https://bsc-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "binancecoin",
-    "themeColor": "#F0B90B"
-  },
-  "1313161554": {
-    "name": "Hemi",
-    "symbol": "HEMI",
-    "chainId": 1313161554,
-    "rpcUrl": "https://hemi-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "hemi",
-    "themeColor": "#FF6B00"
-  },
-  "5000": {
-    "name": "Mantle",
-    "symbol": "MNT",
-    "chainId": 5000,
-    "rpcUrl": "https://mantle-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "mantle",
-    "themeColor": "#000000"
-  },
-  "204": {
-    "name": "opBNB",
-    "symbol": "OPBNB",
-    "chainId": 204,
-    "rpcUrl": "https://opbnb-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "binancecoin",
-    "themeColor": "#F0B90B"
-  },
-  "534352": {
-    "name": "Scroll",
-    "symbol": "SCR",
-    "chainId": 534352,
-    "rpcUrl": "https://scroll-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "ethereum",
-    "themeColor": "#E6D5B4"
-  },
-  "1329": {
-    "name": "Sei Mainnet",
-    "symbol": "SEI",
-    "chainId": 1329,
-    "rpcUrl": "https://sei-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "sei-network",
-    "themeColor": "#9C27B0"
-  },
-  "1750": {
-    "name": "Swellchain",
-    "symbol": "SWELL",
-    "chainId": 1750,
-    "rpcUrl": "https://swellchain-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "swell-network",
-    "themeColor": "#F8C471"
-  },
-  "130": {
-    "name": "Unichain",
-    "symbol": "UNI",
-    "chainId": 130,
-    "rpcUrl": "https://unichain-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "uniswap",
-    "themeColor": "#FF007A"
-  },
-  "99999": {
-    "name": "Monad",
-    "symbol": "MON",
-    "chainId": 99999,
-    "rpcUrl": "https://monad-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "ethereum"
-  },
-  "88888": {
-    "name": "MegaETH",
-    "symbol": "MEGA",
-    "chainId": 88888,
-    "rpcUrl": "https://megaeth-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "ethereum"
-  },
-  "77777": {
-    "name": "Sei Testnet",
-    "symbol": "SEI",
-    "chainId": 77777,
-    "rpcUrl": "https://sei-testnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "sei-network"
-  },
-  "66666": {
-    "name": "Starknet",
-    "symbol": "STRK",
-    "chainId": 66666,
-    "rpcUrl": "https://starknet-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "starknet"
+    "themeColor": "#28A0F0",
+    "type": "evm"
   }
 }
