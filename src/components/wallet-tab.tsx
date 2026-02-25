@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   RefreshCw,
   ArrowUpFromLine,
@@ -14,7 +14,8 @@ import {
   ChevronRight,
   Wallet as WalletIcon,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  Timer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -125,6 +126,10 @@ export default function WalletTab() {
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
+  const [fetchStartTime, setFetchStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -135,6 +140,23 @@ export default function WalletTab() {
       return () => clearTimeout(timer);
     }
   }, [isInitialized, wallets, infuraApiKey]);
+
+  // Timer logic for balance fetching
+  useEffect(() => {
+    if (isRefreshing) {
+      setFetchStartTime(Date.now());
+      setElapsedSeconds(0);
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => +(prev + 0.1).toFixed(1));
+      }, 100);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setFetchStartTime(null);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isRefreshing]);
 
   const totalFiatValue = useMemo(() => {
     return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
@@ -157,8 +179,6 @@ export default function WalletTab() {
     const changeValue = totalFiatValue - totalValueYesterday;
     return (changeValue / totalValueYesterday) * 100;
   }, [allAssets, totalFiatValue]);
-
-  const isInitialWalletLoad = isRefreshing && totalFiatValue === 0;
 
   const getBalanceFontSize = (balance: number) => {
     const val = Number.isFinite(balance) ? balance : 0;
@@ -198,26 +218,22 @@ export default function WalletTab() {
     <div className="flex flex-col h-full">
       <div className="bg-background pt-8">
         <div className="flex items-center justify-between px-6">
-            <div>
-              {isInitialWalletLoad ? (
-                <div className="space-y-3">
-                   <Skeleton className="h-10 w-48 rounded-2xl bg-white/5" />
-                   <Skeleton className="h-4 w-32 rounded-lg bg-white/5" />
-                </div>
-              ) : (
-                <>
-                  <h2 className={cn(
-                    'font-black tracking-tighter text-white',
-                    getBalanceFontSize(Number(totalFiatValue ?? 0))
-                  )}>
-                    US${(totalFiatValue || 0).toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </h2>
+            <div className="relative group">
+                <h2 className={cn(
+                  'font-black tracking-tighter text-white transition-opacity',
+                  getBalanceFontSize(Number(totalFiatValue ?? 0)),
+                  isRefreshing && "opacity-80"
+                )}>
+                  US${(totalFiatValue || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </h2>
+                
+                <div className="flex items-center gap-3 mt-1.5">
                   <p
                     className={cn(
-                      'text-sm font-bold mt-1.5 flex items-center gap-2',
+                      'text-sm font-bold flex items-center gap-2',
                       total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
                     )}
                   >
@@ -228,8 +244,17 @@ export default function WalletTab() {
                       {total24hChange.toFixed(2)}%)
                     </span>
                   </p>
-                </>
-              )}
+
+                  {isRefreshing && (
+                    <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-left-2 duration-500">
+                        <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[10px] font-black text-green-500/80 uppercase tracking-widest flex items-center gap-1">
+                            Updating... 
+                            <span className="font-mono opacity-60">({elapsedSeconds}s)</span>
+                        </span>
+                    </div>
+                  )}
+                </div>
             </div>
         </div>
 

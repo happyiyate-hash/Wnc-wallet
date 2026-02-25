@@ -48,17 +48,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
-    "UserVault": {
-      "title": "UserVault",
-      "description": "Encrypted secure data for a user.",
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and encrypted vault data.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "encryptedMnemonic": { "type": "string" },
-        "mnemonicIv": { "type": "string" },
-        "encryptedInfuraKey": { "type": "string" },
-        "infuraIv": { "type": "string" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "vault_phrase": { "type": "string", "description": "Encrypted mnemonic" },
+        "iv": { "type": "string", "description": "IV for mnemonic" },
+        "vault_infura_key": { "type": "string", "description": "Encrypted Infura Key" },
+        "infura_iv": { "type": "string", "description": "IV for infura key" }
       }
     }
   },
@@ -81,10 +81,6 @@
     "/users/{userId}/balances/{assetId}": {
       "schema": "Balance",
       "description": "User's internal ledger balances."
-    },
-    "/users/{userId}/vault": {
-      "schema": "UserVault",
-      "description": "User's encrypted secret data."
     }
   }
 }
