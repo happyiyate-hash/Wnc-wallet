@@ -23,7 +23,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
   const [dbTokens, setDbTokens] = useState<AssetRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 1. Fetch Tokens for current network from Logo Database
+  // 1. Fetch Tokens for current network from Logo Database (token_metadata table)
   useEffect(() => {
     async function fetchMetadata() {
       if (!isOpen || !logoSupabase || !viewingNetwork) return;
@@ -37,17 +37,18 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
           .eq('network', networkSlug);
 
         if (!error && data) {
-          const formatted = data.map(t => ({
+          const formatted = data.map(token => ({
             chainId: viewingNetwork.chainId,
-            address: t.contract_address?.toLowerCase().trim(), // Standardized Normalization
-            symbol: t.token_details.symbol,
-            name: t.token_details.name,
-            decimals: t.token_details.decimals || 18,
-            iconUrl: t.logo_url,
+            address: token.contract_address?.toLowerCase().trim(),
+            symbol: token.token_details.symbol,
+            name: token.token_details.name,
+            decimals: token.token_details.decimals || 18,
+            iconUrl: token.logo_url,
             balance: '0',
             isNative: false,
-            priceSource: t.token_details.priceSource || 'coingecko',
-            coingeckoId: t.token_details.priceId || t.token_details.coingeckoId
+            priceSource: token.token_details.priceSource || 'coingecko',
+            priceId: token.token_details.priceId || token.token_details.coingeckoId,
+            coingeckoId: token.token_details.priceId || token.token_details.coingeckoId
           } as AssetRow));
           setDbTokens(formatted);
         }
@@ -70,7 +71,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     } as AssetRow));
 
     const combined = [...hardcoded, ...dbTokens];
-    // Remove duplicates by address/symbol
+    // Remove duplicates by identifier (address or symbol)
     return combined.reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
         if (!acc.find(t => (t.isNative ? t.symbol : t.address?.toLowerCase()) === identifier)) {

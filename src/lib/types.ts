@@ -14,6 +14,7 @@ export interface AssetRow {
   decimals?: number;
   priceSource?: 'coingecko' | 'dex' | 'manual';
   dexPair?: string;
+  priceId?: string; // Standardized price identifier from CDN
 }
 
 export interface WalletWithMetadata {

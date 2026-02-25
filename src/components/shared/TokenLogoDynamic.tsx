@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17,6 +16,8 @@ interface TokenLogoDynamicProps {
   symbol?: string; 
   name?: string;
 }
+
+const CDN_BASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';
 
 export default function TokenLogoDynamic({
   logoUrl,
@@ -61,14 +62,15 @@ export default function TokenLogoDynamic({
       }
 
       // 3. Fallback logic for provided URLs
-      if (logoUrl && logoUrl.startsWith('http')) {
-        setResolvedUrl(logoUrl);
+      if (logoUrl) {
+        if (logoUrl.startsWith('http')) {
+          setResolvedUrl(logoUrl);
+        } else if (logoUrl.startsWith('/')) {
+          // Prepend CDN base for relative paths
+          setResolvedUrl(`${CDN_BASE_URL}${logoUrl}`);
+        }
         setIsLoading(false);
         return;
-      }
-
-      if (logoUrl && logoUrl.startsWith('/')) {
-        setResolvedUrl(logoUrl);
       }
 
       setIsLoading(false);

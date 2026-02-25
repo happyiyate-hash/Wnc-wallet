@@ -175,8 +175,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             name: token.token_details.name,
             decimals: token.token_details.decimals,
             network: token.network,
-            contract: token.contract_address?.toLowerCase(), // Normalization
-            logo_url: token.logo_url
+            contract: token.contract_address?.toLowerCase(),
+            logo_url: token.logo_url,
+            priceSource: token.token_details.priceSource,
+            priceId: token.token_details.priceId || token.token_details.coingeckoId
           }));
         }
       } catch (e) {}
@@ -208,8 +210,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     allKnownAssets.forEach(asset => {
         // Priority 1: Direct ID Match (Best for Native/Majors)
-        if (asset.coingeckoId) {
-            coingeckoIds.add(asset.coingeckoId.toLowerCase());
+        const effectiveId = asset.priceId || asset.coingeckoId;
+        if (effectiveId) {
+            coingeckoIds.add(effectiveId.toLowerCase());
         } 
         // Priority 2: Contract-based lookup (For long-tail discovered tokens)
         else if (asset.address && asset.address.startsWith('0x')) {
@@ -270,7 +273,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             name: apiMeta?.name || a.name,
             decimals: apiMeta?.decimals || a.decimals || 18,
             iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
-            address: a.address?.toLowerCase(), // Critical for routing
+            address: a.address?.toLowerCase(),
+            priceId: apiMeta?.priceId || a.priceId || a.coingeckoId,
+            coingeckoId: apiMeta?.priceId || a.coingeckoId,
             updatedAt: 0
         } as AssetRow;
     });
@@ -427,7 +432,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           if (res.ok) {
             payload.vault_infura_key = data.encrypted; 
-            payload.infura_iv = data.iv; // Specific field mapping
+            payload.infura_iv = data.iv;
           }
       }
 
@@ -506,7 +511,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
-            const market = (asset.coingeckoId ? prices[asset.coingeckoId.toLowerCase()] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
+            const effectivePriceId = (asset.priceId || asset.coingeckoId)?.toLowerCase();
+            const market = (effectivePriceId ? prices[effectivePriceId] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
             const price = market?.price ?? 0;
             const balanceNum = parseFloat(asset.balance || '0');
             return {
