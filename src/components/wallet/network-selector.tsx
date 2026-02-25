@@ -52,21 +52,21 @@ const NetworkRow = ({
     <div
       onClick={() => onSelect(chain)}
       style={{
-        borderColor: `${themeColor}60`, // Brighter border
-        background: `linear-gradient(135deg, ${themeColor}30 0%, rgba(0,0,0,0.6) 100%)`, // Brighter background
+        borderColor: `${themeColor}80`, // Even brighter border
+        background: `linear-gradient(135deg, ${themeColor}40 0%, rgba(0,0,0,0.7) 100%)`, // More vibrant background
       }}
       className={cn(
-        'w-full flex items-center justify-between p-5 rounded-[2.5rem] border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden mb-3',
-        isSelected && "border-primary/80 shadow-[0_0_30px_rgba(129,140,248,0.2)]"
+        'w-full flex items-center justify-between py-3 px-4 rounded-[1.5rem] border transition-all cursor-pointer active:scale-[0.98] group relative overflow-hidden mb-2',
+        isSelected && "border-primary/90 shadow-[0_0_40px_rgba(129,140,248,0.25)]"
       )}
       role="button"
     >
-      <div className="flex items-center gap-4 relative z-10">
-        <div className="p-1 rounded-full bg-white/5">
+      <div className="flex items-center gap-3 relative z-10">
+        <div className="p-0.5 rounded-full bg-white/10">
             <TokenLogoDynamic 
                 alt={chain.name} 
                 logoUrl={chain.iconUrl}
-                size={48}
+                size={32} // Scaled down icon for slimer profile
                 chainId={chain.chainId}
                 name={chain.name}
                 symbol={chain.symbol}
@@ -75,43 +75,43 @@ const NetworkRow = ({
         </div>
         <div className="flex flex-col text-left">
           <div className="flex items-center gap-2">
-            <p className="font-black text-lg text-white tracking-tight leading-none">{chain.name}</p>
-            <span className="text-[10px] text-white/30 font-black uppercase tracking-widest">ID: {chain.chainId}</span>
+            <p className="font-black text-sm text-white tracking-tight leading-none">{chain.name}</p>
+            <span className="text-[8px] text-white/40 font-black uppercase tracking-widest">ID: {chain.chainId}</span>
           </div>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-1.5 mt-1">
             <p className={cn(
-                "font-mono text-xs tracking-tight transition-colors",
-                isCopied ? "text-green-400" : "text-white/40"
+                "font-mono text-[10px] tracking-tighter transition-colors opacity-60",
+                isCopied ? "text-green-400 opacity-100" : "text-white"
             )}>
                 {shortAddress}
             </p>
             {address && (
                 <button 
                     onClick={handleCopy}
-                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-primary"
+                    className="p-1 rounded-lg hover:bg-white/10 transition-colors text-primary"
                 >
-                    {isCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {isCopied ? <CheckCircle2 className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                 </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 relative z-10 pr-2">
+      <div className="flex items-center gap-3 relative z-10 pr-1">
         {isSelected ? (
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-            <CheckCircle2 className="w-5 h-5 text-primary" />
+          <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center border border-primary/40">
+            <CheckCircle2 className="w-4 h-4 text-primary" />
           </div>
         ) : (
-          <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center opacity-40 group-hover:opacity-100 transition-opacity">
-            <ChevronRight className="w-5 h-5 text-white group-hover:translate-x-0.5 transition-transform" />
+          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center opacity-40 group-hover:opacity-100 transition-opacity">
+            <ChevronRight className="w-4 h-4 text-white group-hover:translate-x-0.5 transition-transform" />
           </div>
         )}
       </div>
       
       {/* Subtle background glow */}
       <div 
-        className="absolute -right-4 -top-4 w-24 h-24 blur-3xl opacity-20 transition-opacity group-hover:opacity-40"
+        className="absolute -right-4 -top-4 w-20 h-20 blur-2xl opacity-30 transition-opacity group-hover:opacity-50"
         style={{ backgroundColor: themeColor }}
       />
     </div>
