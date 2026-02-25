@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
@@ -9,6 +8,7 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
@@ -16,29 +16,25 @@ export default function Home() {
   const { wallets, isInitialized, isWalletLoading } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Controlled states for sheets to ensure they can be dismissed
+  // Controlled states for sheets
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
-  // Sync Auth Sheet visibility
-  useEffect(() => {
-    if (!loading && !user) {
-      setIsAuthOpen(true);
-    } else {
-      setIsAuthOpen(false);
-    }
-  }, [loading, user]);
+  // Derive intended sheet states to prevent race conditions/flickering
+  const shouldShowAuth = !loading && !user;
+  const shouldShowSetup = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
 
-  // Sync Wallet Setup Sheet visibility (Strict Priority)
+  // Sync Auth Sheet
   useEffect(() => {
-    // Only show if user is logged in, Firebase is ready, wallet isn't loading, and no wallets exist yet
-    if (!loading && !!user && isInitialized && !isWalletLoading && !wallets) {
-      setIsWalletSetupOpen(true);
-    } else {
-      setIsWalletSetupOpen(false);
-    }
-  }, [loading, user, isInitialized, isWalletLoading, wallets]);
+    setIsAuthOpen(shouldShowAuth);
+  }, [shouldShowAuth]);
 
+  // Sync Wallet Setup (Strict Priority)
+  useEffect(() => {
+    setIsWalletSetupOpen(shouldShowSetup);
+  }, [shouldShowSetup]);
+
+  // Handle scroll-based header collapse
   useEffect(() => {
     const scrollDiv = scrollRef.current;
     if (!scrollDiv) return;
@@ -58,6 +54,20 @@ export default function Home() {
     scrollDiv.addEventListener('scroll', handle);
     return () => scrollDiv.removeEventListener('scroll', handle);
   }, []);
+
+  // GATEKEEPER: Prevent any flickering during initial profile/wallet resolution
+  if (loading || (!!user && isWalletLoading && !wallets)) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground animate-pulse">
+            Initializing Secure Node...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">

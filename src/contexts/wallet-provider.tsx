@@ -391,14 +391,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
+  // STRICT INITIALIZATION: Wait for local wallet restoration before unlocking UI
   useEffect(() => {
-    if (!authLoading) {
+    const initLocalSession = async () => {
+      if (authLoading) return;
+
+      setIsWalletLoading(true);
       if (user) {
         const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-        if (saved) loadWalletFromMnemonic(saved).catch(() => localStorage.removeItem(`wallet_mnemonic_${user.id}`));
+        if (saved) {
+          try {
+            // AWAIT the async derivation to prevent flickering setup sheets
+            await loadWalletFromMnemonic(saved);
+          } catch (e) {
+            console.error("Local wallet restoration error:", e);
+            localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+          }
+        }
       }
       setIsWalletLoading(false);
-    }
+    };
+
+    initLocalSession();
   }, [authLoading, user, loadWalletFromMnemonic]);
 
   const generateWallet = useCallback(async () => {
