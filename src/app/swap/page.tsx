@@ -11,18 +11,16 @@ import {
   Loader2, 
   ChevronRight,
   Settings2,
-  Fuel,
-  Timer,
   Plane,
   ChevronDown,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { getInitialAssets } from '@/lib/wallets/balances';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getAddressForChain } from '@/lib/wallets/utils';
 import { ethers } from 'ethers';
@@ -93,13 +91,32 @@ function SwapClient() {
         const res = await fetch(`/api/bridge/quote?${params.toString()}`);
         const data = await res.json();
         
-        if (data.error) throw new Error(data.details || data.error);
-        if (!data.estimate?.toAmount || data.estimate.toAmount === "0") throw new Error("No route");
+        if (data.error || !data.estimate?.toAmount || data.estimate.toAmount === "0") {
+            throw new Error(data.details || data.error || "No route");
+        }
         
         setQuoteData(data);
       } catch (e: any) {
-        setFetchError(e.message);
-        setQuoteData(null);
+        // --- INSTITUTIONAL FALLBACK QUOTE ENGINE ---
+        // If live liquidity fails, estimate based on global market prices with a safety buffer.
+        if (fromToken.priceUsd && toToken.priceUsd) {
+            const amountIn = parseFloat(debouncedAmount);
+            const rawEstimatedOut = (amountIn * fromToken.priceUsd) / toToken.priceUsd;
+            const safetyBuffer = 0.97; // 3% institutional discount for slippage/liquidity risk
+            const safeEstimatedOut = rawEstimatedOut * safetyBuffer;
+            
+            setQuoteData({
+                isFallback: true,
+                tool: 'Institutional Estimate',
+                estimate: {
+                    toAmount: ethers.parseUnits(safeEstimatedOut.toFixed(toToken.decimals || 18), toToken.decimals || 18).toString(),
+                    executionDuration: 300,
+                }
+            });
+        } else {
+            setFetchError(e.message);
+            setQuoteData(null);
+        }
       } finally {
         setIsQuoteLoading(false);
       }
@@ -137,6 +154,7 @@ function SwapClient() {
     if (isQuoteLoading) return { text: 'Fetching Route...', disabled: true };
     if (fetchError) return { text: 'No Routes Found', disabled: true };
     if (!quoteData) return { text: 'Loading...', disabled: true };
+    if (quoteData.isFallback) return { text: 'No Liquidity Route', disabled: true, variant: 'secondary' as const };
     return { text: `Swap via ${quoteData.tool?.toUpperCase() || 'Institutional'}`, disabled: false };
   }, [amount, fromToken, isQuoteLoading, fetchError, quoteData]);
 
@@ -280,6 +298,13 @@ function SwapClient() {
                         <p className="text-[10px] font-black text-white">{slippage}%</p>
                     </div>
                 </div>
+
+                {quoteData.isFallback && (
+                    <div className="pt-4 border-t border-white/5 flex items-center gap-2 text-primary">
+                        <ShieldAlert className="w-3 h-3" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Route not available. Showing market estimate.</span>
+                    </div>
+                )}
             </div>
         )}
 
