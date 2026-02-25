@@ -190,8 +190,12 @@ export default function WalletTab() {
   };
 
   const openAction = (type: 'send' | 'receive' | 'swap') => {
-    setActionType(type);
-    setIsActionSheetOpen(true);
+    if (type === 'swap') {
+        // Swap button at top is coming soon, bottom nav one works
+        return;
+    }
+    // Navigate directly to pages as requested
+    router.push(`/${type}`);
   };
 
   const handleTokenSelect = (token: AssetRow) => {
@@ -200,12 +204,16 @@ export default function WalletTab() {
     router.push(`/${actionType}?symbol=${token.symbol}&chainId=${token.chainId}`);
   };
 
-  const ActionButton = ({ icon: Icon, label, onClick }: { icon: React.ElementType, label: string, onClick: () => void }) => (
+  const ActionButton = ({ icon: Icon, label, onClick, disabled }: { icon: React.ElementType, label: string, onClick: () => void, disabled?: boolean }) => (
     <div className="flex flex-col items-center gap-2">
       <Button
         variant="default"
         size="icon"
-        className="bg-primary hover:bg-primary/90 w-12 h-12 rounded-2xl shadow-lg transition-transform active:scale-90"
+        disabled={disabled}
+        className={cn(
+            "bg-primary hover:bg-primary/90 w-12 h-12 rounded-2xl shadow-lg transition-transform active:scale-90",
+            disabled && "opacity-50 grayscale"
+        )}
         onClick={onClick}
       >
         <Icon className="w-5 h-5 text-primary-foreground" />
@@ -261,7 +269,7 @@ export default function WalletTab() {
         <div className="flex justify-center gap-4 my-10 px-8">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
-          <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
+          <ActionButton icon={Repeat} label="Coming Soon" onClick={() => openAction('swap')} disabled />
           <ActionButton icon={Sparkles} label="Buy" onClick={() => router.push('/buy')} />
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
