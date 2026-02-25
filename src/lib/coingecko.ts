@@ -1,4 +1,3 @@
-import type { AssetRow } from '@/lib/types';
 
 const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
@@ -47,7 +46,9 @@ async function fetcher(url: string) {
 export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { usd: number, usd_24h_change: number } }> {
     if (ids.length === 0) return {};
     
-    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    // Ensure unique, clean IDs
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean).map(id => id.toLowerCase().trim())));
+    if (uniqueIds.length === 0) return {};
     
     try {
         const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
@@ -60,18 +61,22 @@ export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { us
 
 /**
  * Fetches prices for tokens on a specific platform using contract addresses.
+ * CRITICAL: Addresses MUST be lowercased for CoinGecko.
  */
 export async function fetchPricesByContract(platformId: string, addresses: string[]): Promise<{ [address: string]: { usd: number, usd_24h_change: number } }> {
     if (!platformId || addresses.length === 0) return {};
     
-    const cleanAddresses = addresses.filter(addr => addr && addr.startsWith('0x')).join(',');
+    const cleanAddresses = addresses
+        .filter(addr => addr && addr.startsWith('0x'))
+        .map(addr => addr.toLowerCase().trim())
+        .join(',');
+        
     if (!cleanAddresses) return {};
 
     try {
         const url = `${COINGECKO_API_URL}/simple/token_price/${platformId}?contract_addresses=${cleanAddresses}&vs_currencies=usd&include_24hr_change=true`;
         const data = await fetcher(url);
         
-        // Normalize response to match the simple price format
         const result: any = {};
         Object.entries(data).forEach(([addr, info]: [string, any]) => {
             result[addr.toLowerCase()] = {
@@ -91,7 +96,7 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
  */
 export async function fetchChartData(coingeckoId: string, days: string) {
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
-    const url = `${COINGECKO_API_URL}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${daysParam}`;
+    const url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
     
     try {
         const data = await fetcher(url);
@@ -109,6 +114,6 @@ export async function fetchChartData(coingeckoId: string, days: string) {
  * Fetches detailed market statistics for a single token.
  */
 export async function fetchSingleTokenDetails(coingeckoId: string) {
-    const url = `${COINGECKO_API_URL}/coins/${coingeckoId}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
+    const url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
     return fetcher(url);
 }

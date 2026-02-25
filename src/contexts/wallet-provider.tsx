@@ -150,7 +150,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setUserAddedTokens(prev => {
         const exists = prev.find(t => t.chainId === token.chainId && t.symbol === token.symbol);
         if (exists) return prev;
-        const next = [...prev, token];
+        const normalizedToken = {
+            ...token,
+            address: token.address?.toLowerCase() // Normalize address on addition
+        };
+        const next = [...prev, normalizedToken];
         localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next));
         return next;
     });
@@ -172,7 +176,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             name: token.token_details.name,
             decimals: token.token_details.decimals,
             network: token.network,
-            contract: token.contract_address,
+            contract: token.contract_address?.toLowerCase(), // Normalization
             logo_url: token.logo_url
           }));
         }
@@ -196,7 +200,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const coingeckoIds = new Set<string>();
     const contractLookups: { [chainId: number]: Set<string> } = {};
 
-    // 1. Collect all assets that might need pricing
+    // 1. Collect all assets from all supported chains + user custom tokens
     const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({...a, balance: '0'} as AssetRow)));
@@ -204,26 +208,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allKnownAssets.push(...userAddedTokens);
 
     allKnownAssets.forEach(asset => {
+        // Priority 1: Direct ID Match (Best for Native/Majors)
         if (asset.coingeckoId) {
-            coingeckoIds.add(asset.coingeckoId);
-        } else if (asset.address && asset.address.startsWith('0x')) {
-            if (!contractLookups[asset.chainId]) contractLookups[asset.chainId] = new Set();
-            contractLookups[asset.chainId].add(asset.address.toLowerCase());
+            coingeckoIds.add(asset.coingeckoId.toLowerCase());
+        } 
+        // Priority 2: Contract-based lookup (For long-tail discovered tokens)
+        else if (asset.address && asset.address.startsWith('0x')) {
+            const chainId = asset.chainId;
+            if (COINGECKO_PLATFORM_MAP[chainId]) {
+                if (!contractLookups[chainId]) contractLookups[chainId] = new Set();
+                contractLookups[chainId].add(asset.address.toLowerCase().trim());
+            }
         }
     });
 
     const newPrices: { [key: string]: PriceInfo } = {};
 
     try {
-        // 2. Fetch by ID (Native tokens & Major assets)
+        // Step A: Fetch by ID
         if (coingeckoIds.size > 0) {
             const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
             Object.entries(priceMap).forEach(([id, data]) => {
-                newPrices[id] = { price: data.usd, change: data.usd_24h_change };
+                newPrices[id.toLowerCase()] = { price: data.usd, change: data.usd_24h_change };
             });
         }
 
-        // 3. Fetch by Contract (CDN Discovered Assets)
+        // Step B: Fetch by Contract (Parallel per platform)
         const contractPromises = Object.entries(contractLookups).map(async ([chainId, addresses]) => {
             const platformId = COINGECKO_PLATFORM_MAP[parseInt(chainId)];
             if (platformId) {
@@ -255,12 +265,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
         return acc;
     }, [] as AssetRow[]).map(a => {
-        const apiMeta = apiTokens.find(t => t.symbol === a.symbol);
+        const apiMeta = apiTokens.find(t => t.symbol === a.symbol || (t.contract && t.contract === a.address?.toLowerCase()));
         return {
             ...a,
             name: apiMeta?.name || a.name,
             decimals: apiMeta?.decimals || a.decimals || 18,
             iconUrl: apiMeta?.logo_url ? apiMeta.logo_url : (a.iconUrl || chain.iconUrl),
+            address: a.address?.toLowerCase(), // Critical for routing
             updatedAt: 0
         } as AssetRow;
     });
@@ -417,7 +428,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           if (res.ok) {
             payload.vault_infura_key = data.encrypted; 
-            payload.iv = data.iv; // Canonical protocol sync
+            payload.infura_iv = data.iv; // Specific field mapping
           }
       }
 
@@ -448,7 +459,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const encryptedPhrase = freshProfile.vault_phrase;
     const phraseIv = freshProfile.iv;
     const encryptedInfura = freshProfile.vault_infura_key;
-    const infuraIv = freshProfile.infura_iv || freshProfile.iv; // IV protocol compatibility
+    const infuraIv = freshProfile.infura_iv; 
 
     if (!encryptedPhrase && !encryptedInfura) {
       throw new Error("No vault backup found in this cloud account.");
@@ -496,7 +507,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
-            const market = (asset.coingeckoId ? prices[asset.coingeckoId] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
+            const market = (asset.coingeckoId ? prices[asset.coingeckoId.toLowerCase()] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
             const price = market?.price ?? 0;
             const balanceNum = parseFloat(asset.balance || '0');
             return {

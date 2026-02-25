@@ -13,6 +13,8 @@ export interface AssetRow {
   coingeckoId?: string;
   updatedAt?: number; // Last successful sync timestamp
   decimals?: number;
+  priceSource?: 'coingecko' | 'dex' | 'manual';
+  dexPair?: string;
 }
 
 export interface WalletWithMetadata {

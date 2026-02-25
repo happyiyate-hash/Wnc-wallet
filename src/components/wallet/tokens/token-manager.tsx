@@ -40,13 +40,14 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
         if (!error && data) {
           const formatted = data.map(t => ({
             chainId: viewingNetwork.chainId,
-            address: t.contract_address,
+            address: t.contract_address?.toLowerCase().trim(), // Standardized Normalization
             symbol: t.token_details.symbol,
             name: t.token_details.name,
             decimals: t.token_details.decimals || 18,
             iconUrl: t.logo_url,
             balance: '0',
-            isNative: false
+            isNative: false,
+            priceSource: 'coingecko' // Default to coingecko for mapping
           } as AssetRow));
           setDbTokens(formatted);
         }
@@ -69,20 +70,23 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     } as AssetRow));
 
     const combined = [...hardcoded, ...dbTokens];
-    // Remove duplicates by symbol
+    // Remove duplicates by address/symbol
     return combined.reduce((acc, curr) => {
-        if (!acc.find(t => t.symbol === curr.symbol)) acc.push(curr);
+        const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
+        if (!acc.find(t => (t.isNative ? t.symbol : t.address?.toLowerCase()) === identifier)) {
+            acc.push(curr);
+        }
         return acc;
     }, [] as AssetRow[]);
   }, [viewingNetwork, dbTokens]);
 
   const filteredTokens = mergedTokens.filter(t => 
     t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    t.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+    t.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (t.address && t.address.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleToggle = (token: AssetRow, checked: boolean) => {
-    // If enabling a token from DB that wasn't in hardcoded list, add it to provider
     if (checked) {
         addUserToken(token);
     }
@@ -131,7 +135,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                         const isHidden = hiddenTokenKeys.has(`${viewingNetwork.chainId}:${token.symbol}`);
                         return (
                             <div 
-                                key={token.symbol}
+                                key={token.isNative ? token.symbol : token.address}
                                 className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
                             >
                                 <div className="flex items-center gap-4">
@@ -145,7 +149,9 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                                     />
                                     <div className="text-left leading-tight">
                                         <p className="font-bold text-sm text-white">{token.symbol}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">{token.name}</p>
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">
+                                            {token.isNative ? 'Native Network Asset' : `${token.address?.slice(0,6)}...${token.address?.slice(-4)}`}
+                                        </p>
                                     </div>
                                 </div>
                                 <Switch 
