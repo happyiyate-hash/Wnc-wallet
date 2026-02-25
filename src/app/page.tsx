@@ -16,9 +16,28 @@ export default function Home() {
   const { wallets, isInitialized, isWalletLoading } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Determine which sheet should be open based on strict priority
-  const isAuthOpen = !loading && !user;
-  const isWalletSetupOpen = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
+  // Controlled states for sheets to ensure they can be dismissed
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
+
+  // Sync Auth Sheet visibility
+  useEffect(() => {
+    if (!loading && !user) {
+      setIsAuthOpen(true);
+    } else {
+      setIsAuthOpen(false);
+    }
+  }, [loading, user]);
+
+  // Sync Wallet Setup Sheet visibility (Strict Priority)
+  useEffect(() => {
+    // Only show if user is logged in, Firebase is ready, wallet isn't loading, and no wallets exist yet
+    if (!loading && !!user && isInitialized && !isWalletLoading && !wallets) {
+      setIsWalletSetupOpen(true);
+    } else {
+      setIsWalletSetupOpen(false);
+    }
+  }, [loading, user, isInitialized, isWalletLoading, wallets]);
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;
@@ -52,8 +71,14 @@ export default function Home() {
         </div>
       </main>
       
-      <AuthSheet isOpen={isAuthOpen} onOpenChange={() => {}} />
-      <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={() => {}} />
+      <AuthSheet 
+        isOpen={isAuthOpen} 
+        onOpenChange={setIsAuthOpen} 
+      />
+      <WalletManagementSheet 
+        isOpen={isWalletSetupOpen} 
+        onOpenChange={setIsWalletSetupOpen} 
+      />
     </div>
   );
 }

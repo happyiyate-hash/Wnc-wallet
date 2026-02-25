@@ -52,10 +52,11 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     setStatus('Syncing Keys...');
     startTimer();
     try {
-      // Near-instant now because WalletProvider uses the pre-fetched profile
       await generateWallet();
       setStatus('Complete!');
-      setTimeout(() => onOpenChange(false), 800);
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 800);
     } catch (e: any) {
       if (e.message === 'CLOUDV_EXISTS') {
           setError("You already have a secret phrase in the cloud. Please retrieve it or delete it manually before creating a new one.");
@@ -81,7 +82,9 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
       setStep('start');
       setImportInput('');
       setStatus('Complete!');
-      setTimeout(() => onOpenChange(false), 800);
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 800);
     } catch (e: any) {
       setStatus('Invalid Phrase');
     } finally {
@@ -99,11 +102,12 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     setStatus('Connecting...');
     startTimer();
     
+    // Status flares for institutional feel
     const statusSequence = [
         { msg: 'Fetching Vault...', delay: 200 },
-        { msg: 'Decrypting AES-256...', delay: 1200 },
-        { msg: 'Restoring Keys...', delay: 2000 },
-        { msg: 'Access Restored!', delay: 2800 }
+        { msg: 'Decrypting AES-256...', delay: 1000 },
+        { msg: 'Restoring Keys...', delay: 1800 },
+        { msg: 'Access Restored!', delay: 2500 }
     ];
 
     statusSequence.forEach(({ msg, delay }) => {
@@ -114,7 +118,10 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
 
     try {
       await restoreFromCloud();
-      setTimeout(() => onOpenChange(false), 3200);
+      // Ensure the flare finishes then close
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 2800);
     } catch (e: any) {
       setStatus('Failed');
     } finally {
@@ -122,7 +129,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
         setIsProcessing(false);
         stopTimer();
         setStatus('');
-      }, 3500);
+      }, 3000);
     }
   };
 
