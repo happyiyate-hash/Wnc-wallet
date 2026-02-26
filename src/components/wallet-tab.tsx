@@ -58,7 +58,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   return (
     <div
       onClick={handleRowClick}
-      className="flex cursor-pointer items-center justify-between py-4 border-b border-white/5 active:bg-white/5 transition-all w-full px-6"
+      className="flex cursor-pointer items-center justify-between py-4 active:bg-white/5 transition-all w-full px-6"
       role="button"
     >
       <div className="flex items-center gap-3">
