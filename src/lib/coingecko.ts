@@ -2,6 +2,7 @@ const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
 /**
  * CoinGecko Platform IDs mapped from Chain IDs
+ * Comprehensive mapping for institutional asset discovery.
  */
 export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
     1: 'ethereum',
@@ -18,7 +19,12 @@ export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
     534352: 'scroll',
     5000: 'mantle',
     1329: 'sei-network',
-    130: 'unichain'
+    130: 'unichain',
+    81457: 'blast',
+    204: 'opbnb',
+    43111: 'hemi',
+    1923: 'swell-network',
+    11297108109: 'palm'
 };
 
 /**
@@ -99,6 +105,7 @@ export async function fetchChartData(coingeckoId: string, days: string) {
     
     try {
         const data = await fetcher(url);
+        if (!data || !data.prices) return [];
         return data.prices.map(([timestamp, price]: [number, number]) => ({
             time: timestamp,
             price: price,

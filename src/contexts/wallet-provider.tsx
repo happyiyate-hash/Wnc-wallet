@@ -189,37 +189,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setTokenRegistry(registry);
   }, [chainsWithLogos]);
 
-  // Deterministic Initialization
-  useEffect(() => {
-    if (!areLogosLoading && !isInitialized) {
-      const savedChainId = localStorage.getItem('last_viewed_chain_id');
-      const restoredChain = savedChainId 
-        ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) 
-        : null;
-
-      setViewingNetwork(restoredChain || chainsWithLogos[0] || null);
-      setIsInitialized(true);
-      if (chainsWithLogos.length > 0) fetchTokenRegistry();
-    }
-  }, [areLogosLoading, chainsWithLogos, fetchTokenRegistry, isInitialized]);
-
-  useEffect(() => {
-    if (viewingNetwork) {
-      localStorage.setItem('last_viewed_chain_id', viewingNetwork.chainId.toString());
-    }
-  }, [viewingNetwork]);
-
   const fetchGlobalPrices = useCallback(async () => {
     if (!isInitialized) return;
     
     const coingeckoIds = new Set<string>();
     const contractLookups: { [chainId: number]: Set<string> } = {};
 
+    // GATHER ALL POTENTIAL TOKENS FROM ALL SOURCES
     const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({...a, balance: '0'} as AssetRow)));
     });
     allKnownAssets.push(...userAddedTokens);
+    
+    // Add tokens currently in balances state (discovered tokens)
+    Object.values(balances).forEach(list => {
+        allKnownAssets.push(...list);
+    });
 
     allKnownAssets.forEach(asset => {
         const effectiveId = asset.priceId || asset.coingeckoId;
@@ -267,7 +253,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await Promise.all(contractPromises);
         
-        // Final state update: Merge carefully to avoid UI jitter
+        // Final state update: Merge carefully to avoid UI jitter and preserve historical data
         setPrices(prev => {
             const merged = { ...prev };
             Object.entries(newPrices).forEach(([key, val]) => {
@@ -278,7 +264,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {
         console.warn("Master Price Engine Failure:", e);
     }
-  }, [isInitialized, chainsWithLogos, userAddedTokens]);
+  }, [isInitialized, chainsWithLogos, userAddedTokens, balances]);
 
   // High-frequency price pulse (10s)
   useEffect(() => {
@@ -350,28 +336,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!viewingNetwork || !infuraApiKey || !wallets) return;
     setIsRefreshing(true);
     try {
-        const [freshBalances] = await Promise.all([
-            fetchBalancesForChain(viewingNetwork),
+        // Parallelized priority fetch
+        await Promise.all([
+            fetchBalancesForChain(viewingNetwork).then(freshBalances => {
+                setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: freshBalances }));
+            }),
             fetchGlobalPrices()
         ]);
-        setBalances(prev => {
-            const next = { ...prev, [viewingNetwork.chainId]: freshBalances };
-            if (user) localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
-            return next;
-        });
     } catch (e) {
         setFetchError("Connection limited.");
     } finally {
         setIsRefreshing(false);
     }
-  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, fetchGlobalPrices, user]);
+  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, fetchGlobalPrices]);
 
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork) return;
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
+    
     setIsRefreshing(true);
     try {
+        // Priority 1: Instant Price Refresh
+        fetchGlobalPrices();
+
+        // Priority 2: Active Network Balances
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -381,6 +370,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally {
         setIsRefreshing(false);
     }
+
     if (isBackgroundSyncRunning.current) return;
     isBackgroundSyncRunning.current = true;
     const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
@@ -397,7 +387,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) {}
     }
     isBackgroundSyncRunning.current = false;
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, user, fetchGlobalPrices]);
 
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) {
@@ -406,7 +396,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
-  // STRICT INITIALIZATION: Finalized state resolution
+  // Deterministic Initialization
+  useEffect(() => {
+    if (!areLogosLoading && !isInitialized) {
+      const savedChainId = localStorage.getItem('last_viewed_chain_id');
+      const restoredChain = savedChainId 
+        ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) 
+        : null;
+
+      setViewingNetwork(restoredChain || chainsWithLogos[0] || null);
+      setIsInitialized(true);
+      if (chainsWithLogos.length > 0) fetchTokenRegistry();
+    }
+  }, [areLogosLoading, chainsWithLogos, fetchTokenRegistry, isInitialized]);
+
+  useEffect(() => {
+    if (viewingNetwork) {
+      localStorage.setItem('last_viewed_chain_id', viewingNetwork.chainId.toString());
+    }
+  }, [viewingNetwork]);
+
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -422,7 +431,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error("Local wallet restoration error:", e);
       } finally {
-        // ALWAYS set loading to false even if user is null or derivation fails
         setIsWalletLoading(false);
       }
     };
