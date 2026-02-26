@@ -8,7 +8,7 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Timer } from 'lucide-react';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
@@ -16,28 +16,42 @@ export default function Home() {
   const { wallets, isInitialized, isWalletLoading } = useWallet();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Failsafe timer to prevent infinite loading if a network request hangs
+  const [showFailsafe, setShowFailsafe] = useState(false);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowFailsafe(true);
+    }, 6000); // 6 second failsafe
+    return () => clearTimeout(timer);
+  }, []);
+
   // Controlled states for sheets
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
   // APP INITIALIZATION GATE
-  // The app is "loading" if auth is checking, networks aren't ready, or wallet derivation is in progress
-  const isAppLoading = loading || !isInitialized || isWalletLoading;
+  // The app is loading if auth is pending, networks aren't ready, OR wallet derivation is still checking local storage.
+  // We include the failsafe to ensure the app ALWAYS mounts eventually.
+  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading);
 
   // Derive intended sheet states to prevent race conditions/flickering
-  // Setup sheet only shows if user is logged in, engine is ready, and NO wallet exists
   const shouldShowAuth = !loading && !user;
   const shouldShowSetup = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
 
   // Sync Auth Sheet
   useEffect(() => {
-    setIsAuthOpen(shouldShowAuth);
-  }, [shouldShowAuth]);
+    if (!isAppLoading) {
+      setIsAuthOpen(shouldShowAuth);
+    }
+  }, [shouldShowAuth, isAppLoading]);
 
   // Sync Wallet Setup
   useEffect(() => {
-    setIsWalletSetupOpen(shouldShowSetup);
-  }, [shouldShowSetup]);
+    if (!isAppLoading) {
+      setIsWalletSetupOpen(shouldShowSetup);
+    }
+  }, [shouldShowSetup, isAppLoading]);
 
   // Handle scroll-based header collapse
   useEffect(() => {
@@ -74,7 +88,7 @@ export default function Home() {
         
         <div className="mt-10 space-y-3 text-center">
           <h2 className="text-sm font-black uppercase tracking-[0.3em] animate-pulse text-white/90">
-            Initializing Secure Node
+            {loading ? "Establishing Identity" : "Initializing Secure Node"}
           </h2>
           <div className="flex items-center justify-center gap-2">
             <div className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
@@ -82,7 +96,7 @@ export default function Home() {
             <div className="h-1 w-1 rounded-full bg-primary animate-bounce" />
           </div>
           <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest opacity-40 pt-2">
-            Establishing Institutional Tunnel
+            {isWalletLoading ? "Synchronizing Cryptographic Vault" : "Establishing Institutional Tunnel"}
           </p>
         </div>
       </div>

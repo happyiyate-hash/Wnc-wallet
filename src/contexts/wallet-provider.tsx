@@ -153,7 +153,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (exists) return prev;
         const normalizedToken = {
             ...token,
-            address: token.address?.toLowerCase() // Normalize address on addition
+            address: token.address?.toLowerCase()
         };
         const next = [...prev, normalizedToken];
         localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next));
@@ -189,21 +189,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setTokenRegistry(registry);
   }, [chainsWithLogos]);
 
+  // Deterministic Initialization
   useEffect(() => {
-    if (chainsWithLogos.length > 0 && !isInitialized) {
-      // Restore last viewed network from storage
+    if (!areLogosLoading && !isInitialized) {
       const savedChainId = localStorage.getItem('last_viewed_chain_id');
       const restoredChain = savedChainId 
         ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) 
         : null;
 
-      setViewingNetwork(restoredChain || chainsWithLogos[0]);
+      setViewingNetwork(restoredChain || chainsWithLogos[0] || null);
       setIsInitialized(true);
-      fetchTokenRegistry();
+      if (chainsWithLogos.length > 0) fetchTokenRegistry();
     }
-  }, [chainsWithLogos, fetchTokenRegistry, isInitialized]);
+  }, [areLogosLoading, chainsWithLogos, fetchTokenRegistry, isInitialized]);
 
-  // Persist viewing network choice whenever it changes
   useEffect(() => {
     if (viewingNetwork) {
       localStorage.setItem('last_viewed_chain_id', viewingNetwork.chainId.toString());
@@ -257,18 +256,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
 
         await Promise.all(contractPromises);
-        
-        // Atomic merge to prevent jumping
         setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (e) {
         console.warn("Master Price Engine Failure:", e);
     }
   }, [isInitialized, chainsWithLogos, userAddedTokens]);
 
-  // Master 10-second Price Pulse
   useEffect(() => {
     if (isInitialized) {
-        fetchGlobalPrices(); // Initial pulse
+        fetchGlobalPrices();
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
         priceIntervalRef.current = setInterval(() => {
             fetchGlobalPrices();
@@ -391,25 +387,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
-  // STRICT INITIALIZATION: Wait for local wallet restoration before unlocking UI
+  // STRICT INITIALIZATION: Finalized state resolution
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
 
       setIsWalletLoading(true);
-      if (user) {
-        const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-        if (saved) {
-          try {
-            // AWAIT the async derivation to prevent flickering setup sheets
+      try {
+        if (user) {
+          const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+          if (saved) {
             await loadWalletFromMnemonic(saved);
-          } catch (e) {
-            console.error("Local wallet restoration error:", e);
-            localStorage.removeItem(`wallet_mnemonic_${user.id}`);
           }
         }
+      } catch (e) {
+        console.error("Local wallet restoration error:", e);
+      } finally {
+        // ALWAYS set loading to false even if user is null or derivation fails
+        setIsWalletLoading(false);
       }
-      setIsWalletLoading(false);
     };
 
     initLocalSession();
