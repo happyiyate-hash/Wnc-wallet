@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 /**
  * PWA SERVICE WORKER REGISTRATION
- * Runs on the client to register the sw.js file.
+ * Standard registration script to enable PWA installability.
  */
 export default function PWARegister() {
   useEffect(() => {
@@ -13,10 +13,10 @@ export default function PWARegister() {
         navigator.serviceWorker
           .register('/sw.js')
           .then((registration) => {
-            console.log('SW registered: ', registration);
+            console.log('PWA Service Worker registered');
           })
-          .catch((registrationError) => {
-            console.log('SW registration failed: ', registrationError);
+          .catch((err) => {
+            console.warn('PWA Service Worker registration failed:', err);
           });
       });
     }
