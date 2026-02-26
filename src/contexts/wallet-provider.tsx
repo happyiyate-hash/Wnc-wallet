@@ -420,11 +420,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const restoreFromCloud = useCallback(async () => {
     if (!user || !supabase) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data: freshProfile, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    if (profileError || !freshProfile) throw new Error("Cloud access retrieval failure.");
-    
+    setIsWalletLoading(true); // LOCK UI DURING ENTIRE RESTORE
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: freshProfile, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      if (profileError || !freshProfile) throw new Error("Cloud access retrieval failure.");
+      
+      // 1. Decrypt Mnemonic first
       if (freshProfile.vault_phrase && freshProfile.iv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
@@ -437,6 +439,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
           }
       }
+
+      // 2. Decrypt API Key second
       if (freshProfile.vault_infura_key && freshProfile.infura_iv) {
           const res = await fetch('/api/wallet/decrypt-phrase', {
             method: 'POST',
@@ -444,12 +448,48 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify({ encrypted: freshProfile.vault_infura_key, iv: freshProfile.infura_iv }),
           });
           const data = await res.json();
-          if (res.ok && data.phrase) handleSetApiKey(data.phrase);
+          if (res.ok && data.phrase) {
+              setInfuraApiKey(data.phrase); // COMMIT TO STATE BEFORE RELEASING LOCK
+              localStorage.setItem('infura_api_key', data.phrase);
+          }
       }
+      
       toast({ title: "Access Restored" });
       refreshProfile();
-    } catch (e: any) { throw e; }
-  }, [user, loadWalletFromMnemonic, toast, refreshProfile, handleSetApiKey]);
+    } catch (e: any) { 
+      throw e; 
+    } finally {
+      setIsWalletLoading(false); // RELEASE LOCK ONLY AFTER ALL STATES SYNCED
+    }
+  }, [user, loadWalletFromMnemonic, toast, refreshProfile]);
+
+  const generateWallet = useCallback(async () => {
+    setIsWalletLoading(true);
+    try {
+        const mnemonic = ethers.Mnemonic.entropyToPhrase(ethers.randomBytes(16));
+        if (user) {
+            const { data: profileCheck } = await supabase!.from('profiles').select('vault_phrase').eq('id', user.id).single();
+            if (profileCheck?.vault_phrase) throw new Error('CLOUDV_EXISTS');
+            localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+        }
+        await loadWalletFromMnemonic(mnemonic);
+        await saveToVault();
+        return mnemonic;
+    } finally {
+        setIsWalletLoading(false);
+    }
+  }, [user, loadWalletFromMnemonic, saveToVault]);
+
+  const importWallet = useCallback(async (mnemonic: string) => {
+    setIsWalletLoading(true);
+    try {
+        await loadWalletFromMnemonic(mnemonic);
+        if (user) localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic.trim());
+        await saveToVault();
+    } finally {
+        setIsWalletLoading(false);
+    }
+  }, [user, loadWalletFromMnemonic, saveToVault]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
@@ -490,15 +530,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     balances,
     prices,
     refresh: manualRefresh,
-    generateWallet: async () => {
-        const m = await generateWallet();
-        await saveToVault();
-        return m;
-    },
-    importWallet: async (m) => {
-        await importWallet(m);
-        await saveToVault();
-    },
+    generateWallet,
+    importWallet,
     saveToVault,
     restoreFromCloud,
     logout: () => { if (user) { localStorage.removeItem(`wallet_mnemonic_${user.id}`); localStorage.removeItem(`wallet_balances_${user.id}`); } setWallets(null); setBalances({}); authSignOut(); },

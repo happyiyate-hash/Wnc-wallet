@@ -135,11 +135,18 @@ export default function WalletTab() {
 
   // API KEY PROMPT LOGIC: Only prompt if app initialization AND session restoration are truly complete
   useEffect(() => {
+    // Increased safety window and strict state gating to prevent ghost prompt during cloud restore
     if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
-        setIsApiKeySheetOpen(true);
-      }, 1200);
+        // Final sanity check: ensure we didn't just restore a key in the last 2 seconds
+        const currentKey = localStorage.getItem('infura_api_key');
+        if (!currentKey) {
+            setIsApiKeySheetOpen(true);
+        }
+      }, 2000);
       return () => clearTimeout(timer);
+    } else if (infuraApiKey) {
+      setIsApiKeySheetOpen(false); // Force close if key appears via restore
     }
   }, [isInitialized, isWalletLoading, wallets, infuraApiKey]);
 
