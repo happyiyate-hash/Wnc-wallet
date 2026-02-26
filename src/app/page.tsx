@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
@@ -8,7 +9,6 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
@@ -21,6 +21,7 @@ export default function Home() {
   const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
   // Derive intended sheet states to prevent race conditions/flickering
+  // Setup sheet only shows if user is logged in, engine is ready, and NO wallet exists
   const shouldShowAuth = !loading && !user;
   const shouldShowSetup = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
 
@@ -29,7 +30,7 @@ export default function Home() {
     setIsAuthOpen(shouldShowAuth);
   }, [shouldShowAuth]);
 
-  // Sync Wallet Setup (Strict Priority)
+  // Sync Wallet Setup
   useEffect(() => {
     setIsWalletSetupOpen(shouldShowSetup);
   }, [shouldShowSetup]);
@@ -54,20 +55,6 @@ export default function Home() {
     scrollDiv.addEventListener('scroll', handle);
     return () => scrollDiv.removeEventListener('scroll', handle);
   }, []);
-
-  // GATEKEEPER: Prevent any flickering during initial profile/wallet resolution
-  if (loading || (!!user && isWalletLoading && !wallets)) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground animate-pulse">
-            Initializing Secure Node...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">

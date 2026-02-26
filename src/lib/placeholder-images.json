@@ -3,13 +3,13 @@
     {
       "id": "pwa-icon-192",
       "description": "PWA Icon 192x192",
-      "imageUrl": "https://images.unsplash.com/photo-1656523537172-63d277539a03?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHx3YWxsZXQlMjBpY29ufGVufDB8fHx8MTc3MjA2MzkwN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "/icons/icon-192.png",
       "imageHint": "wallet icon"
     },
     {
       "id": "pwa-icon-512",
       "description": "PWA Icon 512x512",
-      "imageUrl": "https://images.unsplash.com/photo-1765446904833-434c1f56d9ea?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHx3YWxsZXQlMjBsb2dvfGVufDB8fHx8MTc3MjA2MzkwN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageUrl": "/icons/icon-512.png",
       "imageHint": "wallet logo"
     }
   ]
