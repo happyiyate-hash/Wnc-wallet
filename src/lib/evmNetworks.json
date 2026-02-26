@@ -202,7 +202,7 @@
     "name": "Polkadot",
     "symbol": "DOT",
     "chainId": 1000,
-    "rpcUrl": "wss://rpc.polkadot.io",
+    "rpcUrl": "wss://polkadot-rpc.publicnode.com",
     "coingeckoId": "polkadot",
     "themeColor": "#E6007A",
     "type": "polkadot"

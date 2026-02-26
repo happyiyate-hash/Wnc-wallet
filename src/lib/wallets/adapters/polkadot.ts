@@ -6,7 +6,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * Polkadot (DOT) Adapter
- * Handles balance fetching via Substrate API.
+ * Hardened version with connection timeouts and resilient error handling.
  */
 class PolkadotAdapter implements IWalletAdapter {
     private rpcUrl: string;
@@ -20,9 +20,22 @@ class PolkadotAdapter implements IWalletAdapter {
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
         let api: ApiPromise | null = null;
+        let provider: WsProvider | null = null;
+
         try {
-            const provider = new WsProvider(this.rpcUrl);
-            api = await ApiPromise.create({ provider });
+            // Add a 10-second timeout to the provider initialization
+            provider = new WsProvider(this.rpcUrl, 10000);
+            
+            // Connect with a specific timeout to prevent app hanging
+            api = await Promise.race([
+                ApiPromise.create({ provider }),
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 12000))
+            ]) as ApiPromise;
+
+            if (!api) throw new Error("API_INIT_FAILED");
+
+            // Wait for the specific "ready" state or fail fast
+            await api.isReadyOrError;
 
             const { data: balance } = await api.query.system.account(ownerAddress) as any;
             
@@ -37,10 +50,12 @@ class PolkadotAdapter implements IWalletAdapter {
                 return { ...asset, balance: '0' } as AssetRow;
             });
         } catch (error: any) {
-            console.warn("Polkadot Balance Fetch Error:", error.message);
+            console.warn(`Polkadot Balance Fetch Silent Failure (${this.rpcUrl}):`, error.message);
+            // Graceful fallback to zero to prevent UI blocking
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         } finally {
             if (api) await api.disconnect();
+            if (provider) await provider.disconnect();
         }
     }
 }
