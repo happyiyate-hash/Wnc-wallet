@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -80,6 +81,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Stability Ref to prevent circular dependencies in fetch functions
+  const latestBalancesRef = useRef(balances);
+  const latestUserTokensRef = useRef(userAddedTokens);
+
+  useEffect(() => {
+    latestBalancesRef.current = balances;
+  }, [balances]);
+
+  useEffect(() => {
+    latestUserTokensRef.current = userAddedTokens;
+  }, [userAddedTokens]);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('infura_api_key');
@@ -190,20 +203,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos]);
 
   const fetchGlobalPrices = useCallback(async () => {
-    if (!isInitialized) return;
-    
+    // Break circularity: Use internal state values instead of closure capturing
     const coingeckoIds = new Set<string>();
     const contractLookups: { [chainId: number]: Set<string> } = {};
 
-    // GATHER ALL POTENTIAL TOKENS FROM ALL SOURCES
+    // GATHER ALL POTENTIAL TOKENS FROM ALL SOURCES (via stable refs)
     const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({...a, balance: '0'} as AssetRow)));
     });
-    allKnownAssets.push(...userAddedTokens);
     
-    // Add tokens currently in balances state (discovered tokens)
-    Object.values(balances).forEach(list => {
+    allKnownAssets.push(...latestUserTokensRef.current);
+    
+    Object.values(latestBalancesRef.current).forEach(list => {
         allKnownAssets.push(...list);
     });
 
@@ -253,7 +265,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await Promise.all(contractPromises);
         
-        // Final state update: Merge carefully to avoid UI jitter and preserve historical data
         setPrices(prev => {
             const merged = { ...prev };
             Object.entries(newPrices).forEach(([key, val]) => {
@@ -264,16 +275,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {
         console.warn("Master Price Engine Failure:", e);
     }
-  }, [isInitialized, chainsWithLogos, userAddedTokens, balances]);
+  }, [chainsWithLogos]); // Only depend on chains list, not fluctuating balances
 
   // High-frequency price pulse (10s)
   useEffect(() => {
     if (isInitialized) {
-        fetchGlobalPrices(); // Pulse once immediately
+        fetchGlobalPrices(); 
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = setInterval(() => {
-            fetchGlobalPrices();
-        }, 10000);
+        priceIntervalRef.current = setInterval(fetchGlobalPrices, 10000);
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, fetchGlobalPrices]);
@@ -285,7 +294,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     const apiTokens = tokenRegistry[chain.chainId] || [];
     const baseAssets = getInitialAssets(chain.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const customAssets = userAddedTokens.filter(t => t.chainId === chain.chainId);
+    const customAssets = latestUserTokensRef.current.filter(t => t.chainId === chain.chainId);
     
     const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
@@ -319,24 +328,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
     }
     return combinedAssetsList;
-  }, [wallets, infuraApiKey, tokenRegistry, userAddedTokens]);
+  }, [wallets, infuraApiKey, tokenRegistry]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const custom = userAddedTokens.filter(t => t.chainId === chainId);
+    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
     const combined = [...base, ...custom];
     
     return combined.reduce((acc, curr) => {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
         return acc;
     }, [] as AssetRow[]);
-  }, [userAddedTokens]);
+  }, []);
 
   const manualRefresh = useCallback(async () => {
     if (!viewingNetwork || !infuraApiKey || !wallets) return;
     setIsRefreshing(true);
     try {
-        // Parallelized priority fetch
         await Promise.all([
             fetchBalancesForChain(viewingNetwork).then(freshBalances => {
                 setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: freshBalances }));
@@ -357,10 +365,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setIsRefreshing(true);
     try {
-        // Priority 1: Instant Price Refresh
         fetchGlobalPrices();
-
-        // Priority 2: Active Network Balances
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -396,7 +401,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); };
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine]);
 
-  // Deterministic Initialization
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
       const savedChainId = localStorage.getItem('last_viewed_chain_id');
