@@ -18,7 +18,7 @@ interface TokenManagerProps {
 }
 
 export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps) {
-  const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken } = useWallet();
+  const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens } = useWallet();
   const [searchTerm, setSearchTerm] = useState('');
   const [dbTokens, setDbTokens] = useState<AssetRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,10 +88,23 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
   );
 
   const handleToggle = (token: AssetRow, checked: boolean) => {
+    const key = `${viewingNetwork.chainId}:${token.symbol}`;
+    const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
+
     if (checked) {
-        addUserToken(token);
+        // ACTIVATE: Add to wallet if not present and ensure not hidden
+        if (!token.isNative && !isAdded) {
+            addUserToken(token);
+        }
+        if (hiddenTokenKeys.has(key)) {
+            toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
+        }
+    } else {
+        // DEACTIVATE: Move to hidden state
+        if (!hiddenTokenKeys.has(key)) {
+            toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
+        }
     }
-    toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
   };
 
   return (
@@ -133,7 +146,14 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                     </div>
                 ) : filteredTokens.length > 0 ? (
                     filteredTokens.map((token) => {
-                        const isHidden = hiddenTokenKeys.has(`${viewingNetwork.chainId}:${token.symbol}`);
+                        const key = `${viewingNetwork.chainId}:${token.symbol}`;
+                        const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
+                        const isHidden = hiddenTokenKeys.has(key);
+                        
+                        // LOGIC FIX: Token is ONLY 'On' if it's Native or explicitly Added AND not hidden.
+                        // This prevents discovered DB tokens from appearing 'On' before activation.
+                        const isOn = (token.isNative || isAdded) && !isHidden;
+
                         return (
                             <div 
                                 key={token.isNative ? token.symbol : token.address}
@@ -156,7 +176,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                                     </div>
                                 </div>
                                 <Switch 
-                                    checked={!isHidden} 
+                                    checked={isOn} 
                                     onCheckedChange={(checked) => handleToggle(token, checked)}
                                     className="data-[state=checked]:bg-primary"
                                 />
