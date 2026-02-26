@@ -2,22 +2,59 @@
 import React from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchChartData } from '@/lib/coingecko';
+import { Skeleton } from './ui/skeleton';
+import { TrendingUp, AlertCircle } from 'lucide-react';
 
 const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string | null, days: string, isNegative: boolean }) => {
-    const [data, setData] = React.useState([]);
+    const [data, setData] = React.useState<any[]>([]);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(false);
 
     React.useEffect(() => {
         if (coingeckoId) {
-            fetchChartData(coingeckoId, days).then(setData);
+            setLoading(true);
+            setError(false);
+            fetchChartData(coingeckoId, days)
+                .then((res) => {
+                    if (!res || res.length === 0) {
+                        setError(true);
+                    } else {
+                        setData(res);
+                    }
+                })
+                .catch(() => setError(true))
+                .finally(() => setLoading(false));
         }
     }, [coingeckoId, days]);
+
+    if (loading) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-white/[0.02]">
+                <Skeleton className="w-3/4 h-32 rounded-3xl bg-white/5 animate-pulse" />
+                <div className="flex gap-2">
+                    <Skeleton className="w-12 h-2 rounded bg-white/5" />
+                    <Skeleton className="w-12 h-2 rounded bg-white/5" />
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !data.length) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 bg-white/[0.02]">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 opacity-20" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">Market Terminal Offline</p>
+            </div>
+        );
+    }
 
     const linecolor = isNegative ? '#f87171' : '#4ade80';
     const fillcolor = isNegative ? '#f87171' : '#4ade80';
 
     return (
         <ResponsiveContainer width="100%" height="100%">
-            {/* REMOVED HORIZONTAL MARGINS FOR FULL-BLEED LOOK */}
             <AreaChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                 <defs>
                     <linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1">
@@ -27,20 +64,25 @@ const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string
                 </defs>
                 <Tooltip 
                     contentStyle={{ 
-                        backgroundColor: 'rgba(20, 20, 20, 0.8)', 
-                        border: '1px solid #444', 
-                        borderRadius: '0.5rem'
+                        backgroundColor: 'rgba(5, 5, 5, 0.9)', 
+                        border: '1px solid rgba(255,255,255,0.1)', 
+                        borderRadius: '1rem',
+                        backdropFilter: 'blur(10px)',
+                        padding: '12px'
                     }}
+                    labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
+                    itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: '900' }}
                     labelFormatter={(label) => new Date(label).toLocaleString()}
-                    formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
+                    formatter={(value: any) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Price']}
                 />
                 <Area
                     type="monotone"
                     dataKey="price"
                     stroke={linecolor}
                     fill="url(#chart-fill)"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     dot={false}
+                    animationDuration={1500}
                 />
                 <XAxis dataKey="time" hide />
                 <YAxis domain={['dataMin', 'dataMax']} hide />

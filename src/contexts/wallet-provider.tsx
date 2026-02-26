@@ -224,7 +224,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allKnownAssets.forEach(asset => {
         const effectiveId = asset.priceId || asset.coingeckoId;
         if (effectiveId) {
-            coingeckoIds.add(effectiveId.toLowerCase());
+            coingeckoIds.add(effectiveId.toLowerCase().trim());
         } 
         else if (asset.address && asset.address.startsWith('0x')) {
             const chainId = asset.chainId;
@@ -241,7 +241,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (coingeckoIds.size > 0) {
             const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
             Object.entries(priceMap).forEach(([id, data]) => {
-                newPrices[id.toLowerCase()] = { price: data.usd, change: data.usd_24h_change };
+                if (data && typeof data.usd === 'number') {
+                    newPrices[id.toLowerCase()] = { 
+                        price: data.usd, 
+                        change: typeof data.usd_24h_change === 'number' ? data.usd_24h_change : 0 
+                    };
+                }
             });
         }
 
@@ -250,21 +255,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             if (platformId) {
                 const results = await fetchPricesByContract(platformId, Array.from(addresses));
                 Object.entries(results).forEach(([addr, info]) => {
-                    newPrices[addr.toLowerCase()] = info;
+                    if (info && typeof info.usd === 'number') {
+                        newPrices[addr.toLowerCase()] = {
+                            price: info.usd,
+                            change: typeof info.usd_24h_change === 'number' ? info.usd_24h_change : 0
+                        };
+                    }
                 });
             }
         });
 
         await Promise.all(contractPromises);
-        setPrices(prev => ({ ...prev, ...newPrices }));
+        
+        // Final state update: Merge carefully to avoid UI jitter
+        setPrices(prev => {
+            const merged = { ...prev };
+            Object.entries(newPrices).forEach(([key, val]) => {
+                merged[key] = val;
+            });
+            return merged;
+        });
     } catch (e) {
         console.warn("Master Price Engine Failure:", e);
     }
   }, [isInitialized, chainsWithLogos, userAddedTokens]);
 
+  // High-frequency price pulse (10s)
   useEffect(() => {
     if (isInitialized) {
-        fetchGlobalPrices();
+        fetchGlobalPrices(); // Pulse once immediately
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
         priceIntervalRef.current = setInterval(() => {
             fetchGlobalPrices();
@@ -543,8 +562,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return list
         .filter(asset => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`))
         .map(asset => {
-            const effectivePriceId = (asset.priceId || asset.coingeckoId)?.toLowerCase();
-            const market = (effectivePriceId ? prices[effectivePriceId] : null) || (asset.address ? prices[asset.address.toLowerCase()] : null);
+            const effectivePriceId = (asset.priceId || asset.coingeckoId)?.toLowerCase().trim();
+            const market = (effectivePriceId ? prices[effectivePriceId] : null) || (asset.address ? prices[asset.address.toLowerCase().trim()] : null);
             const price = market?.price ?? 0;
             const balanceNum = parseFloat(asset.balance || '0');
             return {
