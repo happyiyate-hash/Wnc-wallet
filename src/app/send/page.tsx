@@ -359,7 +359,7 @@ function SendClient() {
                     <ArrowLeft className="w-5 h-5"/>
                 </Button>
                 <div>
-                    <h2 className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</h2>
+                    <SheetTitle className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</SheetTitle>
                     <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Select Asset to Send</p>
                 </div>
             </div>
