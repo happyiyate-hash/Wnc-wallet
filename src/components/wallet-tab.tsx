@@ -112,7 +112,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances, getAvailableAssetsForChain } = useWallet();
+  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances, getAvailableAssetsForChain } = useWallet();
   const { user } = useUser();
   const { toast } = useToast();
   
@@ -133,14 +133,15 @@ export default function WalletTab() {
 
   const router = useRouter();
 
+  // API KEY PROMPT LOGIC: Only prompt if app initialization AND session restoration are truly complete
   useEffect(() => {
-    if (isInitialized && !!wallets && !infuraApiKey) {
+    if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
         setIsApiKeySheetOpen(true);
-      }, 800);
+      }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [isInitialized, wallets, infuraApiKey]);
+  }, [isInitialized, isWalletLoading, wallets, infuraApiKey]);
 
   useEffect(() => {
     if (isRefreshing) {
@@ -266,7 +267,6 @@ export default function WalletTab() {
             </div>
         </div>
 
-        {/* GROUPED AND CENTERED ACTION BUTTONS */}
         <div className="flex justify-center gap-2.5 my-10 px-4">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
@@ -387,7 +387,7 @@ export default function WalletTab() {
       </Sheet>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[400px] p-0 flex flex-col shadow-2xl">
+        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
             <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
                 <SheetTitle className="flex items-center gap-2">
                     <TokenLogoDynamic 
