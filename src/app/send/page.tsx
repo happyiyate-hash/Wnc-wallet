@@ -111,7 +111,7 @@ function SendClient() {
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     let target = allAssets.find(a => a.symbol === symbol && a.chainId === (chainIdParam || viewingNetwork.chainId)) || allAssets[0];
     if (target && !selectedToken) setSelectedToken({ ...target });
-  }, [allAssets, searchParams, viewingNetwork.chainId]);
+  }, [allAssets, searchParams, viewingNetwork.chainId, selectedToken]);
 
   const activeNetwork = useMemo(() => {
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
@@ -243,7 +243,6 @@ function SendClient() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative pb-40">
-      {/* HEADER WITH DROPDOWN ASSET SELECTOR */}
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
@@ -262,9 +261,7 @@ function SendClient() {
       </header>
 
       <main className="flex-1 p-6 space-y-10 max-w-lg mx-auto w-full">
-        {/* SENDER -> RECIPIENT VISUAL COMPONENT */}
         <section className="flex items-center justify-between px-2">
-            {/* SENDER NODE */}
             <div className="flex flex-col items-center gap-3">
                 <div className="relative">
                     <Avatar className="w-20 h-20 rounded-[2rem] border-2 border-primary/30 shadow-2xl">
@@ -286,7 +283,6 @@ function SendClient() {
                 </div>
             </div>
 
-            {/* RECIPIENT NODE */}
             <div className="flex flex-col items-center gap-3">
                 <div className="relative">
                     {recipientProfile ? (
@@ -306,13 +302,12 @@ function SendClient() {
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              isNetworkMismatch ? (
-                                <div className="flex flex-col items-center justify-center p-2 relative">
+                                <div className="flex flex-col items-center justify-center p-2">
                                     <TokenLogoDynamic 
                                         symbol={detectedMeta?.symbol} 
                                         name={detectedMeta?.name} 
                                         size={44} 
                                     />
-                                    <XCircle className="w-8 h-8 text-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl" />
                                 </div>
                              ) : addrType !== 'invalid' ? (
                                 <div className="relative">
@@ -328,15 +323,15 @@ function SendClient() {
                     )}
                 </div>
                 <span className={cn(
-                    "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center",
+                    "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
                     isNetworkMismatch ? "text-red-500 animate-pulse" : "text-muted-foreground"
                 )}>
+                    {isNetworkMismatch && <XCircle className="w-3.5 h-3.5" />}
                     {recipientProfile ? `@${recipientProfile.name}` : isNetworkMismatch ? 'Route Blocked' : addrType !== 'invalid' ? 'Network Node' : 'Recipient'}
                 </span>
             </div>
         </section>
 
-        {/* RECIPIENT DETAILS */}
         <section className="space-y-3">
             <div className="flex justify-between items-center px-2">
                 <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
@@ -364,7 +359,6 @@ function SendClient() {
             )}
         </section>
 
-        {/* AMOUNT INPUT */}
         <section className="space-y-3">
             <div className="flex justify-between items-center px-2">
                 <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Transfer Amount</Label>
@@ -387,7 +381,6 @@ function SendClient() {
             </div>
         </section>
 
-        {/* INSTITUTIONAL SUMMARY */}
         <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
             <div className="flex items-center gap-2 mb-2 relative z-10">
                 <ShieldCheck className="w-4 h-4 text-primary" />
@@ -426,7 +419,6 @@ function SendClient() {
         </div>
       </div>
 
-      {/* ASSET SELECTOR SHEET */}
       <Sheet open={isTokenSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="bottom" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-[3.5rem] p-0 h-[70vh] overflow-hidden">
           <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
