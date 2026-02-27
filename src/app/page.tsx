@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
@@ -8,13 +8,14 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import { cn } from '@/lib/utils';
-import { Loader2, Timer } from 'lucide-react';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const { user, profile, loading } = useUser();
   const { wallets, isInitialized, isWalletLoading } = useWallet();
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
   // Failsafe timer to prevent infinite loading
   const [showFailsafe, setShowFailsafe] = useState(false);
@@ -25,17 +26,6 @@ export default function Home() {
     }, 6000);
     return () => clearTimeout(timer);
   }, []);
-
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
-
-  // INSTANT UI CHECK:
-  // If we have a cached profile, we bypass the full-screen initialization loader
-  const hasCachedIdentity = !!profile;
-  
-  // App is loading if Auth is still fetching OR Wallet system isn't ready
-  // EXCEPT when we have a cached identity to show or when sign-out is confirmed
-  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity && !!user;
 
   // INITIALIZATION SETTLED:
   // System has reached a definitive state about the user's session
@@ -50,25 +40,29 @@ export default function Home() {
       setIsAuthOpen(shouldShowAuth);
       setIsWalletSetupOpen(shouldShowSetup);
     } else if (!loading && !user) {
-      // Eagerly show auth if we definitively know there is no user, 
-      // even if wallet system is still resolving its internal flags
+      // Eagerly show auth if we definitively know there is no user
       setIsAuthOpen(true);
     }
   }, [isSettled, shouldShowAuth, shouldShowSetup, loading, user]);
 
   useEffect(() => {
-    const scrollDiv = scrollRef.current;
-    if (!scrollDiv) return;
-    let lastScrollY = scrollDiv.scrollTop;
+    let lastScrollY = window.scrollY;
     const handle = () => {
-      const currentScrollY = scrollDiv.scrollTop;
-      if (currentScrollY > lastScrollY && currentScrollY > 50) setIsHeaderCollapsed(true);
-      else setIsHeaderCollapsed(false);
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        setIsHeaderCollapsed(true);
+      } else {
+        setIsHeaderCollapsed(false);
+      }
       lastScrollY = currentScrollY;
     };
-    scrollDiv.addEventListener('scroll', handle);
-    return () => scrollDiv.removeEventListener('scroll', handle);
+    window.addEventListener('scroll', handle);
+    return () => window.removeEventListener('scroll', handle);
   }, []);
+
+  // INSTANT UI CHECK:
+  const hasCachedIdentity = !!profile;
+  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity && !!user;
 
   if (isAppLoading) {
     return (
@@ -97,7 +91,7 @@ export default function Home() {
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto bg-background thin-scrollbar">
+    <div className="flex-1 bg-background pb-32">
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <main className={cn(
         "flex flex-col items-center transition-all duration-700 ease-out",

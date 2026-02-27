@@ -44,7 +44,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#673AB7" />
       </head>
-      <body className="font-body antialiased min-h-screen bg-background flex flex-col relative overflow-hidden">
+      <body className="font-body antialiased min-h-screen bg-background flex flex-col relative">
         {/* GLOBAL BRAND WATERMARK */}
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none z-0">
           <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
@@ -58,12 +58,12 @@ export default function RootLayout({
             <CurrencyProvider>
               <WalletProvider>
                 <SidebarProvider defaultOpen={true}>
-                  <div className="flex min-h-screen w-full bg-transparent overflow-hidden relative z-10">
+                  <div className="flex min-h-screen w-full bg-transparent relative z-10">
                     <NavGradient />
                     <DesktopSidebar />
-                    <div className="flex flex-col flex-1 w-full min-w-0 h-[100dvh] overflow-hidden">
+                    <div className="flex flex-col flex-1 w-full min-w-0 relative">
                       <PWARegister />
-                      <div className="flex-1 overflow-y-auto thin-scrollbar relative">
+                      <div className="flex-1 relative">
                         {children}
                       </div>
                       <MobileNav />
