@@ -22,7 +22,8 @@ import {
   Search,
   History,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  XCircle
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -51,13 +52,11 @@ const detectAddressType = (input: string) => {
   return 'invalid';
 };
 
-const getNetworkBadge = (chain: ChainConfig) => {
-  if (chain.type === 'xrp') return 'XRPL';
-  if (chain.type === 'polkadot') return 'Substrate';
-  if (chain.chainId === 1) return 'ERC20';
-  if (chain.chainId === 137) return 'Polygon';
-  if (chain.chainId === 8453) return 'Base';
-  return 'EVM';
+const getDetectedNetworkMeta = (type: string) => {
+    if (type === 'xrp') return { name: 'XRP Ledger', symbol: 'XRP', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/xrp.png' };
+    if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/polkadot.png' };
+    if (type === 'evm') return { name: 'EVM Network', symbol: 'ETH', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/ethereum.png' };
+    return null;
 };
 
 function SendClient() {
@@ -121,11 +120,15 @@ function SendClient() {
 
   // 3. IDENTITY & VALIDATION ENGINE
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
+  const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
+  
   const isNetworkMismatch = useMemo(() => {
     if (addrType === 'invalid' || addrType === 'internal') return false;
-    if (activeNetwork.type === 'evm' && addrType !== 'evm') return true;
-    if (activeNetwork.type === 'xrp' && addrType !== 'xrp') return true;
-    if (activeNetwork.type === 'polkadot' && addrType !== 'polkadot') return true;
+    // Map internal types to simple types for comparison
+    const activeType = activeNetwork.type || 'evm';
+    if (activeType === 'evm' && addrType !== 'evm') return true;
+    if (activeType === 'xrp' && addrType !== 'xrp') return true;
+    if (activeType === 'polkadot' && addrType !== 'polkadot') return true;
     return false;
   }, [addrType, activeNetwork.type]);
 
@@ -270,7 +273,7 @@ function SendClient() {
                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
                     </Avatar>
                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} />
+                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                     </div>
                 </div>
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You</span>
@@ -288,28 +291,44 @@ function SendClient() {
             <div className="flex flex-col items-center gap-3">
                 <div className="relative">
                     {recipientProfile ? (
-                        <Avatar className="w-20 h-20 rounded-[2rem] border-2 border-primary/30 shadow-2xl animate-in zoom-in duration-500">
-                            <AvatarImage src={recipientProfile.avatar} className="object-cover"/>
-                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                        </Avatar>
+                        <div className="relative group">
+                            <Avatar className="w-20 h-20 rounded-[2rem] border-2 border-primary/30 shadow-2xl animate-in zoom-in duration-500">
+                                <AvatarImage src={recipientProfile.avatar} className="object-cover"/>
+                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
+                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                            </div>
+                        </div>
                     ) : (
                         <div className={cn(
-                            "w-20 h-20 rounded-[2rem] border-2 border-dashed flex items-center justify-center transition-all duration-500",
-                            addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500/50 bg-red-500/5" : "border-primary/50 bg-primary/5"
+                            "w-20 h-20 rounded-[2rem] border-2 border-dashed flex items-center justify-center transition-all duration-500 relative",
+                            addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10 scale-105" : "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.1)]"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
-                             isNetworkMismatch ? <ShieldAlert className="w-8 h-8 text-red-500" /> :
-                             <Search className="w-8 h-8 text-white/10" />}
-                        </div>
-                    )}
-                    {isValidAddress && (
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl animate-in fade-in zoom-in">
-                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} />
+                             isNetworkMismatch ? (
+                                <div className="flex flex-col items-center justify-center p-2 relative">
+                                    <TokenLogoDynamic logoUrl={detectedMeta?.logoUrl} alt="Detected" size={44} className="grayscale opacity-50" />
+                                    <XCircle className="w-8 h-8 text-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl" />
+                                </div>
+                             ) : addrType !== 'invalid' ? (
+                                <div className="relative">
+                                    <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target" size={44} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={16} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    </div>
+                                </div>
+                             ) : (
+                                <Search className="w-8 h-8 text-white/10" />
+                             )}
                         </div>
                     )}
                 </div>
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                    {recipientProfile ? `@${recipientProfile.name}` : isValidAddress ? 'Network Node' : 'Recipient'}
+                <span className={cn(
+                    "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center",
+                    isNetworkMismatch ? "text-red-500 animate-pulse" : "text-muted-foreground"
+                )}>
+                    {recipientProfile ? `@${recipientProfile.name}` : isNetworkMismatch ? 'Route Blocked' : addrType !== 'invalid' ? 'Network Node' : 'Recipient'}
                 </span>
             </div>
         </section>
@@ -322,7 +341,7 @@ function SendClient() {
             </div>
             <div className={cn(
                 "bg-white/[0.03] border border-white/10 focus-within:border-primary/50 rounded-[2rem] p-2 transition-all",
-                isNetworkMismatch && "border-red-500/50 bg-red-500/5"
+                isNetworkMismatch && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10"
             )}>
                 <div className="flex items-center gap-2 px-2">
                     <Input 
@@ -337,7 +356,7 @@ function SendClient() {
             {isNetworkMismatch && (
                 <div className="px-2 flex items-center gap-2 text-red-400 text-[9px] font-black uppercase tracking-tight animate-in slide-in-from-top-1">
                     <ShieldAlert className="w-3.5 h-3.5" />
-                    <span>Selected token network mismatch ({activeNetwork.type?.toUpperCase()} expected)</span>
+                    <span>Incompatible network detected: Found {detectedMeta?.name} address</span>
                 </div>
             )}
         </section>
@@ -372,7 +391,7 @@ function SendClient() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Network Summary</span>
             </div>
             <div className="space-y-3 text-[11px] font-bold">
-                <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Ecosystem</span><span className="text-white">{activeNetwork.name} ({getNetworkBadge(activeNetwork)})</span></div>
+                <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Ecosystem</span><span className="text-white">{activeNetwork.name}</span></div>
                 <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Arrival Time</span><span className="text-white">{gasData.estimatedTime}</span></div>
                 <div className="pt-3 border-t border-white/5 flex justify-between items-center"><span className="text-xs font-black uppercase text-white/40">Total Impact</span><span className="text-sm font-black text-white">{amount || '0'} {selectedToken?.symbol}</span></div>
             </div>
@@ -386,6 +405,11 @@ function SendClient() {
               <AlertCircle className="w-3.5 h-3.5" /> Insufficient {selectedToken?.symbol} balance
             </div>
           )}
+          {isNetworkMismatch && (
+            <div className="flex items-center gap-2 p-3 rounded-2xl bg-red-500/10 text-red-500 text-[10px] border border-red-500/20 mb-4 font-black uppercase tracking-widest justify-center">
+              <ShieldAlert className="w-3.5 h-3.5" /> Cross-Chain Error: Unauthorized Route
+            </div>
+          )}
           <Button 
             className={cn(
                 "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", 
@@ -394,7 +418,7 @@ function SendClient() {
             disabled={!canSend} 
             onClick={() => setIsConfirmOpen(true)}
           >
-            Sign & Authorize
+            {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
           </Button>
         </div>
       </div>
