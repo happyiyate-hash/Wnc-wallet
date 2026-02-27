@@ -89,8 +89,10 @@ function SendClient() {
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     let target = allAssets.find(a => a.symbol === symbol && a.chainId === (chainIdParam || viewingNetwork.chainId)) || allAssets[0];
-    if (target && !selectedToken) setSelectedToken({ ...target });
-  }, [allAssets, searchParams, viewingNetwork.chainId, selectedToken]);
+    if (target) {
+        setSelectedToken({ ...target });
+    }
+  }, [allAssets, searchParams, viewingNetwork.chainId]);
 
   const activeNetwork = useMemo(() => {
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
@@ -168,25 +170,37 @@ function SendClient() {
   }, [debouncedRecipient, addrType, activeNetwork.type]);
 
   const parseError = (error: any): string => {
-    const message = error.message || error.toString();
+    const message = (error.message || error.toString()).toLowerCase();
     const code = error.code || '';
 
-    if (message.includes('insufficient funds') || code === 'INSUFFICIENT_FUNDS' || message.includes('failed with 33554432 gas')) {
+    // Insufficient Funds / Gas Translation
+    if (
+      message.includes('insufficient funds') || 
+      code === 'INSUFFICIENT_FUNDS' || 
+      message.includes('tecunfunded_payment') ||
+      message.includes('insufficient balance') ||
+      message.includes('not enough')
+    ) {
       const balance = parseFloat(selectedToken?.balance || '0');
       const sendAmount = parseFloat(amount) || 0;
       if (balance < sendAmount) return "Insufficient Balance: You do not have enough funds to complete this dispatch.";
       return "Insufficient Gas Fee: Your wallet does not have enough native network currency to pay the dispatch fee.";
     }
 
-    if (message.includes('user rejected') || message.includes('ACTION_REJECTED')) {
+    // XRPL specific activation error
+    if (message.includes('actnotfound') || message.includes('account not found')) {
+      return "Destination Error: The recipient XRP account is not activated. A minimum of 10 XRP is required for activation.";
+    }
+
+    if (message.includes('user rejected') || message.includes('action_rejected')) {
       return "Authorization Cancelled: Transaction was manually rejected.";
     }
 
-    if (message.includes('network error') || message.includes('failed to fetch')) {
-      return "Network Connection Error: Institutional node sync failed. Please check your network.";
+    if (message.includes('join.decode') || message.includes('expected string')) {
+      return "Input Error: Invalid amount format for the destination network.";
     }
 
-    return message.length > 100 ? "System Error: Node broadcast failed. Please try again." : message;
+    return message.length > 100 ? "System Error: Node broadcast failed. Please check your network and try again." : message;
   };
 
   const handleSendRequest = async () => {
@@ -200,19 +214,29 @@ function SendClient() {
     try {
       if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
+        if (!xrpWalletData?.seed) throw new Error("No institutional key found for XRPL");
+        
         const client = new xrpl.Client(activeNetwork.rpcUrl);
         await client.connect();
-        const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
+        const wallet = xrpl.Wallet.fromSeed(xrpWalletData.seed);
+        
+        // Use string amount to prevent SDK decode errors
+        const sendAmountStr = amount.toString();
         const prepared = await client.autofill({ 
             TransactionType: "Payment", 
             Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(amount), 
+            Amount: xrpl.xrpToDrops(sendAmountStr), 
             Destination: resolvedAddress 
         });
+        
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
+        
         if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
           setTxHash(result.result.hash);
-        } else { throw new Error("Transaction rejected by XRPL"); }
+        } else { 
+          const errCode = (result.result.meta as any)?.TransactionResult || "Unknown failure";
+          throw new Error(`XRPL Broadcast Error: ${errCode}`); 
+        }
         await client.disconnect();
       } else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
@@ -521,7 +545,8 @@ function SendClient() {
         token={{
             symbol: selectedToken?.symbol || '',
             iconUrl: selectedToken?.iconUrl,
-            chainId: selectedToken?.chainId || 1
+            chainId: selectedToken?.chainId || 1,
+            name: selectedToken?.name
         }}
         isRawAddress={!recipientProfile}
       />
