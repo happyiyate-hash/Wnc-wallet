@@ -110,7 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // SILENT WATCHDOG SYNC: Keep Database user_identity in sync with local wallets
+  // Watchdog sync for database user_identity
   useEffect(() => {
     const syncIdentities = async () => {
       if (!user || !wallets || !supabase) return;
@@ -125,7 +125,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const dbMatch = dbIdentities?.find(db => db.blockchain_name === wallet.type);
 
           if (!dbMatch || dbMatch.wallet_address !== wallet.address) {
-            // SILENT UPDATE: If missing or changed, upsert the database
             await supabase.from('user_identity').upsert({
               user_id: user.id,
               blockchain_name: wallet.type,
@@ -407,7 +406,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           if (res.ok) { payload.vault_infura_key = data.encrypted; payload.infura_iv = data.iv; }
       }
       if (Object.keys(payload).length > 0) {
-          await supabase.from('wevina_profiles').update(payload).eq('user_id', activeSessionId);
+          await supabase.from('profiles').update(payload).eq('id', activeSessionId);
           toast({ title: "Cloud Vault Synced" });
           refreshProfile();
       }
@@ -419,7 +418,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsWalletLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { data: freshProfile, error: profileError } = await supabase.from('wevina_profiles').select('*').eq('user_id', activeSessionId).single();
+      const { data: freshProfile, error: profileError } = await supabase.from('profiles').select('*').eq('id', activeSessionId).single();
       if (profileError || !freshProfile) throw new Error("Cloud access retrieval failure.");
       if (freshProfile.vault_phrase && freshProfile.iv) {
           const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_phrase, iv: freshProfile.iv }), });
@@ -441,7 +440,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
         const mnemonic = ethers.Mnemonic.entropyToPhrase(ethers.randomBytes(16));
         if (activeSessionId) {
-            const { data: profileCheck } = await supabase!.from('wevina_profiles').select('vault_phrase').eq('user_id', activeSessionId).single();
+            const { data: profileCheck } = await supabase!.from('profiles').select('vault_phrase').eq('id', activeSessionId).single();
             if (profileCheck?.vault_phrase) throw new Error('CLOUDV_EXISTS');
             localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         }
@@ -497,12 +496,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     saveToVault,
     restoreFromCloud,
     logout: () => { 
-        if (activeSessionId) { 
-            localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`); 
-            localStorage.removeItem(`wallet_balances_${activeSessionId}`); 
-        } 
-        setWallets(null); 
-        setBalances({}); 
+        // Only clear Supabase session, keep local wallet vault
         authSignOut(); 
     },
     deleteWallet: () => { 

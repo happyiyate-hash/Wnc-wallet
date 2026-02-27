@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -15,8 +14,8 @@ interface WalletManagementSheetProps {
 }
 
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
-  const { generateWallet, importWallet, restoreFromCloud } = useWallet();
-  const { profile } = useUser();
+  const { generateWallet, importWallet, restoreFromCloud, wallets } = useWallet();
+  const { profile, user } = useUser();
   const [step, setStep] = useState<'start' | 'import'>('start');
   const [importInput, setImportInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -106,21 +105,11 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     
     try {
       setStatus('Fetching Vault...');
-      // Small pause for UX feel
-      await new Promise(r => setTimeout(r, 600));
-      
-      // Perform actual restoration
       await restoreFromCloud();
-      
-      setStatus('Decrypting AES-256...');
-      await new Promise(r => setTimeout(r, 800));
-      
-      setStatus('Restoring Keys...');
-      await new Promise(r => setTimeout(r, 400));
-      
       setStatus('Access Restored!');
-      // The parent Home component useEffect will automatically close 
-      // the sheet once 'wallets' state changes in WalletProvider.
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 800);
     } catch (e: any) {
       console.error("Vault restoration error:", e);
       setStatus('Failed');
@@ -131,7 +120,9 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     }
   };
 
+  // Robust check for cloud backup
   const hasCloudBackup = !!(profile?.vault_phrase || profile?.vault_infura_key);
+  const isUserLoggedIn = !!user;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -196,12 +187,15 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
                 Import Existing Wallet
               </Button>
 
-              {hasCloudBackup && (
+              {isUserLoggedIn && (
                 <Button 
                   variant="outline"
-                  className="w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5 shadow-lg shadow-primary/5" 
+                  className={cn(
+                    "w-full h-12 text-sm font-bold rounded-xl gap-3 border-primary/20 text-primary hover:bg-primary/5 shadow-lg shadow-primary/5 transition-all",
+                    !hasCloudBackup && "opacity-50 grayscale cursor-not-allowed"
+                  )} 
                   onClick={handleRestore}
-                  disabled={isProcessing}
+                  disabled={isProcessing || !hasCloudBackup}
                 >
                   {isProcessing && !status.includes('Syncing') ? (
                     <div className="flex items-center gap-2">

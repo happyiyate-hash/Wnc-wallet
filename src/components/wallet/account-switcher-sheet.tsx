@@ -21,8 +21,9 @@ export default function AccountSwitcherSheet({ isOpen, onOpenChange }: AccountSw
     onOpenChange(false);
   };
 
-  const handleAddAccount = () => {
-    signOut(); // Sign out current supabase user to allow new login
+  const handleAddAccount = async () => {
+    // Correctly terminate current user session to show login for "Add Account"
+    await signOut();
     onOpenChange(false);
   };
 
@@ -74,7 +75,7 @@ export default function AccountSwitcherSheet({ isOpen, onOpenChange }: AccountSw
                                     <ShieldCheck className="w-3 h-3 text-primary" />
                                 </div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">
-                                    @{session.profile.username}
+                                    ID: {session.profile.account_number || '---'}
                                 </p>
                             </div>
                         </div>
