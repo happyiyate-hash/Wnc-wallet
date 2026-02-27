@@ -19,7 +19,8 @@ import {
   Search,
   XCircle,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  AlertCircle
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -36,19 +37,35 @@ import TransactionStatusCard from '@/components/wallet/transaction-status-card';
 import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 
+/**
+ * Enhanced Address Detection with Checksum Support
+ */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
-  if (clean.startsWith('0x') && clean.length === 42) return 'evm';
+  
+  // EVM Detection
+  if (clean.startsWith('0x')) {
+    const formatRegex = /^0x[a-fA-F0-9]{40}$/;
+    if (!formatRegex.test(clean)) return 'invalid-evm-format';
+    // EIP-55 Checksum Validation
+    if (!ethers.isAddress(clean)) return 'invalid-evm-checksum';
+    return 'evm';
+  }
+  
+  // XRP Ledger
   if (clean.startsWith('r') && clean.length >= 25 && clean.length <= 35) return 'xrp';
+  
+  // Polkadot / Substrate
   if (clean.length >= 47 && !clean.includes('0x')) return 'polkadot';
+  
   return 'invalid';
 };
 
 const getDetectedNetworkMeta = (type: string) => {
     if (type === 'xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
     if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
-    if (type === 'evm') return { name: 'EVM Network', symbol: 'ETH' };
+    if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'EVM Network', symbol: 'ETH' };
     return null;
 };
 
@@ -78,29 +95,20 @@ function SendClient() {
   const [txHash, setTxHash] = useState('');
   
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
-  
-  // Track if we have performed initial token resolution
   const hasInitialized = useRef(false);
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // CONTEXT-AWARE INITIALIZATION (Runs once or when searchParams change explicitly)
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
-
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    
-    // 1. Check URL Params
     let target = allAssets.find(a => a.symbol === symbol && a.chainId === chainIdParam);
-    
-    // 2. Fallback to viewingNetwork native
     if (!target) {
         target = allAssets.find(a => a.chainId === viewingNetwork.chainId && a.isNative) || 
                  allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
                  allAssets[0];
     }
-
     if (target) {
         setSelectedToken({ ...target });
         hasInitialized.current = true;
@@ -115,8 +123,24 @@ function SendClient() {
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
   
+  const validationError = useMemo(() => {
+    if (addrType === 'invalid-evm-format') {
+        return {
+            title: "Invalid Address Format",
+            message: "This doesn’t look like a valid EVM address. Please check the address and try again."
+        };
+    }
+    if (addrType === 'invalid-evm-checksum') {
+        return {
+            title: "Invalid Address Checksum",
+            message: "This address failed checksum validation. Please double-check the address."
+        };
+    }
+    return null;
+  }, [addrType]);
+
   const isNetworkMismatch = useMemo(() => {
-    if (addrType === 'invalid') return false;
+    if (addrType === 'invalid' || addrType.includes('invalid-evm')) return false;
     const activeType = activeNetwork.type || 'evm';
     return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
@@ -125,9 +149,11 @@ function SendClient() {
     let isMounted = true;
     async function resolve() {
       const input = debouncedRecipient.trim();
-      if (!input || input.length < 3 || addrType !== 'invalid') {
+      const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-evm');
+      
+      if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
-          setResolvedAddress(addrType !== 'invalid' ? input : '');
+          setResolvedAddress(isValidBase ? input : '');
           setRecipientProfile(null);
           setIsResolving(false);
         }
@@ -171,17 +197,8 @@ function SendClient() {
     return () => { isMounted = false; };
   }, [debouncedRecipient, addrType, activeNetwork.type]);
 
-  const parseError = (error: any): string => {
-    const message = (error.message || error.toString()).toLowerCase();
-    if (message.includes('insufficient funds') || message.includes('tecunfunded_payment') || message.includes('insufficient balance')) {
-      return "Insufficient Balance: You do not have enough funds to complete this dispatch.";
-    }
-    return message.length > 100 ? "System Error: Node broadcast failed." : message;
-  };
-
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
-    
     setIsConfirmOpen(false);
     setIsStatusVisible(true);
     setTxStatus('pending');
@@ -193,12 +210,7 @@ function SendClient() {
         const client = new xrpl.Client(activeNetwork.rpcUrl);
         await client.connect();
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-        const prepared = await client.autofill({ 
-            TransactionType: "Payment", 
-            Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(amount), 
-            Destination: resolvedAddress 
-        });
+        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amount), Destination: resolvedAddress });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
           setTxHash(result.result.hash);
@@ -217,20 +229,17 @@ function SendClient() {
       setTxStatus('success');
     } catch (e: any) {
       setTxStatus('error');
-      setReceiptError(parseError(e));
+      setReceiptError(e.message || "Broadcast failed.");
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => {
-        setIsStatusVisible(false);
-        setIsReceiptOpen(true);
-      }, 3000);
+      setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
     }
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
-  const isValidAddress = resolvedAddress.length > 0 && !isNetworkMismatch;
-  const canSend = isValidAddress && parseFloat(amount) > 0 && !isSubmitting;
+  const isActuallyValid = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError;
+  const canSend = isActuallyValid && parseFloat(amount) > 0 && !isSubmitting;
 
   const gasFiatValue = useMemo(() => {
     if (!selectedToken) return 0;
@@ -239,19 +248,10 @@ function SendClient() {
     return parseFloat(gasData.nativeFee) * nativePrice;
   }, [gasData.nativeFee, selectedToken, prices, allChainsMap]);
 
-  const handleTokenSelect = (token: AssetRow) => {
-    setSelectedToken({ ...token });
-    setIsSelectorOpen(false);
-    // Ensure we don't accidentally revert back on next allAssets update
-    hasInitialized.current = true;
-  };
-
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
-            <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <button 
             onClick={() => setIsSelectorOpen(true)}
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
@@ -271,15 +271,13 @@ function SendClient() {
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <div className="relative">
-                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
-                                <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Me" />
-                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
-                            </Avatar>
-                            {/* Institutional Badge - Corrected z-index and placement */}
-                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Active Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                            </div>
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
+                            <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender Avatar" />
+                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
+                        </Avatar>
+                        {/* Sender Badge: LAYERED ABOVE TO PREVENT CLIPPING */}
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Active Network Logo" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                         </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
@@ -297,31 +295,29 @@ function SendClient() {
                     <div className="relative">
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative",
-                            !resolvedAddress ? "border-dashed border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
+                            !resolvedAddress ? "border-dashed border-white/10" : (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
                                     <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
-                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
+                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Avatar" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Target Token Logo" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
                                 </div>
                              ) : isNetworkMismatch ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt={detectedMeta?.name || 'mismatch'} size={44} />
-                                    <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1 border-2 border-black z-20 shadow-xl">
-                                        <XCircle className="w-3 h-3 text-white" />
-                                    </div>
+                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="Network Mismatch Icon" size={44} />
+                                    <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1 border-2 border-black z-20 shadow-xl"><XCircle className="w-3 h-3 text-white" /></div>
                                 </div>
                              ) : resolvedAddress ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token Icon" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network Icon" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
@@ -331,9 +327,9 @@ function SendClient() {
                     </div>
                     <span className={cn(
                         "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
-                        isNetworkMismatch ? "text-red-500" : "text-white/40"
+                        (isNetworkMismatch || validationError) ? "text-red-500" : "text-white/40"
                     )}>
-                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? 'ROUTE BLOCKED' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
+                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : (isNetworkMismatch || validationError) ? 'ROUTE BLOCKED' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
                 </div>
             </section>
@@ -343,34 +339,30 @@ function SendClient() {
                     <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
                     <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
                 </div>
-                <div className={cn(
-                    "bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all",
-                    isNetworkMismatch && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10"
-                )}>
+                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10")}>
                     <div className="flex items-center gap-2 px-2">
-                        <Input 
-                            placeholder="Account ID or Address" 
-                            value={recipientInput} 
-                            onChange={(e) => setRecipientInput(e.target.value)} 
-                            className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1"
-                        />
+                        <Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1" />
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                     </div>
                 </div>
 
+                {validationError && (
+                    <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-2xl">
+                        <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><AlertCircle className="w-6 h-6 text-red-500" /></div>
+                        <div className="space-y-1.5">
+                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">{validationError.title}</p>
+                            <p className="text-xs font-bold text-red-400 leading-relaxed">{validationError.message}</p>
+                        </div>
+                    </div>
+                )}
+
                 {isNetworkMismatch && (
                     <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-2xl">
-                        <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0">
-                            <ShieldAlert className="w-6 h-6 text-red-500" />
-                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div>
                         <div className="space-y-1.5">
                             <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Incompatible Network Detected</p>
-                            <p className="text-xs font-bold text-red-400 leading-relaxed">
-                                This address belongs to <span className="text-white font-black underline decoration-red-500/50">{detectedMeta?.name}</span>, but you're currently sending from <span className="text-white font-black">{activeNetwork.name}</span>.
-                            </p>
-                            <p className="text-[10px] text-red-400/60 font-medium leading-relaxed italic">
-                                To avoid permanent loss of funds, please switch networks or enter a valid {activeNetwork.name} address.
-                            </p>
+                            <p className="text-xs font-bold text-red-400 leading-relaxed">This address belongs to <span className="text-white font-black underline decoration-red-500/50">{detectedMeta?.name}</span>, but you're currently sending from <span className="text-white font-black">{activeNetwork.name}</span>.</p>
+                            <p className="text-[10px] text-red-400/60 font-medium leading-relaxed italic">To avoid permanent loss of funds, please switch networks or enter a valid {activeNetwork.name} address.</p>
                         </div>
                     </div>
                 )}
@@ -386,120 +378,37 @@ function SendClient() {
                 </div>
                 <div className="bg-white/[0.03] border border-white/10 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 rounded-[2.5rem] p-6 transition-all relative group">
                   <div className="flex items-baseline justify-between gap-4">
-                    <Input 
-                      type="number" 
-                      placeholder="0.00" 
-                      value={amount} 
-                      onChange={(e) => setAmount(e.target.value)} 
-                      className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800 text-white"
-                    />
+                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800 text-white" />
                     <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                   </div>
-                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
-                    ≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated Value</span>
-                  </div>
+                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated Value</span></div>
                 </div>
             </div>
 
             <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-3xl rounded-full -mr-12 -mt-12" />
-                <div className="flex items-center gap-2 mb-2 relative z-10">
-                    <ShieldCheck className="w-4 h-4 text-primary" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span>
-                </div>
-                
+                <div className="flex items-center gap-2 mb-2 relative z-10"><ShieldCheck className="w-4 h-4 text-primary" /><span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span></div>
                 <div className="space-y-3 relative z-10">
-                    <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-white/40 font-bold uppercase tracking-tighter">Network Gas</span>
-                        <div className="flex items-center gap-1.5 font-bold text-white">
-                            <Fuel className="w-3 h-3 text-primary" />
-                            <span>{gasData.priceGwei} Gwei</span>
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-white/40 font-bold uppercase tracking-tighter">Native Fee</span>
-                        <div className="text-right">
-                            <p className="font-bold text-white">{gasData.nativeFee} {activeNetwork.symbol}</p>
-                            <p className="text-[9px] text-primary font-black uppercase">≈ {formatFiat(gasFiatValue)}</p>
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span>
-                        <div className="flex items-center gap-1.5 font-bold text-white">
-                            <Timer className="w-3 h-3 text-primary" />
-                            <span>{gasData.estimatedTime}</span>
-                        </div>
-                    </div>
+                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Network Gas</span><div className="flex items-center gap-1.5 font-bold text-white"><Fuel className="w-3 h-3 text-primary" /><span>{gasData.priceGwei} Gwei</span></div></div>
+                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Native Fee</span><div className="text-right"><p className="font-bold text-white">{gasData.nativeFee} {activeNetwork.symbol}</p><p className="text-[9px] text-primary font-black uppercase">≈ {formatFiat(gasFiatValue)}</p></div></div>
+                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span><div className="flex items-center gap-1.5 font-bold text-white"><Timer className="w-3 h-3 text-primary" /><span>{gasData.estimatedTime}</span></div></div>
                 </div>
             </div>
           </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
           <div className="max-w-md mx-auto">
-            <Button 
-              className={cn(
-                "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", 
-                canSend 
-                    ? "bg-primary hover:bg-primary/90 border-primary/50 shadow-primary/30 text-white" 
-                    : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none"
-              )} 
-              disabled={!canSend} 
-              onClick={() => setIsConfirmOpen(true)}
-            >
+            <Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", canSend ? "bg-primary hover:bg-primary/90 border-primary/50 shadow-primary/30 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none")} disabled={!canSend} onClick={() => setIsConfirmOpen(true)}>
               {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
             </Button>
           </div>
         </div>
       </main>
 
-      <GlobalTokenSelector 
-        isOpen={isSelectorOpen}
-        onOpenChange={setIsSelectorOpen}
-        onSelect={handleTokenSelect}
-        title="Select Network"
-      />
-
-      <TransactionConfirmationSheet 
-        isOpen={isConfirmOpen}
-        onOpenChange={setIsConfirmOpen}
-        onConfirm={handleSendRequest}
-        isSubmitting={isSubmitting}
-        amount={amount}
-        token={selectedToken}
-        recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')}
-        recipientAddress={resolvedAddress}
-        recipientAvatar={recipientProfile?.avatar}
-      />
-
-      <TransactionStatusCard 
-        isVisible={isStatusVisible}
-        status={txStatus}
-        senderName="You"
-        senderAvatar={profile?.photo_url}
-        recipientName={recipientProfile?.name || 'Network Node'}
-        recipientAvatar={recipientProfile?.avatar}
-        token={{
-            symbol: selectedToken?.symbol || '',
-            iconUrl: selectedToken?.iconUrl,
-            chainId: selectedToken?.chainId || 1,
-            name: selectedToken?.name
-        }}
-        isRawAddress={!recipientProfile}
-      />
-
-      <TransactionReceiptSheet 
-        isOpen={isReceiptOpen}
-        onOpenChange={setIsReceiptOpen}
-        status={txStatus === 'error' ? 'error' : 'success'}
-        amount={amount}
-        token={selectedToken}
-        recipientName={recipientProfile?.name || 'Network Node'}
-        recipientAddress={resolvedAddress}
-        txHash={txHash}
-        errorReason={receiptError}
-        fee={`${gasData.nativeFee} ${activeNetwork.symbol}`}
-        networkName={activeNetwork.name}
-      />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Network" />
+      <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
+      <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={`${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
     </div>
   );
 }
