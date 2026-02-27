@@ -34,20 +34,21 @@ export default function Home() {
   const hasCachedIdentity = !!profile;
   const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity;
 
-  const shouldShowAuth = !loading && !user;
-  const shouldShowSetup = !loading && !!user && isInitialized && !isWalletLoading && !wallets;
+  // INITIALIZATION SETTLED:
+  // We only show auth/setup sheets once all async checks are fully resolved.
+  // This prevents the sheets from "popping" during transitions.
+  const isSettled = !loading && isInitialized && !isWalletLoading;
+  
+  const shouldShowAuth = isSettled && !user;
+  const shouldShowSetup = isSettled && !!user && !wallets;
 
   useEffect(() => {
-    if (!isAppLoading) {
+    // Only update sheet visibility once the system has settled
+    if (isSettled) {
       setIsAuthOpen(shouldShowAuth);
-    }
-  }, [shouldShowAuth, isAppLoading]);
-
-  useEffect(() => {
-    if (!isAppLoading) {
       setIsWalletSetupOpen(shouldShowSetup);
     }
-  }, [shouldShowSetup, isAppLoading]);
+  }, [isSettled, shouldShowAuth, shouldShowSetup]);
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;

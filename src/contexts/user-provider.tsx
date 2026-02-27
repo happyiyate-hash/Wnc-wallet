@@ -44,7 +44,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (cached) {
             try {
                 setProfile(JSON.parse(cached));
-                setLoading(false); 
+                // We DON'T set loading to false here. 
+                // We wait for the actual Supabase auth handshake to confirm identity.
             } catch (e) {}
         }
     }
