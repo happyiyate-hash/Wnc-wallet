@@ -16,20 +16,15 @@ import {
   Loader2, 
   CheckCircle2, 
   Fuel,
-  ClipboardPaste,
   ShieldCheck,
   Timer,
   Search,
-  History,
   XCircle,
   ArrowRight
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
-import { ApiPromise, WsProvider } from '@polkadot/api';
-import { Keyring } from '@polkadot/keyring';
-import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { AssetRow, ChainConfig } from '@/lib/types';
@@ -109,10 +104,7 @@ function SendClient() {
   const isNetworkMismatch = useMemo(() => {
     if (addrType === 'invalid') return false;
     const activeType = activeNetwork.type || 'evm';
-    if (activeType === 'evm' && addrType !== 'evm') return true;
-    if (activeType === 'xrp' && addrType !== 'xrp') return true;
-    if (activeType === 'polkadot' && addrType !== 'polkadot') return true;
-    return false;
+    return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
 
   useEffect(() => {
@@ -120,7 +112,6 @@ function SendClient() {
     async function resolve() {
       const input = debouncedRecipient.trim();
       
-      // Reset state if input is cleared or too short
       if (!input || input.length < 3) {
         if (isMounted) {
           setResolvedAddress('');
@@ -130,7 +121,6 @@ function SendClient() {
         return;
       }
 
-      // Handle direct address entry (skip DB lookup)
       if (addrType !== 'invalid') {
         if (isMounted) {
           setResolvedAddress(input);
@@ -140,7 +130,6 @@ function SendClient() {
         return;
       }
 
-      // Handle Account ID Lookup
       setIsResolving(true);
       const searchHandle = input.startsWith('@') ? input.substring(1).toLowerCase().trim() : input.toLowerCase().trim();
 
@@ -165,6 +154,7 @@ function SendClient() {
           setRecipientProfile(null);
         }
       } catch (e) {
+        console.warn("Recipient resolve error:", e);
         if (isMounted) {
           setResolvedAddress('');
           setRecipientProfile(null);
@@ -187,7 +177,6 @@ function SendClient() {
     setIsSubmitting(true);
 
     try {
-      // Simulate/Execute multi-chain broadcast
       if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
@@ -205,7 +194,6 @@ function SendClient() {
         } else { throw new Error("Transaction rejected by XRPL"); }
         await client.disconnect();
       } else {
-        // EVM Generic Logic
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
@@ -215,7 +203,6 @@ function SendClient() {
           : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(resolvedAddress, ethers.parseUnits(amount, decimals));
         setTxHash(tx.hash);
       }
-      
       setTxStatus('success');
     } catch (e: any) {
       setTxStatus('error');
@@ -242,12 +229,11 @@ function SendClient() {
   }, [gasData.nativeFee, selectedToken, prices, allChainsMap]);
 
   return (
-    <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative pb-40">
+    <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
         </Button>
-        
         <button 
             onClick={() => setIsTokenSideSheetOpen(true)}
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
@@ -256,158 +242,199 @@ function SendClient() {
             <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span>
             <ChevronRight className="w-3 h-3 text-primary rotate-90" />
         </button>
-
         <div className="w-10" />
       </header>
 
-      <main className="flex-1 p-6 space-y-10 max-w-lg mx-auto w-full relative z-10">
-        <section className="flex items-center justify-between px-2">
-            <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                    <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl">
-                        <AvatarImage src={profile?.photo_url} />
-                        <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+      <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10">
+        <ScrollArea className="h-full pr-0 pb-40">
+          <div className="space-y-10 pt-2 px-1">
+            <section className="flex items-center justify-between px-2">
+                <div className="flex flex-col items-center gap-3">
+                    <div className="relative">
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl">
+                            <AvatarImage src={profile?.photo_url} />
+                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                        </div>
+                    </div>
+                    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
+                </div>
+
+                <div className="flex-1 px-4 relative">
+                    <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full">
+                            <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
+                        </div>
                     </div>
                 </div>
-                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
-            </div>
 
-            <div className="flex-1 px-4 relative">
-                <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full">
-                        <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                    {recipientProfile ? (
-                        <div className="relative group">
-                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl animate-in zoom-in duration-500">
-                                <AvatarImage src={recipientProfile.avatar} />
-                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                <div className="flex flex-col items-center gap-3">
+                    <div className="relative">
+                        {recipientProfile ? (
+                            <div className="relative group">
+                                <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl animate-in zoom-in duration-500">
+                                    <AvatarImage src={recipientProfile.avatar} />
+                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
+                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className={cn(
-                            "w-20 h-20 rounded-[2.5rem] border-2 border-dashed flex items-center justify-center transition-all duration-500 relative",
-                            addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10" : "border-primary/50 bg-primary/5"
-                        )}>
-                            {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
-                             isNetworkMismatch ? (
-                                <div className="flex flex-col items-center justify-center p-2 text-red-500">
-                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="mismatch" size={44} />
-                                </div>
-                             ) : addrType !== 'invalid' ? (
-                                <div className="relative">
-                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} />
+                        ) : (
+                            <div className={cn(
+                                "w-20 h-20 rounded-[2.5rem] border-2 border-dashed flex items-center justify-center transition-all duration-500 relative",
+                                addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10" : "border-primary/50 bg-primary/5"
+                            )}>
+                                {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
+                                 isNetworkMismatch ? (
+                                    <div className="flex flex-col items-center justify-center p-2 text-red-500">
+                                        <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="mismatch" size={44} />
                                     </div>
-                                </div>
-                             ) : (
-                                <Search className="w-8 h-8 text-white/10" />
-                             )}
-                        </div>
-                    )}
+                                 ) : addrType !== 'invalid' ? (
+                                    <div className="relative">
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10">
+                                            <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} />
+                                        </div>
+                                    </div>
+                                 ) : (
+                                    <Search className="w-8 h-8 text-white/10" />
+                                 )}
+                            </div>
+                        )}
+                    </div>
+                    <span className={cn(
+                        "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
+                        isNetworkMismatch ? "text-red-500" : "text-white/40"
+                    )}>
+                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? 'ROUTE BLOCKED' : addrType !== 'invalid' ? 'NETWORK NODE' : 'TO RECIPIENT'}
+                        {isNetworkMismatch && <XCircle className="w-3 h-3 mt-1" />}
+                    </span>
                 </div>
-                <span className={cn(
-                    "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
-                    isNetworkMismatch ? "text-red-500" : "text-white/40"
+            </section>
+
+            <section className="space-y-3">
+                <div className="flex justify-between items-center px-2">
+                    <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
+                    <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
+                </div>
+                <div className={cn(
+                    "bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all",
+                    isNetworkMismatch && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10"
                 )}>
-                    {isNetworkMismatch && <XCircle className="w-3 h-3" />}
-                    {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? 'ROUTE BLOCKED' : addrType !== 'invalid' ? 'NETWORK NODE' : 'TO RECIPIENT'}
-                </span>
-            </div>
-        </section>
-
-        {resolvedAddress && !isNetworkMismatch && (
-            <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500">
-                <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Target Vault Address</span>
-                <h2 className="text-3xl font-mono font-black text-white tracking-tighter">
-                    {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
-                </h2>
-            </div>
-        )}
-
-        <section className="space-y-3">
-            <div className="flex justify-between items-center px-2">
-                <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
-                <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
-            </div>
-            <div className={cn(
-                "bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all",
-                isNetworkMismatch && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10"
-            )}>
-                <div className="flex items-center gap-2 px-2">
-                    <Input 
-                        placeholder="Account ID or Address" 
-                        value={recipientInput} 
-                        onChange={(e) => setRecipientInput(e.target.value)} 
-                        className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1"
-                    />
-                    {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                    <div className="flex items-center gap-2 px-2">
+                        <Input 
+                            placeholder="Account ID or Address" 
+                            value={recipientInput} 
+                            onChange={(e) => setRecipientInput(e.target.value)} 
+                            className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1"
+                        />
+                        {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section className="space-y-3">
-            <div className="flex justify-between items-center px-2">
-                <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Transfer Amount</Label>
-                <span className="text-[9px] text-white/20 font-bold uppercase">Bal: {balance.toFixed(4)}</span>
-            </div>
-            <div className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-6 transition-all relative">
-                <div className="flex items-baseline justify-between gap-4">
+            {resolvedAddress && !isNetworkMismatch && (
+                <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Target Vault Address</span>
+                    <h2 className="text-3xl font-mono font-black text-white tracking-tighter">
+                        {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
+                    </h2>
+                </div>
+            )}
+
+            <div className="space-y-3">
+                <div className="flex justify-between items-center px-2">
+                    <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-white/40 font-bold uppercase">Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span>
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md" onClick={() => setAmount(balance.toString())}>MAX</Button>
+                    </div>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 rounded-[2.5rem] p-6 transition-all relative group">
+                  <div className="flex items-baseline justify-between gap-4">
                     <Input 
-                        type="number" 
-                        placeholder="0.00" 
-                        value={amount} 
-                        onChange={(e) => setAmount(e.target.value)} 
-                        className="bg-transparent border-none text-4xl font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800 text-white"
+                      type="number" 
+                      placeholder="0.00" 
+                      value={amount} 
+                      onChange={(e) => setAmount(e.target.value)} 
+                      className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800 text-white"
                     />
                     <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
-                </div>
-                <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic">
-                    ≈ {formatFiat(amountUsdValue)}
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
+                    ≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated</span>
+                  </div>
                 </div>
             </div>
-        </section>
 
-        <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
-            <div className="flex items-center gap-2 mb-2 relative z-10">
-                <ShieldCheck className="w-4 h-4 text-primary" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span>
+            <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-3xl rounded-full -mr-12 -mt-12" />
+                <div className="flex items-center gap-2 mb-2 relative z-10">
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span>
+                </div>
+                
+                <div className="space-y-3 relative z-10">
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Network Gas</span>
+                        <div className="flex items-center gap-1.5 font-bold text-white">
+                            <Fuel className="w-3 h-3 text-primary" />
+                            <span className={cn(gasData.status === 'loading' && "animate-pulse")}>
+                                {gasData.priceGwei} Gwei
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Native Fee</span>
+                        <div className="text-right">
+                            <p className="font-bold text-white">{gasData.nativeFee} {activeNetwork.symbol}</p>
+                            <p className="text-[9px] text-primary font-black uppercase">≈ {formatFiat(gasFiatValue)}</p>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span>
+                        <div className="flex items-center gap-1.5 font-bold text-white">
+                            <Timer className="w-3 h-3 text-primary" />
+                            <span>{gasData.estimatedTime}</span>
+                        </div>
+                    </div>
+                    <div className="pt-3 border-t border-white/5 flex justify-between items-center">
+                        <span className="text-xs font-black uppercase text-white/40">Total Impact</span>
+                        <div className="text-right">
+                            <p className="text-sm font-black text-white">{amount || '0'} {selectedToken?.symbol}</p>
+                            <p className="text-[10px] font-bold text-muted-foreground">≈ {formatFiat(amountUsdValue)}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div className="space-y-3 text-[11px] font-bold">
-                <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Ecosystem</span><span className="text-white">{activeNetwork.name}</span></div>
-                <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Native Fee</span><span className="text-white">{gasData.nativeFee} {activeNetwork.symbol}</span></div>
-                <div className="flex justify-between items-center"><span className="text-white/40 uppercase">Arrival Time</span><span className="text-white">{gasData.estimatedTime}</span></div>
-                <div className="pt-3 border-t border-white/5 flex justify-between items-center"><span className="text-xs font-black uppercase text-white/40">Total Impact</span><span className="text-sm font-black text-white">{amount || '0'} {selectedToken?.symbol}</span></div>
-            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
+          <div className="max-w-md mx-auto">
+            <Button 
+              className={cn(
+                "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", 
+                canSend 
+                    ? "bg-primary hover:bg-primary/90 border-primary/50 shadow-primary/30 text-white" 
+                    : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none"
+              )} 
+              disabled={!canSend} 
+              onClick={() => setIsConfirmOpen(true)}
+            >
+              {isSubmitting ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span className="animate-pulse">Broadcasting Node...</span>
+                </div>
+              ) : "Sign & Authorize"}
+            </Button>
+          </div>
         </div>
       </main>
-
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
-        <div className="max-w-md mx-auto">
-          <Button 
-            className={cn(
-                "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", 
-                canSend ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale text-zinc-600 shadow-none"
-            )} 
-            disabled={!canSend} 
-            onClick={() => setIsConfirmOpen(true)}
-          >
-            Sign & Authorize
-          </Button>
-        </div>
-      </div>
 
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="bottom" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-[3.5rem] p-0 h-[70vh] overflow-hidden">
