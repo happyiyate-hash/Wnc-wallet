@@ -272,13 +272,13 @@ function SendClient() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                         <div className="relative">
-                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl overflow-visible bg-black">
+                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
                                 <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Me" />
                                 <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
                             </Avatar>
-                            {/* Institutional Badge - Fixed placement */}
+                            {/* Institutional Badge - Corrected z-index and placement */}
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Active Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                             </div>
                         </div>
                     </div>
@@ -302,7 +302,7 @@ function SendClient() {
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
-                                    <Avatar className="w-full h-full rounded-[2.5rem] overflow-visible bg-black">
+                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
@@ -311,12 +311,17 @@ function SendClient() {
                                     </div>
                                 </div>
                              ) : isNetworkMismatch ? (
-                                <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt={detectedMeta?.name || 'mismatch'} size={44} />
+                                <div className="relative">
+                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt={detectedMeta?.name || 'mismatch'} size={44} />
+                                    <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1 border-2 border-black z-20 shadow-xl">
+                                        <XCircle className="w-3 h-3 text-white" />
+                                    </div>
+                                </div>
                              ) : resolvedAddress ? (
                                 <div className="relative">
                                     <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
@@ -354,12 +359,17 @@ function SendClient() {
                 </div>
 
                 {isNetworkMismatch && (
-                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3 animate-in slide-in-from-top-2">
-                        <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">Security Alert</p>
+                    <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-2xl">
+                        <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0">
+                            <ShieldAlert className="w-6 h-6 text-red-500" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Incompatible Network Detected</p>
                             <p className="text-xs font-bold text-red-400 leading-relaxed">
-                                Wrong address for <span className="underline decoration-red-500/50">{detectedMeta?.name}</span> detected. Incompatible network.
+                                This address belongs to <span className="text-white font-black underline decoration-red-500/50">{detectedMeta?.name}</span>, but you're currently sending from <span className="text-white font-black">{activeNetwork.name}</span>.
+                            </p>
+                            <p className="text-[10px] text-red-400/60 font-medium leading-relaxed italic">
+                                To avoid permanent loss of funds, please switch networks or enter a valid {activeNetwork.name} address.
                             </p>
                         </div>
                     </div>
