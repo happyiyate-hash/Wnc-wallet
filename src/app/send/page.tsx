@@ -163,32 +163,32 @@ function SendClient() {
           selected_chain: activeNetwork.type || 'evm'
         });
 
-        if (isMounted) {
-          if (!error && data && data[0]) {
-            const result = data[0];
-            
-            // Set profile data (always present if user exists)
-            setRecipientProfile({
-              avatar: result.profile_pic,
-              verified: result.verified,
-              name: result.name || searchHandle
-            });
+        if (!isMounted) return;
 
-            // Set address (only present if wallet connected to this network)
-            if (result.target_address) {
-              setResolvedAddress(result.target_address);
-            } else {
-              setResolvedAddress('');
-              toast({
-                title: "Network Not Ready",
-                description: `Recipient found, but they haven't connected their wallet to ${activeNetwork.name} yet.`,
-                variant: "destructive"
-              });
-            }
+        if (!error && data && data[0]) {
+          const result = data[0];
+          
+          // Set profile data (always present if user exists)
+          setRecipientProfile({
+            avatar: result.profile_pic,
+            verified: result.verified,
+            name: result.name || searchHandle
+          });
+
+          // Set address (only present if wallet connected to this network)
+          if (result.target_address) {
+            setResolvedAddress(result.target_address);
           } else {
             setResolvedAddress('');
-            setRecipientProfile(null);
+            toast({
+              title: "Network Not Ready",
+              description: `Recipient found, but they haven't connected their wallet to ${activeNetwork.name} yet.`,
+              variant: "destructive"
+            });
           }
+        } else {
+          setResolvedAddress('');
+          setRecipientProfile(null);
         }
       } catch (e) {
         console.warn("Identity lookup failed:", e);
