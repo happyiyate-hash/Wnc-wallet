@@ -29,6 +29,7 @@ import { supabase } from '@/lib/supabase/client';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import TransactionConfirmationSheet from '@/components/wallet/transaction-confirmation-sheet';
 import type { AssetRow } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 function SendClient() {
   const { viewingNetwork, allAssets, allChainsMap, infuraApiKey } = useWallet();
