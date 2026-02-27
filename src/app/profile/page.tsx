@@ -137,16 +137,17 @@ export default function ProfilePage() {
 
                     {/* DYNAMIC FINANCIAL GRID */}
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <Coins className="w-5 h-5 text-primary mb-3" />
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Cloud Earnings</p>
+                        {/* EARNINGS CARD WITH EMERALD GRADIENT */}
+                        <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl transition-all hover:scale-[1.02] group">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-emerald-500/20 transition-colors" />
+                            <Coins className="w-5 h-5 text-emerald-400 mb-3" />
+                            <p className="text-[9px] font-black text-emerald-400/60 uppercase tracking-widest mb-1">Cloud Earnings</p>
                             <p className="text-xl font-black text-white tabular-nums truncate">{convertedEarnings}</p>
                         </div>
                         
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <TrendingUp className="w-5 h-5 text-emerald-400 mb-3" />
+                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl transition-all hover:scale-[1.02]">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
+                            <TrendingUp className="w-5 h-5 text-primary mb-3" />
                             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Portfolio Balance</p>
                             <p className="text-xl font-black text-white tabular-nums truncate">{formatFiat(totalPortfolioValue)}</p>
                         </div>
