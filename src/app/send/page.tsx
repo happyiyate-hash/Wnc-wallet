@@ -166,6 +166,29 @@ function SendClient() {
     return () => { isMounted = false; };
   }, [debouncedRecipient, addrType, activeNetwork.type]);
 
+  const parseError = (error: any): string => {
+    const message = error.message || error.toString();
+    const code = error.code || '';
+
+    if (message.includes('insufficient funds') || code === 'INSUFFICIENT_FUNDS' || message.includes('failed with 33554432 gas')) {
+      // Check if we have native currency for gas
+      const balance = parseFloat(selectedToken?.balance || '0');
+      const sendAmount = parseFloat(amount) || 0;
+      if (balance < sendAmount) return "Insufficient Balance: You do not have enough funds to complete this dispatch.";
+      return "Insufficient Gas Fee: Your wallet does not have enough native network currency to pay the dispatch fee.";
+    }
+
+    if (message.includes('user rejected') || message.includes('ACTION_REJECTED')) {
+      return "Authorization Cancelled: Transaction was manually rejected.";
+    }
+
+    if (message.includes('network error') || message.includes('failed to fetch')) {
+      return "Network Connection Error: Institutional node sync failed. Please check your network.";
+    }
+
+    return message.length > 100 ? "System Error: Node broadcast failed. Please try again." : message;
+  };
+
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
     
@@ -204,7 +227,7 @@ function SendClient() {
       setTxStatus('success');
     } catch (e: any) {
       setTxStatus('error');
-      setReceiptError(e.message);
+      setReceiptError(parseError(e));
     } finally {
       setIsSubmitting(false);
       setTimeout(() => {
@@ -217,7 +240,6 @@ function SendClient() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
   const isValidAddress = resolvedAddress.length > 0 && !isNetworkMismatch;
-  // REMOVED balance check for disabling button per user request
   const canSend = isValidAddress && parseFloat(amount) > 0 && !isSubmitting;
 
   const gasFiatValue = useMemo(() => {
@@ -288,7 +310,7 @@ function SendClient() {
                                 {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                                  isNetworkMismatch ? (
                                     <div className="flex flex-col items-center justify-center p-2">
-                                        <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="mismatch" size={44} />
+                                        <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt={detectedMeta?.name || 'mismatch'} size={44} />
                                     </div>
                                  ) : addrType !== 'invalid' ? (
                                     <div className="relative">

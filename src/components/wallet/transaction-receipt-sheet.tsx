@@ -3,10 +3,11 @@
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertCircle, Copy, ExternalLink, Share2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Copy, Share2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/currency-provider';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 
 interface TransactionReceiptSheetProps {
   isOpen: boolean;
@@ -60,10 +61,13 @@ export default function TransactionReceiptSheet({
         
         <div className="flex flex-col items-center text-center space-y-6 mb-8">
           <div className={cn(
-            "w-20 h-20 rounded-[2.5rem] flex items-center justify-center shadow-2xl",
+            "w-20 h-20 rounded-[2.5rem] flex items-center justify-center shadow-2xl relative",
             status === 'success' ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
           )}>
             {status === 'success' ? <CheckCircle2 className="w-10 h-10" /> : <AlertCircle className="w-10 h-10" />}
+            <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1.5 border border-white/10 shadow-2xl">
+                <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={24} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
+            </div>
           </div>
           
           <div className="space-y-1">

@@ -5,15 +5,14 @@ import { motion } from 'framer-motion';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowRight, Loader2, ShieldCheck, Search } from 'lucide-react';
+import { ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import TokenLogoDynamic from '../shared/TokenLogoDynamic';
 import { useCurrency } from '@/contexts/currency-provider';
-import { cn } from '@/lib/utils';
 import { useUser } from '@/contexts/user-provider';
 
 interface TransactionConfirmationSheetProps {
   isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (isOpen: boolean) => void;
   onConfirm: () => void;
   isSubmitting: boolean;
   amount: string;
@@ -48,7 +47,7 @@ export default function TransactionConfirmationSheet({
 
         <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
         
-        {/* SENDER -> RECIPIENT VISUALS REPEATED */}
+        {/* SENDER -> RECIPIENT VISUALS */}
         <div className="flex items-center justify-between mb-10 px-4">
           <div className="flex flex-col items-center gap-2">
             <div className="relative">
@@ -57,7 +56,7 @@ export default function TransactionConfirmationSheet({
                     <AvatarFallback className="bg-primary/20 text-primary font-black">{profile?.name?.[0]}</AvatarFallback>
                 </Avatar>
                 <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt="T" size={16} chainId={token?.chainId} />
+                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={20} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                 </div>
             </div>
             <span className="text-[8px] font-black text-white/40 uppercase">You</span>
@@ -78,11 +77,11 @@ export default function TransactionConfirmationSheet({
                     </Avatar>
                 ) : (
                     <div className="w-16 h-16 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center">
-                        <TokenLogoDynamic logoUrl={token?.iconUrl} alt="T" size={32} chainId={token?.chainId} />
+                        <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={32} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                     </div>
                 )}
                 <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt="T" size={16} chainId={token?.chainId} />
+                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={20} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                 </div>
             </div>
             <span className="text-[8px] font-black text-white/40 uppercase truncate w-16 text-center">{recipientName}</span>
