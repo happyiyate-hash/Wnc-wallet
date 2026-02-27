@@ -186,13 +186,12 @@ function SendClient() {
   const saveToHistory = async (recipientData: { accountNumber: string, address: string, chain: string }) => {
     if (!user || !supabase) return;
     try {
-      // Use atomic RPC for history update (Production-ready Section 5)
       await supabase.rpc('update_transaction_history', {
         p_recipient_account: recipientData.accountNumber,
         p_blockchain: recipientData.chain,
         p_address: recipientData.address
       });
-      fetchRecent(); // Refresh the bar immediately
+      fetchRecent();
     } catch (e) {
       console.warn("Failed to save transaction history:", e);
     }
@@ -347,7 +346,6 @@ function SendClient() {
         <ScrollArea className="h-full">
           <div className="p-6 space-y-8 pb-48 max-w-lg mx-auto">
             
-            {/* RECENT RECIPIENTS BAR */}
             {recentRecipients.length > 0 && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div className="flex items-center gap-2 px-2">
@@ -379,7 +377,6 @@ function SendClient() {
                 </div>
             )}
 
-            {/* ASSET SELECTOR */}
             <div className="space-y-3">
                 <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] pl-2">Asset to Transfer</Label>
                 <button 
@@ -428,17 +425,188 @@ function SendClient() {
                             </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
-                            <p className="text-[8px] font-black text-primary uppercase tracking-widest">Verified Recipient</p>
-                            <p className="text-sm font-bold text-white tracking-tight">@{recipientProfile.name}</p>
+                            <p className="text-[8px] font-black text-primary uppercase tracking-[0.2em]">Verified Identity Found</p>
+                            <p className="text-sm font-black text-white tracking-tight">@{recipientProfile.name}</p>
                         </div>
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <ShieldCheck className="w-5 h-5 text-primary" />
                     </div>
                   )}
                 </div>
             </div>
+            
+            <div className="space-y-3">
+                <div className="flex justify-between items-center px-2">
+                    <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-white/40 font-bold uppercase">Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span>
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md" onClick={() => setAmount(balance.toString())}>MAX</Button>
+                    </div>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 rounded-[2.5rem] p-6 transition-all relative group">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <Input 
+                      type="number" 
+                      placeholder="0.00" 
+                      value={amount} 
+                      onChange={(e) => setAmount(e.target.value)} 
+                      className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter placeholder:text-zinc-800 text-white"
+                    />
+                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
+                    ≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated</span>
+                  </div>
+                </div>
+            </div>
+
+            <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-3xl rounded-full -mr-12 -mt-12" />
+                <div className="flex items-center gap-2 mb-2 relative z-10">
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span>
+                </div>
+                
+                <div className="space-y-3 relative z-10">
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Network Gas</span>
+                        <div className="flex items-center gap-1.5 font-bold text-white">
+                            <Fuel className="w-3 h-3 text-primary" />
+                            <span className={cn(gasData.status === 'loading' && "animate-pulse")}>
+                                {gasData.priceGwei} Gwei
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Native Fee</span>
+                        <div className="text-right">
+                            <p className="font-bold text-white">{gasData.nativeFee} {activeNetwork.symbol}</p>
+                            <p className="text-[9px] text-primary font-black uppercase">≈ {formatFiat(gasFiatValue)}</p>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span>
+                        <div className="flex items-center gap-1.5 font-bold text-white">
+                            <Timer className="w-3 h-3 text-primary" />
+                            <span>{gasData.estimatedTime}</span>
+                        </div>
+                    </div>
+                    <div className="pt-3 border-t border-white/5 flex justify-between items-center">
+                        <span className="text-xs font-black uppercase text-white/40">Total Impact</span>
+                        <div className="text-right">
+                            <p className="text-sm font-black text-white">{amount || '0'} {selectedToken?.symbol}</p>
+                            <p className="text-[10px] font-bold text-muted-foreground">≈ {formatFiat(amountUsdValue)}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
           </div>
         </ScrollArea>
+        
+        <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
+          <div className="max-w-md mx-auto">
+            {amount && parseFloat(amount) > balance && (
+              <div className="flex items-center gap-2 p-3 rounded-2xl bg-destructive/10 text-destructive text-[10px] border border-destructive/20 mb-4 font-black uppercase tracking-widest justify-center animate-in fade-in slide-in-from-bottom-2">
+                <AlertCircle className="w-3.5 h-3.5" /> Insufficient {selectedToken?.symbol} balance
+              </div>
+            )}
+            <Button 
+              className={cn(
+                "w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", 
+                canSend 
+                    ? "bg-primary hover:bg-primary/90 border-primary/50 shadow-primary/30 text-white" 
+                    : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none"
+              )} 
+              disabled={!canSend} 
+              onClick={handleSendRequest}
+            >
+              {isSubmitting ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span className="animate-pulse">Broadcasting Node...</span>
+                </div>
+              ) : "Sign & Authorize"}
+            </Button>
+          </div>
+        </div>
       </main>
+      
+      <Sheet open={isNetworkSheetOpen} onOpenChange={setIsNetworkSheetOpen}>
+        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
+          <div className="absolute inset-0 bg-[#0a0a0c]/95 backdrop-blur-3xl -z-10" />
+          <div className="flex flex-col h-full relative z-10">
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+            <SheetHeader className="mb-6 px-6 pt-4 text-center">
+              <SheetTitle className="text-2xl font-black uppercase tracking-widest text-white">Switch Network</SheetTitle>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Select destination ecosystem</p>
+            </SheetHeader>
+            <ScrollArea className="flex-1 px-6">
+              <div className="grid grid-cols-1 gap-2 pb-32">
+                {allChains.map((chain) => (
+                  <button 
+                    key={chain.chainId} 
+                    onClick={() => { setSelectedNetworkForSelection(chain); setIsTokenSideSheetOpen(true); }} 
+                    style={{ borderColor: `${chain.themeColor || '#818cf8'}40`, background: `linear-gradient(135deg, ${chain.themeColor || '#818cf8'}15 0%, rgba(0,0,0,0) 100%)` }} 
+                    className="flex items-center justify-between p-4 rounded-3xl border transition-all hover:bg-white/5 active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-4">
+                        <div className="p-1 rounded-full bg-black/40 border border-white/5">
+                            <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={36} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                        </div>
+                        <div className="text-left">
+                            <p className="font-black text-sm text-white">{chain.name}</p>
+                            <p className="text-[9px] text-muted-foreground uppercase font-mono opacity-60">ID: {chain.chainId}</p>
+                        </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+          </div>
+        </SheetContent>
+      </Sheet>
+      
+      <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
+        <SheetContent side="right" className="bg-[#050505]/95 backdrop-blur-2xl border-l border-white/5 w-full sm:max-w-[450px] p-0 flex flex-col h-full shadow-2xl">
+          <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl bg-white/5">
+                    <ArrowLeft className="w-5 h-5"/>
+                </Button>
+                <div>
+                    <SheetTitle className="text-lg font-black uppercase tracking-tight text-white">{selectedNetworkForSelection?.name}</SheetTitle>
+                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Select Asset to Send</p>
+                </div>
+            </div>
+          </SheetHeader>
+          <ScrollArea className="flex-1 p-4">
+            <div className="space-y-2 pb-24">
+              {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => { 
+                const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow; 
+                return (
+                  <button 
+                    key={asset.symbol} 
+                    onClick={() => handleTokenSelect(asset)} 
+                    className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 hover:border-primary/20 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
+                      <div>
+                        <p className="font-black text-base text-white group-hover:text-primary transition-colors">{asset.symbol}</p>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{asset.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="font-mono text-sm font-black text-white">{parseFloat(asset.balance).toFixed(4)}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase font-black tracking-tighter">Available</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
