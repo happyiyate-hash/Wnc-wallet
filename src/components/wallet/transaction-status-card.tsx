@@ -18,6 +18,7 @@ interface TransactionStatusCardProps {
     symbol: string;
     iconUrl?: string | null;
     chainId: number;
+    name?: string; // Added metadata
   };
   isRawAddress?: boolean;
 }
@@ -124,6 +125,7 @@ export default function TransactionStatusCard({
                         size={28} 
                         chainId={token?.chainId} 
                         symbol={token?.symbol} 
+                        name={token?.name} // Added metadata
                         alt="target"
                       />
                     ) : (

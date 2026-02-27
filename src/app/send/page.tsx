@@ -241,7 +241,6 @@ function SendClient() {
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
   const isValidAddress = resolvedAddress.length > 0 && !isNetworkMismatch;
   
-  // Rule: mismatch is a hard-disable, but low balance/gas is allowed through to verification sheet
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && parseFloat(amount) > 0 && !isSubmitting;
 
   const gasFiatValue = useMemo(() => {
@@ -321,7 +320,7 @@ function SendClient() {
                                     <div className="relative">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10">
-                                            <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} />
+                                            <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                         </div>
                                     </div>
                                  ) : (
@@ -360,7 +359,6 @@ function SendClient() {
                     </div>
                 </div>
 
-                {/* SECURITY ALERT BLOCK */}
                 {isNetworkMismatch && (
                     <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3 animate-in slide-in-from-top-2">
                         <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
