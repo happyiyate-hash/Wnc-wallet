@@ -25,6 +25,7 @@ import {
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
+import { checkAddress } from '@polkadot/util-crypto';
 import { useToast } from '@/hooks/use-toast';
 import type { AssetRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -38,33 +39,42 @@ import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-she
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 
 /**
- * Enhanced Address Detection with Checksum Support
+ * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
+ * Performs format and checksum validation for all supported ecosystems.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
   
-  // EVM Detection
+  // 1. EVM Detection (EIP-55 Checksum)
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
-    // EIP-55 Checksum Validation
     if (!ethers.isAddress(clean)) return 'invalid-evm-checksum';
     return 'evm';
   }
   
-  // XRP Ledger
-  if (clean.startsWith('r') && clean.length >= 25 && clean.length <= 35) return 'xrp';
+  // 2. XRP Ledger (Base58 Classic Address)
+  if (clean.startsWith('r')) {
+    if (xrpl.isValidClassicAddress(clean)) return 'xrp';
+    return 'invalid-xrp';
+  }
   
-  // Polkadot / Substrate
-  if (clean.length >= 47 && !clean.includes('0x')) return 'polkadot';
+  // 3. Polkadot / Substrate (SS58 Checksum)
+  if (clean.length >= 47 && !clean.includes('0x')) {
+    try {
+        const [isValid] = checkAddress(clean, 42); // Generic SS58 check
+        if (isValid) return 'polkadot';
+    } catch (e) {}
+    return 'invalid-polkadot';
+  }
   
   return 'invalid';
 };
 
 const getDetectedNetworkMeta = (type: string) => {
-    if (type === 'xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
-    if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
+    if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
+    if (type === 'polkadot' || type === 'invalid-polkadot') return { name: 'Polkadot', symbol: 'DOT' };
     if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'EVM Network', symbol: 'ETH' };
     return null;
 };
@@ -77,6 +87,7 @@ function SendClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // State locked identity refs
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isStatusVisible, setIsStatusVisible] = useState(false);
   const [txStatus, setTxStatus] = useState<'pending' | 'success' | 'error'>('pending');
@@ -99,16 +110,20 @@ function SendClient() {
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
+  // CONTEXT LOCK: Only initialize once from global state, then remain independent.
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
+    
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
+    
     let target = allAssets.find(a => a.symbol === symbol && a.chainId === chainIdParam);
     if (!target) {
         target = allAssets.find(a => a.chainId === viewingNetwork.chainId && a.isNative) || 
                  allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
                  allAssets[0];
     }
+    
     if (target) {
         setSelectedToken({ ...target });
         hasInitialized.current = true;
@@ -125,31 +140,32 @@ function SendClient() {
   
   const validationError = useMemo(() => {
     if (addrType === 'invalid-evm-format') {
-        return {
-            title: "Invalid Address Format",
-            message: "This doesn’t look like a valid EVM address. Please check the address and try again."
-        };
+        return { title: "Invalid Address Format", message: "This doesn’t look like a valid EVM address. Please check and try again." };
     }
     if (addrType === 'invalid-evm-checksum') {
-        return {
-            title: "Invalid Address Checksum",
-            message: "This address failed checksum validation. Please double-check the address."
-        };
+        return { title: "Invalid Address Checksum", message: "This address failed checksum validation. Please double-check for typos." };
+    }
+    if (addrType === 'invalid-xrp') {
+        return { title: "Invalid XRP Address", message: "This address failed Base58 validation. Please check for typos." };
+    }
+    if (addrType === 'invalid-polkadot') {
+        return { title: "Invalid Polkadot Address", message: "This address failed SS58 checksum validation. Please check for typos." };
     }
     return null;
   }, [addrType]);
 
   const isNetworkMismatch = useMemo(() => {
-    if (addrType === 'invalid' || addrType.includes('invalid-evm')) return false;
+    if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     const activeType = activeNetwork.type || 'evm';
     return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
 
+  // Recipient Resolution Logic
   useEffect(() => {
     let isMounted = true;
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-evm');
+      const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
       if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
@@ -173,11 +189,7 @@ function SendClient() {
 
         if (data && data.length > 0) {
           const result = data[0];
-          setRecipientProfile({ 
-            avatar: result.profile_pic, 
-            verified: result.verified, 
-            name: result.name || searchHandle 
-          });
+          setRecipientProfile({ avatar: result.profile_pic, verified: result.verified, name: result.name || searchHandle });
           setResolvedAddress(result.target_address || '');
         } else {
           setResolvedAddress('');
@@ -214,7 +226,7 @@ function SendClient() {
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
           setTxHash(result.result.hash);
-        } else { throw new Error("XRPL Broadcast Error"); }
+        } else { throw new Error((result.result.meta as any)?.TransactionResult || "XRPL Broadcast Error"); }
         await client.disconnect();
       } else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
@@ -229,7 +241,10 @@ function SendClient() {
       setTxStatus('success');
     } catch (e: any) {
       setTxStatus('error');
-      setReceiptError(e.message || "Broadcast failed.");
+      let msg = e.message || "Broadcast failed.";
+      if (msg.includes('INSUFFICIENT_FUNDS')) msg = "Insufficient Gas Fee";
+      if (msg.includes('insufficient funds')) msg = "Insufficient Balance";
+      setReceiptError(msg);
     } finally {
       setIsSubmitting(false);
       setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
@@ -272,12 +287,12 @@ function SendClient() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                         <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
-                            <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender Avatar" />
+                            <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
                         </Avatar>
-                        {/* Sender Badge: LAYERED ABOVE TO PREVENT CLIPPING */}
+                        {/* Sender Badge: UNCLIPPED Visual Layer */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Active Network Logo" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                         </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
@@ -301,23 +316,23 @@ function SendClient() {
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
                                     <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
-                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Avatar" />
+                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Target Token Logo" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
                                 </div>
                              ) : isNetworkMismatch ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="Network Mismatch Icon" size={44} />
+                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="Mismatch" size={44} />
                                     <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1 border-2 border-black z-20 shadow-xl"><XCircle className="w-3 h-3 text-white" /></div>
                                 </div>
                              ) : resolvedAddress ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token Icon" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network Icon" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
