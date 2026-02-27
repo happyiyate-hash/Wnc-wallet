@@ -593,7 +593,7 @@ function SendClient() {
                   <button 
                     key={asset.symbol} 
                     onClick={() => handleTokenSelect(asset)} 
-                    className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 hover:border-primary/20 transition-all text-left group"
+                    className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/20 transition-all text-left group"
                   >
                     <div className="flex items-center gap-4">
                       <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
