@@ -40,13 +40,11 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Performs format and checksum validation for all supported ecosystems.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
   
-  // 1. EVM Detection (EIP-55 Checksum)
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
@@ -54,16 +52,14 @@ const detectAddressType = (input: string) => {
     return 'evm';
   }
   
-  // 2. XRP Ledger (Base58 Classic Address)
   if (clean.startsWith('r')) {
     if (xrpl.isValidClassicAddress(clean)) return 'xrp';
     return 'invalid-xrp';
   }
   
-  // 3. Polkadot / Substrate (SS58 Checksum)
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        const [isValid] = checkAddress(clean, 42); // Generic SS58 check
+        const [isValid] = checkAddress(clean, 42);
         if (isValid) return 'polkadot';
     } catch (e) {}
     return 'invalid-polkadot';
@@ -79,6 +75,35 @@ const getDetectedNetworkMeta = (type: string) => {
     return null;
 };
 
+/**
+ * TECHNICAL ERROR MAPPING ENGINE
+ * Translates raw blockchain JSON into friendly institutional alerts.
+ */
+const mapTechnicalError = (err: any): string => {
+  const msg = (err.message || String(err)).toLowerCase();
+  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient_funds')) {
+    if (msg.includes('gas') || msg.includes('fee')) {
+      return "Insufficient Gas Fee: You need more native tokens (e.g. ETH, MATIC, BNB) to pay for the network transfer.";
+    }
+    return "Insufficient Balance: You do not have enough funds to complete this transfer.";
+  }
+  
+  if (msg.includes('user rejected') || msg.includes('action rejected')) {
+    return "Transaction Cancelled: You rejected the request in your wallet.";
+  }
+  
+  if (msg.includes('nonce too low') || msg.includes('already known')) {
+    return "Sync Mismatch: Your wallet is currently processing another transaction. Please wait a moment and try again.";
+  }
+
+  if (msg.includes('replacement transaction underpriced')) {
+    return "Gas Error: The network gas price has increased. Please try again with updated fees.";
+  }
+
+  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance and try again.";
+};
+
 function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap } = useWallet();
   const { formatFiat } = useCurrency();
@@ -87,7 +112,6 @@ function SendClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // State locked identity refs
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isStatusVisible, setIsStatusVisible] = useState(false);
   const [txStatus, setTxStatus] = useState<'pending' | 'success' | 'error'>('pending');
@@ -110,7 +134,6 @@ function SendClient() {
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // CONTEXT LOCK: Only initialize once from global state, then remain independent.
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
     
@@ -143,7 +166,7 @@ function SendClient() {
         return { title: "Invalid Address Format", message: "This doesn’t look like a valid EVM address. Please check and try again." };
     }
     if (addrType === 'invalid-evm-checksum') {
-        return { title: "Invalid Address Checksum", message: "This address failed checksum validation. Please double-check for typos." };
+        return { title: "Invalid Address Checksum", message: "This address failed cryptographic checksum validation. Please double-check for typos." };
     }
     if (addrType === 'invalid-xrp') {
         return { title: "Invalid XRP Address", message: "This address failed Base58 validation. Please check for typos." };
@@ -160,7 +183,6 @@ function SendClient() {
     return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
 
-  // Recipient Resolution Logic
   useEffect(() => {
     let isMounted = true;
     async function resolve() {
@@ -241,10 +263,7 @@ function SendClient() {
       setTxStatus('success');
     } catch (e: any) {
       setTxStatus('error');
-      let msg = e.message || "Broadcast failed.";
-      if (msg.includes('INSUFFICIENT_FUNDS')) msg = "Insufficient Gas Fee";
-      if (msg.includes('insufficient funds')) msg = "Insufficient Balance";
-      setReceiptError(msg);
+      setReceiptError(mapTechnicalError(e));
     } finally {
       setIsSubmitting(false);
       setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
@@ -285,15 +304,15 @@ function SendClient() {
           <div className="space-y-10 pt-2 px-1">
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
+                    <div className="relative group">
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-visible">
                             <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
+                            {/* Corrected Layering for Sender Badge */}
+                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                            </div>
                         </Avatar>
-                        {/* Sender Badge: UNCLIPPED Visual Layer */}
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                        </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
                 </div>
@@ -310,28 +329,23 @@ function SendClient() {
                     <div className="relative">
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative",
-                            !resolvedAddress ? "border-dashed border-white/10" : (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
+                            !isActuallyValid ? "border-dashed border-white/10" : (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
-                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
+                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black overflow-visible">
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        </div>
                                     </Avatar>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    </div>
                                 </div>
-                             ) : isNetworkMismatch ? (
-                                <div className="relative">
-                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="Mismatch" size={44} />
-                                    <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1 border-2 border-black z-20 shadow-xl"><XCircle className="w-3 h-3 text-white" /></div>
-                                </div>
-                             ) : resolvedAddress ? (
+                             ) : (isActuallyValid && !isNetworkMismatch && !validationError) ? (
                                 <div className="relative">
                                     <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
                                         <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
@@ -375,9 +389,9 @@ function SendClient() {
                     <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-2xl">
                         <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div>
                         <div className="space-y-1.5">
-                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Incompatible Network Detected</p>
+                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert</p>
                             <p className="text-xs font-bold text-red-400 leading-relaxed">This address belongs to <span className="text-white font-black underline decoration-red-500/50">{detectedMeta?.name}</span>, but you're currently sending from <span className="text-white font-black">{activeNetwork.name}</span>.</p>
-                            <p className="text-[10px] text-red-400/60 font-medium leading-relaxed italic">To avoid permanent loss of funds, please switch networks or enter a valid {activeNetwork.name} address.</p>
+                            <p className="text-[10px] text-red-400/60 font-medium leading-relaxed italic">To avoid permanent loss of funds, please switch to the {detectedMeta?.name} network or enter a valid {activeNetwork.name} address.</p>
                         </div>
                     </div>
                 )}
