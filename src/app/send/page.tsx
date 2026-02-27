@@ -19,7 +19,8 @@ import {
   Timer,
   Search,
   XCircle,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -171,7 +172,6 @@ function SendClient() {
     const code = error.code || '';
 
     if (message.includes('insufficient funds') || code === 'INSUFFICIENT_FUNDS' || message.includes('failed with 33554432 gas')) {
-      // Check if we have native currency for gas
       const balance = parseFloat(selectedToken?.balance || '0');
       const sendAmount = parseFloat(amount) || 0;
       if (balance < sendAmount) return "Insufficient Balance: You do not have enough funds to complete this dispatch.";
@@ -240,7 +240,9 @@ function SendClient() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
   const isValidAddress = resolvedAddress.length > 0 && !isNetworkMismatch;
-  const canSend = isValidAddress && parseFloat(amount) > 0 && !isSubmitting;
+  
+  // Rule: mismatch is a hard-disable, but low balance/gas is allowed through to verification sheet
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && parseFloat(amount) > 0 && !isSubmitting;
 
   const gasFiatValue = useMemo(() => {
     if (!selectedToken) return 0;
@@ -260,7 +262,10 @@ function SendClient() {
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
         >
             <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-            <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span>
+            <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span>
+                <span className="text-[7px] font-bold text-primary uppercase opacity-60">{activeNetwork.name}</span>
+            </div>
             <ChevronRight className="w-3 h-3 text-primary rotate-90" />
         </button>
         <div className="w-10" />
@@ -304,8 +309,8 @@ function SendClient() {
                             </div>
                         ) : (
                             <div className={cn(
-                                "w-20 h-20 rounded-[2.5rem] border-2 border-dashed flex items-center justify-center transition-all duration-500 relative",
-                                addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10" : "border-primary/50 bg-primary/5"
+                                "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative",
+                                addrType === 'invalid' ? "border-dashed border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
                             )}>
                                 {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                                  isNetworkMismatch ? (
@@ -354,6 +359,20 @@ function SendClient() {
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                     </div>
                 </div>
+
+                {/* SECURITY ALERT BLOCK */}
+                {isNetworkMismatch && (
+                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3 animate-in slide-in-from-top-2">
+                        <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">Security Alert</p>
+                            <p className="text-xs font-bold text-red-400 leading-relaxed">
+                                Wrong address for <span className="underline decoration-red-500/50">{detectedMeta?.name}</span> detected. 
+                                Sending assets to an incompatible network will result in permanent fund loss.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </section>
 
             {resolvedAddress && !isNetworkMismatch && (
