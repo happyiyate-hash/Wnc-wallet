@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -42,7 +43,6 @@ import TransactionConfirmationSheet from '@/components/wallet/transaction-confir
 import TransactionStatusCard from '@/components/wallet/transaction-status-card';
 import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 
-// --- UTILS FOR ADDRESS DETECTION ---
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   if (input.startsWith('0x') && input.length === 42) return 'evm';
@@ -66,7 +66,6 @@ function SendClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // STATE: FLOW CONTROL
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isStatusVisible, setIsStatusVisible] = useState(false);
   const [txStatus, setTxStatus] = useState<'pending' | 'success' | 'error'>('pending');
@@ -74,10 +73,6 @@ function SendClient() {
   const [receiptError, setReceiptError] = useState('');
 
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
-  
-  const [recentRecipients, setRecentRecipients] = useState<RecentRecipient[]>([]);
-  const [isRecentLoading, setIsRecentLoading] = useState(false);
-
   const [recipientInput, setRecipientInput] = useState('');
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
@@ -94,23 +89,6 @@ function SendClient() {
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // 1. FETCH RECENT
-  const fetchRecent = useCallback(async () => {
-    if (!user || !supabase) return;
-    setIsRecentLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('recent_recipients_live')
-        .select('*')
-        .eq('sender_id', user.id)
-        .limit(10);
-      if (!error && data) setRecentRecipients(data as RecentRecipient[]);
-    } catch (e) { console.warn(e); } finally { setIsRecentLoading(false); }
-  }, [user]);
-
-  useEffect(() => { fetchRecent(); }, [fetchRecent]);
-
-  // 2. INITIALIZE TOKEN
   useEffect(() => {
     if (allAssets.length === 0) return;
     const symbol = searchParams.get('symbol');
@@ -124,7 +102,6 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
-  // 3. IDENTITY & VALIDATION ENGINE
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
   
@@ -141,13 +118,22 @@ function SendClient() {
     let isMounted = true;
     async function resolve() {
       const input = debouncedRecipient.trim();
+      
       if (!input || input.length < 3) {
-        if (isMounted) { setResolvedAddress(''); setRecipientProfile(null); }
+        if (isMounted) { 
+          setResolvedAddress(''); 
+          setRecipientProfile(null); 
+          setIsResolving(false); // CRITICAL FIX: Always clear loader
+        }
         return;
       }
 
       if (addrType !== 'invalid') {
-        if (isMounted) { setResolvedAddress(input); setRecipientProfile(null); }
+        if (isMounted) { 
+          setResolvedAddress(input); 
+          setRecipientProfile(null); 
+          setIsResolving(false); // CRITICAL FIX: Always clear loader
+        }
         return;
       }
 
@@ -163,22 +149,22 @@ function SendClient() {
         if (!isMounted) return;
 
         if (data && data.length > 0) {
-          // Profile match found!
           const result = data[0];
           setRecipientProfile({ 
             avatar: result.profile_pic, 
             verified: result.verified, 
             name: result.name || searchHandle 
           });
-          
-          // Set address if linked for this specific chain
           setResolvedAddress(result.target_address || '');
         } else {
           setResolvedAddress('');
           setRecipientProfile(null);
         }
       } catch (e) {
-        if (isMounted) { setResolvedAddress(''); setRecipientProfile(null); }
+        if (isMounted) { 
+          setResolvedAddress(''); 
+          setRecipientProfile(null); 
+        }
       } finally { 
         if (isMounted) setIsResolving(false); 
       }
@@ -187,7 +173,6 @@ function SendClient() {
     return () => { isMounted = false; };
   }, [debouncedRecipient, addrType, activeNetwork.type]);
 
-  // 4. BROADCAST ENGINE
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
     
@@ -283,7 +268,6 @@ function SendClient() {
       </header>
 
       <main className="flex-1 p-6 space-y-10 max-w-lg mx-auto w-full relative z-10 pb-40">
-        {/* SENDER -> RECIPIENT VISUALS */}
         <section className="flex items-center justify-between px-2">
             <div className="flex flex-col items-center gap-3">
                 <div className="relative">
@@ -358,7 +342,6 @@ function SendClient() {
             </div>
         </section>
 
-        {/* TARGET VAULT ADDRESS DISPLAY */}
         {resolvedAddress && !isNetworkMismatch && (
             <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500 py-4">
                 <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Target Vault Address</span>
@@ -468,7 +451,6 @@ function SendClient() {
         </SheetContent>
       </Sheet>
 
-      {/* STAGE 1: CONFIRMATION */}
       <TransactionConfirmationSheet 
         isOpen={isConfirmOpen}
         onOpenChange={setIsConfirmOpen}
@@ -481,7 +463,6 @@ function SendClient() {
         recipientAvatar={recipientProfile?.avatar}
       />
 
-      {/* STAGE 2: FLIGHT ANIMATION */}
       <TransactionStatusCard 
         isVisible={isStatusVisible}
         status={txStatus}
@@ -497,7 +478,6 @@ function SendClient() {
         isRawAddress={!recipientProfile}
       />
 
-      {/* STAGE 3: RECEIPT */}
       <TransactionReceiptSheet 
         isOpen={isReceiptOpen}
         onOpenChange={setIsReceiptOpen}

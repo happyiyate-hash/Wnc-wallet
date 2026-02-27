@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -114,6 +115,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // CRITICAL: Watchdog to sync identities to cloud vault
   useEffect(() => {
     const runWatchdog = async () => {
       if (!user || !wallets || !profile?.account_number || !supabase) return;
@@ -132,7 +134,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               user_id: user.id,
               account_number: profile.account_number,
               blockchain_name: wallet.type,
-              wallet_address: wallet.address
+              wallet_address: wallet.address,
+              updated_at: new Date().toISOString()
             }, { onConflict: 'user_id, blockchain_name' });
           }
         }

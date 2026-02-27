@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -28,7 +29,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<LocalSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  // 1. INSTANT UI: Cache-then-Network Strategy
   useEffect(() => {
     const savedSessions = localStorage.getItem('wevina_sessions');
     const savedActiveId = localStorage.getItem('wevina_active_session_id');
@@ -47,7 +47,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 2. MASTER CLOUD HANDSHAKE
   const fetchProfile = async (userId: string) => {
     if (!supabase) return null;
     
@@ -61,13 +60,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       let resolvedProfile = data as UserProfile;
 
       if (!error && resolvedProfile) {
-        // Handle Missing Account Number (Institutional 10-Digit ID Generation)
-        // Format: 835XXXXXXX
         if (!resolvedProfile.account_number) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const generatedId = `835${randomSuffix}`;
             
-            // Attempt to update profiles (Silent failure if column missing)
             const { data: updated, error: uError } = await supabase
                 .from('profiles')
                 .update({ account_number: generatedId })
@@ -78,7 +74,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
             if (updated && !uError) {
                 resolvedProfile = updated as UserProfile;
             } else {
-                // If update fails (e.g. missing column), we still attach it locally for the session
                 resolvedProfile.account_number = generatedId;
             }
         }
@@ -87,7 +82,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
         return resolvedProfile;
       } else if (!data) {
-        // Create new profile if missing
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const generatedId = `835${randomSuffix}`;
         
@@ -110,7 +104,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
-  // 3. REALTIME SYNCHRONIZATION
   useEffect(() => {
     if (!user || !supabase) return;
 
@@ -135,7 +128,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.id]);
 
-  // 4. SESSION MANAGEMENT
   useEffect(() => {
     if (!supabase) {
       setLoading(false);
