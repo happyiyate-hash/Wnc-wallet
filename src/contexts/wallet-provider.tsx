@@ -110,14 +110,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 1. INSTITUTIONAL WATCHDOG SYNC (Local -> Cloud user_identity)
-  // Implements the "unbreakable" silent sync logic.
+  // 1. INSTITUTIONAL WATCHDOG SYNC (Local -> user_identity)
   useEffect(() => {
     const runWatchdog = async () => {
       if (!user || !wallets || !profile?.account_number || !supabase) return;
 
       try {
-        // Fetch current cloud state for this node's Account Number
         const { data: cloudIdentities } = await supabase
           .from('user_identity')
           .select('blockchain_name, wallet_address')
@@ -126,7 +124,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         for (const wallet of wallets) {
           const cloudMatch = cloudIdentities?.find(c => c.blockchain_name === wallet.type);
 
-          // Silent Update: If address mismatch or new chain added, upsert cloud
           if (!cloudMatch || cloudMatch.wallet_address !== wallet.address) {
             await supabase.from('user_identity').upsert({
               user_id: user.id,

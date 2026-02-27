@@ -56,36 +56,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (!error && data) {
-        const resolvedProfile = data as UserProfile;
-        
+      let resolvedProfile = data as UserProfile;
+
+      if (!error && resolvedProfile) {
         // Handle Missing Account Number (Institutional 10-Digit ID Generation)
         // Format: 835XXXXXXX
         if (!resolvedProfile.account_number) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const generatedId = `835${randomSuffix}`;
             
-            const { data: updated } = await supabase
+            // Attempt to update profiles (Silent failure if column missing)
+            const { data: updated, error: uError } = await supabase
                 .from('profiles')
                 .update({ account_number: generatedId })
                 .eq('id', userId)
                 .select()
-                .single();
+                .maybeSingle();
                 
-            if (updated) {
-                const finalProfile = updated as UserProfile;
-                setProfile(finalProfile);
-                localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
-                return finalProfile;
+            if (updated && !uError) {
+                resolvedProfile = updated as UserProfile;
+            } else {
+                // If update fails (e.g. missing column), we still attach it locally for the session
+                resolvedProfile.account_number = generatedId;
             }
         }
 
         setProfile(resolvedProfile);
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
         return resolvedProfile;
-      } else if (error && error.code === 'PGRST116') {
+      } else if (!data) {
         // Create new profile if missing
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const generatedId = `835${randomSuffix}`;
