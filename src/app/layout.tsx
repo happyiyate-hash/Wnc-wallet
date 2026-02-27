@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -10,8 +9,8 @@ import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
 
 export const metadata: Metadata = {
-  title: 'Wevina v2 - Your Secure Custodial Wallet',
-  description: 'A programmable custodial wallet platform.',
+  title: 'Wevina Terminal - Institutional Multi-Chain Vault',
+  description: 'Shared identity and multi-account session management for SmarterSeller ecosystem.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

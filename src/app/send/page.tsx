@@ -51,14 +51,14 @@ function SendClient() {
 
   // Identity Resolution Handshake
   const [resolvedAddress, setResolvedAddress] = useState('');
-  const [recipientProfile, setRecipientProfile] = useState<{avatar: string, name: string} | null>(null);
+  const [recipientProfile, setRecipientProfile] = useState<{avatar: string, name: string, id: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const debouncedRecipient = useDebounce(recipientInput, 600);
 
   const [isTokenSheetOpen, setIsTokenSideSheetOpen] = useState(false);
   const initializedRef = useRef(false);
 
-  // 1. IDENTITY RESOLUTION ENGINE: Two-Stage Handshake
+  // 1. ATOMIC IDENTITY HANDSHAKE: profiles -> user_identity
   useEffect(() => {
     async function resolve() {
       if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
@@ -75,14 +75,14 @@ function SendClient() {
       }
 
       setIsResolving(true);
-      const searchHandle = debouncedRecipient.replace('@', '').toLowerCase().trim();
+      const searchHandle = debouncedRecipient.toLowerCase().trim();
 
       try {
-        // Stage 1: Get Profile from wevina_profiles
+        // Stage 1: Get Profile from shared 'profiles' table
         const { data: prof, error: pError } = await supabase!
-          .from('wevina_profiles')
-          .select('user_id, photo_url, display_name')
-          .eq('account_number', searchHandle)
+          .from('profiles')
+          .select('id, photo_url, name')
+          .eq('name', searchHandle)
           .maybeSingle();
 
         if (pError || !prof) throw new Error("Not found");
@@ -92,7 +92,7 @@ function SendClient() {
         const { data: ident, error: iError } = await supabase!
           .from('user_identity')
           .select('wallet_address')
-          .eq('user_id', prof.user_id)
+          .eq('user_id', prof.id)
           .eq('blockchain_name', chainType)
           .maybeSingle();
 
@@ -100,7 +100,8 @@ function SendClient() {
           setResolvedAddress(ident.wallet_address);
           setRecipientProfile({
             avatar: prof.photo_url || '',
-            name: prof.display_name || searchHandle
+            name: prof.name,
+            id: prof.id
           });
         } else {
           setResolvedAddress('');
@@ -200,7 +201,7 @@ function SendClient() {
 
       <main className="flex-1 overflow-y-auto px-6 pt-10 pb-32 space-y-12 max-w-lg mx-auto w-full">
         
-        {/* CENTRAL ANIMATION AREA */}
+        {/* BROACAST ANIMATION AREA */}
         <section className="flex items-center justify-center gap-8 py-4">
           <div className="relative group">
             <div className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity" />
@@ -263,12 +264,12 @@ function SendClient() {
         <section className="space-y-3">
           <div className="flex justify-between items-center px-2">
             <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Recipient Details</Label>
-            <span className="text-[9px] font-bold text-primary uppercase bg-primary/10 px-2 py-0.5 rounded">Verified Handshake</span>
+            <span className="text-[9px] font-bold text-primary uppercase bg-primary/10 px-2 py-0.5 rounded">Verified Cloud</span>
           </div>
           <div className="relative bg-white/[0.02] border border-white/5 focus-within:border-primary/30 rounded-2xl transition-all">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/30" />
             <Input 
-              placeholder="10-digit ID or Address" 
+              placeholder="Username or Address" 
               value={recipientInput} 
               onChange={(e) => setRecipientInput(e.target.value)} 
               className="h-12 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-sm font-mono text-white placeholder:text-zinc-800"

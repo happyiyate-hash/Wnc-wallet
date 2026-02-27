@@ -39,12 +39,16 @@ export interface ChainConfig {
 }
 
 export interface UserProfile {
-    id: string;
-    username: string; // account_number
-    name?: string; // display_name
+    id: string; // UUID matching auth.users
+    name: string; // Username Column
     photo_url?: string;
-    wnc_earnings?: number;
-    tokens?: number;
+    wnc_earnings: number;
+    tokens: number;
+    plan_type?: string;
+    country_code?: string;
+    business_category?: string;
+    // Multi-chain extension fields
+    account_number?: string; 
     vault_phrase?: string;
     iv?: string;
     vault_infura_key?: string;
@@ -61,6 +65,7 @@ export interface LocalSession {
 
 export interface RecentRecipient {
     id: string;
+    sender_id: string;
     recipient_account_number: string;
     current_pfp: string;
     last_blockchain_used: string;

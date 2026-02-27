@@ -28,7 +28,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<LocalSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  // 1. Initial Local Load (Cache-then-Network Strategy)
+  // 1. CACHE-THEN-NETWORK: Initial Local Load
   useEffect(() => {
     const savedSessions = localStorage.getItem('wevina_sessions');
     const savedActiveId = localStorage.getItem('wevina_active_session_id');
@@ -39,53 +39,44 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     if (savedActiveId) {
         setActiveSessionId(savedActiveId);
-        // Instant UI: Try to load profile from specific account cache
-        const cachedProfile = localStorage.getItem(`profile_cache_${savedActiveId}`);
-        if (cachedProfile) {
+        // INSTANT UI: Load profile from local cache key
+        const cacheKey = `profile_cache_${savedActiveId}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
             try {
-                setProfile(JSON.parse(cachedProfile));
-                setLoading(false); // Stop loading immediately if we have a cache
+                setProfile(JSON.parse(cached));
+                setLoading(false); // Clear loading immediately for 0ms UI
             } catch (e) {}
         }
     }
   }, []);
 
-  // 2. Optimized Fetch with Background Refresh
+  // 2. SHARED BACKEND: Fetch from 'profiles' table
   const fetchProfile = async (userId: string) => {
     if (!supabase) return null;
     
     try {
       const { data, error } = await supabase
-        .from('wevina_profiles')
+        .from('profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
 
       if (!error && data) {
-        // AUTO-GENERATION: 10-digit ID if missing
-        if (!data.account_number) {
-            const newId = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-            await supabase.from('wevina_profiles').update({ account_number: newId }).eq('user_id', userId);
-            data.account_number = newId;
-        }
-
-        const resolvedProfile = {
-          ...data,
-          id: data.user_id,
-          name: data.display_name,
-          username: data.account_number 
-        } as UserProfile;
+        const resolvedProfile = data as UserProfile;
         
         setProfile(resolvedProfile);
+        // Update Cache
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
         return resolvedProfile;
       } else if (error && error.code === 'PGRST116') {
+        // First-time identity generation if missing in public.profiles
         const { data: newProfile } = await supabase
-            .from('wevina_profiles')
-            .upsert({ user_id: userId, display_name: 'Institutional User' })
+            .from('profiles')
+            .upsert({ id: userId, name: user?.email?.split('@')[0] || 'Institutional User', wnc_earnings: 0, tokens: 0 })
             .select()
             .single();
-        return newProfile ? await fetchProfile(userId) : null;
+        return newProfile ? (newProfile as UserProfile) : null;
       }
     } catch (e) {
         console.warn("Profile fetch error:", e);
@@ -93,28 +84,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
-  // 3. Realtime Synchronization
+  // 3. REALTIME SYNCHRONIZATION
   useEffect(() => {
     if (!user || !supabase) return;
 
     const channel = supabase
-      .channel(`profile-sync-${user.id}`)
+      .channel(`profile-updates-${user.id}`)
       .on('postgres_changes', { 
           event: '*', 
           schema: 'public', 
-          table: 'wevina_profiles', 
-          filter: `user_id=eq.${user.id}` 
+          table: 'profiles', 
+          filter: `id=eq.${user.id}` 
       }, (payload) => {
-          const updated = payload.new as any;
+          const updated = payload.new as UserProfile;
           if (updated) {
-              const resolved = {
-                  ...updated,
-                  id: updated.user_id,
-                  name: updated.display_name,
-                  username: updated.account_number
-              } as UserProfile;
-              setProfile(resolved);
-              localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(resolved));
+              setProfile(updated);
+              localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(updated));
           }
       })
       .subscribe();
@@ -124,7 +109,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  // 4. Session & Auth Management
+  // 4. SESSION & AUTH MANAGEMENT
   useEffect(() => {
     if (!supabase) {
       setLoading(false);
@@ -180,7 +165,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [user?.email]);
 
   const addSession = useCallback((session: LocalSession) => {
     setSessions(prev => {
@@ -217,12 +202,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const cached = localStorage.getItem(`profile_cache_${sessionId}`);
         if (cached) setProfile(JSON.parse(cached));
         
-        // Sync mnemonic
+        // Restore local credentials if available in session vault
         if (target.encryptedMnemonic) {
             localStorage.setItem(`wallet_mnemonic_${sessionId}`, target.encryptedMnemonic);
         }
         
-        // Perform background refresh
+        // Background refresh
         await fetchProfile(sessionId);
     } finally {
         setLoading(false);
