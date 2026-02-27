@@ -45,9 +45,7 @@ export default function ProfilePage() {
     const convertedEarnings = useMemo(() => {
         const wncCount = profile?.wnc_earnings || 0;
         const ngnRate = rates['NGN'] || 1650;
-        // Step 1: Convert WNC (NGN) to USD base
         const usdValue = wncCount / ngnRate;
-        // Step 2: formatFiat handles USD-to-Selected conversion
         return formatFiat(usdValue);
     }, [profile?.wnc_earnings, rates, formatFiat]);
 
@@ -88,13 +86,8 @@ export default function ProfilePage() {
     );
 
     return (
-        <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
-            {/* BRAND WATERMARK */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
-                <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
-            </div>
-
-            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50 px-6">
+        <div className="flex flex-col h-screen bg-transparent text-foreground relative overflow-hidden">
+            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Identity Vault</h1>
@@ -135,9 +128,7 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
-                    {/* DYNAMIC FINANCIAL GRID */}
                     <div className="grid grid-cols-2 gap-3">
-                        {/* EARNINGS CARD WITH EMERALD GRADIENT */}
                         <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl transition-all hover:scale-[1.02] group">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-emerald-500/20 transition-colors" />
                             <Coins className="w-5 h-5 text-emerald-400 mb-3" />

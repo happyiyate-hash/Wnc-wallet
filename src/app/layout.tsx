@@ -44,13 +44,21 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#673AB7" />
       </head>
-      <body className="font-body antialiased min-h-screen bg-background flex flex-col">
+      <body className="font-body antialiased min-h-screen bg-background flex flex-col relative overflow-hidden">
+        {/* GLOBAL BRAND WATERMARK */}
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none z-0">
+          <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
+        </div>
+        
+        {/* GLOBAL GRADIENT DEPTH */}
+        <div className="fixed inset-0 bg-gradient-to-b from-primary/5 via-transparent to-black/40 pointer-events-none z-0" />
+
         <Web3Provider>
           <UserProvider>
             <CurrencyProvider>
               <WalletProvider>
                 <SidebarProvider defaultOpen={true}>
-                  <div className="flex min-h-screen w-full bg-background overflow-hidden">
+                  <div className="flex min-h-screen w-full bg-transparent overflow-hidden relative z-10">
                     <NavGradient />
                     <DesktopSidebar />
                     <div className="flex flex-col flex-1 w-full min-w-0 h-screen overflow-hidden">

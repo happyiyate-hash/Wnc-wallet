@@ -143,12 +143,8 @@ export default function SettingsPage() {
     const handleTag = profile?.username ? `@${profile.username}` : user?.email;
 
     return (
-        <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
-                <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
-            </div>
-
-            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="flex flex-col h-screen bg-transparent text-foreground relative overflow-hidden">
+            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
                     <ArrowLeft className="w-5 h-5" />
                 </Button>
