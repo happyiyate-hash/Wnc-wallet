@@ -37,6 +37,7 @@ import TransactionConfirmationSheet from '@/components/wallet/transaction-confir
 import TransactionStatusCard from '@/components/wallet/transaction-status-card';
 import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
@@ -189,6 +190,7 @@ function SendClient() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
+      // If input is empty or too short, or it's already a valid direct address, stop resolving
       if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
           setResolvedAddress(isValidBase ? input : '');
@@ -308,21 +310,42 @@ function SendClient() {
                         <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-visible">
                             <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
-                            {/* Corrected Layering for Sender Badge */}
+                            {/* Network Badge - Unlocked from clipping */}
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Network" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Active Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                             </div>
                         </Avatar>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
                 </div>
 
-                <div className="flex-1 px-4 relative">
+                <div className="flex-1 px-4 relative flex flex-col items-center justify-center min-h-[80px]">
                     <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full z-10">
                             <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
                         </div>
                     </div>
+                    
+                    {/* FLOATING ADDRESS BRIDGE */}
+                    <AnimatePresence>
+                        {isActuallyValid && !isResolving && (
+                            <motion.div 
+                                initial={{ y: 10, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: 5, opacity: 0 }}
+                                className="absolute top-10 left-0 right-0 text-center"
+                            >
+                                <div className="inline-flex flex-col items-center gap-1">
+                                    <p className="text-[7px] font-black text-primary uppercase tracking-[0.2em]">Resolved Route</p>
+                                    <div className="bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg backdrop-blur-md">
+                                        <p className="text-[9px] font-mono text-white tracking-tighter whitespace-nowrap">
+                                            {resolvedAddress.slice(0, 8)}...{resolvedAddress.slice(-6)}
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 <div className="flex flex-col items-center gap-3">
@@ -338,13 +361,15 @@ function SendClient() {
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Target Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                                         </div>
                                     </Avatar>
                                 </div>
                              ) : (isActuallyValid && !isNetworkMismatch && !validationError) ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    </div>
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
                                         <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
