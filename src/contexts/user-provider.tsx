@@ -25,19 +25,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Multi-Account State
   const [sessions, setSessions] = useState<LocalSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  // Initialize Sessions from Local Storage
   useEffect(() => {
     const savedSessions = localStorage.getItem('wevina_sessions');
     const savedActiveId = localStorage.getItem('wevina_active_session_id');
     
     if (savedSessions) {
-        try {
-            setSessions(JSON.parse(savedSessions));
-        } catch (e) {}
+        try { setSessions(JSON.parse(savedSessions)); } catch (e) {}
     }
     if (savedActiveId) {
         setActiveSessionId(savedActiveId);
@@ -54,16 +50,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (!error && data) {
+        // AUTOMATIC ID GENERATION: If account_number is null, generate 10-digit ID
+        if (!data.account_number) {
+            const newId = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+            await supabase.from('wevina_profiles').update({ account_number: newId }).eq('user_id', userId);
+            data.account_number = newId;
+        }
+
         const resolvedProfile = {
           ...data,
           id: data.user_id,
           name: data.display_name,
-          username: data.account_number
+          username: data.account_number // Mapping account_number to the legacy username field for UI compatibility
         } as UserProfile;
+        
         setProfile(resolvedProfile);
         return resolvedProfile;
+      } else if (error && error.code === 'PGRST116') {
+        // Create initial profile if missing
+        const { data: newProfile } = await supabase
+            .from('wevina_profiles')
+            .upsert({ user_id: userId, display_name: 'Institutional User' })
+            .select()
+            .single();
+        return newProfile ? await fetchProfile(userId) : null;
       }
-    } catch (e) {}
+    } catch (e) {
+        console.warn("Profile fetch error:", e);
+    }
     return null;
   };
 
@@ -97,7 +111,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         const p = await fetchProfile(currentUser.id);
         if (p) {
-            // Update sessions list if new
             setSessions(prev => {
                 const existing = prev.find(s => s.id === currentUser.id);
                 if (existing) return prev;
@@ -152,12 +165,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     try {
-        // In a multi-account system, we'd restore the specific Supabase session here
-        // For now, we update the active ID and the WalletProvider will react to key changes
         setActiveSessionId(sessionId);
         localStorage.setItem('wevina_active_session_id', sessionId);
         setProfile(target.profile);
-        // If mnemonic exists in session, ensure it's in the primary local storage slot
         if (target.encryptedMnemonic) {
             localStorage.setItem(`wallet_mnemonic_${sessionId}`, target.encryptedMnemonic);
         }

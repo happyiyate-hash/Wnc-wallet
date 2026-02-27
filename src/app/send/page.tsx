@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -50,17 +49,16 @@ function SendClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
-  // Identity Resolution (The Two-Stage Handshake)
+  // Identity Resolution Handshake
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const debouncedRecipient = useDebounce(recipientInput, 600);
 
-  // Token Selection UI
   const [isTokenSheetOpen, setIsTokenSideSheetOpen] = useState(false);
   const initializedRef = useRef(false);
 
-  // 1. IDENTITY RESOLUTION ENGINE
+  // 1. IDENTITY RESOLUTION ENGINE: Two-Stage Handshake
   useEffect(() => {
     async function resolve() {
       if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
@@ -69,7 +67,6 @@ function SendClient() {
         return;
       }
 
-      // Check if it's a raw blockchain address first
       const isRaw = debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 30;
       if (isRaw) {
         setResolvedAddress(debouncedRecipient);
@@ -78,12 +75,10 @@ function SendClient() {
       }
 
       setIsResolving(true);
-      
-      // Normalize Handle (e.g., @8354380450 -> 8354380450)
       const searchHandle = debouncedRecipient.replace('@', '').toLowerCase().trim();
 
       try {
-        // STAGE 1: Fetch Profile Identity
+        // Stage 1: Get Profile from wevina_profiles
         const { data: prof, error: pError } = await supabase!
           .from('wevina_profiles')
           .select('user_id, photo_url, display_name')
@@ -92,7 +87,7 @@ function SendClient() {
 
         if (pError || !prof) throw new Error("Not found");
 
-        // STAGE 2: Resolve Wallet for active ecosystem
+        // Stage 2: Get Address from user_identity for current ecosystem
         const chainType = allChainsMap[selectedToken?.chainId || viewingNetwork.chainId]?.type || 'evm';
         const { data: ident, error: iError } = await supabase!
           .from('user_identity')
@@ -104,7 +99,7 @@ function SendClient() {
         if (ident?.wallet_address) {
           setResolvedAddress(ident.wallet_address);
           setRecipientProfile({
-            avatar: prof.photo_url,
+            avatar: prof.photo_url || '',
             name: prof.display_name || searchHandle
           });
         } else {
@@ -121,7 +116,6 @@ function SendClient() {
     resolve();
   }, [debouncedRecipient, selectedToken?.chainId, viewingNetwork.chainId, allChainsMap]);
 
-  // 2. INITIALIZATION
   useEffect(() => {
     if (allAssets.length === 0 || initializedRef.current) return;
     const symbol = searchParams.get('symbol');
@@ -150,7 +144,6 @@ function SendClient() {
     }
 
     setIsSubmitting(true);
-    // ... Broadcast logic would go here
     setTimeout(() => {
         setIsSubmitting(false);
         setIsConfirming(false);
@@ -163,7 +156,6 @@ function SendClient() {
 
   return (
     <div className="flex flex-col h-screen bg-[#050505] text-foreground overflow-hidden">
-      {/* HEADER WITH CURRENCY DROPDOWN */}
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
@@ -190,7 +182,6 @@ function SendClient() {
         <Button variant="ghost" size="icon"><Info className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* TOP ERROR ALERT */}
       <AnimatePresence>
         {balanceError && (
           <motion.div 
@@ -211,7 +202,6 @@ function SendClient() {
         
         {/* CENTRAL ANIMATION AREA */}
         <section className="flex items-center justify-center gap-8 py-4">
-          {/* SENDER NODE */}
           <div className="relative group">
             <div className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity" />
             <div className="w-24 h-24 rounded-[2.5rem] bg-white/[0.03] border border-white/10 flex items-center justify-center shadow-2xl relative z-10">
@@ -225,13 +215,9 @@ function SendClient() {
             </div>
           </div>
 
-          {/* THE SPEAR (ANIMATED ARROW) */}
           <div className="relative flex items-center justify-center">
             <motion.div
-              animate={{ 
-                x: [0, 10, 0],
-                opacity: [0.4, 1, 0.4]
-              }}
+              animate={{ x: [0, 10, 0], opacity: [0.4, 1, 0.4] }}
               transition={{ duration: 2, repeat: Infinity }}
               className="text-primary"
             >
@@ -239,7 +225,6 @@ function SendClient() {
             </motion.div>
           </div>
 
-          {/* RECIPIENT NODE */}
           <div className="relative group">
             <div className={cn(
                 "absolute -inset-4 bg-primary/20 rounded-full blur-2xl transition-opacity",
@@ -254,7 +239,6 @@ function SendClient() {
                       {recipientProfile.name[0].toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  {/* MINI TOKEN BADGE */}
                   <div className="absolute bottom-2 right-2 w-8 h-8 rounded-xl bg-black border-2 border-[#050505] p-1.5 shadow-xl animate-in zoom-in duration-500">
                     <TokenLogoDynamic 
                         logoUrl={selectedToken?.iconUrl} 
@@ -279,12 +263,12 @@ function SendClient() {
         <section className="space-y-3">
           <div className="flex justify-between items-center px-2">
             <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Recipient Details</Label>
-            <span className="text-[9px] font-bold text-primary uppercase bg-primary/10 px-2 py-0.5 rounded">Verified Cloud</span>
+            <span className="text-[9px] font-bold text-primary uppercase bg-primary/10 px-2 py-0.5 rounded">Verified Handshake</span>
           </div>
           <div className="relative bg-white/[0.02] border border-white/5 focus-within:border-primary/30 rounded-2xl transition-all">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/30" />
             <Input 
-              placeholder="Account Number or Address" 
+              placeholder="10-digit ID or Address" 
               value={recipientInput} 
               onChange={(e) => setRecipientInput(e.target.value)} 
               className="h-12 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-sm font-mono text-white placeholder:text-zinc-800"
@@ -315,7 +299,7 @@ function SendClient() {
         </section>
       </main>
 
-      {/* SEND BUTTON - ALWAYS ACTIVE */}
+      {/* SEND BUTTON */}
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
         <Button 
           disabled={!resolvedAddress || !amount || isSubmitting}
@@ -326,7 +310,6 @@ function SendClient() {
         </Button>
       </div>
 
-      {/* CONFIRMATION SHEET */}
       <TransactionConfirmationSheet 
         isOpen={isConfirming}
         onOpenChange={setIsConfirming}
@@ -339,7 +322,6 @@ function SendClient() {
         recipientAvatar={recipientProfile?.avatar}
       />
 
-      {/* TOKEN SELECTION SHEET */}
       <Sheet open={isTokenSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="bottom" className="bg-[#0a0a0c]/95 border-t border-white/10 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden">
           <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4" />

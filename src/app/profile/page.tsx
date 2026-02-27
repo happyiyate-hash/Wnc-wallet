@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -44,68 +43,44 @@ export default function ProfilePage() {
     const [isSyncing, setIsSyncing] = useState(false);
 
     // Identity State
-    const [identity, setIdentity] = useState<string | null>(null);
-    const [isIdentityLoading, setIsIdentityLoading] = useState(true);
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
-    const [claimHandle, setClaimHandle] = useState('');
-    const [isClaiming, setIsClaiming] = useState(false);
+    const [displayNameInput, setDisplayNameInput] = useState('');
+    const [isSavingName, setIsSavingName] = useState(false);
 
+    // Initial load sync
     useEffect(() => {
-        if (profile?.username) {
-            setIdentity(profile.username);
-            setIsIdentityLoading(false);
-        } else if (!user) {
-            setIsIdentityLoading(false);
-        }
-    }, [profile, user]);
+        if (profile?.name) setDisplayNameInput(profile.name);
+    }, [profile]);
 
-    const handleClaim = async () => {
-        if (!claimHandle || !wallets || !supabase || !user) return;
-        setIsClaiming(true);
+    const handleUpdateName = async () => {
+        if (!displayNameInput || !user || !supabase) return;
+        setIsSavingName(true);
         try {
-            // Stage 1: Update wevina_profiles with the handle (Account ID)
-            const { error: profileError } = await supabase
+            const { error } = await supabase
                 .from('wevina_profiles')
-                .upsert({
-                    user_id: user.id,
-                    account_number: claimHandle.trim().toLowerCase(),
-                    display_name: profile?.name || user.email?.split('@')[0] || 'Institutional User'
-                }, { onConflict: 'user_id' });
+                .update({ display_name: displayNameInput.trim() })
+                .eq('user_id', user.id);
 
-            if (profileError) throw profileError;
-
-            // Stage 2: Register Identities for active wallets
-            const identityPayload = wallets.map(w => ({
-                user_id: user.id,
-                blockchain_name: w.type,
-                wallet_address: w.address
-            }));
-
-            const { error: identityError } = await supabase
-                .from('user_identity')
-                .upsert(identityPayload, { onConflict: 'user_id,blockchain_name' });
-
-            if (identityError) throw identityError;
+            if (error) throw error;
 
             await refreshProfile();
             setIsClaimModalOpen(false);
-            toast({ title: "Identity Claimed!", description: `You are now searchable as @${claimHandle.toLowerCase()}` });
+            toast({ title: "Profile Updated", description: "Your display name has been secured." });
         } catch (e: any) {
             toast({ 
-                title: "Claim Failed", 
-                description: e.message || "This handle might be taken or identity sync failed.", 
+                title: "Update Failed", 
+                description: e.message || "Could not update display name.", 
                 variant: "destructive" 
             });
         } finally {
-            setIsClaiming(false);
+            setIsSavingName(false);
         }
     };
 
-    // Identity Resolution
-    const displayName = profile?.name || profile?.username || user?.email?.split('@')[0] || 'Institutional User';
+    const displayName = profile?.name || 'Institutional User';
+    const accountId = profile?.username; // mapped to account_number
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
-    // Portfolio Value Calculation
     const totalPortfolioValue = useMemo(() => {
         return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     }, [allAssets]);
@@ -163,7 +138,7 @@ export default function ProfilePage() {
             <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50 px-6">
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Ecosystem Profile</h1>
+                    <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Financial Identity</h1>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="ghost" size="icon" onClick={handleSync} className={cn("rounded-xl", isSyncing && "animate-spin")}>
@@ -193,31 +168,25 @@ export default function ProfilePage() {
                         </div>
                         
                         <div className="space-y-2 flex flex-col items-center w-full">
-                            {isIdentityLoading ? (
-                                <Skeleton className="h-6 w-24 bg-white/5 rounded-full" />
-                            ) : identity ? (
+                            {accountId ? (
                                 <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 animate-in fade-in zoom-in duration-500">
-                                    <span className="text-[11px] font-black text-primary uppercase tracking-[0.1em]">@{identity}</span> <button 
-                                        onClick={() => copy(`@${identity}`)}
+                                    <span className="text-[11px] font-black text-primary uppercase tracking-[0.1em]">Account ID: {accountId}</span> 
+                                    <button 
+                                        onClick={() => copy(accountId)}
                                         className="p-1 hover:bg-primary/20 rounded-md transition-colors"
                                     >
                                         <Copy className="w-2.5 h-2.5 text-primary" />
                                     </button>
                                 </div>
                             ) : (
-                                <Button 
-                                    onClick={() => setIsClaimModalOpen(true)}
-                                    className="rounded-full bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-9 px-6 text-[10px] font-black uppercase tracking-widest gap-2 animate-pulse"
-                                >
-                                    <Sparkles className="w-3.5 h-3.5" /> Claim Webiv ID
-                                </Button>
+                                <Skeleton className="h-6 w-32 bg-white/5 rounded-full" />
                             )}
 
                             <div className="pt-2">
                                 <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
                                 <div className="flex items-center justify-center gap-1.5 mt-2">
                                     <ShieldCheck className="w-2.5 h-2.5 text-primary" />
-                                    <span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span>
+                                    <span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Node Identity</span>
                                 </div>
                             </div>
                         </div>
@@ -233,25 +202,22 @@ export default function ProfilePage() {
                         <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl rounded-full -mr-12 -mt-12" />
                             <ArrowUpRight className="w-5 h-5 text-emerald-400 mb-3" />
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Pending Earnings</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{formatFiat(profile?.wnc_earnings || 0)}</p>
+                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Verified Links</p>
+                            <p className="text-xl font-black text-white tabular-nums truncate">{wallets?.length || 0} Chains</p>
                         </div>
                     </div>
 
                     <section className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Secure Vault Hub</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Ecosystem Hub</p>
                         <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative group">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <QrCode className="w-4 h-4 text-primary" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Primary Vault Address</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span>
                                 </div>
-                                <div className={cn(
-                                    "flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest",
-                                    isSyncing ? "text-primary animate-pulse" : "text-green-500"
-                                )}>
-                                    <div className={cn("w-1  h-1 rounded-full bg-current", !isSyncing && "animate-pulse")} />
-                                    {isSyncing ? "Syncing..." : "Cloud Verified"}
+                                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-green-500">
+                                    <div className="w-1 h-1 rounded-full bg-current animate-pulse" />
+                                    Watchdog Verified
                                 </div>
                             </div>
                             
@@ -260,7 +226,7 @@ export default function ProfilePage() {
                                 className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all"
                             >
                                 <p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">
-                                    {address || (wallets ? 'Resolving Ecosystem Address...' : 'Initializing Secure Node...')}
+                                    {address || 'Initializing Secure Node...'}
                                 </p>
                                 <div className={cn(
                                     "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
@@ -273,29 +239,28 @@ export default function ProfilePage() {
                     </section>
 
                     <section className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Institutional Actions</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Terminal Actions</p>
                         <div className="space-y-2">
                             <ProfileAction 
+                                icon={Fingerprint} 
+                                label="Update Node Alias" 
+                                value={displayName} 
+                                accentColor="text-purple-400" 
+                                onClick={() => setIsClaimModalOpen(true)} 
+                            />
+                            <ProfileAction 
                                 icon={Store} 
-                                label="View My Business" 
-                                value="SmarterSeller Shop" 
+                                label="Institution Settings" 
+                                value="Configure Node" 
                                 accentColor="text-emerald-400" 
-                                badge="Live"
-                                onClick={() => router.push('/browse')} 
+                                onClick={() => router.push('/settings')} 
                             />
                             <ProfileAction 
                                 icon={Users} 
-                                label="Invite & Earn" 
-                                value="Referral Program" 
+                                label="Invite Node" 
+                                value="Affiliate Network" 
                                 accentColor="text-blue-400" 
-                                onClick={() => router.push('/tokens/add')} 
-                            />
-                            <ProfileAction 
-                                icon={Fingerprint} 
-                                label="Webiv ID Status" 
-                                value={identity ? `@${identity}` : 'Unclaimed Handle'} 
-                                accentColor="text-purple-400" 
-                                onClick={() => !identity && setIsClaimModalOpen(true)} 
+                                onClick={() => router.push('/browse')} 
                             />
                         </div>
                     </section>
@@ -304,11 +269,11 @@ export default function ProfilePage() {
                         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
                             <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} />
                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                                Last Synced: {isSyncing ? "Just Now" : "2 mins ago"}
+                                Watchdog Last Synced: Just Now
                             </span>
                         </div>
                         <p className="text-[8px] text-muted-foreground/40 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">
-                            Secured by SmarterSeller Cloud Protocol v2.1.0
+                            Secured by Wevina Identity Protocol v2.2
                         </p>
                     </div>
                 </div>
@@ -320,36 +285,35 @@ export default function ProfilePage() {
                         <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mx-auto">
                             <Fingerprint className="w-8 h-8" />
                         </div>
-                        <DialogTitle className="text-2xl font-black text-center text-white">Choose Your Webiv ID</DialogTitle>
+                        <DialogTitle className="text-2xl font-black text-center text-white">Node Identity</DialogTitle>
                         <DialogDescription className="text-center text-zinc-400 leading-relaxed font-medium">
-                            Set a human-readable identifier for your multi-chain vault. This handle will be used for peer-to-peer transfers.
+                            Set a human-readable display name for your multi-chain terminal.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="mt-6 space-y-4">
                         <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black text-lg">@</span>
                             <Input 
-                                placeholder="username"
-                                value={claimHandle}
-                                onChange={(e) => setClaimHandle(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
-                                className="h-14 bg-white/5 border-white/10 pl-10 rounded-2xl focus-visible:ring-primary text-lg font-bold"
+                                placeholder="Display Name"
+                                value={displayNameInput}
+                                onChange={(e) => setDisplayNameInput(e.target.value)}
+                                className="h-14 bg-white/5 border-white/10 px-6 rounded-2xl focus-visible:ring-primary text-lg font-bold"
                             />
                         </div>
 
                         <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex gap-3">
                             <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                             <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                Handles must be 3-15 characters. Once claimed, this handle will be linked to your EVM, XRP, and Polkadot addresses.
+                                Your 10-digit Account ID is permanent. Changing your display name updates your public record across all linked chains.
                             </p>
                         </div>
 
                         <Button 
                             className="w-full h-14 rounded-2xl font-black text-lg bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-                            onClick={handleClaim}
-                            disabled={isClaiming || claimHandle.length < 3}
+                            onClick={handleUpdateName}
+                            disabled={isSavingName || !displayNameInput}
                         >
-                            {isClaiming ? <Loader2 className="w-6 h-6 animate-spin" /> : "Claim Handle"}
+                            {isSavingName ? <Loader2 className="w-6 h-6 animate-spin" /> : "Update Identity"}
                         </Button>
                     </div>
                 </DialogContent>

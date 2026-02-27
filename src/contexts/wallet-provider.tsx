@@ -60,7 +60,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile, activeSessionId, addSession, sessions } = useUser();
+  const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile, activeSessionId, addSession } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -110,13 +110,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // SILENT WATCHDOG SYNC: Keep Database user_identity in sync with local wallets
+  useEffect(() => {
+    const syncIdentities = async () => {
+      if (!user || !wallets || !supabase) return;
+
+      try {
+        const { data: dbIdentities } = await supabase
+          .from('user_identity')
+          .select('blockchain_name, wallet_address')
+          .eq('user_id', user.id);
+
+        for (const wallet of wallets) {
+          const dbMatch = dbIdentities?.find(db => db.blockchain_name === wallet.type);
+
+          if (!dbMatch || dbMatch.wallet_address !== wallet.address) {
+            // SILENT UPDATE: If missing or changed, upsert the database
+            await supabase.from('user_identity').upsert({
+              user_id: user.id,
+              blockchain_name: wallet.type,
+              wallet_address: wallet.address
+            }, { onConflict: 'user_id, blockchain_name' });
+          }
+        }
+      } catch (e) {
+        console.warn("Silent Watchdog Sync Error:", e);
+      }
+    };
+
+    if (user && wallets) syncIdentities();
+  }, [user?.id, wallets, activeSessionId]);
+
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
     if (key) localStorage.setItem('infura_api_key', key);
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // SESSION SYNC: Re-derive keys whenever the active session ID changes
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading || !activeSessionId) {
@@ -354,7 +384,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
     const currentApiKey = localStorage.getItem('infura_api_key');
     
-    // Update local session vault
     const updatedSession: LocalSession = {
         id: activeSessionId,
         profile: profile,
