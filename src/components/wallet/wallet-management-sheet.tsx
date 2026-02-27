@@ -25,7 +25,7 @@ interface WalletManagementSheetProps {
 
 export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletManagementSheetProps) {
   const { generateWallet, importWallet, restoreFromCloud, wallets } = useWallet();
-  const { profile, user } = useUser();
+  const { profile, user, activeSessionId } = useUser();
   const [step, setStep] = useState<'start' | 'import'>('start');
   const [importInput, setImportInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -130,8 +130,7 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     }
   };
 
-  // Robust check for cloud backup
-  const hasCloudBackup = !!(profile?.vault_phrase || profile?.vault_infura_key);
+  const hasCloudBackup = !!(profile?.vault_phrase);
   const isUserLoggedIn = !!user;
 
   return (

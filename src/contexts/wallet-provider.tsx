@@ -110,7 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Watchdog sync for database user_identity
+  // 1. WATCHDOG IDENTITY SYNC (Local -> DB)
   useEffect(() => {
     const syncIdentities = async () => {
       if (!user || !wallets || !supabase) return;
@@ -138,7 +138,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     if (user && wallets) syncIdentities();
-  }, [user?.id, wallets, activeSessionId]);
+  }, [user?.id, wallets]);
 
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
@@ -146,6 +146,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
+  // 2. USER-ISOLATED SESSION INITIALIZATION
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading || !activeSessionId) {
@@ -161,6 +162,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedKey = localStorage.getItem('infura_api_key');
         if (savedKey) setInfuraApiKey(savedKey);
         
+        // Load User-Scoped Cached Data
         const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
         if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
         
@@ -171,7 +173,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
         
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-        if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
+        if (savedMnemonic) {
+            await loadWalletFromMnemonic(savedMnemonic);
+        } else {
+            // AUTO-RECOVERY PROTOCOL: If logged in but no local mnemonic, check cloud
+            if (profile?.vault_phrase && profile?.iv) {
+                try {
+                    await restoreFromCloud();
+                } catch (e) {
+                    console.warn("Auto-restore failed:", e);
+                }
+            }
+        }
       } catch (e) {
         console.error("Session recovery failure:", e);
       } finally {
@@ -179,7 +192,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     };
     initLocalSession();
-  }, [authLoading, activeSessionId, loadWalletFromMnemonic]);
+  }, [authLoading, activeSessionId, profile?.vault_phrase]);
 
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
     if (!activeSessionId) return;
@@ -423,12 +436,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (freshProfile.vault_phrase && freshProfile.iv) {
           const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_phrase, iv: freshProfile.iv }), });
           const data = await res.json();
-          if (res.ok && data.phrase) { await loadWalletFromMnemonic(data.phrase); localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); }
+          if (res.ok && data.phrase) { 
+              await loadWalletFromMnemonic(data.phrase); 
+              localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); 
+          }
       }
       if (freshProfile.vault_infura_key && freshProfile.infura_iv) {
           const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_infura_key, iv: freshProfile.infura_iv }), });
           const data = await res.json();
-          if (res.ok && data.phrase) { setInfuraApiKey(data.phrase); localStorage.setItem('infura_api_key', data.phrase); }
+          if (res.ok && data.phrase) { 
+              setInfuraApiKey(data.phrase); 
+              localStorage.setItem('infura_api_key', data.phrase); 
+          }
       }
       toast({ title: "Access Restored" });
       refreshProfile();
@@ -453,8 +472,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const importWallet = useCallback(async (mnemonic: string) => {
     setIsWalletLoading(true);
     try {
-        await loadWalletFromMnemonic(mnemonic);
-        if (activeSessionId) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic.trim());
+        const clean = mnemonic.trim();
+        await loadWalletFromMnemonic(clean);
+        if (activeSessionId) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, clean);
         await saveToVault();
     } finally { setIsWalletLoading(false); }
   }, [activeSessionId, loadWalletFromMnemonic, saveToVault]);
@@ -496,13 +516,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     saveToVault,
     restoreFromCloud,
     logout: () => { 
-        // Only clear Supabase session, keep local wallet vault
         authSignOut(); 
     },
     deleteWallet: () => { 
         if (activeSessionId) { 
             localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`); 
             localStorage.removeItem(`wallet_balances_${activeSessionId}`); 
+            localStorage.removeItem(`hidden_tokens_${activeSessionId}`);
+            localStorage.removeItem(`custom_tokens_${activeSessionId}`);
         } 
         setWallets(null); 
         setBalances({}); 
