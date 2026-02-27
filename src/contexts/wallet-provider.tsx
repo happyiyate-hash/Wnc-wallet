@@ -110,7 +110,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 1. INSTITUTIONAL WATCHDOG SYNC (Local -> user_identity)
   useEffect(() => {
     const runWatchdog = async () => {
       if (!user || !wallets || !profile?.account_number || !supabase) return;
@@ -149,14 +148,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // 2. USER-ISOLATED SESSION INITIALIZATION
   useEffect(() => {
     const initLocalSession = async () => {
-      if (authLoading || !activeSessionId) {
-          if (!activeSessionId) {
-              setWallets(null);
-              setBalances({});
-          }
+      if (authLoading) return;
+      
+      // If no session, resolve loading state immediately to unblock UI
+      if (!activeSessionId) {
+          setWallets(null);
+          setBalances({});
+          setIsWalletLoading(false);
           return;
       }
       

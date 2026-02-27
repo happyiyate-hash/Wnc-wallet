@@ -32,11 +32,13 @@ export default function Home() {
   // INSTANT UI CHECK:
   // If we have a cached profile, we bypass the full-screen initialization loader
   const hasCachedIdentity = !!profile;
-  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity;
+  
+  // App is loading if Auth is still fetching OR Wallet system isn't ready
+  // EXCEPT when we have a cached identity to show or when sign-out is confirmed
+  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity && !!user;
 
   // INITIALIZATION SETTLED:
-  // We only show auth/setup sheets once all async checks are fully resolved.
-  // This prevents the sheets from "popping" during transitions.
+  // System has reached a definitive state about the user's session
   const isSettled = !loading && isInitialized && !isWalletLoading;
   
   const shouldShowAuth = isSettled && !user;
@@ -47,8 +49,12 @@ export default function Home() {
     if (isSettled) {
       setIsAuthOpen(shouldShowAuth);
       setIsWalletSetupOpen(shouldShowSetup);
+    } else if (!loading && !user) {
+      // Eagerly show auth if we definitively know there is no user, 
+      // even if wallet system is still resolving its internal flags
+      setIsAuthOpen(true);
     }
-  }, [isSettled, shouldShowAuth, shouldShowSetup]);
+  }, [isSettled, shouldShowAuth, shouldShowSetup, loading, user]);
 
   useEffect(() => {
     const scrollDiv = scrollRef.current;
