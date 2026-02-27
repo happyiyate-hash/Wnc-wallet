@@ -251,7 +251,196 @@ function SendClient() {
     }
   };
 
-  return null; // Awaiting UI Parts...
+  const handleRecentClick = (recent: RecentRecipient) => {
+    setRecipientInput(`@${recent.recipient_account_number}`);
+    const targetChainType = recent.last_blockchain_used as any;
+    const matchingChain = allChains.find(c => c.type === targetChainType);
+    if (matchingChain) {
+        const available = getAvailableAssetsForChain(matchingChain.chainId);
+        const nativeToken = available.find(a => a.isNative) || available[0];
+        if (nativeToken) {
+            setSelectedToken({ ...nativeToken });
+        }
+    }
+    toast({ title: "Recipient Auto-filled" });
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setRecipientInput(text);
+    } catch (err) {
+      toast({ title: "Clipboard Error", description: "Could not access clipboard." });
+    }
+  };
+
+  const handleTokenSelect = (token: AssetRow) => {
+    setSelectedToken({ ...token });
+    setIsTokenSideSheetOpen(false);
+    setIsNetworkSheetOpen(false);
+  };
+
+  const balance = parseFloat(selectedToken?.balance || '0');
+  const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
+  const canSend = resolvedAddress.length > 0 && parseFloat(amount) > 0 && parseFloat(amount) <= balance && !isSubmitting;
+
+  const gasFiatValue = useMemo(() => {
+    if (!selectedToken) return 0;
+    const nativeAssetId = allChainsMap[selectedToken.chainId]?.coingeckoId?.toLowerCase();
+    const nativePrice = nativeAssetId ? (prices[nativeAssetId]?.price || 0) : 0;
+    let price = nativePrice;
+    if (price === 0 && selectedToken.isNative) price = selectedToken.priceUsd || 0;
+    return parseFloat(gasData.nativeFee) * price;
+  }, [gasData.nativeFee, selectedToken, prices, allChainsMap]);
+
+  if (step === 'success') {
+    return (
+        <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-screen bg-[#050505]">
+            <div className="w-24 h-24 rounded-[2.5rem] bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-4 relative">
+                <div className="absolute inset-0 bg-green-500/20 blur-2xl rounded-full animate-pulse" />
+                <CheckCircle2 className="w-12 h-12 text-green-500 relative z-10" />
+            </div>
+            <div className="space-y-3">
+                <h2 className="text-3xl font-black tracking-tight text-white">Transaction Sent!</h2>
+                <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">Your assets are being broadcasted to the <span className="text-primary font-bold">{activeNetwork.name}</span> network.</p>
+                {txHash && (
+                    <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-2">
+                        <p className="text-[10px] uppercase font-black tracking-widest text-white/40">Transaction Hash</p>
+                        <p className="text-[10px] font-mono text-primary break-all">{txHash}</p>
+                    </div>
+                )}
+            </div>
+            <Button className="w-full h-16 rounded-[2rem] font-black text-lg mt-8 shadow-2xl shadow-primary/20" onClick={() => router.push('/')}>Return to Dashboard</Button>
+        </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
+          <div className="text-[40rem] font-black italic transform -rotate-12 text-white">W</div>
+      </div>
+
+      <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
+        <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
+                <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+                <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Send Assets</h1>
+                <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[8px] text-muted-foreground uppercase font-black tracking-tighter">System Online</span>
+                </div>
+            </div>
+        </div>
+        
+        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-full">
+            <div className="p-0.5 bg-black/40 rounded-full border border-white/5">
+                <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={18} chainId={activeNetwork.chainId} name={activeNetwork.name} symbol={activeNetwork.symbol}/>
+            </div>
+            <span className="text-[9px] font-black text-primary uppercase tracking-widest">{activeNetwork.name}</span>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-hidden relative z-10">
+        <ScrollArea className="h-full">
+          <div className="p-6 space-y-8 pb-48 max-w-lg mx-auto">
+            
+            {/* RECENT RECIPIENTS BAR */}
+            {recentRecipients.length > 0 && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="flex items-center gap-2 px-2">
+                        <History className="w-3 h-3 text-primary" />
+                        <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Recent Contacts</span>
+                    </div>
+                    <div className="flex gap-4 overflow-x-auto pb-2 thin-scrollbar">
+                        {recentRecipients.map((recent) => (
+                            <button 
+                                key={recent.id}
+                                onClick={() => handleRecentClick(recent)}
+                                className="flex flex-col items-center gap-2 group min-w-[64px]"
+                            >
+                                <div className="relative">
+                                    <div className="absolute -inset-1 bg-primary/20 rounded-full blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <Avatar className="w-12 h-12 rounded-full border-2 border-white/5 bg-white/5 transition-transform group-active:scale-90 relative z-10">
+                                        <AvatarImage src={recent.current_pfp} />
+                                        <AvatarFallback className="bg-gradient-to-br from-primary/40 to-purple-600/40 text-primary text-xs font-black">
+                                            {recent.recipient_account_number[0].toUpperCase()}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </div>
+                                <span className="text-[8px] font-black text-white/60 uppercase tracking-tighter truncate w-16 text-center">
+                                    @{recent.recipient_account_number}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ASSET SELECTOR */}
+            <div className="space-y-3">
+                <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] pl-2">Asset to Transfer</Label>
+                <button 
+                    onClick={() => setIsNetworkSheetOpen(true)} 
+                    className="w-full flex items-center justify-between p-5 rounded-[2.5rem] bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] hover:border-primary/30 transition-all group relative overflow-hidden"
+                >
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="p-1 rounded-full bg-black/40 border border-white/5">
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.name || ''} size={44} chainId={selectedToken?.chainId} name={selectedToken?.name} symbol={selectedToken?.symbol}/>
+                        </div>
+                        <div className="text-left">
+                            <h2 className="text-lg font-black text-white uppercase tracking-tight">{selectedToken?.symbol || 'Select Asset'}</h2>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">{selectedToken?.name || 'Institutional Registry'}</p>
+                        </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform relative z-10" />
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[40px] -mr-16 -mt-16 pointer-events-none" />
+                </button>
+            </div>
+            
+            <div className="space-y-3">
+                <div className="flex justify-between items-center px-2">
+                    <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Recipient Details</Label>
+                    <button onClick={handlePaste} className="flex items-center gap-1.5 text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/10 hover:bg-primary/20 transition-all">
+                        <ClipboardPaste className="w-3 h-3" /> Paste
+                    </button>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 rounded-[2rem] p-2 transition-all space-y-2">
+                  <div className="flex items-center gap-2 px-2">
+                    <Search className="w-4 h-4 text-muted-foreground/40" />
+                    <Input 
+                        placeholder="Account Number or Address" 
+                        value={recipientInput} 
+                        onChange={(e) => setRecipientInput(e.target.value)} 
+                        className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1"
+                    />
+                    {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />}
+                  </div>
+
+                  {recipientProfile && (
+                    <div className="mx-2 mb-2 p-3 rounded-2xl bg-primary/10 border border-primary/20 flex items-center gap-3 animate-in fade-in zoom-in duration-300">
+                        <Avatar className="w-10 h-10 rounded-xl border border-primary/20">
+                            <AvatarImage src={recipientProfile.avatar} />
+                            <AvatarFallback className="bg-black text-primary text-xs font-black">
+                                {recipientProfile.name[0].toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                            <p className="text-[8px] font-black text-primary uppercase tracking-widest">Verified Recipient</p>
+                            <p className="text-sm font-bold text-white tracking-tight">@{recipientProfile.name}</p>
+                        </div>
+                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                    </div>
+                  )}
+                </div>
+            </div>
+          </div>
+        </ScrollArea>
+      </main>
+    </div>
+  );
 }
 
 export default function SendPage() {
