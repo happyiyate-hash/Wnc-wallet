@@ -40,12 +40,10 @@ export default function ProfilePage() {
     const accountNumber = profile?.account_number || 'Generating...';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
-    // Portfolio calculation
     const totalPortfolioValue = useMemo(() => {
         return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     }, [allAssets]);
 
-    // WNC to Fiat logic: 1 WNC = 1 NGN
     const convertedEarnings = useMemo(() => {
         const wncCount = profile?.wnc_earnings || 0;
         const ngnRate = rates['NGN'] || 1650;
@@ -90,154 +88,55 @@ export default function ProfilePage() {
     );
 
     return (
-        <div className="flex flex-col h-screen bg-transparent text-foreground relative overflow-hidden">
+        <div className="flex flex-col min-h-full bg-transparent text-foreground relative">
             <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Identity Vault</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={handleSync} className={cn("rounded-xl", isSyncing && "animate-spin")}>
-                        <RefreshCw className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => router.push('/settings')} className="rounded-xl">
-                        <Lock className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                </div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary animate-pulse" /><h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Identity Vault</h1></div>
+                <div className="flex items-center gap-2"><Button variant="ghost" size="icon" onClick={handleSync} className={cn("rounded-xl", isSyncing && "animate-spin")}><RefreshCw className="w-4 h-4 text-muted-foreground" /></Button><Button variant="ghost" size="icon" onClick={() => router.push('/settings')} className="rounded-xl"><Lock className="w-4 h-4 text-muted-foreground" /></Button></div>
             </header>
 
-            <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
-                <div className="max-w-2xl mx-auto p-6 space-y-10">
-                    
+            <main className="flex-1 p-6 space-y-10 max-w-2xl mx-auto w-full pb-32">
                     <section className="flex flex-col items-center text-center space-y-6">
                         <div className="relative group">
-                            <div className="absolute -inset-4 bg-primary/20 rounded-[3rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
-                            <Avatar className="w-28 h-28 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10">
-                                <AvatarImage src={profile?.photo_url} className="object-cover" />
-                                <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-4xl font-black rounded-[2.5rem]">
-                                    {displayName.slice(0, 1)}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="absolute -bottom-2 -right-2 z-20 bg-primary p-2 rounded-2xl border-4 border-[#050505] shadow-xl">
-                                <ShieldCheck className="w-5 h-5 text-white" />
-                            </div>
+                            <div className="absolute -inset-4 bg-primary/20 rounded-[3rem] blur-2xl opacity-50 transition-opacity" />
+                            <Avatar className="w-28 h-28 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10"><AvatarImage src={profile?.photo_url} className="object-cover" /><AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-4xl font-black rounded-[2.5rem]">{displayName.slice(0, 1)}</AvatarFallback></Avatar>
+                            <div className="absolute -bottom-2 -right-2 z-20 bg-primary p-2 rounded-2xl border-4 border-[#050505] shadow-xl"><ShieldCheck className="w-5 h-5 text-white" /></div>
                         </div>
-                        
                         <div className="space-y-3 flex flex-col items-center w-full">
                             <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
-                            
-                            {/* INSTITUTIONAL ACCOUNT ID CARD */}
-                            <div 
-                                onClick={() => accountNumber !== 'Generating...' && copyId(accountNumber)}
-                                className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span>
-                                    <div className={cn(
-                                        "transition-colors",
-                                        isIdCopied ? "text-green-500" : "text-primary opacity-40 group-hover:opacity-100"
-                                    )}>
-                                        {isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                    </div>
-                                </div>
+                            <div onClick={() => accountNumber !== 'Generating...' && copyId(accountNumber)} className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group">
+                                <div className="flex items-center gap-2"><span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span><div className={cn("transition-colors", isIdCopied ? "text-green-500" : "text-primary opacity-40")}>{isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}</div></div>
                                 <p className="text-lg font-mono font-black text-white tracking-[0.1em]">{accountNumber}</p>
                             </div>
-
-                            <div className="flex items-center justify-center gap-1.5 pt-1">
-                                <ShieldCheck className="w-2.5 h-2.5 text-primary" />
-                                <span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span>
-                            </div>
+                            <div className="flex items-center justify-center gap-1.5 pt-1"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span></div>
                         </div>
                     </section>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl transition-all hover:scale-[1.02] group">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-2xl rounded-full -mr-12 -mt-12 group-hover:bg-emerald-500/20 transition-colors" />
-                            <Coins className="w-5 h-5 text-emerald-400 mb-3" />
-                            <p className="text-[9px] font-black text-emerald-400/60 uppercase tracking-widest mb-1">Cloud Earnings</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{convertedEarnings}</p>
-                        </div>
-                        
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl transition-all hover:scale-[1.02]">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <TrendingUp className="w-5 h-5 text-primary mb-3" />
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Portfolio Balance</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{formatFiat(totalPortfolioValue)}</p>
-                        </div>
+                        <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl"><Coins className="w-5 h-5 text-emerald-400 mb-3" /><p className="text-[9px] font-black text-emerald-400/60 uppercase tracking-widest mb-1">Cloud Earnings</p><p className="text-xl font-black text-white tabular-nums truncate">{convertedEarnings}</p></div>
+                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl"><TrendingUp className="w-5 h-5 text-primary mb-3" /><p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Portfolio Balance</p><p className="text-xl font-black text-white tabular-nums truncate">{formatFiat(totalPortfolioValue)}</p></div>
                     </div>
 
                     <section className="space-y-3">
-                        <div className="flex justify-between items-center px-2">
-                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Network Hub</p>
-                            <div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500">
-                                <Cpu className="w-2.5 h-2.5 animate-pulse" />
-                                Watchdog Sync: Active
-                            </div>
-                        </div>
-                        <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative group">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <QrCode className="w-4 h-4 text-primary" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span>
-                                </div>
-                            </div>
-                            
-                            <div 
-                                onClick={() => address && copyAddress(address)}
-                                className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all"
-                            >
-                                <p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">
-                                    {address || 'Initializing Secure Node...'}
-                                </p>
-                                <div className={cn(
-                                    "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                                    isAddressCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary"
-                                )}>
-                                    {isAddressCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                                </div>
-                            </div>
+                        <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Network Hub</p><div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500"><Cpu className="w-2.5 h-2.5 animate-pulse" />Watchdog Sync: Active</div></div>
+                        <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative">
+                            <div className="flex items-center gap-2"><QrCode className="w-4 h-4 text-primary" /><span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span></div>
+                            <div onClick={() => address && copyAddress(address)} className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all"><p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">{address || 'Initializing...'}</p><div className={cn("shrink-0 w-10 h-10 rounded-xl flex items-center justify-center", isAddressCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>{isAddressCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}</div></div>
                         </div>
                     </section>
 
                     <section className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Terminal Configuration</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Terminal Config</p>
                         <div className="space-y-2">
-                            <ProfileAction 
-                                icon={Fingerprint} 
-                                label="Update Node Alias" 
-                                value={displayName} 
-                                accentColor="text-purple-400" 
-                                onClick={() => router.push('/settings')} 
-                            />
-                            <ProfileAction 
-                                icon={Store} 
-                                label="Marketplace Settings" 
-                                value="Business Category" 
-                                accentColor="text-emerald-400" 
-                                onClick={() => router.push('/settings')} 
-                            />
-                            <ProfileAction 
-                                icon={Users} 
-                                label="Affiliate Network" 
-                                value="Invite Nodes" 
-                                accentColor="text-blue-400" 
-                                onClick={() => router.push('/browse')} 
-                            />
+                            <ProfileAction icon={Fingerprint} label="Node Alias" value={displayName} accentColor="text-purple-400" onClick={() => router.push('/settings')} />
+                            <ProfileAction icon={Store} label="Marketplace" value="Business Mode" accentColor="text-emerald-400" onClick={() => router.push('/settings')} />
+                            <ProfileAction icon={Users} label="Affiliate" value="Invite Nodes" accentColor="text-blue-400" onClick={() => router.push('/browse')} />
                         </div>
                     </section>
 
                     <div className="pt-4 flex flex-col items-center gap-3">
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
-                            <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} />
-                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                                Global Watchdog Last Synced: Just Now
-                            </span>
-                        </div>
-                        <p className="text-[8px] text-muted-foreground/40 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">
-                            Secured by Master Wevina Cloud Protocol v3.0
-                        </p>
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5"><RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} /><span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Global Watchdog Sync: Active</span></div>
+                        <p className="text-[8px] text-muted-foreground/40 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">Secured by Master Wevina Cloud Protocol v3.0</p>
                     </div>
-                </div>
             </main>
         </div>
     );

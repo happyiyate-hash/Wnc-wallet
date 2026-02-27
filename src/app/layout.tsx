@@ -61,7 +61,7 @@ export default function RootLayout({
                   <div className="flex min-h-screen w-full bg-transparent overflow-hidden relative z-10">
                     <NavGradient />
                     <DesktopSidebar />
-                    <div className="flex flex-col flex-1 w-full min-w-0 h-screen overflow-hidden">
+                    <div className="flex flex-col flex-1 w-full min-w-0 h-[100dvh] overflow-hidden">
                       <PWARegister />
                       <div className="flex-1 overflow-y-auto thin-scrollbar relative">
                         {children}
