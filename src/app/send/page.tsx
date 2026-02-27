@@ -122,6 +122,7 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
+  // RECIPIENT IDENTITY RESOLUTION ENGINE
   useEffect(() => {
     let isMounted = true;
 
@@ -137,6 +138,7 @@ function SendClient() {
         return;
       }
 
+      // 1. Detect Raw Addresses
       const isRaw = input.startsWith('0x') || input.startsWith('r') || input.length > 30;
 
       if (isRaw) {
@@ -148,6 +150,7 @@ function SendClient() {
         return;
       }
 
+      // 2. Resolve via Account ID Routing
       if (isMounted) setIsResolving(true);
       
       const searchHandle = input.startsWith('@') 
@@ -161,13 +164,27 @@ function SendClient() {
         });
 
         if (isMounted) {
-          if (!error && data && data[0]?.target_address) {
-            setResolvedAddress(data[0].target_address);
+          if (!error && data && data[0]) {
+            const result = data[0];
+            
+            // Set profile data (always present if user exists)
             setRecipientProfile({
-              avatar: data[0].profile_pic,
-              verified: data[0].verified,
-              name: searchHandle
+              avatar: result.profile_pic,
+              verified: result.verified,
+              name: result.name || searchHandle
             });
+
+            // Set address (only present if wallet connected to this network)
+            if (result.target_address) {
+              setResolvedAddress(result.target_address);
+            } else {
+              setResolvedAddress('');
+              toast({
+                title: "Network Not Ready",
+                description: `Recipient found, but they haven't connected their wallet to ${activeNetwork.name} yet.`,
+                variant: "destructive"
+              });
+            }
           } else {
             setResolvedAddress('');
             setRecipientProfile(null);
@@ -187,7 +204,7 @@ function SendClient() {
     resolve();
 
     return () => { isMounted = false; };
-  }, [debouncedRecipient, activeNetwork.type]);
+  }, [debouncedRecipient, activeNetwork.type, activeNetwork.name, toast]);
 
   const saveToHistory = async (recipientData: { accountNumber: string, address: string, chain: string }) => {
     if (!user || !supabase) return;
@@ -593,7 +610,7 @@ function SendClient() {
                   <button 
                     key={asset.symbol} 
                     onClick={() => handleTokenSelect(asset)} 
-                    className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/20 transition-all text-left group"
+                    className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 hover:border-primary/20 transition-all text-left group"
                   >
                     <div className="flex items-center gap-4">
                       <TokenLogoDynamic logoUrl={asset.iconUrl} alt={asset.symbol} size={44} chainId={asset.chainId} symbol={asset.symbol} name={asset.name} />
