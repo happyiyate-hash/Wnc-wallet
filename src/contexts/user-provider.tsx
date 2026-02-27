@@ -42,11 +42,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const cacheKey = `profile_cache_${savedActiveId}`;
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
-            try {
-                setProfile(JSON.parse(cached));
-                // We DON'T set loading to false here. 
-                // We wait for the actual Supabase auth handshake to confirm identity.
-            } catch (e) {}
+            try { setProfile(JSON.parse(cached)); } catch (e) {}
         }
     }
   }, []);
@@ -74,7 +70,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 .eq('id', userId)
                 .select()
                 .single();
-            if (updated) return updated as UserProfile;
+            if (updated) {
+                setProfile(updated as UserProfile);
+                localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(updated));
+                return updated as UserProfile;
+            }
         }
 
         setProfile(resolvedProfile);
@@ -84,7 +84,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const generatedId = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
         const { data: newProfile } = await supabase
             .from('profiles')
-            .upsert({ id: userId, name: user?.email?.split('@')[0] || 'Institutional User', wnc_earnings: 0, tokens: 0, account_number: generatedId })
+            .upsert({ 
+                id: userId, 
+                name: user?.email?.split('@')[0] || 'Institutional User', 
+                wnc_earnings: 0, 
+                tokens: 0, 
+                account_number: generatedId 
+            })
             .select()
             .single();
         return newProfile ? (newProfile as UserProfile) : null;
@@ -118,7 +124,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.id]);
 
   // 4. SESSION MANAGEMENT
   useEffect(() => {

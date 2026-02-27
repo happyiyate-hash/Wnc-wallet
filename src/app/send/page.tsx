@@ -10,11 +10,8 @@ import {
   Loader2, 
   ShieldCheck, 
   AlertCircle,
-  History,
-  ClipboardPaste,
   ArrowRight,
   User,
-  Zap,
   Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,12 +28,11 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { supabase } from '@/lib/supabase/client';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import TransactionConfirmationSheet from '@/components/wallet/transaction-confirmation-sheet';
-import type { AssetRow, ChainConfig } from '@/lib/types';
+import type { AssetRow } from '@/lib/types';
 
 function SendClient() {
-  const { viewingNetwork, wallets, infuraApiKey, allChains, allAssets, getAvailableAssetsForChain, allChainsMap, prices } = useWallet();
+  const { viewingNetwork, allAssets, allChainsMap, infuraApiKey } = useWallet();
   const { formatFiat } = useCurrency();
-  const { user, profile } = useUser();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,7 +45,7 @@ function SendClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
-  // Identity Resolution Handshake
+  // Identity Resolution Handshake (Account ID + Chain)
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, name: string, id: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
@@ -58,7 +54,7 @@ function SendClient() {
   const [isTokenSheetOpen, setIsTokenSideSheetOpen] = useState(false);
   const initializedRef = useRef(false);
 
-  // 1. ATOMIC IDENTITY HANDSHAKE: profiles -> user_identity
+  // ATOMIC IDENTITY HANDSHAKE: user_identity -> profiles
   useEffect(() => {
     async function resolve() {
       if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
@@ -67,7 +63,8 @@ function SendClient() {
         return;
       }
 
-      const isRaw = debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 30;
+      // Check if it's a raw address (0x or r-address)
+      const isRaw = debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 25;
       if (isRaw) {
         setResolvedAddress(debouncedRecipient);
         setRecipientProfile(null);
@@ -75,33 +72,32 @@ function SendClient() {
       }
 
       setIsResolving(true);
-      const searchHandle = debouncedRecipient.toLowerCase().trim();
+      const searchId = debouncedRecipient.trim();
+      const chainType = allChainsMap[selectedToken?.chainId || viewingNetwork.chainId]?.type || 'evm';
 
       try {
-        // Stage 1: Get Profile from shared 'profiles' table
-        const { data: prof, error: pError } = await supabase!
-          .from('profiles')
-          .select('id, photo_url, name')
-          .eq('name', searchHandle)
-          .maybeSingle();
-
-        if (pError || !prof) throw new Error("Not found");
-
-        // Stage 2: Get Address from user_identity for current ecosystem
-        const chainType = allChainsMap[selectedToken?.chainId || viewingNetwork.chainId]?.type || 'evm';
-        const { data: ident, error: iError } = await supabase!
+        // Stage 1 & 2: Get both Technical Address and Visual Identity using the 10-digit Account ID
+        const { data: identity, error: iError } = await supabase!
           .from('user_identity')
-          .select('wallet_address')
-          .eq('user_id', prof.id)
+          .select('wallet_address, user_id')
+          .eq('account_number', searchId)
           .eq('blockchain_name', chainType)
           .maybeSingle();
 
-        if (ident?.wallet_address) {
-          setResolvedAddress(ident.wallet_address);
+        if (identity?.wallet_address) {
+          setResolvedAddress(identity.wallet_address);
+          
+          // Fetch the human-friendly identity from profiles
+          const { data: prof } = await supabase!
+            .from('profiles')
+            .select('photo_url, name')
+            .eq('id', identity.user_id)
+            .maybeSingle();
+
           setRecipientProfile({
-            avatar: prof.photo_url || '',
-            name: prof.name,
-            id: prof.id
+            avatar: prof?.photo_url || '',
+            name: prof?.name || 'Institutional Recipient',
+            id: identity.user_id
           });
         } else {
           setResolvedAddress('');
@@ -156,8 +152,8 @@ function SendClient() {
   const activeChain = allChainsMap[selectedToken?.chainId || viewingNetwork.chainId] || viewingNetwork;
 
   return (
-    <div className="flex flex-col h-screen bg-[#050505] text-foreground overflow-hidden">
-      <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl z-50">
+    <div className="flex flex-col h-screen bg-transparent text-foreground overflow-hidden">
+      <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="w-5 h-5" />
         </Button>
@@ -199,7 +195,7 @@ function SendClient() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 overflow-y-auto px-6 pt-10 pb-32 space-y-12 max-w-lg mx-auto w-full">
+      <main className="flex-1 overflow-y-auto px-6 pt-10 pb-32 space-y-12 max-w-lg mx-auto w-full relative z-10">
         
         {/* BROACAST ANIMATION AREA */}
         <section className="flex items-center justify-center gap-8 py-4">
@@ -263,13 +259,13 @@ function SendClient() {
         {/* SLIM RECIPIENT BAR */}
         <section className="space-y-3">
           <div className="flex justify-between items-center px-2">
-            <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Recipient Details</Label>
+            <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Account ID / Address</Label>
             <span className="text-[9px] font-bold text-primary uppercase bg-primary/10 px-2 py-0.5 rounded">Verified Cloud</span>
           </div>
           <div className="relative bg-white/[0.02] border border-white/5 focus-within:border-primary/30 rounded-2xl transition-all">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/30" />
             <Input 
-              placeholder="Username or Address" 
+              placeholder="10-digit ID or Wallet Address" 
               value={recipientInput} 
               onChange={(e) => setRecipientInput(e.target.value)} 
               className="h-12 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-sm font-mono text-white placeholder:text-zinc-800"
@@ -300,7 +296,6 @@ function SendClient() {
         </section>
       </main>
 
-      {/* SEND BUTTON */}
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
         <Button 
           disabled={!resolvedAddress || !amount || isSubmitting}
@@ -318,7 +313,7 @@ function SendClient() {
         isSubmitting={isSubmitting}
         amount={amount}
         token={selectedToken}
-        recipientName={recipientProfile?.name || resolvedAddress.slice(0, 8)}
+        recipientName={recipientProfile?.name || resolvedAddress.slice(0, 12)}
         recipientAddress={resolvedAddress}
         recipientAvatar={recipientProfile?.avatar}
       />

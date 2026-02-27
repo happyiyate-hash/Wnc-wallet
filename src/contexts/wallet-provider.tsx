@@ -110,35 +110,41 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 1. WATCHDOG IDENTITY SYNC (Local -> DB)
+  // 1. INSTITUTIONAL WATCHDOG SYNC (Local -> Cloud user_identity)
+  // Implements the "unbreakable" silent sync logic.
   useEffect(() => {
-    const syncIdentities = async () => {
-      if (!user || !wallets || !supabase) return;
+    const runWatchdog = async () => {
+      if (!user || !wallets || !profile?.account_number || !supabase) return;
 
       try {
-        const { data: dbIdentities } = await supabase
+        // Fetch current cloud state for this node's Account Number
+        const { data: cloudIdentities } = await supabase
           .from('user_identity')
           .select('blockchain_name, wallet_address')
           .eq('user_id', user.id);
 
         for (const wallet of wallets) {
-          const dbMatch = dbIdentities?.find(db => db.blockchain_name === wallet.type);
+          const cloudMatch = cloudIdentities?.find(c => c.blockchain_name === wallet.type);
 
-          if (!dbMatch || dbMatch.wallet_address !== wallet.address) {
+          // Silent Update: If address mismatch or new chain added, upsert cloud
+          if (!cloudMatch || cloudMatch.wallet_address !== wallet.address) {
             await supabase.from('user_identity').upsert({
               user_id: user.id,
+              account_number: profile.account_number,
               blockchain_name: wallet.type,
               wallet_address: wallet.address
             }, { onConflict: 'user_id, blockchain_name' });
           }
         }
       } catch (e) {
-        console.warn("Silent Watchdog Sync Error:", e);
+        console.warn("Watchdog Sync Error:", e);
       }
     };
 
-    if (user && wallets) syncIdentities();
-  }, [user?.id, wallets]);
+    if (user && wallets && profile?.account_number) {
+        runWatchdog();
+    }
+  }, [user?.id, wallets, profile?.account_number]);
 
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
@@ -162,7 +168,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedKey = localStorage.getItem('infura_api_key');
         if (savedKey) setInfuraApiKey(savedKey);
         
-        // Load User-Scoped Cached Data
         const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
         if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
         
@@ -176,13 +181,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedMnemonic) {
             await loadWalletFromMnemonic(savedMnemonic);
         } else {
-            // AUTO-RECOVERY PROTOCOL: If logged in but no local mnemonic, check cloud
             if (profile?.vault_phrase && profile?.iv) {
-                try {
-                    await restoreFromCloud();
-                } catch (e) {
-                    console.warn("Auto-restore failed:", e);
-                }
+                try { await restoreFromCloud(); } catch (e) { console.warn("Auto-restore failed:", e); }
             }
         }
       } catch (e) {
@@ -290,7 +290,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isInitialized) {
         fetchGlobalPrices(); 
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = setInterval(fetchGlobalPrices, 10000);
+        priceIntervalRef.current = setInterval(fetchGlobalPrices, 15000);
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, fetchGlobalPrices]);
@@ -515,9 +515,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     importWallet,
     saveToVault,
     restoreFromCloud,
-    logout: () => { 
-        authSignOut(); 
-    },
+    logout: () => { authSignOut(); },
     deleteWallet: () => { 
         if (activeSessionId) { 
             localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`); 
@@ -525,8 +523,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem(`hidden_tokens_${activeSessionId}`);
             localStorage.removeItem(`custom_tokens_${activeSessionId}`);
         } 
-        setWallets(null); 
-        setBalances({}); 
+        setWallets(null); setBalances({}); 
     },
     fetchError,
     getAddressForChain: (chain, w) => getAddressForChainUtil(chain, w),
@@ -544,6 +541,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 export function useWallet() {
   const context = useContext(WalletContext);
-  if (context === undefined) throw new Error('useWallet must be used within a WalletProvider');
+  if (context === undefined) throw new Error('useWallet must be used within WalletProvider');
   return context;
 }

@@ -63,6 +63,13 @@ export interface LocalSession {
     lastActive: number;
 }
 
+export interface UserIdentity {
+    user_id: string;
+    account_number: string;
+    blockchain_name: string;
+    wallet_address: string;
+}
+
 export interface RecentRecipient {
     id: string;
     sender_id: string;
