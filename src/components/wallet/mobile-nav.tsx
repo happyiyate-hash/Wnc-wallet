@@ -1,5 +1,7 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -16,7 +18,6 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-// Shared Gradient Definition
 const SharedGradient = () => (
   <svg width="0" height="0" className="absolute">
     <defs>
@@ -30,8 +31,14 @@ const SharedGradient = () => (
 
 export default function MobileNav() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
 
-  // Hide the navigation on action-oriented pages to allow for full-screen focus
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   const isActionPage = pathname === '/swap' || pathname === '/send' || pathname === '/receive' || pathname === '/buy';
   if (isActionPage) return null;
 
@@ -48,9 +55,9 @@ export default function MobileNav() {
     const Icon = item.icon;
     
     return (
-        <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0">
-            <Icon className={cn('h-6 w-6 transition-all', isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground')} />
-            <span className={cn("text-[10px] font-medium transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}>
+        <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0.5">
+            <Icon className={cn('h-6 w-6 transition-all', isActive ? 'opacity-100 scale-110' : 'opacity-40 group-hover:opacity-100')} />
+            <span className={cn("text-[9px] font-black uppercase tracking-tighter transition-colors", isActive ? "text-primary" : "text-muted-foreground")}>
               {item.label}
             </span>
         </Link>
@@ -60,13 +67,9 @@ export default function MobileNav() {
   return (
     <>
       <SharedGradient />
-       <footer
-        className={cn(
-          'sticky z-10 mx-2 transition-transform duration-300 ease-in-out bottom-4 md:hidden'
-        )}
-      >
-        <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-2xl">
-            <nav className="flex h-[52px] w-full items-center justify-around rounded-2xl bg-black px-1">
+       <footer className="fixed z-50 left-4 right-4 transition-all duration-500 ease-in-out bottom-6 md:hidden">
+        <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem]">
+            <nav className="flex h-[60px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-xl px-1 shadow-2xl">
                 {navItems.map((item) => <NavLink key={item.label} item={item} />)}
             </nav>
         </div>

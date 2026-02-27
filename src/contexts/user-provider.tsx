@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -10,7 +11,6 @@ interface UserContextType {
   profile: UserProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  isSupabaseConfigured: boolean;
   refreshProfile: () => Promise<void>;
 }
 
@@ -21,30 +21,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isSupabaseConfigured = !!supabase;
-
   const fetchProfile = async (userId: string) => {
     if (!supabase) return;
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('wevina_profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .single();
 
       if (!error && data) {
         setProfile(data as UserProfile);
       } else {
-        // If profile doesn't exist, create a minimal one
+        // Create initial record if missing
         const { data: newProfile } = await supabase
-          .from('profiles')
-          .insert({ id: userId, username: user?.email?.split('@')[0] || 'User' })
+          .from('wevina_profiles')
+          .insert({ 
+            user_id: userId, 
+            display_name: user?.email?.split('@')[0] || 'Institutional User' 
+          })
           .select()
           .single();
         if (newProfile) setProfile(newProfile as UserProfile);
       }
     } catch (e) {
-      console.error("Profile fetch error", e);
+      console.warn("Profile fetch error:", e);
     }
   };
 
@@ -57,10 +58,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        setUser(session?.user ?? null);
-        if (session?.user) await fetchProfile(session.user.id);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) await fetchProfile(currentUser.id);
       } catch (e) {
-        console.error("Supabase session check failed", e);
+        console.error("Session check failed:", e);
       } finally {
         setLoading(false);
       }
@@ -69,9 +71,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user.id);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        await fetchProfile(currentUser.id);
       } else {
         setProfile(null);
       }
@@ -84,9 +87,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+    if (supabase) await supabase.auth.signOut();
   };
 
   const refreshProfile = async () => {
@@ -94,7 +95,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, profile, loading, signOut, isSupabaseConfigured, refreshProfile }}>
+    <UserContext.Provider value={{ user, profile, loading, signOut, refreshProfile }}>
       {children}
     </UserContext.Provider>
   );
