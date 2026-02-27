@@ -121,17 +121,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!user || !wallets || !profile?.account_number || !supabase) return;
 
       try {
-        // 1. Fetch current cloud identities
         const { data: cloudIdentities } = await supabase
           .from('user_identity')
           .select('blockchain_name, wallet_address')
           .eq('user_id', user.id);
 
-        // 2. Iterate through local derived wallets
         for (const wallet of wallets) {
           const cloudMatch = cloudIdentities?.find(c => c.blockchain_name === wallet.type);
 
-          // 3. Upsert if missing or mismatch (Account ID is always synced from profile)
           if (!cloudMatch || cloudMatch.wallet_address !== wallet.address) {
             await supabase.from('user_identity').upsert({
               user_id: user.id,

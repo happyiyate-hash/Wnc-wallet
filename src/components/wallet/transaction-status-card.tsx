@@ -122,8 +122,8 @@ export default function TransactionStatusCard({
                       <TokenLogoDynamic 
                         logoUrl={token?.iconUrl} 
                         size={28} 
-                        chainId={token?.chainId || 1} 
-                        symbol={token?.symbol || ''} 
+                        chainId={token?.chainId} 
+                        symbol={token?.symbol} 
                         alt="target"
                       />
                     ) : (

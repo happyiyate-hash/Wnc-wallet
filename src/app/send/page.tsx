@@ -14,7 +14,6 @@ import {
   ChevronRight, 
   AlertCircle, 
   Loader2, 
-  CheckCircle2, 
   Fuel,
   ShieldCheck,
   Timer,
@@ -80,7 +79,6 @@ function SendClient() {
   const [txHash, setTxHash] = useState('');
   
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
-  const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
   const gasData = useGasPrice(selectedToken?.chainId);
@@ -130,7 +128,7 @@ function SendClient() {
         return;
       }
 
-      setIsResolving(true);
+      if (isMounted) setIsResolving(true);
       const searchHandle = input.startsWith('@') ? input.substring(1).toLowerCase().trim() : input.toLowerCase().trim();
 
       try {
@@ -219,7 +217,8 @@ function SendClient() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
   const isValidAddress = resolvedAddress.length > 0 && !isNetworkMismatch;
-  const canSend = isValidAddress && parseFloat(amount) > 0 && parseFloat(amount) <= balance && !isSubmitting;
+  // REMOVED balance check for disabling button per user request
+  const canSend = isValidAddress && parseFloat(amount) > 0 && !isSubmitting;
 
   const gasFiatValue = useMemo(() => {
     if (!selectedToken) return 0;
@@ -245,8 +244,7 @@ function SendClient() {
         <div className="w-10" />
       </header>
 
-      <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10">
-        <ScrollArea className="h-full pr-0 pb-40">
+      <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
           <div className="space-y-10 pt-2 px-1">
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
@@ -256,7 +254,7 @@ function SendClient() {
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
                         </Avatar>
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                         </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
@@ -279,7 +277,7 @@ function SendClient() {
                                     <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                 </div>
                             </div>
                         ) : (
@@ -289,7 +287,7 @@ function SendClient() {
                             )}>
                                 {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                                  isNetworkMismatch ? (
-                                    <div className="flex flex-col items-center justify-center p-2 text-red-500">
+                                    <div className="flex flex-col items-center justify-center p-2">
                                         <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="mismatch" size={44} />
                                     </div>
                                  ) : addrType !== 'invalid' ? (
@@ -411,7 +409,6 @@ function SendClient() {
                 </div>
             </div>
           </div>
-        </ScrollArea>
 
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
           <div className="max-w-md mx-auto">
@@ -428,7 +425,7 @@ function SendClient() {
               {isSubmitting ? (
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-6 h-6 animate-spin" />
-                  <span className="animate-pulse">Broadcasting Node...</span>
+                  <span className="animate-pulse">Broadcasting...</span>
                 </div>
               ) : "Sign & Authorize"}
             </Button>
