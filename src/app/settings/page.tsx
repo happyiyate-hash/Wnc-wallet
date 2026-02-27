@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -87,7 +88,6 @@ export default function SettingsPage() {
         const popular = ['USD', 'NGN', 'EUR', 'GBP', 'KES', 'GHS', 'ZAR'];
         const filtered = codes.filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
         
-        // Push popular to top
         const results = [...new Set([...popular.filter(p => filtered.includes(p)), ...filtered])];
         return results;
     }, [rates, currencySearch]);
@@ -144,7 +144,6 @@ export default function SettingsPage() {
 
     return (
         <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
-            {/* BRAND WATERMARK */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
                 <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
             </div>
@@ -166,7 +165,6 @@ export default function SettingsPage() {
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
-                    {/* ACCOUNT & IDENTITY */}
                     <section className="space-y-3">
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Account & Identity</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
@@ -204,7 +202,6 @@ export default function SettingsPage() {
                         </div>
                     </section>
 
-                    {/* SECURITY & PRIVACY */}
                     <section className="space-y-3">
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Security & Privacy</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
@@ -273,7 +270,6 @@ export default function SettingsPage() {
                         </div>
                     </section>
 
-                    {/* DANGER ZONE */}
                     <section className="space-y-3">
                         <h2 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.2em] px-2">Session Control</h2>
                         <div className="bg-red-500/[0.02] border border-red-500/10 rounded-[2.5rem] p-2 space-y-1">
@@ -339,7 +335,6 @@ export default function SettingsPage() {
                 </div>
             </main>
 
-            {/* CURRENCY SELECTION SHEET */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
                 <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden flex flex-col">
                     <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />

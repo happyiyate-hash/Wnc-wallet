@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -30,14 +31,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (!error && data) {
-        // Map display_name to name and account_number to username for legacy UI compatibility
+        // Map display_name to name and account_number to username for UI compatibility
         setProfile({
           ...data,
+          id: data.user_id,
           name: data.display_name,
           username: data.account_number
         } as UserProfile);
       } else {
-        // Create initial record if missing
+        // Create initial record if missing to ensure we have an anchor
         const { data: newProfile } = await supabase
           .from('wevina_profiles')
           .upsert({ 
@@ -50,6 +52,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (newProfile) {
           setProfile({
             ...newProfile,
+            id: newProfile.user_id,
             name: newProfile.display_name,
             username: newProfile.account_number
           } as UserProfile);

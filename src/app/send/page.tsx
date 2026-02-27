@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -37,23 +38,28 @@ import { supabase } from '@/lib/supabase/client';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useUser } from '@/contexts/user-provider';
+import TransactionStatusCard from '@/components/wallet/transaction-status-card';
+import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 
 function SendClient() {
   const { viewingNetwork, wallets, balances, infuraApiKey, allChains, allAssets, getAvailableAssetsForChain, prices, allChainsMap } = useWallet();
   const { formatFiat } = useCurrency();
-  const { user } = useUser();
+  const { user, profile } = useUser();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [step, setStep] = useState<'details' | 'success'>('details');
+  // TX Orchestration
+  const [txStatus, setTxStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [txError, setTxError] = useState('');
+  const [txHash, setTxHash] = useState('');
+
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
-  
-  // RECENT RECIPIENTS STATE (Using Live View)
   const [recentRecipients, setRecentRecipients] = useState<RecentRecipient[]>([]);
   const [isRecentLoading, setIsRecentLoading] = useState(false);
 
-  // IDENTITY RESOLUTION STATES
+  // Identity Resolution
   const [recipientInput, setRecipientInput] = useState('');
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
@@ -62,18 +68,14 @@ function SendClient() {
 
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [txHash, setTxHash] = useState('');
   
   const initializedRef = useRef(false);
-
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
-  // Live Gas Data Integration
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // 1. FETCH RECENT RECIPIENTS FROM LIVE VIEW
   const fetchRecent = useCallback(async () => {
     if (!user || !supabase) return;
     setIsRecentLoading(true);
@@ -98,24 +100,18 @@ function SendClient() {
     fetchRecent();
   }, [fetchRecent]);
 
-  // SECURE INITIALIZATION
   useEffect(() => {
     if (allAssets.length === 0 || initializedRef.current) return;
-
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    
     let targetToken: AssetRow | null = null;
-
     if (symbol && !isNaN(chainIdParam)) {
         const available = getAvailableAssetsForChain(chainIdParam);
         targetToken = available.find(a => a.symbol === symbol) || null;
     }
-
     if (!targetToken) {
         targetToken = allAssets.find(a => a.chainId === viewingNetwork.chainId) || allAssets[0];
     }
-
     if (targetToken) {
         setSelectedToken({ ...targetToken });
         initializedRef.current = true;
@@ -127,7 +123,6 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
-  // RECIPIENT IDENTITY RESOLUTION ENGINE
   useEffect(() => {
     async function resolve() {
       if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
@@ -135,31 +130,21 @@ function SendClient() {
         setRecipientProfile(null);
         return;
       }
-
-      // 1. Detect Raw Addresses
-      const isRaw = debouncedRecipient.startsWith('0x') || 
-                    debouncedRecipient.startsWith('r') || 
-                    debouncedRecipient.length > 30;
-
+      const isRaw = debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 30;
       if (isRaw) {
         setResolvedAddress(debouncedRecipient);
         setRecipientProfile(null);
         return;
       }
-
-      // 2. Resolve Human-Readable Handle (@handle or handle)
       setIsResolving(true);
-      
       const searchHandle = debouncedRecipient.startsWith('@') 
         ? debouncedRecipient.substring(1).toLowerCase().trim() 
         : debouncedRecipient.toLowerCase().trim();
-
       try {
         const { data } = await supabase!.rpc('fetch_recipient_details', {
           search_account_number: searchHandle,
           selected_chain: activeNetwork.type || 'evm'
         });
-
         if (data && data[0]?.target_address) {
           setResolvedAddress(data[0].target_address);
           setRecipientProfile({
@@ -181,9 +166,23 @@ function SendClient() {
     resolve();
   }, [debouncedRecipient, activeNetwork.type]);
 
+  const saveToHistory = async (recipientData: { accountNumber: string, address: string, chain: string }) => {
+    if (!user || !supabase) return;
+    try {
+      await supabase.rpc('update_transaction_history', {
+        p_recipient_account: recipientData.accountNumber,
+        p_blockchain: recipientData.chain,
+        p_address: recipientData.address
+      });
+      fetchRecent();
+    } catch (e) {}
+  };
+
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
     setIsSubmitting(true);
+    setTxStatus('pending');
+    let polkadotApi: ApiPromise | null = null;
     try {
       if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
@@ -194,22 +193,25 @@ function SendClient() {
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         if (result.result.meta && typeof result.result.meta !== 'string' && result.result.meta.TransactionResult === "tesSUCCESS") {
           setTxHash(result.result.hash);
-          setStep('success');
-        }
+          setTxStatus('success');
+          saveToHistory({ accountNumber: recipientProfile?.name || recipientInput, address: resolvedAddress, chain: 'xrp' });
+          setTimeout(() => setIsReceiptOpen(true), 1500);
+        } else throw new Error("Transaction Failed");
         await client.disconnect();
       } else if (activeNetwork.type === 'polkadot') {
         await cryptoWaitReady();
         const provider = new WsProvider(activeNetwork.rpcUrl, 10000);
-        const api = await ApiPromise.create({ provider });
-        await api.isReadyOrError;
+        polkadotApi = await ApiPromise.create({ provider });
+        await polkadotApi.isReadyOrError;
         const keyring = new Keyring({ type: 'sr25519' });
         const userMnemonic = localStorage.getItem(`wallet_mnemonic_${user?.id}`);
         if (!userMnemonic) throw new Error("Keys missing.");
         const wallet = keyring.addFromMnemonic(userMnemonic);
-        const hash = await api.tx.balances.transferKeepAlive(resolvedAddress, BigInt(Math.floor(parseFloat(amount) * 10_000_000_000))).signAndSend(wallet);
+        const hash = await polkadotApi.tx.balances.transferKeepAlive(resolvedAddress, BigInt(Math.floor(parseFloat(amount) * 10_000_000_000))).signAndSend(wallet);
         setTxHash(hash.toHex());
-        setStep('success');
-        await api.disconnect();
+        setTxStatus('success');
+        saveToHistory({ accountNumber: recipientProfile?.name || recipientInput, address: resolvedAddress, chain: 'polkadot' });
+        setTimeout(() => setIsReceiptOpen(true), 1500);
       } else {
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(wallets.find(w => w.type === 'evm')!.privateKey!, provider);
@@ -217,13 +219,24 @@ function SendClient() {
           ? await wallet.sendTransaction({ to: resolvedAddress, value: ethers.parseUnits(amount, selectedToken.decimals || 18) }) 
           : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(resolvedAddress, ethers.parseUnits(amount, selectedToken.decimals || 18));
         setTxHash(tx.hash);
-        setStep('success');
+        setTxStatus('success');
+        saveToHistory({ accountNumber: recipientProfile?.name || recipientInput, address: resolvedAddress, chain: 'evm' });
+        setTimeout(() => setIsReceiptOpen(true), 1500);
       }
     } catch (e: any) {
+      setTxStatus('error');
+      setTxError(e.message);
       toast({ title: "Send Failed", description: e.message, variant: "destructive" });
+      setTimeout(() => setIsReceiptOpen(true), 1500);
     } finally {
+      if (polkadotApi) await polkadotApi.disconnect();
       setIsSubmitting(false);
     }
+  };
+
+  const handleRecentClick = (recent: RecentRecipient) => {
+    setRecipientInput(`@${recent.recipient_account_number}`);
+    toast({ title: "Recipient Auto-filled" });
   };
 
   const handleTokenSelect = (token: AssetRow) => {
@@ -236,26 +249,37 @@ function SendClient() {
   const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
   const canSend = resolvedAddress.length > 0 && parseFloat(amount) > 0 && parseFloat(amount) <= balance && !isSubmitting;
 
-  if (step === 'success') {
-    return (
-        <div className="p-10 text-center space-y-8 flex flex-col items-center justify-center h-screen bg-[#050505]">
-            <div className="w-24 h-24 rounded-[2.5rem] bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-4 relative">
-                <div className="absolute inset-0 bg-green-500/20 blur-2xl rounded-full animate-pulse" />
-                <CheckCircle2 className="w-12 h-12 text-green-500 relative z-10" />
-            </div>
-            <div className="space-y-3">
-                <h2 className="text-3xl font-black tracking-tight text-white">Transaction Sent!</h2>
-                <p className="text-[10px] font-mono text-primary break-all">{txHash}</p>
-            </div>
-            <Button className="w-full h-16 rounded-[2rem] font-black text-lg mt-8" onClick={() => router.push('/')}>Done</Button>
-        </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
+          <div className="text-[40rem] font-black italic transform -rotate-12 text-white">W</div>
+      </div>
+
+      <TransactionStatusCard 
+        isVisible={txStatus !== 'idle'} 
+        status={txStatus === 'idle' ? 'pending' : txStatus} 
+        senderAvatar={profile?.photo_url}
+        senderName={profile?.username || 'You'}
+        recipientAvatar={recipientProfile?.avatar}
+        recipientName={recipientProfile?.name || resolvedAddress.slice(0, 6)}
+        token={selectedToken ? { symbol: selectedToken.symbol, iconUrl: selectedToken.iconUrl, chainId: selectedToken.chainId } : undefined}
+        isRawAddress={!recipientProfile}
+      />
+
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
+        <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
+                <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+                <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Send Assets</h1>
+                <div className="flex items-center gap-1.5 mt-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[8px] text-muted-foreground uppercase font-black tracking-tighter">System Online</span>
+                </div>
+            </div>
+        </div>
+        
         <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-full">
             <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={18} chainId={activeNetwork.chainId} name={activeNetwork.name} symbol={activeNetwork.symbol}/>
             <span className="text-[9px] font-black text-primary uppercase tracking-widest">{activeNetwork.name}</span>
@@ -266,25 +290,33 @@ function SendClient() {
         <ScrollArea className="h-full">
           <div className="p-6 space-y-8 pb-48 max-w-lg mx-auto">
             {recentRecipients.length > 0 && (
-                <div className="flex gap-4 overflow-x-auto pb-2 thin-scrollbar">
-                    {recentRecipients.map((r) => (
-                        <button key={r.id} onClick={() => setRecipientInput(`@${r.recipient_account_number}`)} className="flex flex-col items-center gap-2 min-w-[64px]">
-                            <Avatar className="w-12 h-12 border-2 border-white/5"><AvatarImage src={r.current_pfp} /><AvatarFallback>{r.recipient_account_number[0].toUpperCase()}</AvatarFallback></Avatar>
-                            <span className="text-[8px] font-black text-white/60 truncate w-16">@{r.recipient_account_number}</span>
-                        </button>
-                    ))}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-2">
+                        <History className="w-3 h-3 text-primary" />
+                        <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Recent</span>
+                    </div>
+                    <div className="flex gap-4 overflow-x-auto pb-2 thin-scrollbar">
+                        {recentRecipients.map((r) => (
+                            <button key={r.id} onClick={() => handleRecentClick(r)} className="flex flex-col items-center gap-2 min-w-[64px]">
+                                <Avatar className="w-12 h-12 border-2 border-white/5 bg-white/5"><AvatarImage src={r.current_pfp} /><AvatarFallback>{r.recipient_account_number[0].toUpperCase()}</AvatarFallback></Avatar>
+                                <span className="text-[8px] font-black text-white/60 truncate w-16">@{r.recipient_account_number}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
 
             <div className="space-y-3">
+                <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] pl-2">Asset</Label>
                 <button onClick={() => setIsNetworkSheetOpen(true)} className="w-full flex items-center justify-between p-5 rounded-[2.5rem] bg-white/[0.03] border border-white/10 group">
                     <div className="flex items-center gap-4"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.name || ''} size={44} chainId={selectedToken?.chainId} name={selectedToken?.name} symbol={selectedToken?.symbol}/>
-                    <div className="text-left"><h2 className="text-lg font-black text-white">{selectedToken?.symbol || 'Select Asset'}</h2><p className="text-[10px] text-muted-foreground uppercase">{selectedToken?.name}</p></div></div>
+                    <div className="text-left"><h2 className="text-lg font-black text-white uppercase">{selectedToken?.symbol || 'Select Asset'}</h2><p className="text-[10px] text-muted-foreground uppercase">{selectedToken?.name}</p></div></div>
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </button>
             </div>
             
             <div className="space-y-3">
+                <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] pl-2">Recipient</Label>
                 <div className="bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 space-y-2">
                   <div className="flex items-center gap-2 px-2">
                     <Search className="w-4 h-4 text-muted-foreground/40" />
@@ -297,6 +329,7 @@ function SendClient() {
             </div>
             
             <div className="space-y-3">
+                <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] pl-2">Amount</Label>
                 <div className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-6 transition-all relative group">
                   <div className="flex items-baseline justify-between gap-4">
                     <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 text-white" />
@@ -316,7 +349,7 @@ function SendClient() {
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent z-40">
           <div className="max-w-md mx-auto">
             {amount && parseFloat(amount) > balance && <div className="flex items-center gap-2 p-3 rounded-2xl bg-destructive/10 text-destructive text-[10px] mb-4 font-black uppercase"><AlertCircle className="w-3.5 h-3.5" /> Insufficient balance</div>}
-            <Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black", canSend ? "bg-primary text-white" : "bg-zinc-900 text-zinc-600")} disabled={!canSend} onClick={handleSendRequest}>{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}</Button>
+            <Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black", canSend ? "bg-primary text-white shadow-primary/20 shadow-2xl" : "bg-zinc-900 text-zinc-600")} disabled={!canSend} onClick={handleSendRequest}>{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}</Button>
           </div>
         </div>
       </main>
@@ -328,6 +361,20 @@ function SendClient() {
       <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
         <SheetContent side="right" className="bg-black/95 w-full sm:max-w-[450px] p-0 flex flex-col h-full shadow-2xl"><ScrollArea className="flex-1 p-4"><div className="space-y-2 pb-24">{selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => (<button key={token.symbol} onClick={() => handleTokenSelect(token)} className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/5"><div className="flex items-center gap-4"><TokenLogoDynamic logoUrl={token.iconUrl} alt={token.symbol} size={44} chainId={token.chainId} symbol={token.symbol} name={token.name} /><div><p className="font-black text-base text-white">{token.symbol}</p><p className="text-[10px] text-muted-foreground">{token.name}</p></div></div></button>))}</div></ScrollArea></SheetContent>
       </Sheet>
+
+      <TransactionReceiptSheet 
+        isOpen={isReceiptOpen}
+        onOpenChange={(open) => { setIsReceiptOpen(open); if(!open) setTxStatus('idle'); }}
+        status={txStatus === 'error' ? 'error' : 'success'}
+        amount={amount}
+        token={selectedToken}
+        recipientName={recipientProfile?.name || resolvedAddress.slice(0, 8)}
+        recipientAddress={resolvedAddress}
+        txHash={txHash}
+        errorReason={txError}
+        fee={`${gasData.nativeFee} ${activeNetwork.symbol}`}
+        networkName={activeNetwork.name}
+      />
     </div>
   );
 }

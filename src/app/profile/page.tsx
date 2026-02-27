@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -62,7 +63,7 @@ export default function ProfilePage() {
         if (!claimHandle || !wallets || !supabase || !user) return;
         setIsClaiming(true);
         try {
-            // Stage 1: Update wevina_profiles with the handle
+            // Stage 1: Update wevina_profiles with the handle (Account ID)
             const { error: profileError } = await supabase
                 .from('wevina_profiles')
                 .upsert({
@@ -177,7 +178,6 @@ export default function ProfilePage() {
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
-                    {/* IDENTITY HEADER */}
                     <section className="flex flex-col items-center text-center space-y-4">
                         <div className="relative group">
                             <div className="absolute -inset-4 bg-primary/20 rounded-[3rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -193,7 +193,6 @@ export default function ProfilePage() {
                         </div>
                         
                         <div className="space-y-2 flex flex-col items-center w-full">
-                            {/* ACCOUNT NUMBER (HANDLE) - UNDER PFP */}
                             {isIdentityLoading ? (
                                 <Skeleton className="h-6 w-24 bg-white/5 rounded-full" />
                             ) : identity ? (
@@ -224,7 +223,6 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
-                    {/* ECOSYSTEM STATS */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
@@ -240,7 +238,6 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    {/* VAULT HUB */}
                     <section className="space-y-3">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Secure Vault Hub</p>
                         <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative group">
@@ -275,7 +272,6 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
-                    {/* ACTION LIST */}
                     <section className="space-y-3">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Institutional Actions</p>
                         <div className="space-y-2">
@@ -304,7 +300,6 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
-                    {/* SYNC STATUS FOOTER */}
                     <div className="pt-4 flex flex-col items-center gap-3">
                         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
                             <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} />
@@ -319,7 +314,6 @@ export default function ProfilePage() {
                 </div>
             </main>
 
-            {/* IDENTITY CLAIM DIALOG */}
             <Dialog open={isClaimModalOpen} onOpenChange={setIsClaimModalOpen}>
                 <DialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px] shadow-2xl">
                     <DialogHeader className="space-y-4">
