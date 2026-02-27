@@ -5,8 +5,11 @@ import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
 import { CurrencyProvider } from '@/contexts/currency-provider';
 import MobileNav from '@/components/wallet/mobile-nav';
+import DesktopSidebar from '@/components/wallet/desktop-sidebar';
 import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { NavGradient } from '@/components/shared/nav-gradient';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -46,9 +49,19 @@ export default function RootLayout({
           <UserProvider>
             <CurrencyProvider>
               <WalletProvider>
-                <PWARegister />
-                {children}
-                <MobileNav />
+                <SidebarProvider defaultOpen={true}>
+                  <div className="flex min-h-screen w-full bg-background overflow-hidden">
+                    <NavGradient />
+                    <DesktopSidebar />
+                    <div className="flex flex-col flex-1 w-full min-w-0 h-screen overflow-hidden">
+                      <PWARegister />
+                      <div className="flex-1 overflow-y-auto thin-scrollbar relative">
+                        {children}
+                      </div>
+                      <MobileNav />
+                    </div>
+                  </div>
+                </SidebarProvider>
               </WalletProvider>
             </CurrencyProvider>
           </UserProvider>

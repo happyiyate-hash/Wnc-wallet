@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -17,17 +16,6 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
 }
-
-const SharedGradient = () => (
-  <svg width="0" height="0" className="absolute">
-    <defs>
-      <linearGradient id="nav-icon-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#818cf8" />
-        <stop offset="100%" stopColor="#c084fc" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
 
 export default function MobileNav() {
   const pathname = usePathname();
@@ -65,15 +53,12 @@ export default function MobileNav() {
   };
 
   return (
-    <>
-      <SharedGradient />
-       <footer className="fixed z-50 left-4 right-4 transition-all duration-500 ease-in-out bottom-6 md:hidden">
-        <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem]">
-            <nav className="flex h-[60px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-xl px-1 shadow-2xl">
-                {navItems.map((item) => <NavLink key={item.label} item={item} />)}
-            </nav>
-        </div>
-      </footer>
-    </>
+    <footer className="fixed z-50 left-4 right-4 transition-all duration-500 ease-in-out bottom-6 md:hidden">
+      <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem]">
+          <nav className="flex h-[60px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-xl px-1 shadow-2xl">
+              {navItems.map((item) => <NavLink key={item.label} item={item} />)}
+          </nav>
+      </div>
+    </footer>
   );
 }
