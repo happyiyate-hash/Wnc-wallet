@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCurrency } from '@/contexts/currency-provider';
@@ -32,7 +32,7 @@ import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import type { AssetRow, ChainConfig, RecentRecipient } from '@/lib/types';
+import type { AssetRow, ChainConfig } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
@@ -45,9 +45,10 @@ import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-she
 
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
-  if (input.startsWith('0x') && input.length === 42) return 'evm';
-  if (input.startsWith('r') && input.length >= 25 && input.length <= 35) return 'xrp';
-  if (input.length >= 47 && !input.includes('0x')) return 'polkadot';
+  const clean = input.trim();
+  if (clean.startsWith('0x') && clean.length === 42) return 'evm';
+  if (clean.startsWith('r') && clean.length >= 25 && clean.length <= 35) return 'xrp';
+  if (clean.length >= 47 && !clean.includes('0x')) return 'polkadot';
   return 'invalid';
 };
 
@@ -59,9 +60,9 @@ const getDetectedNetworkMeta = (type: string) => {
 };
 
 function SendClient() {
-  const { viewingNetwork, wallets, balances, infuraApiKey, allChains, allAssets, getAvailableAssetsForChain, prices, allChainsMap } = useWallet();
+  const { viewingNetwork, wallets, infuraApiKey, allChains, allAssets, prices, allChainsMap, getAvailableAssetsForChain, balances } = useWallet();
   const { formatFiat } = useCurrency();
-  const { user, profile } = useUser();
+  const { profile } = useUser();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -119,24 +120,27 @@ function SendClient() {
     async function resolve() {
       const input = debouncedRecipient.trim();
       
+      // Reset state if input is cleared or too short
       if (!input || input.length < 3) {
-        if (isMounted) { 
-          setResolvedAddress(''); 
-          setRecipientProfile(null); 
-          setIsResolving(false); // CRITICAL FIX: Always clear loader
+        if (isMounted) {
+          setResolvedAddress('');
+          setRecipientProfile(null);
+          setIsResolving(false);
         }
         return;
       }
 
+      // Handle direct address entry (skip DB lookup)
       if (addrType !== 'invalid') {
-        if (isMounted) { 
-          setResolvedAddress(input); 
-          setRecipientProfile(null); 
-          setIsResolving(false); // CRITICAL FIX: Always clear loader
+        if (isMounted) {
+          setResolvedAddress(input);
+          setRecipientProfile(null);
+          setIsResolving(false);
         }
         return;
       }
 
+      // Handle Account ID Lookup
       setIsResolving(true);
       const searchHandle = input.startsWith('@') ? input.substring(1).toLowerCase().trim() : input.toLowerCase().trim();
 
@@ -161,14 +165,15 @@ function SendClient() {
           setRecipientProfile(null);
         }
       } catch (e) {
-        if (isMounted) { 
-          setResolvedAddress(''); 
-          setRecipientProfile(null); 
+        if (isMounted) {
+          setResolvedAddress('');
+          setRecipientProfile(null);
         }
-      } finally { 
-        if (isMounted) setIsResolving(false); 
+      } finally {
+        if (isMounted) setIsResolving(false);
       }
     }
+    
     resolve();
     return () => { isMounted = false; };
   }, [debouncedRecipient, addrType, activeNetwork.type]);
@@ -181,32 +186,26 @@ function SendClient() {
     setTxStatus('pending');
     setIsSubmitting(true);
 
-    let polkadotApi: ApiPromise | null = null;
-
     try {
+      // Simulate/Execute multi-chain broadcast
       if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
         await client.connect();
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amount), Destination: resolvedAddress });
+        const prepared = await client.autofill({ 
+            TransactionType: "Payment", 
+            Account: wallet.address, 
+            Amount: xrpl.xrpToDrops(amount), 
+            Destination: resolvedAddress 
+        });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
           setTxHash(result.result.hash);
         } else { throw new Error("Transaction rejected by XRPL"); }
         await client.disconnect();
-      } else if (activeNetwork.type === 'polkadot') {
-        await cryptoWaitReady();
-        const provider = new WsProvider(activeNetwork.rpcUrl, 10000);
-        polkadotApi = await ApiPromise.create({ provider });
-        await polkadotApi.isReadyOrError;
-        const keyring = new Keyring({ type: 'sr25519' });
-        const userMnemonic = localStorage.getItem(`wallet_mnemonic_${user?.id}`);
-        const wallet = keyring.addFromMnemonic(userMnemonic!);
-        const planckAmount = BigInt(Math.floor(parseFloat(amount) * 10_000_000_000));
-        const hash = await polkadotApi.tx.balances.transferKeepAlive(resolvedAddress, planckAmount).signAndSend(wallet);
-        setTxHash(hash.toHex());
       } else {
+        // EVM Generic Logic
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
@@ -222,9 +221,7 @@ function SendClient() {
       setTxStatus('error');
       setReceiptError(e.message);
     } finally {
-      if (polkadotApi) await polkadotApi.disconnect();
       setIsSubmitting(false);
-      
       setTimeout(() => {
         setIsStatusVisible(false);
         setIsReceiptOpen(true);
@@ -245,11 +242,7 @@ function SendClient() {
   }, [gasData.nativeFee, selectedToken, prices, allChainsMap]);
 
   return (
-    <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none z-0">
-          <div className="text-[40rem] font-black italic transform -rotate-12 text-white">W</div>
-      </div>
-
+    <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative pb-40">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
@@ -257,9 +250,9 @@ function SendClient() {
         
         <button 
             onClick={() => setIsTokenSideSheetOpen(true)}
-            className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all active:scale-95"
+            className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
         >
-            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} name={selectedToken?.name} symbol={selectedToken?.symbol} />
+            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
             <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span>
             <ChevronRight className="w-3 h-3 text-primary rotate-90" />
         </button>
@@ -267,7 +260,7 @@ function SendClient() {
         <div className="w-10" />
       </header>
 
-      <main className="flex-1 p-6 space-y-10 max-w-lg mx-auto w-full relative z-10 pb-40">
+      <main className="flex-1 p-6 space-y-10 max-w-lg mx-auto w-full relative z-10">
         <section className="flex items-center justify-between px-2">
             <div className="flex flex-col items-center gap-3">
                 <div className="relative">
@@ -279,12 +272,10 @@ function SendClient() {
                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                     </div>
                 </div>
-                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">
-                    FROM {profile?.name?.split(' ')[0] || 'YOU'}
-                </span>
+                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
             </div>
 
-            <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
+            <div className="flex-1 px-4 relative">
                 <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full">
                         <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
@@ -307,23 +298,18 @@ function SendClient() {
                     ) : (
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 border-dashed flex items-center justify-center transition-all duration-500 relative",
-                            addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10 scale-105" : "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.1)]"
+                            addrType === 'invalid' ? "border-white/10" : isNetworkMismatch ? "border-red-500 bg-red-500/10" : "border-primary/50 bg-primary/5"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              isNetworkMismatch ? (
-                                <div className="flex flex-col items-center justify-center p-2">
-                                    <TokenLogoDynamic 
-                                        symbol={detectedMeta?.symbol} 
-                                        name={detectedMeta?.name} 
-                                        alt={detectedMeta?.name || 'mismatch'}
-                                        size={44} 
-                                    />
+                                <div className="flex flex-col items-center justify-center p-2 text-red-500">
+                                    <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt="mismatch" size={44} />
                                 </div>
                              ) : addrType !== 'invalid' ? (
                                 <div className="relative">
                                     <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10">
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} />
                                     </div>
                                 </div>
                              ) : (
@@ -334,16 +320,16 @@ function SendClient() {
                 </div>
                 <span className={cn(
                     "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
-                    isNetworkMismatch ? "text-red-500 animate-pulse" : "text-white/40"
+                    isNetworkMismatch ? "text-red-500" : "text-white/40"
                 )}>
-                    {isNetworkMismatch && <XCircle className="w-3.5 h-3.5" />}
+                    {isNetworkMismatch && <XCircle className="w-3 h-3" />}
                     {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? 'ROUTE BLOCKED' : addrType !== 'invalid' ? 'NETWORK NODE' : 'TO RECIPIENT'}
                 </span>
             </div>
         </section>
 
         {resolvedAddress && !isNetworkMismatch && (
-            <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500 py-4">
+            <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500">
                 <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Target Vault Address</span>
                 <h2 className="text-3xl font-mono font-black text-white tracking-tighter">
                     {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
@@ -357,7 +343,7 @@ function SendClient() {
                 <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
             </div>
             <div className={cn(
-                "bg-white/[0.03] border border-white/10 focus-within:border-primary/50 rounded-[2rem] p-2 transition-all",
+                "bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all",
                 isNetworkMismatch && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10"
             )}>
                 <div className="flex items-center gap-2 px-2">
@@ -375,9 +361,9 @@ function SendClient() {
         <section className="space-y-3">
             <div className="flex justify-between items-center px-2">
                 <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Transfer Amount</Label>
-                <span className="text-[9px] text-white/20 font-bold uppercase">Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span>
+                <span className="text-[9px] text-white/20 font-bold uppercase">Bal: {balance.toFixed(4)}</span>
             </div>
-            <div className="bg-white/[0.03] border border-white/10 focus-within:border-primary/50 rounded-[2.5rem] p-6 transition-all relative">
+            <div className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-6 transition-all relative">
                 <div className="flex items-baseline justify-between gap-4">
                     <Input 
                         type="number" 
@@ -388,7 +374,7 @@ function SendClient() {
                     />
                     <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                 </div>
-                <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
+                <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic">
                     ≈ {formatFiat(amountUsdValue)}
                 </div>
             </div>
@@ -443,7 +429,6 @@ function SendClient() {
                 </div>
                 <div className="text-right">
                     <p className="font-mono text-sm font-black text-white">{parseFloat(token.balance).toFixed(4)}</p>
-                    <p className="text-[10px] text-primary uppercase font-black">Available</p>
                 </div>
               </button>
             ))}

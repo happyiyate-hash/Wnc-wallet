@@ -60,20 +60,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
       let resolvedProfile = data as UserProfile;
 
       if (!error && resolvedProfile) {
+        // Safe check for account_number column existence during profile update
         if (!resolvedProfile.account_number) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const generatedId = `835${randomSuffix}`;
             
-            const { data: updated, error: uError } = await supabase
-                .from('profiles')
-                .update({ account_number: generatedId })
-                .eq('id', userId)
-                .select()
-                .maybeSingle();
-                
-            if (updated && !uError) {
-                resolvedProfile = updated as UserProfile;
-            } else {
+            try {
+                const { data: updated, error: uError } = await supabase
+                    .from('profiles')
+                    .update({ account_number: generatedId })
+                    .eq('id', userId)
+                    .select()
+                    .maybeSingle();
+                    
+                if (updated && !uError) {
+                    resolvedProfile = updated as UserProfile;
+                } else {
+                    // Fallback to local generated ID if column is missing or update fails
+                    resolvedProfile.account_number = generatedId;
+                }
+            } catch (e) {
                 resolvedProfile.account_number = generatedId;
             }
         }
@@ -85,18 +91,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const generatedId = `835${randomSuffix}`;
         
-        const { data: newProfile } = await supabase
-            .from('profiles')
-            .upsert({ 
-                id: userId, 
-                name: user?.email?.split('@')[0] || 'Institutional User', 
-                wnc_earnings: 0, 
-                tokens: 0, 
-                account_number: generatedId 
-            })
-            .select()
-            .single();
-        return newProfile ? (newProfile as UserProfile) : null;
+        try {
+            const { data: newProfile } = await supabase
+                .from('profiles')
+                .upsert({ 
+                    id: userId, 
+                    name: user?.email?.split('@')[0] || 'Institutional User', 
+                    wnc_earnings: 0, 
+                    tokens: 0, 
+                    account_number: generatedId 
+                })
+                .select()
+                .single();
+            return newProfile ? (newProfile as UserProfile) : null;
+        } catch (e) {
+            return null;
+        }
       }
     } catch (e) {
         console.warn("Profile fetch error:", e);
