@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCurrency } from '@/contexts/currency-provider';
@@ -78,12 +78,16 @@ function SendClient() {
   const [txHash, setTxHash] = useState('');
   
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  
+  // Track if we have performed initial token resolution
+  const hasInitialized = useRef(false);
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // CONTEXT-AWARE DEFAULTING
+  // CONTEXT-AWARE INITIALIZATION (Runs once or when searchParams change explicitly)
   useEffect(() => {
-    if (allAssets.length === 0) return;
+    if (allAssets.length === 0 || hasInitialized.current) return;
+
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     
@@ -99,6 +103,7 @@ function SendClient() {
 
     if (target) {
         setSelectedToken({ ...target });
+        hasInitialized.current = true;
     }
   }, [allAssets, searchParams, viewingNetwork.chainId]);
 
@@ -234,6 +239,13 @@ function SendClient() {
     return parseFloat(gasData.nativeFee) * nativePrice;
   }, [gasData.nativeFee, selectedToken, prices, allChainsMap]);
 
+  const handleTokenSelect = (token: AssetRow) => {
+    setSelectedToken({ ...token });
+    setIsSelectorOpen(false);
+    // Ensure we don't accidentally revert back on next allAssets update
+    hasInitialized.current = true;
+  };
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
@@ -259,13 +271,16 @@ function SendClient() {
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl overflow-visible">
-                            <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem]" alt="Me" />
-                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
-                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-10">
+                        <div className="relative">
+                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl overflow-visible bg-black">
+                                <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Me" />
+                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
+                            </Avatar>
+                            {/* Institutional Badge - Fixed placement */}
+                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
                                 <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                             </div>
-                        </Avatar>
+                        </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
                 </div>
@@ -286,19 +301,21 @@ function SendClient() {
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
-                                <Avatar className="w-full h-full rounded-[2.5rem] overflow-visible">
-                                    <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem]" alt="Recipient" />
-                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-10">
+                                <div className="relative w-full h-full">
+                                    <Avatar className="w-full h-full rounded-[2.5rem] overflow-visible bg-black">
+                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
+                                        <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Asset" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                </Avatar>
+                                </div>
                              ) : isNetworkMismatch ? (
                                 <TokenLogoDynamic symbol={detectedMeta?.symbol} name={detectedMeta?.name} alt={detectedMeta?.name || 'mismatch'} size={44} />
                              ) : resolvedAddress ? (
                                 <div className="relative">
                                     <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-10">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
                                         <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
@@ -428,7 +445,7 @@ function SendClient() {
       <GlobalTokenSelector 
         isOpen={isSelectorOpen}
         onOpenChange={setIsSelectorOpen}
-        onSelect={(token) => setSelectedToken({ ...token })}
+        onSelect={handleTokenSelect}
         title="Select Network"
       />
 
