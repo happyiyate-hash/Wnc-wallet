@@ -61,19 +61,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!error && data) {
         const resolvedProfile = data as UserProfile;
         
-        // Handle Missing Account Number (10-Digit ID Generation)
+        // Handle Missing Account Number (Institutional 10-Digit ID Generation)
+        // Format: 835XXXXXXX
         if (!resolvedProfile.account_number) {
-            const generatedId = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+            const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+            const generatedId = `835${randomSuffix}`;
+            
             const { data: updated } = await supabase
                 .from('profiles')
                 .update({ account_number: generatedId })
                 .eq('id', userId)
                 .select()
                 .single();
+                
             if (updated) {
-                setProfile(updated as UserProfile);
-                localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(updated));
-                return updated as UserProfile;
+                const finalProfile = updated as UserProfile;
+                setProfile(finalProfile);
+                localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
+                return finalProfile;
             }
         }
 
@@ -81,7 +86,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
         return resolvedProfile;
       } else if (error && error.code === 'PGRST116') {
-        const generatedId = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+        // Create new profile if missing
+        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+        const generatedId = `835${randomSuffix}`;
+        
         const { data: newProfile } = await supabase
             .from('profiles')
             .upsert({ 

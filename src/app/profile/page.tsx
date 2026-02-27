@@ -20,7 +20,9 @@ import {
   Fingerprint,
   TrendingUp,
   Coins,
-  User
+  User,
+  ExternalLink,
+  Cpu
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -30,10 +32,12 @@ export default function ProfilePage() {
     const { user, profile, refreshProfile } = useUser();
     const { allAssets, viewingNetwork, wallets, getAddressForChain } = useWallet();
     const { formatFiat, rates } = useCurrency();
-    const [isCopied, copy] = useCopyToClipboard();
+    const [isAddressCopied, copyAddress] = useCopyToClipboard();
+    const [isIdCopied, copyId] = useCopyToClipboard();
     const [isSyncing, setIsSyncing] = useState(false);
 
     const displayName = profile?.name || 'Institutional User';
+    const accountNumber = profile?.account_number || 'Generating...';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
     // Portfolio calculation
@@ -103,9 +107,9 @@ export default function ProfilePage() {
             </header>
 
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
-                <div className="max-w-2xl mx-auto p-6 space-y-8">
+                <div className="max-w-2xl mx-auto p-6 space-y-10">
                     
-                    <section className="flex flex-col items-center text-center space-y-4">
+                    <section className="flex flex-col items-center text-center space-y-6">
                         <div className="relative group">
                             <div className="absolute -inset-4 bg-primary/20 rounded-[3rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
                             <Avatar className="w-28 h-28 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10">
@@ -119,9 +123,27 @@ export default function ProfilePage() {
                             </div>
                         </div>
                         
-                        <div className="space-y-2 flex flex-col items-center w-full">
+                        <div className="space-y-3 flex flex-col items-center w-full">
                             <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
-                            <div className="flex items-center justify-center gap-1.5 mt-2">
+                            
+                            {/* INSTITUTIONAL ACCOUNT ID CARD */}
+                            <div 
+                                onClick={() => accountNumber !== 'Generating...' && copyId(accountNumber)}
+                                className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span>
+                                    <div className={cn(
+                                        "transition-colors",
+                                        isIdCopied ? "text-green-500" : "text-primary opacity-40 group-hover:opacity-100"
+                                    )}>
+                                        {isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    </div>
+                                </div>
+                                <p className="text-lg font-mono font-black text-white tracking-[0.1em]">{accountNumber}</p>
+                            </div>
+
+                            <div className="flex items-center justify-center gap-1.5 pt-1">
                                 <ShieldCheck className="w-2.5 h-2.5 text-primary" />
                                 <span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span>
                             </div>
@@ -145,21 +167,23 @@ export default function ProfilePage() {
                     </div>
 
                     <section className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Network Hub</p>
+                        <div className="flex justify-between items-center px-2">
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Network Hub</p>
+                            <div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500">
+                                <Cpu className="w-2.5 h-2.5 animate-pulse" />
+                                Watchdog Sync: Active
+                            </div>
+                        </div>
                         <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative group">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <QrCode className="w-4 h-4 text-primary" />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span>
                                 </div>
-                                <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-green-500">
-                                    <div className="w-1 h-1 rounded-full bg-current animate-pulse" />
-                                    Cloud Watchdog Sync
-                                </div>
                             </div>
                             
                             <div 
-                                onClick={() => address && copy(address)}
+                                onClick={() => address && copyAddress(address)}
                                 className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all"
                             >
                                 <p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">
@@ -167,9 +191,9 @@ export default function ProfilePage() {
                                 </p>
                                 <div className={cn(
                                     "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                                    isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary"
+                                    isAddressCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary"
                                 )}>
-                                    {isCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                    {isAddressCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                                 </div>
                             </div>
                         </div>
@@ -206,7 +230,7 @@ export default function ProfilePage() {
                         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
                             <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} />
                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                                Watchdog Last Synced: Just Now
+                                Global Watchdog Last Synced: Just Now
                             </span>
                         </div>
                         <p className="text-[8px] text-muted-foreground/40 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">
