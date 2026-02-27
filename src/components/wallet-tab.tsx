@@ -30,21 +30,8 @@ import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import MoreActionsSheet from './wallet/more-actions-sheet';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { getAddressForChain } from '@/lib/wallets/utils';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from './ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-
-// Utility to determine text contrast
-const getContrastColor = (hex: string) => {
-  if (!hex || hex.length < 7) return '#ffffff';
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? '#000000' : '#ffffff';
-};
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
@@ -112,9 +99,8 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, isTokenLoading, refresh, viewingNetwork, fetchError, infuraApiKey, allChains, balances, getAvailableAssetsForChain } = useWallet();
+  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey } = useWallet();
   const { user } = useUser();
-  const { toast } = useToast();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -122,23 +108,14 @@ export default function WalletTab() {
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const [isQuickSwapOpen, setIsQuickSwapOpen] = useState(false);
   
-  const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
-  const [actionType, setActionType] = useState<'send' | 'receive' | 'swap'>('send');
-  const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
-  const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
-
-  const [fetchStartTime, setFetchStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const router = useRouter();
 
-  // API KEY PROMPT LOGIC: Only prompt if app initialization AND session restoration are truly complete
   useEffect(() => {
-    // Increased safety window and strict state gating to prevent ghost prompt during cloud restore
     if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
-        // Final sanity check: ensure we didn't just restore a key in the last 2 seconds
         const currentKey = localStorage.getItem('infura_api_key');
         if (!currentKey) {
             setIsApiKeySheetOpen(true);
@@ -146,20 +123,18 @@ export default function WalletTab() {
       }, 2000);
       return () => clearTimeout(timer);
     } else if (infuraApiKey) {
-      setIsApiKeySheetOpen(false); // Force close if key appears via restore
+      setIsApiKeySheetOpen(false);
     }
   }, [isInitialized, isWalletLoading, wallets, infuraApiKey]);
 
   useEffect(() => {
     if (isRefreshing) {
-      setFetchStartTime(Date.now());
       setElapsedSeconds(0);
       timerRef.current = setInterval(() => {
         setElapsedSeconds((prev) => +(prev + 0.1).toFixed(1));
       }, 100);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
-      setFetchStartTime(null);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -202,14 +177,8 @@ export default function WalletTab() {
         setIsQuickSwapOpen(true);
         return;
     }
-    setActionType(type);
-    setIsActionSheetOpen(true);
-  };
-
-  const handleTokenSelect = (token: AssetRow) => {
-    setIsTokenSideSheetOpen(false);
-    setIsActionSheetOpen(false);
-    router.push(`/${actionType}?symbol=${token.symbol}&chainId=${token.chainId}`);
+    // DIRECT NAVIGATION as requested: Defaults are handled by the destination page context logic
+    router.push(`/${type}`);
   };
 
   const ActionButton = ({ icon: Icon, label, onClick, disabled }: { icon: React.ElementType, label: string, onClick: () => void, disabled?: boolean }) => (
@@ -330,7 +299,7 @@ export default function WalletTab() {
                       <TokenRow
                         key={`${token.chainId}-${token.address || token.symbol}`}
                         token={token}
-                        isLoading={isTokenLoading(token.chainId, token.symbol) || isRefreshing}
+                        isLoading={isRefreshing}
                       />
                     ))}
                   </div>
@@ -345,132 +314,6 @@ export default function WalletTab() {
       {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
       <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
       <QuickSwapPanel isOpen={isQuickSwapOpen} onOpenChange={setIsQuickSwapOpen} />
-
-      <Sheet open={isActionSheetOpen} onOpenChange={setIsActionSheetOpen}>
-        <SheetContent side="bottom" className="bg-transparent border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="absolute inset-0 bg-[#0a0a0c]/80 backdrop-blur-3xl -z-10" />
-            <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-transparent to-black/80 -z-10" />
-            
-            <div className="flex flex-col flex-1 relative z-10 overflow-hidden">
-                <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
-                    <SheetTitle className="text-xl font-black text-center uppercase tracking-widest">Select Network to {actionType}</SheetTitle>
-                </SheetHeader>
-                <ScrollArea className="flex-1 px-6">
-                    <div className="grid grid-cols-2 gap-3 pb-24 pt-2">
-                        {allChains.map((chain) => {
-                            const themeColor = chain.themeColor || '#818cf8';
-                            const textColor = getContrastColor(themeColor);
-                            return (
-                                <button 
-                                    key={chain.chainId}
-                                    onClick={() => {
-                                        setSelectedNetworkForSelection(chain);
-                                        setIsTokenSideSheetOpen(true);
-                                    }}
-                                    style={{
-                                        borderColor: themeColor,
-                                        borderWidth: '2px',
-                                        background: `linear-gradient(135deg, ${themeColor} 0%, rgba(0,0,0,0.8) 100%)`,
-                                    }}
-                                    className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all text-center group"
-                                >
-                                    <TokenLogoDynamic 
-                                        logoUrl={chain.iconUrl} 
-                                        alt={chain.name} 
-                                        size={40} 
-                                        chainId={chain.chainId} 
-                                        name={chain.name} 
-                                        symbol={chain.symbol}
-                                    />
-                                    <p className="font-black text-[11px] uppercase tracking-tight line-clamp-1" style={{ color: textColor }}>{chain.name}</p>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </ScrollArea>
-            </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
-        <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl">
-            <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
-                <SheetTitle className="flex items-center gap-2">
-                    <TokenLogoDynamic 
-                        logoUrl={selectedNetworkForSelection?.iconUrl} 
-                        alt={selectedNetworkForSelection?.name || ''} 
-                        size={32} 
-                        chainId={selectedNetworkForSelection?.chainId} 
-                        name={selectedNetworkForSelection?.name}
-                        symbol={selectedNetworkForSelection?.symbol}
-                    />
-                    <div className="flex flex-col items-start text-left">
-                        <span className="text-lg font-black uppercase tracking-tight">{selectedNetworkForSelection?.name}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Select Token</span>
-                    </div>
-                </SheetTitle>
-            </SheetHeader>
-            <ScrollArea className="flex-1 p-4">
-                <div className="space-y-6">
-                    <div className="p-5 rounded-2xl bg-primary/10 border border-primary/20 space-y-2">
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-widest">
-                            <WalletIcon className="w-3.5 h-3.5" /> Your Address
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
-                                {wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '...'}
-                            </p>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 text-primary shrink-0 hover:bg-primary/20 rounded-xl" onClick={() => {
-                                const addr = wallets && selectedNetworkForSelection ? getAddressForChain(selectedNetworkForSelection, wallets) : '';
-                                if (addr) {
-                                    navigator.clipboard.writeText(addr);
-                                    toast({ title: "Copied" });
-                                }
-                            }}>
-                                <Copy className="w-5 h-5" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2">Available Assets</p>
-                        <div className="space-y-2 pb-12">
-                            {selectedNetworkForSelection && getAvailableAssetsForChain(selectedNetworkForSelection.chainId).map((token) => {
-                                const asset = (balances[selectedNetworkForSelection.chainId]?.find(b => b.symbol === token.symbol) || { ...token, balance: '0' }) as AssetRow;
-                                return (
-                                    <button 
-                                        key={asset.symbol}
-                                        onClick={() => handleTokenSelect(asset)}
-                                        className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-left"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <TokenLogoDynamic 
-                                                logoUrl={asset.iconUrl} 
-                                                alt={asset.symbol} 
-                                                size={44} 
-                                                chainId={asset.chainId} 
-                                                symbol={asset.symbol} 
-                                                name={asset.name}
-                                            />
-                                            <div>
-                                                <p className="font-bold text-base text-white">{asset.symbol}</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">{asset.name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-mono text-sm font-bold text-white">{parseFloat(asset.balance).toFixed(4)}</p>
-                                            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-1">Balance</p>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-            </ScrollArea>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
