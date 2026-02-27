@@ -159,16 +159,29 @@ function SendClient() {
           search_account_number: searchHandle,
           selected_chain: activeNetwork.type || 'evm'
         });
+        
         if (!isMounted) return;
-        if (data && data[0]?.target_address) {
-          setResolvedAddress(data[0].target_address);
-          setRecipientProfile({ avatar: data[0].profile_pic, verified: data[0].verified, name: searchHandle });
+
+        if (data && data.length > 0) {
+          // Profile match found!
+          const result = data[0];
+          setRecipientProfile({ 
+            avatar: result.profile_pic, 
+            verified: result.verified, 
+            name: result.name || searchHandle 
+          });
+          
+          // Set address if linked for this specific chain
+          setResolvedAddress(result.target_address || '');
         } else {
-          setResolvedAddress(''); setRecipientProfile(null);
+          setResolvedAddress('');
+          setRecipientProfile(null);
         }
       } catch (e) {
         if (isMounted) { setResolvedAddress(''); setRecipientProfile(null); }
-      } finally { if (isMounted) setIsResolving(false); }
+      } finally { 
+        if (isMounted) setIsResolving(false); 
+      }
     }
     resolve();
     return () => { isMounted = false; };
