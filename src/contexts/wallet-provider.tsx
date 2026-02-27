@@ -87,6 +87,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => { latestBalancesRef.current = balances; }, [balances]);
   useEffect(() => { latestUserTokensRef.current = userAddedTokens; }, [userAddedTokens]);
 
+  const allChainsMap = useMemo(() => {
+    return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
+  }, [chainsWithLogos]);
+
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return;
     try {
@@ -152,7 +156,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const initLocalSession = async () => {
       if (authLoading) return;
       
-      // If no session, resolve loading state immediately to unblock UI
       if (!activeSessionId) {
           setWallets(null);
           setBalances({});
@@ -501,7 +504,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setNetwork: (net) => { setViewingNetwork(net); setFetchError(null); localStorage.setItem('last_viewed_chain_id', net.chainId.toString()); },
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
-    allChainsMap: chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {}),
+    allChainsMap,
     isRefreshing,
     isTokenLoading: () => false,
     wallets,

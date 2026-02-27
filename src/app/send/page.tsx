@@ -49,11 +49,9 @@ function SendClient() {
   const [step, setStep] = useState<'details' | 'success'>('details');
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
   
-  // RECENT RECIPIENTS STATE (Using Live View)
   const [recentRecipients, setRecentRecipients] = useState<RecentRecipient[]>([]);
   const [isRecentLoading, setIsRecentLoading] = useState(false);
 
-  // IDENTITY RESOLUTION STATES
   const [recipientInput, setRecipientInput] = useState('');
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
@@ -70,16 +68,14 @@ function SendClient() {
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
-  // Live Gas Data Integration
   const gasData = useGasPrice(selectedToken?.chainId);
 
-  // 1. FETCH RECENT RECIPIENTS FROM LIVE VIEW
   const fetchRecent = useCallback(async () => {
     if (!user || !supabase) return;
     setIsRecentLoading(true);
     try {
       const { data, error } = await supabase
-        .from('recent_recipients_live') // Use the production-ready view
+        .from('recent_recipients_live')
         .select('*')
         .eq('sender_id', user.id)
         .limit(10);
@@ -98,7 +94,6 @@ function SendClient() {
     fetchRecent();
   }, [fetchRecent]);
 
-  // SECURE INITIALIZATION
   useEffect(() => {
     if (allAssets.length === 0 || initializedRef.current) return;
 
@@ -127,33 +122,37 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
-  // RECIPIENT IDENTITY RESOLUTION ENGINE
   useEffect(() => {
+    let isMounted = true;
+
     async function resolve() {
-      if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
-        setResolvedAddress('');
-        setRecipientProfile(null);
+      const input = debouncedRecipient?.trim();
+      
+      if (!input || input.length < 3) {
+        if (isMounted) {
+          setResolvedAddress('');
+          setRecipientProfile(null);
+          setIsResolving(false);
+        }
         return;
       }
 
-      // 1. Detect Raw Addresses
-      const isRaw = debouncedRecipient.startsWith('0x') || 
-                    debouncedRecipient.startsWith('r') || 
-                    debouncedRecipient.length > 30;
+      const isRaw = input.startsWith('0x') || input.startsWith('r') || input.length > 30;
 
       if (isRaw) {
-        setResolvedAddress(debouncedRecipient);
-        setRecipientProfile(null);
+        if (isMounted) {
+          setResolvedAddress(input);
+          setRecipientProfile(null);
+          setIsResolving(false);
+        }
         return;
       }
 
-      // 2. Resolve Human-Readable Handle (@handle or handle)
-      setIsResolving(true);
+      if (isMounted) setIsResolving(true);
       
-      // NORMALIZATION: Strip '@' and lowercase for DB lookup
-      const searchHandle = debouncedRecipient.startsWith('@') 
-        ? debouncedRecipient.substring(1).toLowerCase().trim() 
-        : debouncedRecipient.toLowerCase().trim();
+      const searchHandle = input.startsWith('@') 
+        ? input.substring(1).toLowerCase().trim() 
+        : input.toLowerCase().trim();
 
       try {
         const { data, error } = await supabase!.rpc('fetch_recipient_details', {
@@ -161,26 +160,33 @@ function SendClient() {
           selected_chain: activeNetwork.type || 'evm'
         });
 
-        if (data && data[0]?.target_address) {
-          setResolvedAddress(data[0].target_address);
-          setRecipientProfile({
-            avatar: data[0].profile_pic,
-            verified: data[0].verified,
-            name: searchHandle
-          });
-        } else {
-          setResolvedAddress('');
-          setRecipientProfile(null);
+        if (isMounted) {
+          if (!error && data && data[0]?.target_address) {
+            setResolvedAddress(data[0].target_address);
+            setRecipientProfile({
+              avatar: data[0].profile_pic,
+              verified: data[0].verified,
+              name: searchHandle
+            });
+          } else {
+            setResolvedAddress('');
+            setRecipientProfile(null);
+          }
         }
       } catch (e) {
         console.warn("Identity lookup failed:", e);
-        setResolvedAddress('');
-        setRecipientProfile(null);
+        if (isMounted) {
+          setResolvedAddress('');
+          setRecipientProfile(null);
+        }
       } finally {
-        setIsResolving(false);
+        if (isMounted) setIsResolving(false);
       }
     }
+
     resolve();
+
+    return () => { isMounted = false; };
   }, [debouncedRecipient, activeNetwork.type]);
 
   const saveToHistory = async (recipientData: { accountNumber: string, address: string, chain: string }) => {
