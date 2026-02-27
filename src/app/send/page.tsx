@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -185,7 +184,6 @@ function SendClient() {
     setIsSubmitting(true);
 
     let polkadotApi: ApiPromise | null = null;
-    let finalStatus: 'success' | 'error' = 'success';
 
     try {
       if (activeNetwork.type === 'xrp') {
@@ -222,16 +220,13 @@ function SendClient() {
       }
       
       setTxStatus('success');
-      finalStatus = 'success';
     } catch (e: any) {
       setTxStatus('error');
       setReceiptError(e.message);
-      finalStatus = 'error';
     } finally {
       if (polkadotApi) await polkadotApi.disconnect();
       setIsSubmitting(false);
       
-      // Delay to let the animation project its success/fail state before showing receipt
       setTimeout(() => {
         setIsStatusVisible(false);
         setIsReceiptOpen(true);
@@ -287,7 +282,9 @@ function SendClient() {
                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                     </div>
                 </div>
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">You</span>
+                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">
+                    FROM {profile?.name?.split(' ')[0] || 'YOU'}
+                </span>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center px-4 relative">
@@ -340,13 +337,23 @@ function SendClient() {
                 </div>
                 <span className={cn(
                     "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
-                    isNetworkMismatch ? "text-red-500 animate-pulse" : "text-muted-foreground"
+                    isNetworkMismatch ? "text-red-500 animate-pulse" : "text-white/40"
                 )}>
                     {isNetworkMismatch && <XCircle className="w-3.5 h-3.5" />}
-                    {recipientProfile ? `@${recipientProfile.name}` : isNetworkMismatch ? 'Route Blocked' : addrType !== 'invalid' ? 'Network Node' : 'Recipient'}
+                    {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? 'ROUTE BLOCKED' : addrType !== 'invalid' ? 'NETWORK NODE' : 'TO RECIPIENT'}
                 </span>
             </div>
         </section>
+
+        {/* TARGET VAULT ADDRESS DISPLAY */}
+        {resolvedAddress && !isNetworkMismatch && (
+            <div className="flex flex-col items-center justify-center space-y-1 animate-in fade-in zoom-in duration-500 py-4">
+                <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Target Vault Address</span>
+                <h2 className="text-3xl font-mono font-black text-white tracking-tighter">
+                    {resolvedAddress.slice(0, 6)}...{resolvedAddress.slice(-4)}
+                </h2>
+            </div>
+        )}
 
         <section className="space-y-3">
             <div className="flex justify-between items-center px-2">
