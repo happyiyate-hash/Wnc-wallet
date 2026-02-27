@@ -53,9 +53,9 @@ const detectAddressType = (input: string) => {
 };
 
 const getDetectedNetworkMeta = (type: string) => {
-    if (type === 'xrp') return { name: 'XRP Ledger', symbol: 'XRP', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/xrp.png' };
-    if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/polkadot.png' };
-    if (type === 'evm') return { name: 'EVM Network', symbol: 'ETH', logoUrl: 'https://gcghriodmljkusdduhzl.supabase.co/storage/v1/object/public/token-logos/ethereum.png' };
+    if (type === 'xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
+    if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
+    if (type === 'evm') return { name: 'EVM Network', symbol: 'ETH' };
     return null;
 };
 
@@ -124,7 +124,6 @@ function SendClient() {
   
   const isNetworkMismatch = useMemo(() => {
     if (addrType === 'invalid' || addrType === 'internal') return false;
-    // Map internal types to simple types for comparison
     const activeType = activeNetwork.type || 'evm';
     if (activeType === 'evm' && addrType !== 'evm') return true;
     if (activeType === 'xrp' && addrType !== 'xrp') return true;
@@ -308,14 +307,18 @@ function SendClient() {
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              isNetworkMismatch ? (
                                 <div className="flex flex-col items-center justify-center p-2 relative">
-                                    <TokenLogoDynamic logoUrl={detectedMeta?.logoUrl} alt="Detected" size={44} className="grayscale opacity-50" />
+                                    <TokenLogoDynamic 
+                                        symbol={detectedMeta?.symbol} 
+                                        name={detectedMeta?.name} 
+                                        size={44} 
+                                    />
                                     <XCircle className="w-8 h-8 text-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-2xl" />
                                 </div>
                              ) : addrType !== 'invalid' ? (
                                 <div className="relative">
-                                    <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target" size={44} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={16} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={16} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
