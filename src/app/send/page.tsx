@@ -32,7 +32,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { supabase } from '@/lib/supabase/client';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import TransactionConfirmationSheet from '@/components/wallet/transaction-confirmation-sheet';
-import type { AssetRow, ChainConfig, RecentRecipient } from '@/lib/types';
+import type { AssetRow, ChainConfig } from '@/lib/types';
 
 function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allChains, allAssets, getAvailableAssetsForChain, allChainsMap, prices } = useWallet();
@@ -50,7 +50,7 @@ function SendClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
-  // Identity Resolution
+  // Identity Resolution (The Two-Stage Handshake)
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
@@ -69,6 +69,7 @@ function SendClient() {
         return;
       }
 
+      // Check if it's a raw blockchain address first
       const isRaw = debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 30;
       if (isRaw) {
         setResolvedAddress(debouncedRecipient);
@@ -77,19 +78,34 @@ function SendClient() {
       }
 
       setIsResolving(true);
+      
+      // Normalize Handle (e.g., @8354380450 -> 8354380450)
       const searchHandle = debouncedRecipient.replace('@', '').toLowerCase().trim();
 
       try {
-        const { data } = await supabase!.rpc('fetch_recipient_details', {
-          search_account_number: searchHandle,
-          selected_chain: allChainsMap[selectedToken?.chainId || viewingNetwork.chainId]?.type || 'evm'
-        });
+        // STAGE 1: Fetch Profile Identity
+        const { data: prof, error: pError } = await supabase!
+          .from('wevina_profiles')
+          .select('user_id, photo_url, display_name')
+          .eq('account_number', searchHandle)
+          .maybeSingle();
 
-        if (data && data[0]?.target_address) {
-          setResolvedAddress(data[0].target_address);
+        if (pError || !prof) throw new Error("Not found");
+
+        // STAGE 2: Resolve Wallet for active ecosystem
+        const chainType = allChainsMap[selectedToken?.chainId || viewingNetwork.chainId]?.type || 'evm';
+        const { data: ident, error: iError } = await supabase!
+          .from('user_identity')
+          .select('wallet_address')
+          .eq('user_id', prof.user_id)
+          .eq('blockchain_name', chainType)
+          .maybeSingle();
+
+        if (ident?.wallet_address) {
+          setResolvedAddress(ident.wallet_address);
           setRecipientProfile({
-            avatar: data[0].profile_pic,
-            name: searchHandle
+            avatar: prof.photo_url,
+            name: prof.display_name || searchHandle
           });
         } else {
           setResolvedAddress('');
@@ -303,7 +319,7 @@ function SendClient() {
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
         <Button 
           disabled={!resolvedAddress || !amount || isSubmitting}
-          className="w-full h-16 rounded-[2.5rem] font-black text-lg bg-primary hover:bg-primary/90 text-white shadow-2xl shadow-primary/20 transition-all active:scale-95 border-b-4 border-primary/50"
+          className="w-full h-16 rounded-[2.5rem] font-black text-lg bg-primary hover:bg-primary/90 text-white shadow-2xl shadow-primary/20 transition-all active:scale-[0.98] border-b-4 border-primary/50"
           onClick={handleOpenConfirmation}
         >
           {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Dispatch"}
