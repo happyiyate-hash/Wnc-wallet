@@ -10,11 +10,11 @@ export interface AssetRow {
   iconUrl?: string | null;
   isNative?: boolean;
   coingeckoId?: string;
-  updatedAt?: number; // Last successful sync timestamp
+  updatedAt?: number;
   decimals?: number;
   priceSource?: 'coingecko' | 'dex' | 'manual';
   dexPair?: string;
-  priceId?: string; // Standardized price identifier from CDN
+  priceId?: string;
 }
 
 export interface WalletWithMetadata {
@@ -24,13 +24,6 @@ export interface WalletWithMetadata {
   privateKey?: string;
   seed?: string; // For XRP
   type: 'evm' | 'xrp' | 'polkadot';
-}
-
-export interface Chain {
-  chainId: number;
-  name: string;
-  iconUrl?: string;
-  currencySymbol: string;
 }
 
 export interface ChainConfig {
@@ -47,19 +40,29 @@ export interface ChainConfig {
 
 export interface UserProfile {
     id: string;
-    username: string;
-    name?: string;
+    username: string; // account_number
+    name?: string; // display_name
     photo_url?: string;
     wnc_earnings?: number;
     tokens?: number;
-    vault_phrase?: string; // Encrypted mnemonic
-    iv?: string; // IV for mnemonic
-    vault_infura_key?: string; // Encrypted Infura Key
-    infura_iv?: string; // IV for infura key
+    vault_phrase?: string;
+    iv?: string;
+    vault_infura_key?: string;
+    infura_iv?: string;
 }
 
-export interface IWalletAdapter {
-  fetchBalances(ownerAddress: string, assets: Omit<AssetRow, 'balance'>[]): Promise<AssetRow[]>;
+export interface LocalSession {
+    id: string; // Supabase UID
+    profile: UserProfile;
+    encryptedMnemonic: string | null;
+    encryptedApiKey: string | null;
+    lastActive: number;
 }
 
-export type AdapterFactory = (chain: ChainConfig, apiKey: string | null) => IWalletAdapter | null;
+export interface RecentRecipient {
+    id: string;
+    recipient_account_number: string;
+    current_pfp: string;
+    last_blockchain_used: string;
+    last_address_used: string;
+}

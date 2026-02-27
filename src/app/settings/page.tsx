@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -49,10 +48,11 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import AccountSwitcherSheet from "@/components/wallet/account-switcher-sheet";
 
 export default function SettingsPage() {
     const { wallets, deleteWallet, logout } = useWallet();
-    const { user, profile } = useUser();
+    const { user, profile, activeSessionId } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
     const router = useRouter();
@@ -60,15 +60,16 @@ export default function SettingsPage() {
     const [showPhrase, setShowPhrase] = useState(false);
     const [mnemonic, setMnemonic] = useState<string | null>(null);
     const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState(false);
+    const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
     const [currencySearch, setCurrencySearch] = useState('');
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     useEffect(() => {
-        if (user) {
-            const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        if (activeSessionId) {
+            const saved = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
             setMnemonic(saved);
         }
-    }, [user]);
+    }, [activeSessionId]);
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -87,7 +88,6 @@ export default function SettingsPage() {
         const codes = Object.keys(rates).sort();
         const popular = ['USD', 'NGN', 'EUR', 'GBP', 'KES', 'GHS', 'ZAR'];
         const filtered = codes.filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
-        
         const results = [...new Set([...popular.filter(p => filtered.includes(p)), ...filtered])];
         return results;
     }, [rates, currencySearch]);
@@ -194,10 +194,10 @@ export default function SettingsPage() {
                             <SettingItem 
                                 icon={UserCircle} 
                                 label="Switch Account" 
-                                value="Main Vault" 
+                                value="Multi-Session Vault" 
                                 iconBg="bg-emerald-500/10" 
                                 iconColor="text-emerald-400" 
-                                onClick={() => toast({ title: "Account switching coming soon" })} 
+                                onClick={() => setIsSwitcherOpen(true)} 
                             />
                         </div>
                     </section>
@@ -335,6 +335,7 @@ export default function SettingsPage() {
                 </div>
             </main>
 
+            {/* CURRENCY SELECTION SHEET */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
                 <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden flex flex-col">
                     <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
@@ -382,6 +383,8 @@ export default function SettingsPage() {
                     </ScrollArea>
                 </SheetContent>
             </Sheet>
+
+            <AccountSwitcherSheet isOpen={isSwitcherOpen} onOpenChange={setIsSwitcherOpen} />
         </div>
     );
 }
