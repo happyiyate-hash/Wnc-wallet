@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
+import { CurrencyProvider } from '@/contexts/currency-provider';
 import MobileNav from '@/components/wallet/mobile-nav';
 import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
@@ -43,11 +44,13 @@ export default function RootLayout({
       <body className="font-body antialiased min-h-screen bg-background flex flex-col">
         <Web3Provider>
           <UserProvider>
-            <WalletProvider>
-              <PWARegister />
-              {children}
-              <MobileNav />
-            </WalletProvider>
+            <CurrencyProvider>
+              <WalletProvider>
+                <PWARegister />
+                {children}
+                <MobileNav />
+              </WalletProvider>
+            </CurrencyProvider>
           </UserProvider>
         </Web3Provider>
         <Toaster />

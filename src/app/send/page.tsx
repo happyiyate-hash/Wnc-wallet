@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -49,9 +48,12 @@ function SendClient() {
 
   const [step, setStep] = useState<'details' | 'success'>('details');
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
+  
+  // RECENT RECIPIENTS STATE (Using Live View)
   const [recentRecipients, setRecentRecipients] = useState<RecentRecipient[]>([]);
   const [isRecentLoading, setIsRecentLoading] = useState(false);
 
+  // IDENTITY RESOLUTION STATES
   const [recipientInput, setRecipientInput] = useState('');
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
@@ -63,12 +65,15 @@ function SendClient() {
   const [txHash, setTxHash] = useState('');
   
   const initializedRef = useRef(false);
+
   const [isNetworkSheetOpen, setIsNetworkSheetOpen] = useState(false);
   const [selectedNetworkForSelection, setSelectedNetworkForSelection] = useState<ChainConfig | null>(null);
   const [isTokenSideSheetOpen, setIsTokenSideSheetOpen] = useState(false);
 
+  // Live Gas Data Integration
   const gasData = useGasPrice(selectedToken?.chainId);
 
+  // 1. FETCH RECENT RECIPIENTS FROM LIVE VIEW
   const fetchRecent = useCallback(async () => {
     if (!user || !supabase) return;
     setIsRecentLoading(true);
@@ -78,34 +83,100 @@ function SendClient() {
         .select('*')
         .eq('sender_id', user.id)
         .limit(10);
-      if (!error && data) setRecentRecipients(data as RecentRecipient[]);
-    } catch (e) { console.warn(e); } finally { setIsRecentLoading(false); }
+      
+      if (!error && data) {
+        setRecentRecipients(data as RecentRecipient[]);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch recent recipients:", e);
+    } finally {
+      setIsRecentLoading(false);
+    }
   }, [user]);
 
-  useEffect(() => { fetchRecent(); }, [fetchRecent]);
+  useEffect(() => {
+    fetchRecent();
+  }, [fetchRecent]);
 
+  // SECURE INITIALIZATION
   useEffect(() => {
     if (allAssets.length === 0 || initializedRef.current) return;
+
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    let targetToken = (symbol && !isNaN(chainIdParam)) ? getAvailableAssetsForChain(chainIdParam).find(a => a.symbol === symbol) : null;
-    if (!targetToken) targetToken = allAssets.find(a => a.chainId === viewingNetwork.chainId) || allAssets[0];
-    if (targetToken) { setSelectedToken({ ...targetToken }); initializedRef.current = true; }
+    
+    let targetToken: AssetRow | null = null;
+
+    if (symbol && !isNaN(chainIdParam)) {
+        const available = getAvailableAssetsForChain(chainIdParam);
+        targetToken = available.find(a => a.symbol === symbol) || null;
+    }
+
+    if (!targetToken) {
+        targetToken = allAssets.find(a => a.chainId === viewingNetwork.chainId) || allAssets[0];
+    }
+
+    if (targetToken) {
+        setSelectedToken({ ...targetToken });
+        initializedRef.current = true;
+    }
   }, [allAssets, searchParams, getAvailableAssetsForChain, viewingNetwork.chainId]);
 
-  const activeNetwork = useMemo(() => allChainsMap[selectedToken?.chainId || viewingNetwork.chainId] || viewingNetwork, [selectedToken, viewingNetwork, allChainsMap]);
+  const activeNetwork = useMemo(() => {
+    const chainId = selectedToken?.chainId || viewingNetwork.chainId;
+    return allChainsMap[chainId] || viewingNetwork;
+  }, [selectedToken, viewingNetwork, allChainsMap]);
 
+  // RECIPIENT IDENTITY RESOLUTION ENGINE
   useEffect(() => {
     async function resolve() {
-      if (!debouncedRecipient || debouncedRecipient.trim().length < 3) { setResolvedAddress(''); setRecipientProfile(null); return; }
-      if (debouncedRecipient.startsWith('0x') || debouncedRecipient.startsWith('r') || debouncedRecipient.length > 30) { setResolvedAddress(debouncedRecipient); setRecipientProfile(null); return; }
+      if (!debouncedRecipient || debouncedRecipient.trim().length < 3) {
+        setResolvedAddress('');
+        setRecipientProfile(null);
+        return;
+      }
+
+      // 1. Detect Raw Addresses
+      const isRaw = debouncedRecipient.startsWith('0x') || 
+                    debouncedRecipient.startsWith('r') || 
+                    debouncedRecipient.length > 30;
+
+      if (isRaw) {
+        setResolvedAddress(debouncedRecipient);
+        setRecipientProfile(null);
+        return;
+      }
+
+      // 2. Resolve Human-Readable Handle (@handle or handle)
       setIsResolving(true);
-      const searchHandle = debouncedRecipient.startsWith('@') ? debouncedRecipient.substring(1).toLowerCase().trim() : debouncedRecipient.toLowerCase().trim();
+      
+      const searchHandle = debouncedRecipient.startsWith('@') 
+        ? debouncedRecipient.substring(1).toLowerCase().trim() 
+        : debouncedRecipient.toLowerCase().trim();
+
       try {
-        const { data } = await supabase!.rpc('fetch_recipient_details', { search_account_number: searchHandle, selected_chain: activeNetwork.type || 'evm' });
-        if (data?.[0]?.target_address) { setResolvedAddress(data[0].target_address); setRecipientProfile({ avatar: data[0].profile_pic, verified: data[0].verified, name: searchHandle }); }
-        else { setResolvedAddress(''); setRecipientProfile(null); }
-      } catch (e) { setResolvedAddress(''); setRecipientProfile(null); } finally { setIsResolving(false); }
+        const { data } = await supabase!.rpc('fetch_recipient_details', {
+          search_account_number: searchHandle,
+          selected_chain: activeNetwork.type || 'evm'
+        });
+
+        if (data && data[0]?.target_address) {
+          setResolvedAddress(data[0].target_address);
+          setRecipientProfile({
+            avatar: data[0].profile_pic,
+            verified: data[0].verified,
+            name: searchHandle
+          });
+        } else {
+          setResolvedAddress('');
+          setRecipientProfile(null);
+        }
+      } catch (e) {
+        setResolvedAddress('');
+        setRecipientProfile(null);
+      } finally {
+        setIsResolving(false);
+      }
     }
     resolve();
   }, [debouncedRecipient, activeNetwork.type]);
@@ -121,7 +192,10 @@ function SendClient() {
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
         const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amount), Destination: resolvedAddress });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-        if (result.result.meta && typeof result.result.meta !== 'string' && result.result.meta.TransactionResult === "tesSUCCESS") { setTxHash(result.result.hash); setStep('success'); }
+        if (result.result.meta && typeof result.result.meta !== 'string' && result.result.meta.TransactionResult === "tesSUCCESS") {
+          setTxHash(result.result.hash);
+          setStep('success');
+        }
         await client.disconnect();
       } else if (activeNetwork.type === 'polkadot') {
         await cryptoWaitReady();
@@ -133,15 +207,29 @@ function SendClient() {
         if (!userMnemonic) throw new Error("Keys missing.");
         const wallet = keyring.addFromMnemonic(userMnemonic);
         const hash = await api.tx.balances.transferKeepAlive(resolvedAddress, BigInt(Math.floor(parseFloat(amount) * 10_000_000_000))).signAndSend(wallet);
-        setTxHash(hash.toHex()); setStep('success');
+        setTxHash(hash.toHex());
+        setStep('success');
         await api.disconnect();
       } else {
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(wallets.find(w => w.type === 'evm')!.privateKey!, provider);
-        const tx = selectedToken.isNative ? await wallet.sendTransaction({ to: resolvedAddress, value: ethers.parseUnits(amount, selectedToken.decimals || 18) }) : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(resolvedAddress, ethers.parseUnits(amount, selectedToken.decimals || 18));
-        setTxHash(tx.hash); setStep('success');
+        const tx = selectedToken.isNative 
+          ? await wallet.sendTransaction({ to: resolvedAddress, value: ethers.parseUnits(amount, selectedToken.decimals || 18) }) 
+          : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(resolvedAddress, ethers.parseUnits(amount, selectedToken.decimals || 18));
+        setTxHash(tx.hash);
+        setStep('success');
       }
-    } catch (e: any) { toast({ title: "Send Failed", description: e.message, variant: "destructive" }); } finally { setIsSubmitting(false); }
+    } catch (e: any) {
+      toast({ title: "Send Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTokenSelect = (token: AssetRow) => {
+    setSelectedToken({ ...token });
+    setIsTokenSideSheetOpen(false);
+    setIsNetworkSheetOpen(false);
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');

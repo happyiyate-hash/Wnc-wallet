@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -140,8 +139,8 @@ export default function SettingsPage() {
         );
     };
 
-    const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Institutional User';
-    const handleTag = profile?.account_number ? `@${profile.account_number}` : user?.email;
+    const displayName = profile?.name || profile?.username || user?.email?.split('@')[0] || 'Institutional User';
+    const handleTag = profile?.username ? `@${profile.username}` : user?.email;
 
     return (
         <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -31,18 +30,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (!error && data) {
-        setProfile(data as UserProfile);
+        // Map display_name to name and account_number to username for legacy UI compatibility
+        setProfile({
+          ...data,
+          name: data.display_name,
+          username: data.account_number
+        } as UserProfile);
       } else {
         // Create initial record if missing
         const { data: newProfile } = await supabase
           .from('wevina_profiles')
-          .insert({ 
+          .upsert({ 
             user_id: userId, 
             display_name: user?.email?.split('@')[0] || 'Institutional User' 
-          })
+          }, { onConflict: 'user_id' })
           .select()
           .single();
-        if (newProfile) setProfile(newProfile as UserProfile);
+        
+        if (newProfile) {
+          setProfile({
+            ...newProfile,
+            name: newProfile.display_name,
+            username: newProfile.account_number
+          } as UserProfile);
+        }
       }
     } catch (e) {
       console.warn("Profile fetch error:", e);
