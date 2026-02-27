@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-provider";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -15,41 +15,41 @@ import {
   Store, 
   Users, 
   ChevronRight, 
-  ArrowUpRight,
-  TrendingUp,
   Lock,
   QrCode,
   Fingerprint,
-  Sparkles,
-  Loader2,
-  AlertCircle,
+  TrendingUp,
   Coins,
-  Zap
+  User
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from '@/lib/supabase/client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ProfilePage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
     const { allAssets, viewingNetwork, wallets, getAddressForChain } = useWallet();
-    const { formatFiat } = useCurrency();
-    const { toast } = useToast();
+    const { formatFiat, rates } = useCurrency();
     const [isCopied, copy] = useCopyToClipboard();
     const [isSyncing, setIsSyncing] = useState(false);
 
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
+    // Portfolio calculation
     const totalPortfolioValue = useMemo(() => {
         return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     }, [allAssets]);
+
+    // WNC to Fiat logic: 1 WNC = 1 NGN
+    const convertedEarnings = useMemo(() => {
+        const wncCount = profile?.wnc_earnings || 0;
+        const ngnRate = rates['NGN'] || 1650;
+        // Step 1: Convert WNC (NGN) to USD base
+        const usdValue = wncCount / ngnRate;
+        // Step 2: formatFiat handles USD-to-Selected conversion
+        return formatFiat(usdValue);
+    }, [profile?.wnc_earnings, rates, formatFiat]);
 
     const handleSync = async () => {
         setIsSyncing(true);
@@ -62,14 +62,12 @@ export default function ProfilePage() {
         label, 
         value, 
         onClick, 
-        badge,
         accentColor = "text-primary"
     }: {
         icon: any;
         label: string;
         value?: string;
         onClick?: () => void;
-        badge?: string;
         accentColor?: string;
     }) => (
         <button 
@@ -85,19 +83,13 @@ export default function ProfilePage() {
                     {value !== undefined && <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60 mt-0.5">{value}</p>}
                 </div>
             </div>
-            <div className="flex items-center gap-3">
-                {badge && (
-                    <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary text-[8px] font-black uppercase tracking-tighter">
-                        {badge}
-                    </span>
-                )}
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
         </button>
     );
 
     return (
         <div className="flex flex-col h-screen bg-[#050505] text-foreground relative overflow-hidden">
+            {/* BRAND WATERMARK */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
                 <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
             </div>
@@ -143,34 +135,20 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
-                    {/* SHARED EARNINGS GRID */}
+                    {/* DYNAMIC FINANCIAL GRID */}
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
+                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
                             <Coins className="w-5 h-5 text-primary mb-3" />
                             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Cloud Earnings</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{profile?.wnc_earnings?.toLocaleString() || 0} WNC</p>
+                            <p className="text-xl font-black text-white tabular-nums truncate">{convertedEarnings}</p>
                         </div>
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
+                        
+                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden shadow-2xl">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <Zap className="w-5 h-5 text-emerald-400 mb-3" />
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">AI Assistant Fuel</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{profile?.tokens?.toLocaleString() || 0} Tokens</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <TrendingUp className="w-5 h-5 text-primary mb-3" />
+                            <TrendingUp className="w-5 h-5 text-emerald-400 mb-3" />
                             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Portfolio Balance</p>
                             <p className="text-xl font-black text-white tabular-nums truncate">{formatFiat(totalPortfolioValue)}</p>
-                        </div>
-                        <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-2xl rounded-full -mr-12 -mt-12" />
-                            <ArrowUpRight className="w-5 h-5 text-emerald-400 mb-3" />
-                            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Linked Vaults</p>
-                            <p className="text-xl font-black text-white tabular-nums truncate">{wallets?.length || 0} Ecosystems</p>
                         </div>
                     </div>
 
