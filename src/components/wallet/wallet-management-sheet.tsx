@@ -5,7 +5,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "../ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
-import { Loader2, ShieldCheck, Lock, CloudDownload, Plus, Download, Timer, AlertCircle } from 'lucide-react';
+import { cn } from "@/lib/utils";
+import { 
+  Loader2, 
+  ShieldCheck, 
+  Lock, 
+  CloudDownload, 
+  Plus, 
+  Download, 
+  Timer, 
+  AlertCircle 
+} from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 
 interface WalletManagementSheetProps {
