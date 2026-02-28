@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -161,12 +160,12 @@ function SendClient() {
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
+    const timeoutId = setTimeout(() => { if (isResolving) setIsResolving(false); }, 8000);
 
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
-      // Clear previous resolution data immediately on new input
       if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
           setResolvedAddress(isValidBase ? input : '');
@@ -189,38 +188,40 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 8-second safety timeout for institutional lookup
-        const { data, error } = await Promise.race([
-          supabase.rpc('fetch_recipient_details', {
-            search_account_number: searchHandle,
-            selected_chain: activeNetwork.type || 'evm'
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-        ]) as any;
-        
-        if (!isMounted) return;
+        // STEP 1: RESOLVE IDENTITY
+        const { data: userRecord, error: userError } = await supabase
+          .from('profiles')
+          .select('id, name, photo_url, account_number')
+          .eq('account_number', searchHandle)
+          .maybeSingle();
 
-        if (error) throw error;
+        if (userError) throw userError;
 
-        if (data && data.length > 0) {
-          const result = data[0];
-          
-          // Identity found
+        if (userRecord && isMounted) {
           setRecipientProfile({ 
-            avatar: result.profile_pic, 
-            verified: result.verified, 
-            name: result.name || searchHandle 
+            avatar: userRecord.photo_url || '', 
+            verified: true, 
+            name: userRecord.name || searchHandle 
           });
 
-          // Step 2: Address Hydration check
-          if (result.target_address) {
-            setResolvedAddress(result.target_address);
+          // STEP 2: HYDRATE ADDRESS FOR ACTIVE NETWORK
+          const { data: addrRecord, error: addrError } = await supabase
+            .from('user_wallet_addresses')
+            .select('address')
+            .eq('user_id', userRecord.id)
+            .eq('chain', activeNetwork.type || 'evm')
+            .maybeSingle();
+
+          if (addrError) throw addrError;
+
+          if (addrRecord && isMounted) {
+            setResolvedAddress(addrRecord.address);
             setResolutionError(null);
-          } else {
+          } else if (isMounted) {
             setResolvedAddress('');
-            setResolutionError(`Recipient found, but has no address linked for ${activeNetwork.name}.`);
+            setResolutionError(`Recipient node found, but has no address linked for ${activeNetwork.name}.`);
           }
-        } else {
+        } else if (isMounted) {
           setResolvedAddress('');
           setRecipientProfile(null);
           setResolutionError("Recipient account ID not found. Please verify and try again.");
@@ -229,15 +230,16 @@ function SendClient() {
         if (isMounted) {
           setResolvedAddress('');
           setRecipientProfile(null);
-          setResolutionError(e.message === 'TIMEOUT' ? "Identity resolution timed out. Network is congested." : "P2P Dispatch Error: Identity lookup failed.");
+          setResolutionError("P2P Dispatch Error: Identity lookup failed.");
         }
       } finally {
         if (isMounted) setIsResolving(false);
+        clearTimeout(timeoutId);
       }
     }
     
     resolve();
-    return () => { isMounted = false; controller.abort(); };
+    return () => { isMounted = false; controller.abort(); clearTimeout(timeoutId); };
   }, [debouncedRecipient, addrType, activeNetwork.type, activeNetwork.name]);
 
   const handleSendRequest = async () => {
@@ -311,18 +313,16 @@ function SendClient() {
 
       <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
           <div className="space-y-10 pt-2 px-1">
-            {/* IDENTITY HANDSHAKE SECTION */}
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
+                    <div className="relative group">
                         <div className="relative z-10">
-                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
-                                <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender Profile" />
-                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0] || 'U'}</AvatarFallback>
+                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-hidden">
+                                <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender Profile" />
+                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                             </Avatar>
                         </div>
-                        {/* UNLOCKED BADGE: Fixed layering */}
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || 'Network'} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
                     </div>
@@ -336,26 +336,20 @@ function SendClient() {
                         </div>
                     </div>
                     
-                    {/* FLOATING ADDRESS BRIDGE */}
                     <AnimatePresence>
                         {resolvedAddress && !isResolving && (
                             <motion.div 
-                                initial={{ y: 15, opacity: 0, scale: 0.9 }}
-                                animate={{ y: 14, opacity: 1, scale: 1 }}
-                                exit={{ y: 10, opacity: 0, scale: 0.9 }}
-                                className="absolute top-10 left-0 right-0 text-center z-20"
+                                initial={{ y: 20, opacity: 0, scale: 0.9 }}
+                                animate={{ y: 30, opacity: 1, scale: 1 }}
+                                exit={{ y: 15, opacity: 0, scale: 0.9 }}
+                                transition={{ type: "spring", damping: 15 }}
+                                className="absolute left-0 right-0 text-center z-20"
                             >
                                 <div className="inline-flex flex-col items-center gap-1.5">
-                                    <p className={cn(
-                                        "text-[7px] font-black uppercase tracking-[0.25em]",
-                                        isNetworkMismatch ? "text-red-500" : "text-primary"
-                                    )}>
-                                        {isNetworkMismatch ? 'Incompatible Route' : 'Resolved Route'}
+                                    <p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>
+                                        {isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Invalid Format' : 'Resolved Route'}
                                     </p>
-                                    <div className={cn(
-                                        "bg-black/60 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl",
-                                        isNetworkMismatch ? "border-red-500/30" : "border-primary/20"
-                                    )}>
+                                    <div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}>
                                         <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
                                             {resolvedAddress.slice(0, 10)}...{resolvedAddress.slice(-8)}
                                         </p>
@@ -369,7 +363,7 @@ function SendClient() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                         <div className={cn(
-                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black",
+                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden",
                             (!isActuallyValid && !isNetworkMismatch && !validationError) ? "border-dashed border-white/10" : 
                             (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
                             "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
@@ -378,30 +372,30 @@ function SendClient() {
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
                                     <Avatar className="w-full h-full rounded-[2.5rem]">
-                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Profile" />
-                                        <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                                        <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient Profile" />
+                                        <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     {resolvedAddress && (
-                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
                                             <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                         </div>
                                     )}
                                 </div>
-                             ) : isNetworkMismatch ? (
-                                <div className="relative">
+                             ) : (isNetworkMismatch || (resolvedAddress && validationError)) ? (
+                                <div className="relative animate-in zoom-in duration-300">
                                     <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || 'Detected'} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-50">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-[60]">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || 'Detected'} size={20} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
                                 </div>
-                             ) : (isActuallyValid && !validationError) ? (
-                                <div className="relative">
+                             ) : resolvedAddress ? (
+                                <div className="relative animate-in zoom-in duration-300">
                                     <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token Logo" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
                                         <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
@@ -437,9 +431,7 @@ function SendClient() {
                 {resolutionError && !isResolving && (
                     <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                         <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
-                        <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">
-                            {resolutionError}
-                        </p>
+                        <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">{resolutionError}</p>
                     </div>
                 )}
 

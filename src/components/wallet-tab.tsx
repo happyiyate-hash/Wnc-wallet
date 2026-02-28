@@ -32,6 +32,7 @@ import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
+import SyncAlertCard from './wallet/sync-alert-card';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
@@ -117,9 +118,7 @@ export default function WalletTab() {
     if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
         const currentKey = localStorage.getItem('infura_api_key');
-        if (!currentKey) {
-            setIsApiKeySheetOpen(true);
-        }
+        if (!currentKey) setIsApiKeySheetOpen(true);
       }, 2000);
       return () => clearTimeout(timer);
     } else if (infuraApiKey) {
@@ -136,9 +135,7 @@ export default function WalletTab() {
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRefreshing]);
 
   const totalFiatValue = useMemo(() => {
@@ -177,7 +174,6 @@ export default function WalletTab() {
         setIsQuickSwapOpen(true);
         return;
     }
-    // DIRECT NAVIGATION as requested: Defaults are handled by the destination page context logic
     router.push(`/${type}`);
   };
 
@@ -250,6 +246,8 @@ export default function WalletTab() {
           <ActionButton icon={Sparkles} label="Buy" onClick={() => router.push('/buy')} />
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
+
+        <SyncAlertCard />
         
         <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
