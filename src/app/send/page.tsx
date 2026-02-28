@@ -77,9 +77,9 @@ const getDetectedNetworkMeta = (type: string) => {
 
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds')) return "Insufficient Gas Fee: You need more native tokens to pay for the network transfer.";
+  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
   if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
-  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance.";
+  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance and connection.";
 };
 
 function SendClient() {
@@ -177,7 +177,7 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 1. Resolve Identity via profiles table using the Account ID
+        // Resolve Identity via profiles
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
@@ -193,7 +193,7 @@ function SendClient() {
             name: userRecord.name || input
           });
 
-          // 2. Hydrate specific node based on ecosystem type (Canonical Mapping)
+          // Hydrate node based on current network type
           const targetChainType = activeNetwork.type || 'evm';
           let chainAddress = '';
           
@@ -269,8 +269,12 @@ function SendClient() {
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');
-  const amountUsdValue = (parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0);
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && parseFloat(amount) > 0 && !isSubmitting;
+  const amountNum = parseFloat(amount) || 0;
+  const amountUsdValue = amountNum * (selectedToken?.priceUsd || 0);
+  
+  // Hardened Liquidity Check
+  const hasInsufficientFunds = amountNum > balance;
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -300,7 +304,7 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
-                        {/* SENDER BADGE: UNLOCKED Z-INDEX */}
+                        {/* SENDER BADGE */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
@@ -369,7 +373,7 @@ function SendClient() {
                              )}
                         </div>
 
-                        {/* RECIPIENT BADGE: MOVED OUTSIDE OVERFLOW CONTAINER */}
+                        {/* RECIPIENT BADGE */}
                         {resolvedAddress && !isResolving && (
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70] animate-in fade-in zoom-in duration-300">
                                 <TokenLogoDynamic 
@@ -428,16 +432,24 @@ function SendClient() {
                 <div className="flex justify-between items-center px-2">
                     <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
                     <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-white/40 font-bold uppercase">Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span>
+                        <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>
+                          Bal: {balance.toFixed(4)} {selectedToken?.symbol}
+                        </span>
                         <Button size="sm" variant="ghost" className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md" onClick={() => setAmount(balance.toString())}>MAX</Button>
                     </div>
                 </div>
-                <div className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-6 transition-all group">
+                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all group", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4">
-                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter text-white" />
+                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
                     <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                   </div>
-                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated Value</span></div>
+                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
+                    {hasInsufficientFunds ? (
+                      <span className="text-red-400/60 not-italic uppercase tracking-widest font-black text-[9px]">Insufficient Node Funds</span>
+                    ) : (
+                      <>≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated Value</span></>
+                    )}
+                  </div>
                 </div>
             </div>
 

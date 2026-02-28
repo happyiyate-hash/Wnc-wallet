@@ -37,6 +37,16 @@ import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
 
 /**
+ * TECHNICAL ERROR MAPPER
+ */
+const mapTechnicalError = (err: any): string => {
+  const msg = (err.message || String(err)).toLowerCase();
+  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
+  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
+  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance.";
+};
+
+/**
  * INSTITUTIONAL REQUEST CREATION CARD
  * A cinematic overlay node for generating P2P requests.
  */
@@ -255,7 +265,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       refresh();
     } catch (e: any) {
       setTxStatus('error');
-      setReceiptError(e.message || "Dispatch failed.");
+      setReceiptError(mapTechnicalError(e));
     } finally {
       setIsSubmitting(false);
       setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
@@ -267,6 +277,8 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
   const isAlreadyPaid = request.status === 'paid';
   const activeToken = allAssets.find(a => a.symbol === request.token_symbol);
+  const userBalance = parseFloat(activeToken?.balance || '0');
+  const hasInsufficientFunds = request.amount > userBalance;
 
   return (
     <>
@@ -302,8 +314,19 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
             <div className="space-y-1">
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
-              <h2 className="text-5xl font-black text-white tracking-tighter">{request.amount} {request.token_symbol}</h2>
+              <h2 className={cn("text-5xl font-black tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")}>
+                {request.amount} {request.token_symbol}
+              </h2>
               <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * (activeToken?.priceUsd || 0))}</p>
+              
+              {hasInsufficientFunds && (
+                <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 animate-pulse">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
+                    Insufficient Balance ({userBalance.toFixed(4)})
+                  </span>
+                </div>
+              )}
             </div>
 
             {request.note && <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-muted-foreground italic w-full">"{request.note}"</div>}
@@ -311,7 +334,16 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
           <div className="space-y-3">
             {!isAlreadyPaid ? (
-              <Button onClick={handlePay} disabled={isSubmitting} className="w-full h-16 rounded-[2rem] font-black text-lg bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/20">{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize & Send"}</Button>
+              <Button 
+                onClick={handlePay} 
+                disabled={isSubmitting || hasInsufficientFunds} 
+                className={cn(
+                  "w-full h-16 rounded-[2rem] font-black text-lg shadow-2xl transition-all duration-300",
+                  hasInsufficientFunds ? "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed" : "bg-primary hover:bg-primary/90 shadow-primary/20"
+                )}
+              >
+                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize & Send"}
+              </Button>
             ) : (
               <div className="p-5 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-4"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /><div className="text-left"><p className="text-xs font-black text-green-500 uppercase">Paid & Locked</p><p className="text-[10px] text-green-400 opacity-80 leading-relaxed">This request has already been fulfilled.</p></div></div>
             )}
