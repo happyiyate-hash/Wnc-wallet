@@ -57,34 +57,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .eq('id', userId)
         .maybeSingle();
 
-      let resolvedProfile = data as UserProfile;
-
-      if (!error && resolvedProfile) {
-        if (!resolvedProfile.account_number) {
-            const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-            const generatedId = `835${randomSuffix}`;
-            
-            try {
-                const { data: updated, error: uError } = await supabase
-                    .from('profiles')
-                    .update({ account_number: generatedId })
-                    .eq('id', userId)
-                    .select()
-                    .maybeSingle();
-                    
-                if (updated && !uError) {
-                    resolvedProfile = updated as UserProfile;
-                } else {
-                    resolvedProfile.account_number = generatedId;
-                }
-            } catch (e) {
-                resolvedProfile.account_number = generatedId;
-            }
-        }
-
-        setProfile(resolvedProfile);
-        localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
-        return resolvedProfile;
+      if (!error && data) {
+        setProfile(data as UserProfile);
+        localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(data));
+        return data as UserProfile;
       }
     } catch (e) {
         console.warn("Profile fetch error:", e);
@@ -192,12 +168,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     if (supabase) {
         await supabase.auth.signOut();
-        // Atomic local clear to ensure UI reacts immediately
         setUser(null);
         setProfile(null);
         setActiveSessionId(null);
         localStorage.removeItem('wevina_active_session_id');
-        localStorage.removeItem('wevina_sessions'); // Total clear as requested for security
+        localStorage.removeItem('wevina_sessions');
     }
   };
 

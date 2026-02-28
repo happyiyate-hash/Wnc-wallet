@@ -177,8 +177,6 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // HARDENED 2-STEP HANDSHAKE
-        // STEP 1: RESOLVE RECIPIENT NODE (Identity Only)
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url')
@@ -194,8 +192,6 @@ function SendClient() {
             name: userRecord.name || input
           });
 
-          // STEP 2: HYDRATE NETWORK NODE (Chain Specific)
-          // Always requests the address format matching the terminal's active ecosystem (evm, xrp, polkadot)
           const targetChainType = activeNetwork.type || 'evm';
           
           const { data: addrRecord, error: addrError } = await supabase.rpc('fetch_user_addresses_by_account', {

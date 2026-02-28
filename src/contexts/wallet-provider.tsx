@@ -164,7 +164,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
-        // Generate new-gen account number locally
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
@@ -179,7 +178,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
-        // Generate account number locally if missing
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
@@ -190,14 +188,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const syncAllAddresses = async () => {
-    if (!activeSessionId || !supabase || !wallets || !accountNumber) return;
+    if (!activeSessionId || !supabase || !wallets) return;
+    
+    let targetAcc = accountNumber;
+    if (!targetAcc) {
+        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+        targetAcc = `835${randomSuffix}`;
+        setAccountNumber(targetAcc);
+        localStorage.setItem(`account_number_${activeSessionId}`, targetAcc);
+    }
+
     try {
       const syncPromises = wallets.map(w => 
         supabase!.rpc('sync_user_addresses', {
           p_user_id: activeSessionId,
           p_chain: w.type,
           p_address: w.address,
-          p_account_number: accountNumber
+          p_account_number: targetAcc
         })
       );
       
@@ -262,9 +269,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       await syncAllAddresses();
-      
-      setIsSynced(true);
-      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
       await refreshProfile();
     } catch (e: any) {
@@ -316,7 +320,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      // Fetch synced account number from registry
       const { data: addrData } = await supabase!
         .from('user_wallet_addresses')
         .select('account_number')
@@ -331,10 +334,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       setIsSynced(true);
-      
       toast({ title: "Vault Access Restored", description: "Your multi-chain nodes and RPCs are now active." });
     } catch (e: any) {
-      console.error("Cloud Restore Error:", e);
       throw e;
     }
   };
@@ -467,7 +468,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const syncStatus = localStorage.getItem(`is_synced_${activeSessionId}`);
         setIsSynced(syncStatus === 'true');
 
-        // Fetch account number from new registry or local cache
         const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
         if (localAcc) {
             setAccountNumber(localAcc);

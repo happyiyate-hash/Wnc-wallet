@@ -24,7 +24,8 @@ import {
   User,
   ExternalLink,
   Cpu,
-  Loader2
+  Loader2,
+  AlertCircle
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ import { cn } from "@/lib/utils";
 export default function ProfilePage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
-    const { allAssets, viewingNetwork, wallets, getAddressForChain, accountNumber } = useWallet();
+    const { allAssets, viewingNetwork, wallets, getAddressForChain, accountNumber, isRefreshing, syncAllAddresses } = useWallet();
     const { formatFiat, rates } = useCurrency();
     const [isAddressCopied, copyAddress] = useCopyToClipboard();
     const [isIdCopied, copyId] = useCopyToClipboard();
@@ -54,8 +55,12 @@ export default function ProfilePage() {
 
     const handleSync = async () => {
         setIsSyncing(true);
-        await refreshProfile();
-        setTimeout(() => setIsSyncing(false), 1000);
+        try {
+            await refreshProfile();
+            if (wallets) await syncAllAddresses();
+        } finally {
+            setTimeout(() => setIsSyncing(false), 1000);
+        }
     };
 
     const ProfileAction = ({ 
@@ -104,20 +109,34 @@ export default function ProfilePage() {
                         </div>
                         <div className="space-y-3 flex flex-col items-center w-full">
                             <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
-                            <div 
-                                onClick={() => accountNumber && copyId(accountNumber)} 
-                                className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span>
-                                    <div className={cn("transition-colors", isIdCopied ? "text-green-500" : "text-primary opacity-40")}>
-                                        {isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            
+                            {!accountNumber ? (
+                                <div className="flex flex-col items-center gap-4">
+                                    <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 animate-pulse">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Waiting for Sync...</span>
                                     </div>
+                                    <Button onClick={handleSync} className="h-10 rounded-xl px-6 gap-2 bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-all">
+                                        <RefreshCw className="w-4 h-4" /> Initialize Registry
+                                    </Button>
                                 </div>
-                                <p className="text-lg font-mono font-black text-white tracking-[0.1em]">
-                                    {accountNumber || (isSyncing ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Initializing...')}
-                                </p>
-                            </div>
+                            ) : (
+                                <div 
+                                    onClick={() => copyId(accountNumber)} 
+                                    className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span>
+                                        <div className={cn("transition-colors", isIdCopied ? "text-green-500" : "text-primary opacity-40")}>
+                                            {isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                        </div>
+                                    </div>
+                                    <p className="text-lg font-mono font-black text-white tracking-[0.1em]">
+                                        {accountNumber}
+                                    </p>
+                                </div>
+                            )}
+                            
                             <div className="flex items-center justify-center gap-1.5 pt-1"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span></div>
                         </div>
                     </section>
