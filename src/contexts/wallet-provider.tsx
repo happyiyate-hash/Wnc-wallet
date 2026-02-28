@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -66,6 +67,7 @@ interface WalletContextType {
   isSynced: boolean;
   syncAllAddresses: () => Promise<void>;
   syncDiagnostic: SyncDiagnosticState;
+  runCloudDiagnostic: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -102,6 +104,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const latestUserTokensRef = useRef(userAddedTokens);
+  const hasRunInitialDiagnostic = useRef<string | null>(null);
 
   useEffect(() => { latestUserTokensRef.current = userAddedTokens; }, [userAddedTokens]);
 
@@ -522,11 +525,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // Sync Watchdog: Trigger diagnostic on app settle
+  // Sync Watchdog: Trigger diagnostic on app settle (RELIABLE TRIGGER)
   useEffect(() => {
     if (!profile || !activeSessionId || !wallets || !isInitialized) return;
 
-    const checkInitialSync = () => {
+    if (hasRunInitialDiagnostic.current !== activeSessionId) {
+        hasRunInitialDiagnostic.current = activeSessionId;
+        runCloudDiagnostic();
+    }
+
+    const checkSyncStatus = () => {
       const evmLocal = wallets.find(w => w.type === 'evm')?.address;
       const xrpLocal = wallets.find(w => w.type === 'xrp')?.address;
       const dotLocal = wallets.find(w => w.type === 'polkadot')?.address;
@@ -537,14 +545,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                         (dotLocal && profile.polkadot_address !== dotLocal);
 
       setIsSynced(!needsSync);
-      
-      // Auto-trigger diagnostic if out of sync
-      if (needsSync && syncDiagnostic.status === 'idle') {
-        runCloudDiagnostic();
-      }
     };
 
-    checkInitialSync();
+    checkSyncStatus();
   }, [profile, activeSessionId, wallets, isInitialized, runCloudDiagnostic]);
 
   useEffect(() => {
@@ -653,7 +656,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     getAvailableAssetsForChain,
     isSynced,
     syncAllAddresses,
-    syncDiagnostic
+    syncDiagnostic,
+    runCloudDiagnostic
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

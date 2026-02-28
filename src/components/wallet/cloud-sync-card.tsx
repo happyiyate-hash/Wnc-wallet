@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,7 +11,8 @@ import {
   Cpu, 
   Zap, 
   ShieldCheck,
-  Search
+  Search,
+  ArrowRight
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
@@ -46,30 +48,40 @@ export default function CloudSyncCard() {
     if (!addr) return 'None';
     if (addr === 'Encrypted Phrase') return addr;
     if (addr === 'Stored') return addr;
+    if (addr === 'Missing') return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   return (
     <motion.div 
-      initial={{ y: -100, opacity: 0 }}
+      initial={{ y: -150, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      exit={{ y: -100, opacity: 0 }}
-      className="fixed top-4 left-4 right-4 z-[100] max-w-lg mx-auto"
+      exit={{ y: -150, opacity: 0 }}
+      transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+      className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto"
     >
-      <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/5 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
-        {/* Background Animation Node */}
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
+      <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
+        {/* Background Animation Node (Scanning Pulse) */}
+        <div className="absolute inset-0 pointer-events-none opacity-20">
             <motion.div 
                 animate={{ 
-                    scale: [1, 1.2, 1],
-                    opacity: [0.3, 0.5, 0.3]
+                    scale: [1, 1.4, 1],
+                    opacity: [0.2, 0.4, 0.2]
                 }}
-                transition={{ duration: 4, repeat: Infinity }}
+                transition={{ duration: 3, repeat: Infinity }}
                 className={cn(
                     "absolute -right-20 -top-20 w-64 h-64 blur-3xl rounded-full transition-colors duration-1000",
-                    status === 'mismatch' ? "bg-red-500" : status === 'success' ? "bg-green-500" : "bg-primary"
+                    status === 'mismatch' ? "bg-red-500" : status === 'success' || status === 'completed' ? "bg-green-500" : "bg-primary"
                 )}
             />
+            {status === 'checking' && (
+                <motion.div 
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-primary/20 to-transparent skew-x-12"
+                />
+            )}
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -83,23 +95,34 @@ export default function CloudSyncCard() {
               </div>
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">
-                  Cloud Node Active
+                  {status === 'completed' ? 'Registry Verified' : 'Cloud Sync Node'}
                 </h3>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                  <div className={cn(
+                    "w-1 h-1 rounded-full animate-pulse",
+                    status === 'completed' ? "bg-green-500" : "bg-primary"
+                  )} />
                   <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">
-                    Hardware Integrity Check
+                    {status === 'completed' ? 'System Integrity: Locked' : 'Hardware Identity Handshake'}
                   </span>
                 </div>
               </div>
             </div>
             
-            {chain && (
-                <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-2">
-                    <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
-                    <span className="text-[9px] font-black text-white">{chain}</span>
-                </div>
-            )}
+            <AnimatePresence mode="wait">
+                {chain && (
+                    <motion.div 
+                        key={chain}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-2"
+                    >
+                        <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
+                        <span className="text-[9px] font-black text-white">{chain}</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
           </div>
 
           <div className="space-y-2">
@@ -107,17 +130,20 @@ export default function CloudSyncCard() {
                 <span className={cn("text-[9px] font-black uppercase tracking-widest", getStatusColor())}>
                     {status === 'checking' && `Scanning ${chain} Registry...`}
                     {status === 'mismatch' && 'Registry Conflict Detected'}
-                    {status === 'syncing' && 'Reconciling Nodes...'}
-                    {status === 'success' && `${chain} Verified & Locked`}
-                    {status === 'completed' && 'Institutional Sync Complete'}
+                    {status === 'syncing' && 'Reconciling Identity Nodes...'}
+                    {status === 'success' && `${chain} Integrity Verified`}
+                    {status === 'completed' && 'Institutional Handshake Complete'}
                 </span>
                 <span className="text-[9px] font-mono text-muted-foreground">{Math.round(progress)}%</span>
             </div>
-            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                 <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
-                    className="h-full bg-gradient-to-r from-primary to-purple-500"
+                    className={cn(
+                        "h-full bg-gradient-to-r transition-colors duration-500",
+                        status === 'mismatch' ? "from-red-500 to-orange-500" : "from-primary to-purple-500"
+                    )}
                 />
             </div>
           </div>
@@ -130,19 +156,26 @@ export default function CloudSyncCard() {
                 exit={{ opacity: 0, x: -20 }}
                 className="grid grid-cols-2 gap-2"
             >
-                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1">
+                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative">
                     <div className="flex items-center gap-1.5">
                         <Database className="w-2.5 h-2.5 text-muted-foreground" />
                         <span className="text-[7px] font-black text-muted-foreground uppercase">Cloud Registry</span>
                     </div>
                     <p className={cn(
-                        "text-[10px] font-mono truncate",
-                        status === 'mismatch' ? "text-red-400 line-through" : "text-white/60"
+                        "text-[10px] font-mono truncate transition-all duration-500",
+                        status === 'mismatch' ? "text-red-400 line-through scale-95 opacity-50" : "text-white/60"
                     )}>
                         {truncateAddress(cloudValue)}
                     </p>
+                    {status === 'syncing' && (
+                        <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: '100%' }}
+                            className="absolute bottom-0 left-0 h-[1px] bg-primary"
+                        />
+                    )}
                 </div>
-                <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1">
+                <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative">
                     <div className="flex items-center gap-1.5">
                         <Cpu className="w-2.5 h-2.5 text-primary" />
                         <span className="text-[7px] font-black text-primary uppercase">Local Node</span>
@@ -150,17 +183,43 @@ export default function CloudSyncCard() {
                     <p className="text-[10px] font-mono text-white truncate">
                         {truncateAddress(localValue)}
                     </p>
+                    {status === 'success' && (
+                        <motion.div 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="absolute -top-1 -right-1"
+                        >
+                            <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
+                        </motion.div>
+                    )}
                 </div>
             </motion.div>
           </AnimatePresence>
 
           {status === 'mismatch' && (
-            <div className="flex items-center justify-center gap-2 py-1 px-4 rounded-xl bg-red-500/10 border border-red-500/20 animate-pulse">
+            <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-center gap-2 py-1.5 px-4 rounded-xl bg-red-500/10 border border-red-500/20 animate-pulse"
+            >
                 <AlertCircle className="w-3 h-3 text-red-500" />
                 <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">
-                    Outdated Registry Node Found - Auto Repair Initialized
+                    Outdated Registry Node Found - Reconciling...
                 </span>
-            </div>
+            </motion.div>
+          )}
+
+          {status === 'completed' && (
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center justify-center gap-2 py-1 px-4 rounded-xl bg-green-500/10 border border-green-500/20"
+            >
+                <ShieldCheck className="w-3 h-3 text-green-500" />
+                <span className="text-[8px] font-black text-green-500 uppercase tracking-widest">
+                    Institutional Vault Verified
+                </span>
+            </motion.div>
           )}
         </div>
       </div>
