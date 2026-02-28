@@ -193,11 +193,10 @@ function SendClient() {
             name: userRecord.name || input
           });
 
-          // 2. Hydrate specific node based on ecosystem type (NOT chain name)
+          // 2. Hydrate specific node based on ecosystem type (Canonical Mapping)
           const targetChainType = activeNetwork.type || 'evm';
           let chainAddress = '';
           
-          // CRITICAL: Always pull from the standardized column based on network type
           if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
           else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
           else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
@@ -207,7 +206,7 @@ function SendClient() {
             setResolutionError(null);
           } else if (isMounted) {
             setResolvedAddress('');
-            setResolutionError(`Recipient found, but no address linked for ${activeNetwork.name}.`);
+            setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
           }
         } else if (isMounted) {
           setResolvedAddress('');
@@ -301,7 +300,7 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
-                        {/* UNLOCKED BADGE: FIXED CLIPPING */}
+                        {/* SENDER BADGE: UNLOCKED Z-INDEX */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
@@ -342,31 +341,21 @@ function SendClient() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                         <div className={cn(
-                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden",
+                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden z-10",
                             (!resolvedAddress && !isNetworkMismatch && !validationError) ? "border-dashed border-white/10" : 
                             (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
                             "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
-                                <div className="relative w-full h-full">
-                                    <Avatar className="w-full h-full rounded-[2.5rem]">
-                                        <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient" />
-                                        <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                                    </Avatar>
-                                    {resolvedAddress && (
-                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
-                                            <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
-                                        </div>
-                                    )}
-                                </div>
+                                <Avatar className="w-full h-full rounded-none">
+                                    <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient" />
+                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
+                                </Avatar>
                              ) : (isNetworkMismatch || (resolvedAddress && validationError)) ? (
                                 <div className="relative animate-in zoom-in duration-300">
                                     <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
-                                    </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-[70]">
-                                        <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={20} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
                                 </div>
                              ) : resolvedAddress ? (
@@ -374,14 +363,25 @@ function SendClient() {
                                     <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
-                                    </div>
                                 </div>
                              ) : (
                                 <Search className="w-8 h-8 text-white/10" />
                              )}
                         </div>
+
+                        {/* RECIPIENT BADGE: MOVED OUTSIDE OVERFLOW CONTAINER */}
+                        {resolvedAddress && !isResolving && (
+                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70] animate-in fade-in zoom-in duration-300">
+                                <TokenLogoDynamic 
+                                    logoUrl={isNetworkMismatch || validationError ? null : (selectedToken?.iconUrl || activeNetwork.iconUrl)} 
+                                    alt="Network Node" 
+                                    size={20} 
+                                    chainId={isNetworkMismatch || validationError ? undefined : activeNetwork.chainId} 
+                                    symbol={isNetworkMismatch || validationError ? detectedMeta?.symbol : activeNetwork.symbol} 
+                                    name={isNetworkMismatch || validationError ? detectedMeta?.name : activeNetwork.name} 
+                                />
+                            </div>
+                        )}
                     </div>
                     <span className={cn(
                         "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center",
