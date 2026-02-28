@@ -104,22 +104,22 @@ export default function GlobalTokenSelector({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[92vw] max-w-[440px] h-[70vh] bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-0 overflow-hidden shadow-2xl z-[150] gap-0 flex flex-col">
+            <DialogContent className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[92vw] max-w-[440px] h-[75vh] bg-gradient-to-br from-zinc-900/40 via-black/90 to-zinc-900/40 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-0 overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] z-[150] gap-0 flex flex-col">
                 <DialogTitle className="sr-only">{title}</DialogTitle>
-                <DialogDescription className="sr-only">Floating asset control panel for institutional transfers.</DialogDescription>
+                <DialogDescription className="sr-only">Transparent asset control cockpit with integrated network switching.</DialogDescription>
 
                 {/* HEADER COCKPIT */}
-                <div className="p-6 border-b border-white/5 space-y-4 shrink-0 bg-gradient-to-b from-white/[0.02] to-transparent">
+                <div className="p-6 border-b border-white/5 space-y-4 shrink-0 bg-white/[0.02]">
                     <div className="flex items-center justify-between gap-3">
                         {/* NETWORK SWITCHER DROPDOWN (LEFT) */}
                         <button 
                             onClick={() => setIsNetworkListOpen(!isNetworkListOpen)}
-                            className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all active:scale-95 shrink-0"
+                            className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-2xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all active:scale-95 shrink-0"
                         >
                             <TokenLogoDynamic 
                                 logoUrl={selectedChain.iconUrl} 
                                 alt={selectedChain.name} 
-                                size={18} 
+                                size={20} 
                                 chainId={selectedChain.chainId} 
                                 symbol={selectedChain.symbol}
                                 name={selectedChain.name}
@@ -129,9 +129,8 @@ export default function GlobalTokenSelector({
                         </button>
 
                         {/* IDENTITY NODE (RIGHT - MASKED) */}
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/5 group min-w-0">
-                            <Cpu className="w-3 h-3 text-primary opacity-40 shrink-0" />
-                            <p className="text-[10px] font-mono text-white/40 truncate">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white/[0.05] border border-white/10 group min-w-0">
+                            <p className="text-[10px] font-mono text-white/60 tracking-tight">
                                 {maskedAddress}
                             </p>
                             <button 
@@ -144,10 +143,10 @@ export default function GlobalTokenSelector({
                     </div>
 
                     <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                         <Input 
                             placeholder={isNetworkListOpen ? "Search networks..." : "Search assets..."}
-                            className="bg-white/5 border-white/10 pl-11 h-12 rounded-2xl focus-visible:ring-primary text-sm placeholder:text-white/10"
+                            className="bg-black/40 border-white/10 pl-11 h-14 rounded-2xl focus-visible:ring-primary text-base placeholder:text-white/20"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -162,27 +161,27 @@ export default function GlobalTokenSelector({
                                 initial={{ y: -20, opacity: 0 }}
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: -20, opacity: 0 }}
-                                className="absolute inset-0 z-20 bg-[#0a0a0c] p-4 overflow-hidden flex flex-col"
+                                className="absolute inset-0 z-20 bg-black/95 backdrop-blur-xl p-4 overflow-hidden flex flex-col"
                             >
-                                <div className="flex items-center justify-between mb-4 px-2">
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Select Ecosystem</span>
-                                    <button onClick={() => setIsNetworkListOpen(false)} className="text-white/20 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+                                <div className="flex items-center justify-between mb-6 px-2">
+                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Target Ecosystem</span>
+                                    <button onClick={() => setIsNetworkListOpen(false)} className="text-white/20 hover:text-white transition-colors p-2"><X className="w-5 h-5" /></button>
                                 </div>
                                 <ScrollArea className="flex-1">
-                                    <div className="grid grid-cols-2 gap-2 pb-10">
+                                    <div className="grid grid-cols-2 gap-3 pb-10">
                                         {filteredChains.map((chain) => (
                                             <button 
                                                 key={chain.chainId}
                                                 onClick={() => { setSelectedNetwork(chain); setIsNetworkListOpen(false); }}
                                                 className={cn(
-                                                    "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all active:scale-95",
+                                                    "flex flex-col items-center gap-3 p-5 rounded-[2rem] border transition-all active:scale-95 group",
                                                     selectedChain.chainId === chain.chainId 
-                                                        ? "bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(139,92,246,0.1)]" 
-                                                        : "bg-white/5 border-white/5 hover:bg-white/10"
+                                                        ? "bg-primary/10 border-primary/40 shadow-[0_0_30px_rgba(139,92,246,0.15)]" 
+                                                        : "bg-white/[0.03] border-white/5 hover:bg-white/[0.08]"
                                                 )}
                                             >
-                                                <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={32} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
-                                                <p className="font-black text-[10px] uppercase tracking-tight text-white line-clamp-1">{chain.name}</p>
+                                                <TokenLogoDynamic logoUrl={chain.iconUrl} alt={chain.name} size={40} chainId={chain.chainId} name={chain.name} symbol={chain.symbol} />
+                                                <p className="font-black text-[10px] uppercase tracking-tight text-white group-hover:text-primary transition-colors line-clamp-1">{chain.name}</p>
                                             </button>
                                         ))}
                                     </div>
@@ -193,7 +192,7 @@ export default function GlobalTokenSelector({
 
                     {/* MAIN TOKEN LIST */}
                     <ScrollArea className="h-full">
-                        <div className="p-4 space-y-1 pb-24">
+                        <div className="p-4 space-y-2 pb-24">
                             <AnimatePresence mode="popLayout">
                                 {currentAssets.map((asset, index) => (
                                     <motion.button 
@@ -202,19 +201,20 @@ export default function GlobalTokenSelector({
                                         animate={{ x: 0, opacity: 1 }}
                                         transition={{ delay: index * 0.03 }}
                                         onClick={() => handleTokenClick(asset)}
-                                        className="w-full flex items-center justify-between p-4 rounded-[1.5rem] bg-white/[0.03] border border-white/5 hover:bg-white/[0.08] transition-all group active:scale-[0.98]"
+                                        className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/[0.02] border border-white/5 hover:bg-white/[0.08] transition-all group active:scale-[0.98]"
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
                                                 <TokenLogoDynamic 
                                                     logoUrl={asset.iconUrl} 
                                                     alt={asset.symbol} 
-                                                    size={40} 
+                                                    size={44} 
                                                     chainId={asset.chainId} 
                                                     symbol={asset.symbol} 
                                                     name={asset.name}
                                                 />
-                                                <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-0.5 border border-white/10 shadow-lg">
+                                                {/* DYNAMIC NETWORK BADGE - SHOWS NATIVE COIN OF THE CHAIN */}
+                                                <div className="absolute -bottom-1 -right-1 bg-black rounded-xl p-1 border border-white/10 shadow-2xl z-10">
                                                     <TokenLogoDynamic 
                                                         logoUrl={selectedChain.iconUrl} 
                                                         alt="chain" 
@@ -226,15 +226,15 @@ export default function GlobalTokenSelector({
                                                 </div>
                                             </div>
                                             <div className="text-left">
-                                                <p className="font-bold text-sm text-white">{asset.symbol}</p>
+                                                <p className="font-black text-base text-white tracking-tight">{asset.symbol}</p>
                                                 <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-40">{asset.name}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-mono text-xs font-bold text-white">
+                                            <p className="font-mono text-sm font-black text-white">
                                                 {parseFloat(asset.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })}
                                             </p>
-                                            <div className="flex items-center justify-end gap-1 opacity-40">
+                                            <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-60 transition-opacity">
                                                 <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Available</span>
                                                 <ArrowRight className="w-2 h-2" />
                                             </div>
