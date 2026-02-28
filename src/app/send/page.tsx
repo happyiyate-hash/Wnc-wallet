@@ -107,7 +107,7 @@ function SendClient() {
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const debouncedRecipient = useDebounce(recipientInput, 600);
+  const debouncedRecipient = useDebounce(recipientInput, 300); // Snappier response
 
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,8 +156,11 @@ function SendClient() {
     return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
 
+  // HARDENED RESOLUTION EFFECT
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
+
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
@@ -175,16 +178,26 @@ function SendClient() {
       const searchHandle = input.startsWith('@') ? input.substring(1).toLowerCase().trim() : input.toLowerCase().trim();
 
       try {
-        const { data } = await supabase!.rpc('fetch_recipient_details', {
+        if (!supabase) throw new Error("No database connection");
+
+        // Add a 10s timeout to the resolution
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000));
+        const rpcPromise = supabase.rpc('fetch_recipient_details', {
           search_account_number: searchHandle,
           selected_chain: activeNetwork.type || 'evm'
         });
+
+        const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
         
         if (!isMounted) return;
 
         if (data && data.length > 0) {
           const result = data[0];
-          setRecipientProfile({ avatar: result.profile_pic, verified: result.verified, name: result.name || searchHandle });
+          setRecipientProfile({ 
+            avatar: result.profile_pic, 
+            verified: result.verified, 
+            name: result.name || searchHandle 
+          });
           setResolvedAddress(result.target_address || '');
         } else {
           setResolvedAddress('');
@@ -201,7 +214,7 @@ function SendClient() {
     }
     
     resolve();
-    return () => { isMounted = false; };
+    return () => { isMounted = false; controller.abort(); };
   }, [debouncedRecipient, addrType, activeNetwork.type]);
 
   const handleSendRequest = async () => {
@@ -258,7 +271,7 @@ function SendClient() {
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl" aria-label="Go Back"><ArrowLeft className="w-5 h-5" /></Button>
         <button 
             onClick={() => setIsSelectorOpen(true)}
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
@@ -275,16 +288,19 @@ function SendClient() {
 
       <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
           <div className="space-y-10 pt-2 px-1">
+            {/* IDENTITY HANDSHAKE SECTION */}
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
-                            <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender" />
-                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
-                        </Avatar>
-                        {/* UNLOCKED BADGE: Outside clipped avatar container */}
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Active Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
+                        <div className="relative z-10">
+                            <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
+                                <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender Profile" />
+                                <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0] || 'U'}</AvatarFallback>
+                            </Avatar>
+                        </div>
+                        {/* UNLOCKED BADGE: Always visible above clipping */}
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || 'Network'} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
@@ -301,16 +317,16 @@ function SendClient() {
                     <AnimatePresence>
                         {isActuallyValid && !isResolving && (
                             <motion.div 
-                                initial={{ y: 10, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                exit={{ y: 5, opacity: 0 }}
-                                className="absolute top-10 left-0 right-0 text-center"
+                                initial={{ y: 15, opacity: 0, scale: 0.9 }}
+                                animate={{ y: 5, opacity: 1, scale: 1 }}
+                                exit={{ y: 10, opacity: 0, scale: 0.9 }}
+                                className="absolute top-10 left-0 right-0 text-center z-20"
                             >
                                 <div className="inline-flex flex-col items-center gap-1">
                                     <p className="text-[7px] font-black text-primary uppercase tracking-[0.2em]">Resolved Route</p>
-                                    <div className="bg-primary/10 border border-primary/20 px-2 py-1 rounded-lg backdrop-blur-md">
-                                        <p className="text-[9px] font-mono text-white tracking-tighter whitespace-nowrap">
-                                            {resolvedAddress.slice(0, 8)}...{resolvedAddress.slice(-6)}
+                                    <div className="bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl">
+                                        <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
+                                            {resolvedAddress.slice(0, 10)}...{resolvedAddress.slice(-8)}
                                         </p>
                                     </div>
                                 </div>
@@ -322,27 +338,28 @@ function SendClient() {
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                         <div className={cn(
-                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative",
+                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black",
                             !isActuallyValid ? "border-dashed border-white/10" : (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
-                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
-                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
+                                    <Avatar className="w-full h-full rounded-[2.5rem]">
+                                        <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Profile" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                        <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Target Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
+                                    {/* NETWORK BADGE FOR RECIPIENT */}
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (isActuallyValid && !isNetworkMismatch && !validationError) ? (
                                 <div className="relative">
                                     <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token Logo" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
@@ -364,7 +381,7 @@ function SendClient() {
                     <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
                     <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
                 </div>
-                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10")}>
+                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10", isResolving && "ring-2 ring-primary/20")}>
                     <div className="flex items-center gap-2 px-2">
                         <Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1" />
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
