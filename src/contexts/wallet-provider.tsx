@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, LocalSession } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
