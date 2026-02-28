@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,6 +7,7 @@ import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
+import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
@@ -88,7 +88,8 @@ export default function Home() {
   }
 
   return (
-    <div className="flex-1 bg-background pb-32">
+    <div className="flex-1 bg-background pb-32 relative">
+      <CloudSyncCard />
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <main className={cn(
         "flex flex-col items-center transition-all duration-700 ease-out",

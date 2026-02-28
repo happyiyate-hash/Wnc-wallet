@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -18,6 +17,14 @@ import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
+
+export type SyncDiagnosticState = {
+  status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Vault' | null;
+  localValue: string | null;
+  cloudValue: string | null;
+  progress: number;
+};
 
 interface PriceInfo {
     price: number;
@@ -58,6 +65,7 @@ interface WalletContextType {
   getAvailableAssetsForChain: (chainId: number) => AssetRow[];
   isSynced: boolean;
   syncAllAddresses: () => Promise<void>;
+  syncDiagnostic: SyncDiagnosticState;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -78,6 +86,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
   const [isSynced, setIsSynced] = useState(true);
+
+  // Sync Diagnostic State
+  const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnosticState>({
+    status: 'idle',
+    chain: null,
+    localValue: null,
+    cloudValue: null,
+    progress: 0
+  });
 
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
@@ -216,10 +233,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       await refreshProfile();
-      toast({ title: "Sync Successful", description: "Identity registry updated." });
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
-      toast({ variant: "destructive", title: "Sync Failed", description: e.message });
       throw e;
     }
   };
@@ -287,9 +302,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       await refreshProfile();
-      toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Backup Failed", description: e.message });
+      console.error("Vault Backup Failed:", e.message);
     }
   };
 
@@ -426,6 +440,61 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
 
+  const runCloudDiagnostic = useCallback(async () => {
+    if (!wallets || !profile || !activeSessionId) return;
+
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const chains: ('EVM' | 'XRP' | 'Polkadot')[] = ['EVM', 'XRP', 'Polkadot'];
+    
+    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
+
+    for (let i = 0; i < chains.length; i++) {
+      const chain = chains[i];
+      const type = chain.toLowerCase() as 'evm' | 'xrp' | 'polkadot';
+      const local = wallets.find(w => w.type === type)?.address || null;
+      const cloud = profile[`${type}_address` as keyof UserProfile] as string || null;
+      
+      setSyncDiagnostic(prev => ({ 
+        ...prev, 
+        chain, 
+        status: 'checking', 
+        localValue: local, 
+        cloudValue: cloud,
+        progress: (i / chains.length) * 100 
+      }));
+      
+      await wait(1200);
+
+      if (local !== cloud) {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
+        await wait(800);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+        await syncAllAddresses(); // RPC call to update cloud
+        await wait(1000);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await wait(800);
+      } else {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
+        await wait(600);
+      }
+    }
+
+    // Final Mnemonic Check
+    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing' }));
+    await wait(1000);
+    if (!profile.vault_phrase) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+      await saveToVault();
+      await wait(1000);
+    }
+    
+    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    setTimeout(() => {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
+    }, 3000);
+
+  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault]);
+
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
     setHiddenTokenKeys(prev => {
       const next = new Set(prev);
@@ -453,37 +522,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // Sync Watchdog: Performs deep parity check between local and cloud nodes
+  // Sync Watchdog: Trigger diagnostic on app settle
   useEffect(() => {
-    if (!profile || !activeSessionId) return;
+    if (!profile || !activeSessionId || !wallets || !isInitialized) return;
 
-    const checkSyncStatus = () => {
-      const localMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-      const hasCloudMnemonic = !!profile.vault_phrase;
+    const checkInitialSync = () => {
+      const evmLocal = wallets.find(w => w.type === 'evm')?.address;
+      const xrpLocal = wallets.find(w => w.type === 'xrp')?.address;
+      const dotLocal = wallets.find(w => w.type === 'polkadot')?.address;
+
+      const needsSync = !profile.vault_phrase || 
+                        (evmLocal && profile.evm_address !== evmLocal) ||
+                        (xrpLocal && profile.xrp_address !== xrpLocal) ||
+                        (dotLocal && profile.polkadot_address !== dotLocal);
+
+      setIsSynced(!needsSync);
       
-      // 1. Secret Phrase Parity
-      if (localMnemonic && !hasCloudMnemonic) return false;
-
-      // 2. Network Node Parity (Public Addresses)
-      if (wallets) {
-        const evmLocal = wallets.find(w => w.type === 'evm')?.address;
-        const xrpLocal = wallets.find(w => w.type === 'xrp')?.address;
-        const dotLocal = wallets.find(w => w.type === 'polkadot')?.address;
-
-        if (evmLocal && profile.evm_address !== evmLocal) return false;
-        if (xrpLocal && profile.xrp_address !== xrpLocal) return false;
-        if (dotLocal && profile.polkadot_address !== dotLocal) return false;
+      // Auto-trigger diagnostic if out of sync
+      if (needsSync && syncDiagnostic.status === 'idle') {
+        runCloudDiagnostic();
       }
-
-      // 3. Identity Identifier Parity
-      const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
-      if (localAcc && profile.account_number !== localAcc) return false;
-
-      return true;
     };
 
-    setIsSynced(checkSyncStatus());
-  }, [profile, activeSessionId, wallets]);
+    checkInitialSync();
+  }, [profile, activeSessionId, wallets, isInitialized, runCloudDiagnostic]);
 
   useEffect(() => {
     const initLocalSession = async () => {
@@ -590,7 +652,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     addUserToken,
     getAvailableAssetsForChain,
     isSynced,
-    syncAllAddresses
+    syncAllAddresses,
+    syncDiagnostic
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

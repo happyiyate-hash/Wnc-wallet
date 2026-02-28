@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -32,7 +31,6 @@ import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
-import SyncAlertCard from './wallet/sync-alert-card';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
@@ -247,8 +245,6 @@ export default function WalletTab() {
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
 
-        <SyncAlertCard />
-        
         <div className="w-full">
             <Tabs defaultValue="tokens" className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-6 border-b border-white/5">
