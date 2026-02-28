@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -14,7 +15,8 @@ import {
   Wallet as WalletIcon,
   Copy,
   CheckCircle2,
-  Timer
+  Timer,
+  HandCoins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -31,6 +33,7 @@ import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
+import SyncAlertCard from './wallet/sync-alert-card';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
@@ -167,7 +170,7 @@ export default function WalletTab() {
     return 'text-4xl';
   };
 
-  const openAction = (type: 'send' | 'receive' | 'swap') => {
+  const openAction = (type: 'send' | 'receive' | 'swap' | 'request') => {
     if (type === 'swap') {
         setIsQuickSwapOpen(true);
         return;
@@ -237,11 +240,13 @@ export default function WalletTab() {
             </div>
         </div>
 
+        <SyncAlertCard />
+
         <div className="flex justify-center gap-2.5 my-10 px-4">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
-          <ActionButton icon={Sparkles} label="Buy" onClick={() => router.push('/buy')} />
+          <ActionButton icon={HandCoins} label="Request" onClick={() => openAction('request')} />
           <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
         </div>
 

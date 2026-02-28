@@ -60,6 +60,20 @@ export interface UserProfile {
     polkadot_address?: string;
 }
 
+export interface PaymentRequest {
+    id: string;
+    requester_id: string;
+    requester_account_number: string;
+    chain_type: 'evm' | 'xrp' | 'polkadot';
+    token_symbol: string;
+    token_address?: string;
+    amount: number;
+    note?: string;
+    status: 'pending' | 'paid' | 'expired' | 'cancelled';
+    created_at: string;
+    expires_at: string;
+}
+
 export interface LocalSession {
     id: string; // Supabase UID
     profile: UserProfile;
