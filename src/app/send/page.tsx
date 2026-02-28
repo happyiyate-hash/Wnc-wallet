@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Timer,
   Search,
-  XCircle,
   ArrowRight,
   ShieldAlert,
   AlertCircle
@@ -76,32 +75,17 @@ const getDetectedNetworkMeta = (type: string) => {
     return null;
 };
 
-/**
- * TECHNICAL ERROR MAPPING ENGINE
- * Translates raw blockchain JSON into friendly institutional alerts.
- */
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  
   if (msg.includes('insufficient funds') || msg.includes('insufficient_funds')) {
     if (msg.includes('gas') || msg.includes('fee')) {
       return "Insufficient Gas Fee: You need more native tokens (e.g. ETH, MATIC, BNB) to pay for the network transfer.";
     }
     return "Insufficient Balance: You do not have enough funds to complete this transfer.";
   }
-  
   if (msg.includes('user rejected') || msg.includes('action rejected')) {
     return "Transaction Cancelled: You rejected the request in your wallet.";
   }
-  
-  if (msg.includes('nonce too low') || msg.includes('already known')) {
-    return "Sync Mismatch: Your wallet is currently processing another transaction. Please wait a moment and try again.";
-  }
-
-  if (msg.includes('replacement transaction underpriced')) {
-    return "Gas Error: The network gas price has increased. Please try again with updated fees.";
-  }
-
   return "Dispatch Error: The blockchain rejected the transaction. Please check your balance and try again.";
 };
 
@@ -109,7 +93,6 @@ function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap } = useWallet();
   const { formatFiat } = useCurrency();
   const { profile } = useUser();
-  const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -137,17 +120,14 @@ function SendClient() {
 
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
-    
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    
     let target = allAssets.find(a => a.symbol === symbol && a.chainId === chainIdParam);
     if (!target) {
         target = allAssets.find(a => a.chainId === viewingNetwork.chainId && a.isNative) || 
                  allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
                  allAssets[0];
     }
-    
     if (target) {
         setSelectedToken({ ...target });
         hasInitialized.current = true;
@@ -163,18 +143,10 @@ function SendClient() {
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
   
   const validationError = useMemo(() => {
-    if (addrType === 'invalid-evm-format') {
-        return { title: "Invalid Address Format", message: "This doesn’t look like a valid EVM address. Please check and try again." };
-    }
-    if (addrType === 'invalid-evm-checksum') {
-        return { title: "Invalid Address Checksum", message: "This address failed cryptographic checksum validation. Please double-check for typos." };
-    }
-    if (addrType === 'invalid-xrp') {
-        return { title: "Invalid XRP Address", message: "This address failed Base58 validation. Please check for typos." };
-    }
-    if (addrType === 'invalid-polkadot') {
-        return { title: "Invalid Polkadot Address", message: "This address failed SS58 checksum validation. Please check for typos." };
-    }
+    if (addrType === 'invalid-evm-format') return { title: "Invalid Address Format", message: "This doesn’t look like a valid EVM address. Please check and try again." };
+    if (addrType === 'invalid-evm-checksum') return { title: "Invalid Address Checksum", message: "This address failed cryptographic checksum validation. Please double-check for typos." };
+    if (addrType === 'invalid-xrp') return { title: "Invalid XRP Address", message: "This address failed Base58 validation. Please check for typos." };
+    if (addrType === 'invalid-polkadot') return { title: "Invalid Polkadot Address", message: "This address failed SS58 checksum validation. Please check for typos." };
     return null;
   }, [addrType]);
 
@@ -190,7 +162,6 @@ function SendClient() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
-      // If input is empty or too short, or it's already a valid direct address, stop resolving
       if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
           setResolvedAddress(isValidBase ? input : '');
@@ -306,15 +277,15 @@ function SendClient() {
           <div className="space-y-10 pt-2 px-1">
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative group">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-visible">
+                    <div className="relative">
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black">
                             <AvatarImage src={profile?.photo_url} className="rounded-[2.5rem] object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0]}</AvatarFallback>
-                            {/* Network Badge - Unlocked from clipping */}
-                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Active Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
-                            </div>
                         </Avatar>
+                        {/* UNLOCKED BADGE: Outside clipped avatar container */}
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Active Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
+                        </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
                 </div>
@@ -357,13 +328,13 @@ function SendClient() {
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
                                 <div className="relative w-full h-full">
-                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black overflow-visible">
+                                    <Avatar className="w-full h-full rounded-[2.5rem] bg-black">
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Target Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
-                                        </div>
                                     </Avatar>
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                        <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt="Target Network" size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
+                                    </div>
                                 </div>
                              ) : (isActuallyValid && !isNetworkMismatch && !validationError) ? (
                                 <div className="relative">

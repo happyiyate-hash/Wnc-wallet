@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -51,7 +52,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import AccountSwitcherSheet from "@/components/wallet/account-switcher-sheet";
 
 export default function SettingsPage() {
-    const { wallets, deleteWallet, logout } = useWallet();
+    const { deleteWallet, logout } = useWallet();
     const { user, profile, activeSessionId } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
@@ -167,7 +168,7 @@ export default function SettingsPage() {
                             <div className="p-5 flex items-center gap-4 border-b border-white/5 mb-1 bg-white/[0.02] rounded-[2rem]">
                                 <div className="relative">
                                     <Avatar className="w-16 h-16 rounded-[1.5rem] border-2 border-primary/20 shadow-2xl">
-                                        <AvatarImage src={profile?.photo_url} className="object-cover" />
+                                        <AvatarImage src={profile?.photo_url} className="object-cover" alt="Profile" />
                                         <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white rounded-[1.5rem]">
                                             <User className="w-8 h-8" />
                                         </AvatarFallback>

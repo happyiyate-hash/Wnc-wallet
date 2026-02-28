@@ -44,7 +44,7 @@ interface WalletContextType {
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
   restoreFromCloud: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   deleteWallet: () => void;
   fetchError: string | null;
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
@@ -115,45 +115,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // AGGRESSIVE WATCHDOG SYNC: Runs on every startup/wallet load
-  useEffect(() => {
-    const runWatchdog = async () => {
-      if (!user || !wallets || !profile?.account_number || !supabase) return;
-
-      try {
-        const { data: cloudIdentities } = await supabase
-          .from('user_identity')
-          .select('blockchain_name, wallet_address')
-          .eq('user_id', user.id);
-
-        for (const wallet of wallets) {
-          const cloudMatch = cloudIdentities?.find(c => c.blockchain_name === wallet.type);
-
-          if (!cloudMatch || cloudMatch.wallet_address !== wallet.address) {
-            await supabase.from('user_identity').upsert({
-              user_id: user.id,
-              account_number: profile.account_number,
-              blockchain_name: wallet.type,
-              wallet_address: wallet.address,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id, blockchain_name' });
-          }
-        }
-      } catch (e) {
-        console.warn("Watchdog Sync Error:", e);
-      }
-    };
-
-    if (isInitialized && wallets && profile?.account_number) {
-        runWatchdog();
-    }
-  }, [isInitialized, user?.id, wallets, profile?.account_number]);
-
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
     if (key) localStorage.setItem('infura_api_key', key);
     else localStorage.removeItem('infura_api_key');
   }, []);
+
+  const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
+    setHiddenTokenKeys(prev => {
+      const next = new Set(prev);
+      const key = `${chainId}:${symbol}`;
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      if (activeSessionId) {
+        localStorage.setItem(`hidden_tokens_${activeSessionId}`, JSON.stringify(Array.from(next)));
+      }
+      return next;
+    });
+  }, [activeSessionId]);
+
+  const addUserToken = useCallback((token: AssetRow) => {
+    setUserAddedTokens(prev => {
+      const exists = prev.find(t => t.chainId === token.chainId && t.symbol === token.symbol);
+      if (exists) return prev;
+      const next = [...prev, token];
+      if (activeSessionId) {
+        localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  }, [activeSessionId]);
 
   useEffect(() => {
     const initLocalSession = async () => {
@@ -183,10 +177,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
         if (savedMnemonic) {
             await loadWalletFromMnemonic(savedMnemonic);
-        } else {
-            if (profile?.vault_phrase && profile?.iv) {
-                try { await restoreFromCloud(); } catch (e) { console.warn("Auto-restore failed:", e); }
-            }
+        } else if (profile?.vault_phrase && profile?.iv) {
+            try { await restoreFromCloud(); } catch (e) { console.warn("Auto-restore failed:", e); }
         }
       } catch (e) {
         console.error("Session recovery failure:", e);
@@ -196,57 +188,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
     initLocalSession();
   }, [authLoading, activeSessionId, profile?.vault_phrase]);
-
-  const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
-    if (!activeSessionId) return;
-    setHiddenTokenKeys(prev => {
-        const next = new Set(prev);
-        const key = `${chainId}:${symbol}`;
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        localStorage.setItem(`hidden_tokens_${activeSessionId}`, JSON.stringify(Array.from(next)));
-        return next;
-    });
-  }, [activeSessionId]);
-
-  const addUserToken = useCallback((token: AssetRow) => {
-    if (!activeSessionId) return;
-    setUserAddedTokens(prev => {
-        const exists = prev.find(t => t.chainId === token.chainId && t.symbol === token.symbol);
-        if (exists) return prev;
-        const next = [...prev, { ...token, address: token.address?.toLowerCase() }];
-        localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
-        return next;
-    });
-  }, [activeSessionId]);
-
-  const fetchTokenRegistry = useCallback(async () => {
-    if (!logoSupabase) return;
-    const registry: { [chainId: number]: any[] } = {};
-    const fetchPromises = chainsWithLogos.map(async (chain) => {
-      try {
-        const networkSlug = chain.name.split(' ')[0].toLowerCase();
-        const { data, error } = await logoSupabase
-          .from('token_metadata')
-          .select('token_details, contract_address, network, logo_url')
-          .eq('network', networkSlug);
-        if (!error && data) {
-          registry[chain.chainId] = data.map(token => ({
-            symbol: token.token_details.symbol,
-            name: token.token_details.name,
-            decimals: token.token_details.decimals,
-            network: token.network,
-            contract: token.contract_address?.toLowerCase(),
-            logo_url: token.logo_url,
-            priceSource: token.token_details.priceSource,
-            priceId: token.token_details.priceId || token.token_details.coingeckoId
-          }));
-        }
-      } catch (e) {}
-    });
-    await Promise.all(fetchPromises);
-    setTokenRegistry(registry);
-  }, [chainsWithLogos]);
 
   const fetchGlobalPrices = useCallback(async () => {
     const coingeckoIds = new Set<string>();
@@ -334,17 +275,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, [] as AssetRow[]);
   }, []);
 
-  const manualRefresh = useCallback(async () => {
-    if (!viewingNetwork || !infuraApiKey || !wallets) return;
-    setIsRefreshing(true);
-    try {
-        await Promise.all([
-            fetchBalancesForChain(viewingNetwork).then(freshBalances => { setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: freshBalances })); }),
-            fetchGlobalPrices()
-        ]);
-    } catch (e) { setFetchError("Connection limited."); } finally { setIsRefreshing(false); }
-  }, [viewingNetwork, infuraApiKey, wallets, fetchBalancesForChain, fetchGlobalPrices]);
-
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -390,9 +320,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const restoredChain = savedChainId ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) : null;
       setViewingNetwork(restoredChain || chainsWithLogos[0] || null);
       setIsInitialized(true);
-      if (chainsWithLogos.length > 0) fetchTokenRegistry();
     }
-  }, [areLogosLoading, chainsWithLogos, fetchTokenRegistry, isInitialized]);
+  }, [areLogosLoading, chainsWithLogos, isInitialized]);
 
   const saveToVault = useCallback(async () => {
     if (!activeSessionId || !supabase || !wallets || !profile) return;
@@ -444,14 +373,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
               localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); 
           }
       }
-      if (freshProfile.vault_infura_key && freshProfile.infura_iv) {
-          const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_infura_key, iv: freshProfile.infura_iv }), });
-          const data = await res.json();
-          if (res.ok && data.phrase) { 
-              setInfuraApiKey(data.phrase); 
-              localStorage.setItem('infura_api_key', data.phrase); 
-          }
-      }
       toast({ title: "Access Restored" });
       refreshProfile();
     } catch (e: any) { throw e; } finally { setIsWalletLoading(false); }
@@ -498,6 +419,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [balances, viewingNetwork, hiddenTokenKeys, prices, getAvailableAssetsForChain]);
 
+  const atomicLogout = useCallback(async () => {
+    setWallets(null);
+    setBalances({});
+    setIsWalletLoading(false);
+    await authSignOut();
+    localStorage.removeItem('infura_api_key');
+    if (activeSessionId) {
+        localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`);
+        localStorage.removeItem(`wallet_balances_${activeSessionId}`);
+        localStorage.removeItem(`hidden_tokens_${activeSessionId}`);
+        localStorage.removeItem(`custom_tokens_${activeSessionId}`);
+    }
+  }, [authSignOut, activeSessionId]);
+
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
     isAssetsLoading: areLogosLoading,
@@ -513,12 +448,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     wallets,
     balances,
     prices,
-    refresh: manualRefresh,
+    refresh: startEngine,
     generateWallet,
     importWallet,
     saveToVault,
     restoreFromCloud,
-    logout: () => { authSignOut(); },
+    logout: atomicLogout,
     deleteWallet: () => { 
         if (activeSessionId) { 
             localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`); 

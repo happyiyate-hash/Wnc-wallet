@@ -60,7 +60,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       let resolvedProfile = data as UserProfile;
 
       if (!error && resolvedProfile) {
-        // Safe check for account_number column existence during profile update
         if (!resolvedProfile.account_number) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const generatedId = `835${randomSuffix}`;
@@ -76,7 +75,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 if (updated && !uError) {
                     resolvedProfile = updated as UserProfile;
                 } else {
-                    // Fallback to local generated ID if column is missing or update fails
                     resolvedProfile.account_number = generatedId;
                 }
             } catch (e) {
@@ -87,56 +85,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setProfile(resolvedProfile);
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(resolvedProfile));
         return resolvedProfile;
-      } else if (!data) {
-        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-        const generatedId = `835${randomSuffix}`;
-        
-        try {
-            const { data: newProfile } = await supabase
-                .from('profiles')
-                .upsert({ 
-                    id: userId, 
-                    name: user?.email?.split('@')[0] || 'Institutional User', 
-                    wnc_earnings: 0, 
-                    tokens: 0, 
-                    account_number: generatedId 
-                })
-                .select()
-                .single();
-            return newProfile ? (newProfile as UserProfile) : null;
-        } catch (e) {
-            return null;
-        }
       }
     } catch (e) {
         console.warn("Profile fetch error:", e);
     }
     return null;
   };
-
-  useEffect(() => {
-    if (!user || !supabase) return;
-
-    const channel = supabase
-      .channel(`profile-updates-${user.id}`)
-      .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'profiles', 
-          filter: `id=eq.${user.id}` 
-      }, (payload) => {
-          const updated = payload.new as UserProfile;
-          if (updated) {
-              setProfile(updated);
-              localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(updated));
-          }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id]);
 
   useEffect(() => {
     if (!supabase) {
@@ -184,8 +138,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
         setActiveSessionId(currentUser.id);
         localStorage.setItem('wevina_active_session_id', currentUser.id);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setProfile(null);
+        setActiveSessionId(null);
+        setUser(null);
       }
       setLoading(false);
     });
@@ -193,7 +149,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [user?.email]);
+  }, []);
 
   const addSession = useCallback((session: LocalSession) => {
     setSessions(prev => {
@@ -225,10 +181,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
         setActiveSessionId(sessionId);
         localStorage.setItem('wevina_active_session_id', sessionId);
-        
         const cached = localStorage.getItem(`profile_cache_${sessionId}`);
         if (cached) setProfile(JSON.parse(cached));
-        
         await fetchProfile(sessionId);
     } finally {
         setLoading(false);
@@ -236,7 +190,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    if (supabase) await supabase.auth.signOut();
+    if (supabase) {
+        await supabase.auth.signOut();
+        // Atomic local clear to ensure UI reacts immediately
+        setUser(null);
+        setProfile(null);
+        setActiveSessionId(null);
+        localStorage.removeItem('wevina_active_session_id');
+        localStorage.removeItem('wevina_sessions'); // Total clear as requested for security
+    }
   };
 
   const refreshProfile = async () => {

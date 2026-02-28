@@ -1,3 +1,4 @@
+
 export interface AssetRow {
   chainId: number;
   address: string;
@@ -77,4 +78,11 @@ export interface RecentRecipient {
     current_pfp: string;
     last_blockchain_used: string;
     last_address_used: string;
+}
+
+export interface IWalletAdapter {
+    fetchBalances(
+        ownerAddress: string,
+        assets: Omit<AssetRow, 'balance'>[]
+    ): Promise<AssetRow[]>;
 }
