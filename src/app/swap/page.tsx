@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { Skeleton } from '@/components/ui/skeleton';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function SwapClient() {
   const { viewingNetwork, balances, prices, wallets, infuraApiKey, allAssets, allChainsMap } = useWallet();
@@ -42,6 +43,12 @@ function SwapClient() {
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quoteData, setQuoteData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // ANIMATION & LONG PRESS STATE
+  const [rotation, setRotation] = useState(0);
+  const [isHolding, setIsHolding] = useState(false);
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
@@ -117,6 +124,34 @@ function SwapClient() {
     setQuoteData(null);
   };
 
+  const handleSwapTokens = () => {
+    if (!fromToken || !toToken) return;
+    const tempFrom = { ...fromToken };
+    const tempTo = { ...toToken };
+    setFromToken(tempTo);
+    setToToken(tempFrom);
+    setQuoteData(null);
+  };
+
+  const startVoltageHold = () => {
+    isLongPressRef.current = false;
+    setIsHolding(true);
+    holdTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+    }, 400);
+  };
+
+  const endVoltageHold = () => {
+    setIsHolding(false);
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    
+    // Only swap if it was a quick tap, not a long "charge" hold
+    if (!isLongPressRef.current) {
+      setRotation(prev => prev + 360);
+      handleSwapTokens();
+    }
+  };
+
   const estimatedReceivedAmount = quoteData?.estimate?.toAmount 
     ? parseFloat(ethers.formatUnits(quoteData.estimate.toAmount, toToken?.decimals || 18)) 
     : 0;
@@ -148,7 +183,26 @@ function SwapClient() {
           <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-[2.2rem] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter" />
         </section>
 
-        <div className="relative h-6 flex items-center justify-center z-10"><div className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl"><ArrowRightLeft className="w-4 h-4" /></div></div>
+        <div className="relative h-6 flex items-center justify-center z-10">
+          <motion.div 
+            animate={{ 
+              rotate: isHolding ? [rotation, rotation + 360] : rotation 
+            }}
+            transition={{ 
+              rotate: { 
+                duration: isHolding ? 0.3 : 0.6, 
+                repeat: isHolding ? Infinity : 0, 
+                ease: "linear" 
+              } 
+            }}
+            onPointerDown={startVoltageHold}
+            onPointerUp={endVoltageHold}
+            onPointerLeave={() => { setIsHolding(false); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
+            className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl shadow-primary/20 cursor-pointer active:scale-90 transition-transform"
+          >
+            <Zap className="w-5 h-5 fill-current" />
+          </motion.div>
+        </div>
 
         <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-4 rounded-[2rem] space-y-2">
           <div className="flex items-center justify-between">
