@@ -87,9 +87,11 @@ function SwapClient() {
 
   useEffect(() => {
     const runSequence = async () => {
+      // FIX 1: Guard Clause - Stop fetch and reset UI when input is empty or 0
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
         setQuotePhase('IDLE');
+        setSelectedQuoteId(null);
         return;
       }
 
@@ -99,7 +101,7 @@ function SwapClient() {
 
       try {
         // Simulate fetch delay
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1200));
         
         const basePrice = prices[(fromToken.priceId || fromToken.address)?.toLowerCase()]?.price || 1;
         const targetPrice = prices[(toToken.priceId || toToken.address)?.toLowerCase()]?.price || 1;
@@ -126,9 +128,9 @@ function SwapClient() {
         setQuotes(finalBatch);
         setIsQuoteLoading(false);
         
-        // PHASE 1: SHOW ALL
+        // PHASE 1: SHOW ALL (Staggered entrance starts here)
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 1000)); // Wait for staggered entrance
 
         // PHASE 2: SCANNING
         setQuotePhase('SCANNING');
@@ -140,7 +142,7 @@ function SwapClient() {
         // PHASE 3: FINAL SELECTION
         setQuotePhase('FINAL_SELECTED');
         setSelectedQuoteId(finalBatch[0].id);
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 800));
 
         // PHASE 4: COLLAPSE
         setQuotePhase('COLLAPSE');
@@ -167,6 +169,7 @@ function SwapClient() {
     else setToToken(token);
     setQuotes([]);
     setQuotePhase('IDLE');
+    setSelectedQuoteId(null);
   };
 
   const handleSwapTokens = () => {
@@ -177,6 +180,7 @@ function SwapClient() {
     setToToken(tempFrom);
     setQuotes([]);
     setQuotePhase('IDLE');
+    setSelectedQuoteId(null);
   };
 
   const startVoltageHold = () => {
@@ -245,14 +249,25 @@ function SwapClient() {
                       <TrendingUp className="w-4 h-4 text-primary" />
                     )}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                      {quotePhase === 'FETCHING' ? 'Fetching best quotes...' : 
-                       quotePhase === 'SCANNING' ? 'Analyzing Liquidity Nodes...' : 
-                       'Optimal Route Found'}
+                      {quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 
+                       quotePhase === 'SCANNING' ? 'Analyzing Nodes...' : 
+                       'Institutional Choice'}
                     </h3>
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <motion.div 
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    visible: {
+                      transition: {
+                        staggerChildren: 0.08,
+                      }
+                    }
+                  }}
+                  className="space-y-2"
+                >
                   {isQuoteLoading ? (
                     <div className="space-y-2">
                       {[1, 2, 3, 4].map(i => (
@@ -265,13 +280,17 @@ function SwapClient() {
                       return (
                         <motion.div
                           key={quote.id}
-                          animate={{ 
+                          variants={{
+                            hidden: { x: 24, y: 24, opacity: 0, scale: 0.95 },
+                            visible: { x: 0, y: 0, opacity: 1, scale: 1 }
+                          }}
+                          animate={quotePhase === 'SHOW_ALL' ? undefined : { 
                             scale: state === 'rejected' ? 0.95 : state === 'best' ? 1.02 : 1,
                             opacity: state === 'rejected' ? 0.4 : 1,
                           }}
                           className={cn(
                             "w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden",
-                            state === 'neutral' && "bg-white/[0.02] border-white/5 opacity-40",
+                            state === 'neutral' && "bg-white/[0.02] border-white/5",
                             state === 'scanning' && "bg-blue-500/10 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]",
                             state === 'accepted' && "bg-emerald-500/5 border-emerald-500/20",
                             state === 'best' && "bg-primary/20 border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]",
@@ -314,7 +333,7 @@ function SwapClient() {
                       );
                     })
                   )}
-                </div>
+                </motion.div>
               </div>
             </div>
           </motion.div>
@@ -429,7 +448,7 @@ function SwapClient() {
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
           <Button 
             className="w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 border-primary/50 transition-all active:scale-[0.98] shadow-primary/20" 
-            disabled={!amount || isQuoteLoading || quotePhase !== 'COLLAPSE'}
+            disabled={!amount || parseFloat(amount) <= 0 || isQuoteLoading || quotePhase !== 'COLLAPSE'}
           >
             {isQuoteLoading ? 'Discovering Best Route...' : 'Execute Institutional Swap'}
           </Button>
