@@ -12,7 +12,6 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
-import { logoSupabase } from '@/lib/supabase/logo-client';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
@@ -68,7 +67,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [prices, setPrices] = useState<{ [key: string]: PriceInfo }>({});
-  const [tokenRegistry, setTokenRegistry] = useState<{ [chainId: number]: any[] }>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isWalletLoading, setIsWalletLoading] = useState(true);
@@ -92,8 +90,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
   }, [chainsWithLogos]);
 
+  /**
+   * DATA RECONCILIATION PROTOCOL
+   * Syncs derived addresses to Supabase to enable P2P identity resolution.
+   */
+  const syncAddressesToSupabase = useCallback(async (derivedWallets: WalletWithMetadata[]) => {
+    if (!activeSessionId || !supabase) return;
+    
+    try {
+      const updates = derivedWallets.map(w => ({
+        user_id: activeSessionId,
+        chain: w.type, // 'evm', 'xrp', 'polkadot'
+        address: w.address,
+        updated_at: new Date().toISOString()
+      }));
+
+      // Push to central address registry
+      const { error } = await supabase
+        .from('user_addresses')
+        .upsert(updates, { onConflict: 'user_id,chain' });
+
+      if (error) console.warn("Supabase address sync failed:", error.message);
+    } catch (e) {
+      console.warn("Failed to sync addresses to Supabase:", e);
+    }
+  }, [activeSessionId]);
+
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
-    if (!mnemonic) return;
+    if (!mnemonic) return null;
     try {
       const cleanMnemonic = mnemonic.trim();
       if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
@@ -104,11 +128,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
-      setWallets([
+      const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
         { address: dotWallet.address, type: 'polkadot' }
-      ]);
+      ];
+      
+      setWallets(derived);
+      return derived;
     } catch (e: any) {
       console.error("Wallet Derivation Error:", e.message);
       throw e;
@@ -176,7 +203,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
         if (savedMnemonic) {
-            await loadWalletFromMnemonic(savedMnemonic);
+            const derived = await loadWalletFromMnemonic(savedMnemonic);
+            if (derived) await syncAddressesToSupabase(derived);
         } else if (profile?.vault_phrase && profile?.iv) {
             try { await restoreFromCloud(); } catch (e) { console.warn("Auto-restore failed:", e); }
         }
@@ -243,20 +271,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !infuraApiKey) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
     if (!walletForChain) return [];
-    const apiTokens = tokenRegistry[chain.chainId] || [];
+    
     const baseAssets = getInitialAssets(chain.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const customAssets = latestUserTokensRef.current.filter(t => t.chainId === chain.chainId);
     const combinedAssetsList = [...baseAssets, ...customAssets].reduce((acc, curr) => {
         if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
         return acc;
-    }, [] as AssetRow[]).map(a => {
-        const apiMeta = apiTokens.find(t => t.symbol === a.symbol || (t.contract && t.contract === a.address?.toLowerCase()));
-        return { ...a, name: apiMeta?.name || a.name, decimals: apiMeta?.decimals || a.decimals || 18, iconUrl: apiMeta?.logo_url || a.iconUrl || chain.iconUrl, address: a.address?.toLowerCase(), priceId: apiMeta?.priceId || a.priceId || a.coingeckoId, coingeckoId: apiMeta?.priceId || a.coingeckoId } as AssetRow;
-    });
+    }, [] as AssetRow[]);
+
     let adapter = null;
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
+    
     if (adapter) {
         try {
             const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
@@ -264,7 +291,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) { console.warn(`RPC Balance Error for ${chain.name}:`, e); return combinedAssetsList; }
     }
     return combinedAssetsList;
-  }, [wallets, infuraApiKey, tokenRegistry]);
+  }, [wallets, infuraApiKey]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
@@ -289,6 +316,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return next;
         });
     } catch (e) {} finally { setIsRefreshing(false); }
+    
     if (isBackgroundSyncRunning.current) return;
     isBackgroundSyncRunning.current = true;
     const backgroundChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
@@ -369,14 +397,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_phrase, iv: freshProfile.iv }), });
           const data = await res.json();
           if (res.ok && data.phrase) { 
-              await loadWalletFromMnemonic(data.phrase); 
+              const derived = await loadWalletFromMnemonic(data.phrase); 
+              if (derived) await syncAddressesToSupabase(derived);
               localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); 
           }
       }
       toast({ title: "Access Restored" });
       refreshProfile();
     } catch (e: any) { throw e; } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, toast, refreshProfile]);
+  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, toast, refreshProfile]);
 
   const generateWallet = useCallback(async () => {
     setIsWalletLoading(true);
@@ -387,21 +416,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             if (profileCheck?.vault_phrase) throw new Error('CLOUDV_EXISTS');
             localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         }
-        await loadWalletFromMnemonic(mnemonic);
+        const derived = await loadWalletFromMnemonic(mnemonic);
+        if (derived) await syncAddressesToSupabase(derived);
         await saveToVault();
         return mnemonic;
     } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, saveToVault]);
+  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, saveToVault]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     setIsWalletLoading(true);
     try {
         const clean = mnemonic.trim();
-        await loadWalletFromMnemonic(clean);
+        const derived = await loadWalletFromMnemonic(clean);
+        if (derived) await syncAddressesToSupabase(derived);
         if (activeSessionId) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, clean);
         await saveToVault();
     } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, saveToVault]);
+  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, saveToVault]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
@@ -420,9 +451,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [balances, viewingNetwork, hiddenTokenKeys, prices, getAvailableAssetsForChain]);
 
   const atomicLogout = useCallback(async () => {
-    setWallets(null);
-    setBalances({});
-    setIsWalletLoading(false);
+    setIsWalletLoading(true);
     await authSignOut();
     localStorage.removeItem('infura_api_key');
     if (activeSessionId) {
@@ -431,6 +460,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`hidden_tokens_${activeSessionId}`);
         localStorage.removeItem(`custom_tokens_${activeSessionId}`);
     }
+    setWallets(null);
+    setBalances({});
+    setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
   const value: WalletContextType = {

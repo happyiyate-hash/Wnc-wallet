@@ -18,7 +18,7 @@ interface TransactionStatusCardProps {
     symbol: string;
     iconUrl?: string | null;
     chainId: number;
-    name?: string; // Added metadata
+    name?: string;
   };
   isRawAddress?: boolean;
 }
@@ -54,7 +54,6 @@ export default function TransactionStatusCard({
               {/* SENDER NODE */}
               <div className="flex flex-col items-center gap-1.5 min-w-[60px]">
                 <div className="relative">
-                  {/* Rotating dashed spinner for pending */}
                   {status === 'pending' && (
                     <motion.div
                       animate={{ rotate: 360 }}
@@ -63,7 +62,7 @@ export default function TransactionStatusCard({
                     />
                   )}
                   <Avatar className="w-10 h-10 border border-white/10 rounded-full">
-                    <AvatarImage src={senderAvatar} />
+                    <AvatarImage src={senderAvatar} alt="Sender" />
                     <AvatarFallback className="bg-primary/20 text-primary font-black text-[10px]">
                       {senderName[0]?.toUpperCase()}
                     </AvatarFallback>
@@ -125,12 +124,12 @@ export default function TransactionStatusCard({
                         size={28} 
                         chainId={token?.chainId} 
                         symbol={token?.symbol} 
-                        name={token?.name} // Added metadata
-                        alt="target"
+                        name={token?.name}
+                        alt="target token"
                       />
                     ) : (
                       <Avatar className="w-full h-full rounded-none">
-                        <AvatarImage src={recipientAvatar} />
+                        <AvatarImage src={recipientAvatar} alt="Recipient" />
                         <AvatarFallback className="bg-primary/20 text-primary font-black text-[10px]">
                           {recipientName[0]?.toUpperCase()}
                         </AvatarFallback>

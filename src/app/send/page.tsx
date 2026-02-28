@@ -107,6 +107,7 @@ function SendClient() {
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
   const debouncedRecipient = useDebounce(recipientInput, 300);
 
   const [amount, setAmount] = useState('');
@@ -170,17 +171,23 @@ function SendClient() {
           setResolvedAddress(isValidBase ? input : '');
           setRecipientProfile(null);
           setIsResolving(false);
+          setResolutionError(null);
         }
         return;
       }
 
-      if (isMounted) setIsResolving(true);
+      if (isMounted) {
+        setIsResolving(true);
+        setResolutionError(null);
+      }
+      
       const searchHandle = input.startsWith('@') ? input.substring(1).toLowerCase().trim() : input.toLowerCase().trim();
 
       try {
         if (!supabase) throw new Error("No database connection");
 
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000));
+        // 8-second safety timeout
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000));
         const rpcPromise = supabase.rpc('fetch_recipient_details', {
           search_account_number: searchHandle,
           selected_chain: activeNetwork.type || 'evm'
@@ -189,6 +196,8 @@ function SendClient() {
         const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
         
         if (!isMounted) return;
+
+        if (error) throw error;
 
         if (data && data.length > 0) {
           const result = data[0];
@@ -201,11 +210,13 @@ function SendClient() {
         } else {
           setResolvedAddress('');
           setRecipientProfile(null);
+          setResolutionError("Recipient node not found or no address linked for this network.");
         }
-      } catch (e) {
+      } catch (e: any) {
         if (isMounted) {
           setResolvedAddress('');
           setRecipientProfile(null);
+          setResolutionError(e.message === 'TIMEOUT' ? "Lookup timed out. Please try again." : "Identity resolution failed.");
         }
       } finally {
         if (isMounted) setIsResolving(false);
@@ -297,7 +308,7 @@ function SendClient() {
                                 <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0] || 'U'}</AvatarFallback>
                             </Avatar>
                         </div>
-                        {/* UNLOCKED BADGE: Sender active network */}
+                        {/* UNLOCKED BADGE: Fixed layering */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || 'Network'} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
@@ -305,7 +316,7 @@ function SendClient() {
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
                 </div>
 
-                <div className="flex-1 px-4 relative flex flex-col items-center justify-center min-h-[80px]">
+                <div className="flex-1 px-4 relative flex flex-col items-center justify-center min-h-[100px]">
                     <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full z-10">
                             <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
@@ -317,19 +328,19 @@ function SendClient() {
                         {resolvedAddress && !isResolving && (
                             <motion.div 
                                 initial={{ y: 15, opacity: 0, scale: 0.9 }}
-                                animate={{ y: 5, opacity: 1, scale: 1 }}
+                                animate={{ y: 14, opacity: 1, scale: 1 }}
                                 exit={{ y: 10, opacity: 0, scale: 0.9 }}
                                 className="absolute top-10 left-0 right-0 text-center z-20"
                             >
-                                <div className="inline-flex flex-col items-center gap-1">
+                                <div className="inline-flex flex-col items-center gap-1.5">
                                     <p className={cn(
-                                        "text-[7px] font-black uppercase tracking-[0.2em]",
+                                        "text-[7px] font-black uppercase tracking-[0.25em]",
                                         isNetworkMismatch ? "text-red-500" : "text-primary"
                                     )}>
                                         {isNetworkMismatch ? 'Incompatible Route' : 'Resolved Route'}
                                     </p>
                                     <div className={cn(
-                                        "bg-black/40 border px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl",
+                                        "bg-black/60 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl",
                                         isNetworkMismatch ? "border-red-500/30" : "border-primary/20"
                                     )}>
                                         <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
@@ -347,8 +358,8 @@ function SendClient() {
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black",
                             (!isActuallyValid && !isNetworkMismatch && !validationError) ? "border-dashed border-white/10" : 
-                            (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : 
-                            "border-primary/50 bg-primary/5"
+                            (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
+                            "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
@@ -407,6 +418,15 @@ function SendClient() {
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                     </div>
                 </div>
+
+                {resolutionError && !isResolving && (
+                    <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                        <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
+                        <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">
+                            {resolutionError}
+                        </p>
+                    </div>
+                )}
 
                 {validationError && (
                     <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-2xl">
