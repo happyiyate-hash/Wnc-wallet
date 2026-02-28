@@ -199,21 +199,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const syncPromises = wallets.map(w => 
-        supabase!.rpc('sync_user_addresses', {
-          p_user_id: activeSessionId,
-          p_chain: w.type,
-          p_address: w.address,
-          p_account_number: targetAcc
-        })
-      );
-      
-      const results = await Promise.all(syncPromises);
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) throw new Error(errors[0].error.message);
+      const updates: any = {
+        account_number: targetAcc,
+        updated_at: new Date().toISOString()
+      };
+
+      wallets.forEach(w => {
+        if (w.type === 'evm') updates.evm_address = w.address;
+        if (w.type === 'xrp') updates.xrp_address = w.address;
+        if (w.type === 'polkadot') updates.polkadot_address = w.address;
+      });
+
+      const { error } = await supabase!
+        .from('profiles')
+        .update(updates)
+        .eq('id', activeSessionId);
+
+      if (error) throw error;
 
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
+      await refreshProfile();
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
       throw e;
@@ -320,16 +326,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      const { data: addrData } = await supabase!
-        .from('user_wallet_addresses')
-        .select('account_number')
-        .eq('user_id', activeSessionId)
-        .limit(1)
-        .maybeSingle();
-
-      if (addrData?.account_number) {
-          setAccountNumber(addrData.account_number);
-          localStorage.setItem(`account_number_${activeSessionId}`, addrData.account_number);
+      if (profile.account_number) {
+          setAccountNumber(profile.account_number);
+          localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number);
       }
 
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
@@ -468,20 +467,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const syncStatus = localStorage.getItem(`is_synced_${activeSessionId}`);
         setIsSynced(syncStatus === 'true');
 
-        const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
-        if (localAcc) {
-            setAccountNumber(localAcc);
-        } else if (supabase) {
-            const { data } = await supabase
-                .from('user_wallet_addresses')
-                .select('account_number')
-                .eq('user_id', activeSessionId)
-                .limit(1)
-                .maybeSingle();
-            if (data?.account_number) {
-                setAccountNumber(data.account_number);
-                localStorage.setItem(`account_number_${activeSessionId}`, data.account_number);
-            }
+        if (profile?.account_number) {
+            setAccountNumber(profile.account_number);
+            localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number);
+        } else {
+            const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
+            if (localAcc) setAccountNumber(localAcc);
         }
 
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
@@ -489,7 +480,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch (e) {} finally { setIsWalletLoading(false); }
     };
     initLocalSession();
-  }, [authLoading, activeSessionId, loadWalletFromMnemonic]);
+  }, [authLoading, activeSessionId, profile?.account_number, loadWalletFromMnemonic]);
 
   useEffect(() => {
     if (isInitialized) {

@@ -177,9 +177,10 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
+        // 1. Resolve Identity via profiles table
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
-          .select('id, name, photo_url')
+          .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
           .eq('account_number', input)
           .maybeSingle();
 
@@ -192,17 +193,16 @@ function SendClient() {
             name: userRecord.name || input
           });
 
+          // 2. Hydrate specific node for active network
           const targetChainType = activeNetwork.type || 'evm';
+          let chainAddress = '';
           
-          const { data: addrRecord, error: addrError } = await supabase.rpc('fetch_user_addresses_by_account', {
-            p_account_number: input,
-            p_chain: targetChainType
-          });
+          if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
+          else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
+          else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
 
-          if (addrError) throw addrError;
-
-          if (addrRecord && addrRecord.length > 0 && isMounted) {
-            setResolvedAddress(addrRecord[0].address);
+          if (chainAddress && isMounted) {
+            setResolvedAddress(chainAddress);
             setResolutionError(null);
           } else if (isMounted) {
             setResolvedAddress('');
@@ -295,8 +295,8 @@ function SendClient() {
             {/* INSTITUTIONAL HANDSHAKE VISUAL */}
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative group">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-hidden">
+                    <div className="relative">
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-hidden relative z-10">
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>

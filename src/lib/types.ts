@@ -54,6 +54,10 @@ export interface UserProfile {
     iv?: string;
     vault_infura_key?: string;
     infura_iv?: string;
+    // Direct address columns for P2P Handshake
+    evm_address?: string;
+    xrp_address?: string;
+    polkadot_address?: string;
 }
 
 export interface LocalSession {
