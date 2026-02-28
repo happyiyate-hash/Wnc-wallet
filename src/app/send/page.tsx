@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -11,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   ArrowLeft, 
-  ChevronRight, 
   Loader2, 
   Fuel,
   ShieldCheck,
@@ -19,7 +17,9 @@ import {
   Search,
   ArrowRight,
   ShieldAlert,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -83,7 +83,7 @@ const mapTechnicalError = (err: any): string => {
 };
 
 function SendClient() {
-  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap } = useWallet();
+  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber } = useWallet();
   const { formatFiat } = useCurrency();
   const { profile } = useUser();
   const router = useRouter();
@@ -109,6 +109,7 @@ function SendClient() {
   
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const hasInitialized = useRef(false);
+  const resolutionCounter = useRef(0);
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
@@ -136,29 +137,45 @@ function SendClient() {
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
   
+  // SELF-TRANSFER PROTECTION
+  const isSelfTransfer = useMemo(() => {
+    const input = debouncedRecipient.trim().toLowerCase();
+    if (!input) return false;
+    
+    // Check Account Number
+    if (accountNumber && input === accountNumber.toLowerCase()) return true;
+    
+    // Check Multi-chain nodes
+    if (wallets) {
+        return wallets.some(w => w.address.toLowerCase() === input);
+    }
+    return false;
+  }, [debouncedRecipient, accountNumber, wallets]);
+
   const validationError = useMemo(() => {
+    if (isSelfTransfer) return null; // Handled by separate UI block
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
     return null;
-  }, [addrType]);
+  }, [addrType, isSelfTransfer]);
 
   const isNetworkMismatch = useMemo(() => {
+    if (isSelfTransfer) return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     const activeType = activeNetwork.type || 'evm';
     return activeType !== addrType;
-  }, [addrType, activeNetwork.type]);
+  }, [addrType, activeNetwork.type, isSelfTransfer]);
 
   useEffect(() => {
-    let isMounted = true;
-    const timeoutId = setTimeout(() => { if (isResolving) setIsResolving(false); }, 8000);
-
+    const currentId = ++resolutionCounter.current;
+    
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
-      if (!input || input.length < 3 || isValidBase) {
-        if (isMounted) {
+      if (!input || input.length < 3 || isValidBase || isSelfTransfer) {
+        if (currentId === resolutionCounter.current) {
           setResolvedAddress(isValidBase ? input : '');
           setRecipientProfile(null);
           setIsResolving(false);
@@ -167,33 +184,36 @@ function SendClient() {
         return;
       }
 
-      if (isMounted) {
-        setResolvedAddress('');
-        setRecipientProfile(null);
-        setIsResolving(true);
-        setResolutionError(null);
-      }
+      setResolvedAddress('');
+      setRecipientProfile(null);
+      setIsResolving(true);
+      setResolutionError(null);
       
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // Resolve Identity via profiles
-        const { data: userRecord, error: userError } = await supabase
+        // Identity Resolution Handshake with Timeout
+        const lookup = supabase
           .from('profiles')
           .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
           .eq('account_number', input)
           .maybeSingle();
 
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000));
+        
+        const { data: userRecord, error: userError } = await (Promise.race([lookup, timeout]) as any);
+
         if (userError) throw userError;
 
-        if (userRecord && isMounted) {
+        if (currentId !== resolutionCounter.current) return;
+
+        if (userRecord) {
           setRecipientProfile({ 
             avatar: userRecord.photo_url || '', 
             verified: true, 
             name: userRecord.name || input
           });
 
-          // Hydrate node based on current network type
           const targetChainType = activeNetwork.type || 'evm';
           let chainAddress = '';
           
@@ -201,33 +221,31 @@ function SendClient() {
           else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
           else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
 
-          if (chainAddress && isMounted) {
+          if (chainAddress) {
             setResolvedAddress(chainAddress);
             setResolutionError(null);
-          } else if (isMounted) {
+          } else {
             setResolvedAddress('');
             setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
           }
-        } else if (isMounted) {
+        } else {
           setResolvedAddress('');
           setRecipientProfile(null);
           setResolutionError("Recipient account ID not found.");
         }
       } catch (e: any) {
-        if (isMounted) {
+        if (currentId === resolutionCounter.current) {
           setResolvedAddress('');
           setRecipientProfile(null);
-          setResolutionError("Handshake Error: Identity lookup failed.");
+          setResolutionError(e.message === 'TIMEOUT' ? "Handshake Error: Network slow." : "Handshake Error: Identity lookup failed.");
         }
       } finally {
-        if (isMounted) setIsResolving(false);
-        clearTimeout(timeoutId);
+        if (currentId === resolutionCounter.current) setIsResolving(false);
       }
     }
     
     resolve();
-    return () => { isMounted = false; clearTimeout(timeoutId); };
-  }, [debouncedRecipient, addrType, activeNetwork.type, activeNetwork.name]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer]);
 
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
@@ -272,9 +290,8 @@ function SendClient() {
   const amountNum = parseFloat(amount) || 0;
   const amountUsdValue = amountNum * (selectedToken?.priceUsd || 0);
   
-  // Hardened Liquidity Check
   const hasInsufficientFunds = amountNum > balance;
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting;
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -289,14 +306,13 @@ function SendClient() {
                 <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span>
                 <span className="text-[7px] font-bold text-primary uppercase opacity-60">{activeNetwork.name}</span>
             </div>
-            <ChevronRight className="w-3 h-3 text-primary rotate-90" />
+            <ChevronDown className="w-3 h-3 text-primary" />
         </button>
         <div className="w-10" />
       </header>
 
       <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
           <div className="space-y-10 pt-2 px-1">
-            {/* INSTITUTIONAL HANDSHAKE VISUAL */}
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
@@ -304,7 +320,6 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
-                        {/* SENDER BADGE */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
@@ -346,12 +361,17 @@ function SendClient() {
                     <div className="relative">
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden z-10",
-                            (!resolvedAddress && !isNetworkMismatch && !validationError) ? "border-dashed border-white/10" : 
-                            (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
+                            (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : 
+                            (isNetworkMismatch || validationError || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
                             "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
-                             recipientProfile ? (
+                             isSelfTransfer ? (
+                                <Avatar className="w-full h-full rounded-none">
+                                    <AvatarImage src={profile?.photo_url} className="object-cover" alt="Self" />
+                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
+                                </Avatar>
+                             ) : recipientProfile ? (
                                 <Avatar className="w-full h-full rounded-none">
                                     <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient" />
                                     <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
@@ -373,8 +393,7 @@ function SendClient() {
                              )}
                         </div>
 
-                        {/* RECIPIENT BADGE */}
-                        {resolvedAddress && !isResolving && (
+                        {resolvedAddress && !isResolving && !isSelfTransfer && (
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70] animate-in fade-in zoom-in duration-300">
                                 <TokenLogoDynamic 
                                     logoUrl={isNetworkMismatch || validationError ? null : (selectedToken?.iconUrl || activeNetwork.iconUrl)} 
@@ -389,9 +408,10 @@ function SendClient() {
                     </div>
                     <span className={cn(
                         "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center",
-                        (isNetworkMismatch || validationError) ? "text-red-500" : "text-white/40"
+                        (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40"
                     )}>
-                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : 
+                        {isSelfTransfer ? 'NODE REFLECTION' : 
+                         recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : 
                          isNetworkMismatch ? 'ROUTE BLOCKED' : 
                          resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
@@ -403,21 +423,31 @@ function SendClient() {
                     <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
                     <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
                 </div>
-                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10")}>
+                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10")}>
                     <div className="flex items-center gap-2 px-2">
                         <Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1" />
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                     </div>
                 </div>
 
-                {(resolutionError || validationError) && !isResolving && (
+                {isSelfTransfer && (
+                    <div className="p-5 rounded-[2rem] bg-primary/10 border border-primary/20 flex gap-4 animate-in slide-in-from-top-2">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0"><ShieldCheck className="w-6 h-6 text-primary" /></div>
+                        <div className="space-y-1.5 text-left">
+                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Self-Transfer Advisory</p>
+                            <p className="text-xs font-bold text-white/80 leading-relaxed">You can't send money to yourself. Your balance is already here 😄</p>
+                        </div>
+                    </div>
+                )}
+
+                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && (
                     <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                         <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
                         <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">{resolutionError || validationError?.message}</p>
                     </div>
                 )}
 
-                {isNetworkMismatch && (
+                {isNetworkMismatch && !isSelfTransfer && (
                     <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2">
                         <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div>
                         <div className="space-y-1.5">
@@ -472,7 +502,7 @@ function SendClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Network" />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
       <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={`${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
