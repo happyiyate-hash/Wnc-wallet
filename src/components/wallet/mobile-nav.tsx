@@ -27,7 +27,14 @@ export default function MobileNav() {
 
   if (!mounted) return null;
 
-  const isActionPage = pathname === '/swap' || pathname === '/send' || pathname === '/receive' || pathname === '/buy';
+  // HIDE ON ACTION PAGES & REQUEST FLOWS
+  const isActionPage = 
+    pathname === '/swap' || 
+    pathname === '/send' || 
+    pathname === '/receive' || 
+    pathname === '/buy' ||
+    pathname.startsWith('/request');
+
   if (isActionPage) return null;
 
   const navItems: NavItem[] = [

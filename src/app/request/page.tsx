@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -28,10 +27,11 @@ import type { AssetRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import QRCode from "react-qr-code";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useToast } from '@/hooks/use-toast';
 
 export default function RequestPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const { allAssets, viewingNetwork, accountNumber } = useWallet();
   const { user, profile } = useUser();
   const { formatFiat } = useCurrency();
@@ -46,15 +46,15 @@ export default function RequestPage() {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCreateRequest = async () => {
-    if (!user || !selectedToken || !accountNumber || !supabase) return;
+    if (!user || !selectedToken || !accountNumber || !supabase) {
+        toast({ title: "Configuration Error", description: "Identity node or network state is not fully initialized.", variant: "destructive" });
+        return;
+    }
     
     setIsCreating(true);
     try {
       const activeType = viewingNetwork.type || 'evm';
-      const address = activeType === 'evm' ? profile?.evm_address : 
-                      activeType === 'xrp' ? profile?.xrp_address : 
-                      profile?.polkadot_address;
-
+      
       const { data, error } = await supabase
         .from('payment_requests')
         .insert({
@@ -72,8 +72,14 @@ export default function RequestPage() {
 
       if (error) throw error;
       setRequestId(data.id);
-    } catch (e) {
+      toast({ title: "Request Generated", description: "P2P handshake node created successfully." });
+    } catch (e: any) {
       console.error("Failed to create request", e);
+      toast({ 
+        title: "Protocol Rejection", 
+        description: e.message || "The network rejected the request node. Please check your connection.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsCreating(false);
     }
@@ -87,6 +93,7 @@ export default function RequestPage() {
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
     setIsCopied(true);
+    toast({ title: "Link Copied" });
     setTimeout(() => setIsCopied(false), 2000);
   };
 
@@ -95,13 +102,13 @@ export default function RequestPage() {
   if (requestId) {
     return (
       <div className="flex flex-col h-screen bg-background">
-        <header className="p-4 flex items-center justify-between border-b border-white/5">
+        <header className="p-4 flex items-center justify-between border-b border-white/5 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
           <Button variant="ghost" size="icon" onClick={() => router.push('/')} className="rounded-xl"><ArrowLeft className="w-5 h-5"/></Button>
           <h1 className="text-xs font-black uppercase tracking-[0.2em]">Request Ready</h1>
           <div className="w-10" />
         </header>
 
-        <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto">
+        <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto thin-scrollbar pb-32">
           <div className="text-center space-y-2">
             <div className="w-16 h-16 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mx-auto mb-4 border border-green-500/20 animate-in zoom-in duration-500">
               <HandCoins className="w-8 h-8" />
@@ -165,7 +172,7 @@ export default function RequestPage() {
         <Button variant="ghost" size="icon"><Info className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      <main className="flex-1 p-6 space-y-8 max-w-lg mx-auto w-full overflow-y-auto pb-32">
+      <main className="flex-1 p-6 space-y-8 max-w-lg mx-auto w-full overflow-y-auto thin-scrollbar pb-40">
         <section className="space-y-4">
             <div className="flex justify-between items-center px-2">
                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Select Asset</Label>
@@ -221,7 +228,7 @@ export default function RequestPage() {
         </div>
       </main>
 
-      <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
+      <div className="fixed bottom-8 left-0 right-0 px-6 z-40 bg-gradient-to-t from-black via-black/80 to-transparent pt-10 pb-4">
         <Button 
             className="w-full h-16 rounded-full font-black text-lg shadow-2xl transition-all active:scale-95 border-b-4 border-primary/50"
             disabled={!amount || parseFloat(amount) <= 0 || isCreating}

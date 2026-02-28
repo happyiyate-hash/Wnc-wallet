@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useWallet } from '@/contexts/wallet-provider';
 import { ArrowLeft, ChevronRight, Search, Info } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -71,6 +70,7 @@ export default function GlobalTokenSelector({
                         <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                         <SheetHeader className="mb-6 px-6 shrink-0 pt-4">
                             <SheetTitle className="text-2xl font-black text-center uppercase tracking-widest text-white">{title}</SheetTitle>
+                            <SheetDescription className="sr-only">Choose a network ecosystem to browse assets.</SheetDescription>
                             <div className="relative mt-4">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                                 <Input 
@@ -120,6 +120,8 @@ export default function GlobalTokenSelector({
             <Sheet open={isTokenSideSheetOpen} onOpenChange={setIsTokenSideSheetOpen}>
                 <SheetContent side="right" className="bg-[#0a0a0c]/95 backdrop-blur-2xl border-l border-primary/20 w-full sm:max-w-[450px] p-0 flex flex-col shadow-2xl z-[160]">
                     <SheetHeader className="p-6 border-b border-white/5 bg-gradient-to-b from-primary/10 to-transparent shrink-0">
+                        <SheetTitle className="sr-only">Select Token</SheetTitle>
+                        <SheetDescription className="sr-only">Browse available assets on {selectedNetwork?.name}</SheetDescription>
                         <div className="flex items-center gap-4 mb-4">
                             <Button variant="ghost" size="icon" onClick={() => setIsTokenSideSheetOpen(false)} className="rounded-xl">
                                 <ArrowLeft className="w-5 h-5"/>
