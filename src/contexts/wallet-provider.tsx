@@ -162,7 +162,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await loadWalletFromMnemonic(mnemonic);
     if (activeSessionId) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
-        localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
@@ -176,7 +175,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await loadWalletFromMnemonic(mnemonic);
     if (activeSessionId) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
-        localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
@@ -217,10 +215,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      setIsSynced(true);
-      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       await refreshProfile();
-      
       toast({ title: "Sync Successful", description: "Identity registry updated." });
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
@@ -291,10 +286,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('id', activeSessionId);
       if (error) throw error;
 
-      setIsSynced(true);
-      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
-      toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
       await refreshProfile();
+      toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Backup Failed", description: e.message });
     }
@@ -349,8 +342,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number);
       }
 
-      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
-      setIsSynced(true);
       toast({ title: "Vault Access Restored", description: "Your multi-chain nodes and RPCs are now active." });
     } catch (e: any) {
       throw e;
@@ -462,6 +453,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
+  // Sync Watchdog: Performs deep parity check between local and cloud nodes
+  useEffect(() => {
+    if (!profile || !activeSessionId) return;
+
+    const checkSyncStatus = () => {
+      const localMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+      const hasCloudMnemonic = !!profile.vault_phrase;
+      
+      // 1. Secret Phrase Parity
+      if (localMnemonic && !hasCloudMnemonic) return false;
+
+      // 2. Network Node Parity (Public Addresses)
+      if (wallets) {
+        const evmLocal = wallets.find(w => w.type === 'evm')?.address;
+        const xrpLocal = wallets.find(w => w.type === 'xrp')?.address;
+        const dotLocal = wallets.find(w => w.type === 'polkadot')?.address;
+
+        if (evmLocal && profile.evm_address !== evmLocal) return false;
+        if (xrpLocal && profile.xrp_address !== xrpLocal) return false;
+        if (dotLocal && profile.polkadot_address !== dotLocal) return false;
+      }
+
+      // 3. Identity Identifier Parity
+      const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
+      if (localAcc && profile.account_number !== localAcc) return false;
+
+      return true;
+    };
+
+    setIsSynced(checkSyncStatus());
+  }, [profile, activeSessionId, wallets]);
+
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -482,13 +505,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
         if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
         
-        // Sync Status Check
-        if (profile) {
-            const hasLocalWallets = !!localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-            const hasCloudAddresses = !!(profile.evm_address || profile.xrp_address);
-            setIsSynced(hasCloudAddresses || !hasLocalWallets);
-        }
-
         if (profile?.account_number) {
             setAccountNumber(profile.account_number);
             localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number);
@@ -536,7 +552,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`wallet_balances_${prevSessionId}`);
         localStorage.removeItem(`hidden_tokens_${prevSessionId}`);
         localStorage.removeItem(`custom_tokens_${prevSessionId}`);
-        localStorage.removeItem(`is_synced_${prevSessionId}`);
         localStorage.removeItem(`account_number_${prevSessionId}`);
     }
     setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);

@@ -8,7 +8,6 @@ import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
-import SyncAlertCard from '@/components/wallet/sync-alert-card';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
@@ -96,7 +95,6 @@ export default function Home() {
         (isAuthOpen || isWalletSetupOpen) && "blur-xl scale-95 opacity-50 pointer-events-none"
       )}>
         <div className="w-full mx-auto max-w-4xl pt-4">
-          <SyncAlertCard />
           <WalletTab />
         </div>
       </main>
