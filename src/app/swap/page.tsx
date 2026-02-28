@@ -11,11 +11,9 @@ import {
   Loader2, 
   ChevronDown,
   ShieldCheck,
-  Plane,
   Fuel,
   Timer,
   Zap,
-  ArrowRightLeft,
   Settings2,
   CheckCircle2,
   TrendingUp,
@@ -41,6 +39,8 @@ interface SwapQuote {
   isBest?: boolean;
 }
 
+type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'COLLAPSE';
+
 function SwapClient() {
   const { viewingNetwork, balances, prices, wallets, infuraApiKey, allAssets, allChainsMap } = useWallet();
   const router = useRouter();
@@ -58,6 +58,10 @@ function SwapClient() {
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // CHOREOGRAPHY STATE
+  const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
+  const [scanningIndex, setScanningIndex] = useState(-1);
 
   // ANIMATION & LONG PRESS STATE
   const [rotation, setRotation] = useState(0);
@@ -82,19 +86,21 @@ function SwapClient() {
   }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
 
   useEffect(() => {
-    const fetchQuotes = async () => {
+    const runSequence = async () => {
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
+        setQuotePhase('IDLE');
         return;
       }
 
       setIsQuoteLoading(true);
+      setQuotePhase('FETCHING');
       setFetchError(null);
-      setQuotes([]); // Reset for new stream
 
       try {
-        // SIMULATING LIVE PROVIDER STREAM
-        // In production, this calls multiple quote APIs or a single aggregator like Li.Fi
+        // Simulate fetch delay
+        await new Promise(r => setTimeout(r, 1500));
+        
         const basePrice = prices[(fromToken.priceId || fromToken.address)?.toLowerCase()]?.price || 1;
         const targetPrice = prices[(toToken.priceId || toToken.address)?.toLowerCase()]?.price || 1;
         const rawOutput = (parseFloat(debouncedAmount) * basePrice) / targetPrice;
@@ -106,42 +112,47 @@ function SwapClient() {
           { name: '0x', id: '0x', fee: 0.30, slip: 0.997 },
         ];
 
-        const streamedQuotes: SwapQuote[] = [];
+        const batch = providers.map(p => ({
+          id: p.id,
+          provider: p.name,
+          logo: null,
+          receiveAmount: rawOutput * p.slip,
+          fee: p.fee,
+          eta: '~15s'
+        })).sort((a, b) => (b.receiveAmount - b.fee) - (a.receiveAmount - a.fee));
+
+        const finalBatch = batch.map((q, idx) => ({ ...q, isBest: idx === 0 }));
         
-        for (const p of providers) {
-          // Add random latency to simulate live feel
-          await new Promise(r => setTimeout(resolve => r(resolve), Math.random() * 800 + 400));
-          
-          const quote: SwapQuote = {
-            id: p.id,
-            provider: p.name,
-            logo: null,
-            receiveAmount: rawOutput * p.slip,
-            fee: p.fee,
-            eta: '~15s'
-          };
-          
-          streamedQuotes.push(quote);
-          // Sort as they come in: (Amount - Fee) descending
-          const sorted = [...streamedQuotes].sort((a, b) => (b.receiveAmount - b.fee) - (a.receiveAmount - a.fee));
-          
-          // Mark best
-          const best = sorted[0];
-          const finalBatch = sorted.map(q => ({ ...q, isBest: q.id === best.id }));
-          
-          setQuotes(finalBatch);
-          if (!selectedQuoteId || streamedQuotes.length === 1) {
-            setSelectedQuoteId(best.id);
-          }
+        setQuotes(finalBatch);
+        setIsQuoteLoading(false);
+        
+        // PHASE 1: SHOW ALL
+        setQuotePhase('SHOW_ALL');
+        await new Promise(r => setTimeout(r, 600));
+
+        // PHASE 2: SCANNING
+        setQuotePhase('SCANNING');
+        for (let i = 0; i < finalBatch.length; i++) {
+          setScanningIndex(i);
+          await new Promise(r => setTimeout(r, 150));
         }
+
+        // PHASE 3: FINAL SELECTION
+        setQuotePhase('FINAL_SELECTED');
+        setSelectedQuoteId(finalBatch[0].id);
+        await new Promise(r => setTimeout(r, 1000));
+
+        // PHASE 4: COLLAPSE
+        setQuotePhase('COLLAPSE');
       } catch (e: any) {
         setFetchError("Market data unavailable");
+        setQuotePhase('IDLE');
       } finally {
         setIsQuoteLoading(false);
       }
     };
 
-    fetchQuotes();
+    runSequence();
   }, [debouncedAmount, fromToken, toToken, prices]);
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
@@ -155,6 +166,7 @@ function SwapClient() {
     if (selectionType === 'from') setFromToken(token);
     else setToToken(token);
     setQuotes([]);
+    setQuotePhase('IDLE');
   };
 
   const handleSwapTokens = () => {
@@ -164,6 +176,7 @@ function SwapClient() {
     setFromToken(tempTo);
     setToToken(tempFrom);
     setQuotes([]);
+    setQuotePhase('IDLE');
   };
 
   const startVoltageHold = () => {
@@ -186,6 +199,19 @@ function SwapClient() {
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
+  const getRowState = (index: number, isBest: boolean) => {
+    if (quotePhase === 'SHOW_ALL') return 'neutral';
+    if (quotePhase === 'SCANNING') {
+      if (index === scanningIndex) return 'scanning';
+      if (index < scanningIndex) return 'accepted';
+      return 'neutral';
+    }
+    if (quotePhase === 'FINAL_SELECTED' || quotePhase === 'COLLAPSE') {
+      return isBest ? 'best' : 'rejected';
+    }
+    return 'neutral';
+  };
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
@@ -197,90 +223,96 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* FLOATING QUOTE COMPARISON CARD */}
+      {/* CINEMATIC QUOTE CHOREOGRAPHY CARD */}
       <AnimatePresence>
-        {amount && (parseFloat(amount) > 0) && (
+        {quotePhase !== 'IDLE' && quotePhase !== 'COLLAPSE' && (
           <motion.div 
-            initial={{ y: -200, opacity: 0 }}
+            initial={{ y: -300, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -200, opacity: 0 }}
+            exit={{ y: -300, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 150 }}
             className="fixed top-20 left-4 right-4 z-[40] max-w-lg mx-auto"
           >
-            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative group">
-              {/* Dynamic Gradient Border Glow */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-purple-500/20 opacity-50 pointer-events-none" />
+            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 opacity-50 pointer-events-none" />
               
-              <div className="relative z-10 space-y-4">
+              <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {isQuoteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> : <TrendingUp className="w-3.5 h-3.5 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                      {isQuoteLoading ? 'Analyzing Liquidity Nodes...' : 'Optimal Routes Found'}
+                  <div className="flex items-center gap-3">
+                    {isQuoteLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    ) : (
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                    )}
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
+                      {quotePhase === 'FETCHING' ? 'Fetching best quotes...' : 
+                       quotePhase === 'SCANNING' ? 'Analyzing Liquidity Nodes...' : 
+                       'Optimal Route Found'}
                     </h3>
                   </div>
-                  {selectedQuote?.isBest && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-                      <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Best Rate Applied</span>
-                    </div>
-                  )}
                 </div>
 
-                <div className="space-y-1.5 max-h-[180px] overflow-y-auto thin-scrollbar pr-1">
-                  {quotes.length === 0 && isQuoteLoading ? (
+                <div className="space-y-2">
+                  {isQuoteLoading ? (
                     <div className="space-y-2">
-                      {[1, 2].map(i => (
-                        <div key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse flex items-center px-4 gap-3">
-                          <Skeleton className="w-8 h-8 rounded-full bg-white/5" />
-                          <div className="space-y-1.5 flex-1">
-                            <Skeleton className="h-2 w-24 bg-white/5" />
-                            <Skeleton className="h-2 w-16 bg-white/5" />
-                          </div>
-                        </div>
+                      {[1, 2, 3, 4].map(i => (
+                        <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />
                       ))}
                     </div>
                   ) : (
-                    quotes.map((quote, idx) => (
-                      <motion.button
-                        key={quote.id}
-                        initial={{ x: -20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ delay: idx * 0.1 }}
-                        onClick={() => setSelectedQuoteId(quote.id)}
-                        className={cn(
-                          "w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all active:scale-[0.98] relative group/row",
-                          selectedQuoteId === quote.id 
-                            ? "bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(139,92,246,0.1)]" 
-                            : "bg-white/[0.02] border-white/5 hover:bg-white/[0.05] opacity-60 hover:opacity-100"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-[10px] text-white">
-                            {quote.provider[0]}
-                          </div>
-                          <div className="text-left">
-                            <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                              {quote.provider}
-                              {quote.isBest && <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />}
-                            </p>
-                            <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">
-                              <span className="flex items-center gap-1"><Fuel className="w-2 h-2" /> ${quote.fee.toFixed(2)}</span>
-                              <span className="flex items-center gap-1"><Timer className="w-2 h-2" /> {quote.eta}</span>
+                    quotes.map((quote, idx) => {
+                      const state = getRowState(idx, quote.isBest || false);
+                      return (
+                        <motion.div
+                          key={quote.id}
+                          animate={{ 
+                            scale: state === 'rejected' ? 0.95 : state === 'best' ? 1.02 : 1,
+                            opacity: state === 'rejected' ? 0.4 : 1,
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden",
+                            state === 'neutral' && "bg-white/[0.02] border-white/5 opacity-40",
+                            state === 'scanning' && "bg-blue-500/10 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]",
+                            state === 'accepted' && "bg-emerald-500/5 border-emerald-500/20",
+                            state === 'best' && "bg-primary/20 border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]",
+                            state === 'rejected' && "bg-red-500/5 border-red-500/10"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-white">
+                              {quote.provider[0]}
+                            </div>
+                            <div className="text-left">
+                              <p className="text-xs font-black text-white flex items-center gap-2">
+                                {quote.provider}
+                                {state === 'best' && <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
+                              </p>
+                              <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
+                                <span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span>
+                                <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black text-white tabular-nums">
-                            {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-                          </p>
-                          <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
-                        </div>
-                        {selectedQuoteId === quote.id && (
-                          <div className="absolute inset-0 border border-primary/20 rounded-2xl animate-pulse pointer-events-none" />
-                        )}
-                      </motion.button>
-                    ))
+                          <div className="text-right">
+                            <p className={cn(
+                              "text-sm font-black tabular-nums transition-colors",
+                              state === 'best' ? "text-white" : "text-white/60"
+                            )}>
+                              {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                            </p>
+                            <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
+                          </div>
+
+                          {state === 'best' && (
+                            <div className="absolute top-0 right-0 p-1.5">
+                              <div className="bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-lg">
+                                <span className="text-[7px] font-black text-blue-400 uppercase tracking-tighter">Best Rate</span>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -333,16 +365,24 @@ function SwapClient() {
         </div>
 
         {/* TO NODE */}
-        <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl">
-          <div className="flex items-center justify-between">
+        <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl relative overflow-hidden">
+          <div className="flex items-center justify-between relative z-10">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={22} chainId={toToken?.chainId} symbol={toToken?.symbol} />
                 <span className="font-black text-[11px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-3 h-3 text-muted-foreground" />
             </button>
-            <div className="text-right"><span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span></div>
+            <div className="flex flex-col items-end gap-1">
+              <span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
+              {selectedQuote && quotePhase === 'COLLAPSE' && (
+                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
+                  <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} BEST RATE</span>
+                </motion.div>
+              )}
+            </div>
           </div>
-          <div className="text-[2.8rem] font-black tracking-tighter text-white flex items-center h-[1.5em] transition-all">
+          <div className="text-[2.8rem] font-black tracking-tighter text-white flex items-center h-[1.5em] transition-all relative z-10">
             {isQuoteLoading && !selectedQuote ? (
               <div className="flex gap-1">
                 {[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-3 h-3 rounded-full bg-primary/20" />)}
@@ -360,7 +400,7 @@ function SwapClient() {
           </div>
         </section>
 
-        {selectedQuote && (
+        {selectedQuote && quotePhase === 'COLLAPSE' && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -389,9 +429,9 @@ function SwapClient() {
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
           <Button 
             className="w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 border-primary/50 transition-all active:scale-[0.98] shadow-primary/20" 
-            disabled={!amount || isQuoteLoading}
+            disabled={!amount || isQuoteLoading || quotePhase !== 'COLLAPSE'}
           >
-            {isQuoteLoading && !selectedQuote ? 'Discovering Best Route...' : 'Execute Institutional Swap'}
+            {isQuoteLoading ? 'Discovering Best Route...' : 'Execute Institutional Swap'}
           </Button>
       </div>
     </div>
