@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -67,8 +66,7 @@ interface WalletContextType {
   isSynced: boolean;
   syncAllAddresses: () => Promise<void>;
   syncDiagnostic: SyncDiagnosticState;
-  runCloudDiagnostic: () => Promise<void>;
-  // Overlay States
+  runCloudDiagnostic: (options?: { forceUI?: boolean }) => Promise<void>;
   isRequestOverlayOpen: boolean;
   setIsRequestOverlayOpen: (open: boolean) => void;
   activeFulfillmentId: string | null;
@@ -94,11 +92,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
   const [isSynced, setIsSynced] = useState(true);
 
-  // Overlay Controls
   const [isRequestOverlayOpen, setIsRequestOverlayOpen] = useState(false);
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
-  // Sync Diagnostic State
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnosticState>({
     status: 'idle',
     chain: null,
@@ -131,34 +127,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return combined;
   }, []);
 
+  // PRIMARY DATA ENGINE: Hydrates assets with balances and prices
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    const chainId = viewingNetwork.chainId;
-    const chainBalances = balances[chainId] || getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const addedTokens = userAddedTokens.filter(t => t.chainId === chainId);
-    
-    const combined = [...chainBalances, ...addedTokens].reduce((acc, curr) => {
-        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
-        return acc;
-    }, [] as AssetRow[]);
+    const available = getAvailableAssetsForChain(viewingNetwork.chainId);
+    const chainBalances = balances[viewingNetwork.chainId] || [];
 
-    return combined.map(asset => {
-      const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
-      const priceInfo = prices[priceId];
-      const price = priceInfo?.price ?? 0;
-      const change = priceInfo?.change ?? 0;
-      
-      return {
-        ...asset,
-        priceUsd: price,
-        pctChange24h: change,
-        fiatValueUsd: price * (parseFloat(asset.balance) || 0)
-      };
-    }).filter(asset => {
-      const key = `${chainId}:${asset.symbol}`;
-      return !hiddenTokenKeys.has(key);
-    });
-  }, [viewingNetwork, balances, hiddenTokenKeys, userAddedTokens, prices]);
+    return available
+      .map((asset) => {
+        const balDoc = chainBalances.find((b) => b.symbol === asset.symbol);
+        const balance = balDoc?.balance || '0';
+        const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
+        const priceInfo = prices[priceId];
+        const priceUsd = priceInfo?.price || 0;
+        const pctChange24h = priceInfo?.change || 0;
+        const fiatValueUsd = parseFloat(balance) * priceUsd;
+
+        return {
+          ...asset,
+          balance,
+          priceUsd,
+          pctChange24h,
+          fiatValueUsd,
+        } as AssetRow;
+      })
+      .filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
@@ -291,7 +285,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Merge addresses into profile update
       wallets.forEach(w => {
         if (w.type === 'evm') updates.evm_address = w.address;
         if (w.type === 'xrp') updates.xrp_address = w.address;
@@ -452,8 +445,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
 
-  const runCloudDiagnostic = useCallback(async () => {
+  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId) return;
+
+    const isFirstSession = !sessionStorage.getItem(`synced_${activeSessionId}`);
+    
+    const evmLocal = wallets.find(w => w.type === 'evm')?.address || null;
+    const xrpLocal = wallets.find(w => w.type === 'xrp')?.address || null;
+    const dotLocal = wallets.find(w => w.type === 'polkadot')?.address || null;
+
+    const hasMismatch = (evmLocal !== profile.evm_address) || 
+                        (xrpLocal !== profile.xrp_address) || 
+                        (dotLocal !== profile.polkadot_address) ||
+                        (!profile.vault_phrase);
+
+    if (!hasMismatch && !isFirstSession && !options?.forceUI) {
+      return;
+    }
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     const chains: ('EVM' | 'XRP' | 'Polkadot')[] = ['EVM', 'XRP', 'Polkadot'];
@@ -475,35 +483,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         progress: (i / chains.length) * 100 
       }));
       
-      await wait(1200);
+      await wait(800);
 
       if (local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(800);
+        await wait(600);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-        await syncAllAddresses(); // RPC call to update cloud
-        await wait(1000);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await syncAllAddresses(); 
         await wait(800);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await wait(600);
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(600);
+        await wait(400);
       }
     }
 
-    // Final Mnemonic Check
     setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing' }));
-    await wait(1000);
+    await wait(800);
     if (!profile.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(1000);
+      await wait(800);
     }
     
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    sessionStorage.setItem(`synced_${activeSessionId}`, 'true');
+    
     setTimeout(() => {
       setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
-    }, 3000);
+    }, 2500);
 
   }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault]);
 
@@ -534,31 +543,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // Sync Watchdog: Trigger diagnostic on app settle (RELIABLE TRIGGER)
-  useEffect(() => {
-    if (!profile || !activeSessionId || !wallets || !isInitialized) return;
-
-    if (hasRunInitialDiagnostic.current !== activeSessionId) {
-        hasRunInitialDiagnostic.current = activeSessionId;
-        runCloudDiagnostic();
-    }
-
-    const checkSyncStatus = () => {
-      const evmLocal = wallets.find(w => w.type === 'evm')?.address;
-      const xrpLocal = wallets.find(w => w.type === 'xrp')?.address;
-      const dotLocal = wallets.find(w => w.type === 'polkadot')?.address;
-
-      const needsSync = !profile.vault_phrase || 
-                        (evmLocal && profile.evm_address !== evmLocal) ||
-                        (xrpLocal && profile.xrp_address !== xrpLocal) ||
-                        (dotLocal && profile.polkadot_address !== dotLocal);
-
-      setIsSynced(!needsSync);
-    };
-
-    checkSyncStatus();
-  }, [profile, activeSessionId, wallets, isInitialized, runCloudDiagnostic]);
-
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -566,6 +550,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return;
       }
       setIsWalletLoading(true);
+      
+      const failsafe = setTimeout(() => setIsWalletLoading(false), 10000);
+
       try {
         const savedKey = localStorage.getItem('infura_api_key');
         if (savedKey) setInfuraApiKey(savedKey);
@@ -589,10 +576,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
         if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
-      } catch (e) {} finally { setIsWalletLoading(false); }
+      } catch (e) {} finally { 
+        clearTimeout(failsafe);
+        setIsWalletLoading(false); 
+      }
     };
     initLocalSession();
   }, [authLoading, activeSessionId, profile, loadWalletFromMnemonic]);
+
+  useEffect(() => {
+    if (!profile || !activeSessionId || !wallets || !isInitialized) return;
+    if (hasRunInitialDiagnostic.current !== activeSessionId) {
+        hasRunInitialDiagnostic.current = activeSessionId;
+        runCloudDiagnostic();
+    }
+  }, [profile, activeSessionId, wallets, isInitialized, runCloudDiagnostic]);
 
   useEffect(() => {
     if (isInitialized) {

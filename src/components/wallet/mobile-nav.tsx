@@ -33,7 +33,8 @@ export default function MobileNav() {
     pathname === '/send' || 
     pathname === '/receive' || 
     pathname === '/buy' ||
-    pathname.startsWith('/request');
+    pathname === '/request' ||
+    pathname.startsWith('/request/');
 
   if (isActionPage) return null;
 

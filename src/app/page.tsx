@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -6,9 +5,6 @@ import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
-import AuthSheet from '@/components/auth/auth-sheet';
-import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
-import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 import { RequestCreateMoment, RequestReviewMoment } from '@/components/wallet/request-moments';
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
@@ -17,7 +13,6 @@ function HomeContent() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const { user, profile, loading } = useUser();
   const { 
-    wallets, 
     isInitialized, 
     isWalletLoading, 
     isRequestOverlayOpen, 
@@ -27,8 +22,6 @@ function HomeContent() {
   } = useWallet();
 
   const searchParams = useSearchParams();
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
   // Failsafe timer to prevent infinite loading
   const [showFailsafe, setShowFailsafe] = useState(false);
@@ -36,24 +29,9 @@ function HomeContent() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowFailsafe(true);
-    }, 6000);
+    }, 8000);
     return () => clearTimeout(timer);
   }, []);
-
-  // INITIALIZATION SETTLED:
-  const isSettled = !loading && isInitialized && !isWalletLoading;
-  
-  const shouldShowAuth = isSettled && !user;
-  const shouldShowSetup = isSettled && !!user && !wallets;
-
-  useEffect(() => {
-    if (isSettled) {
-      setIsAuthOpen(shouldShowAuth);
-      setIsWalletSetupOpen(shouldShowSetup);
-    } else if (!loading && !user) {
-      setIsAuthOpen(true);
-    }
-  }, [isSettled, shouldShowAuth, shouldShowSetup, loading, user]);
 
   // Deep Link Interceptor: Check for fulfillment ID in URL or search params
   useEffect(() => {
@@ -112,11 +90,10 @@ function HomeContent() {
 
   return (
     <div className="flex-1 bg-background pb-32 relative">
-      <CloudSyncCard />
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <main className={cn(
         "flex flex-col items-center transition-all duration-700 ease-out",
-        (isAuthOpen || isWalletSetupOpen || isRequestOverlayOpen || activeFulfillmentId) && "blur-xl scale-95 opacity-50 pointer-events-none"
+        (isRequestOverlayOpen || activeFulfillmentId) && "blur-xl scale-95 opacity-50 pointer-events-none"
       )}>
         <div className="w-full mx-auto max-w-4xl pt-4">
           <WalletTab />
@@ -126,9 +103,6 @@ function HomeContent() {
       {/* GLOBAL P2P OVERLAY MOMENTS */}
       <RequestCreateMoment isOpen={isRequestOverlayOpen} onClose={() => setIsRequestOverlayOpen(false)} />
       {activeFulfillmentId && <RequestReviewMoment requestId={activeFulfillmentId} onClose={() => setActiveFulfillmentId(null)} />}
-
-      <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
-      <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={setIsWalletSetupOpen} />
     </div>
   );
 }

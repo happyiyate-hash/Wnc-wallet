@@ -10,6 +10,7 @@ import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { NavGradient } from '@/components/shared/nav-gradient';
+import GlobalOverlayManager from '@/components/global-overlay-manager';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -69,6 +70,8 @@ export default function RootLayout({
                       <MobileNav />
                     </div>
                   </div>
+                  {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS */}
+                  <GlobalOverlayManager />
                 </SidebarProvider>
               </WalletProvider>
             </CurrencyProvider>
