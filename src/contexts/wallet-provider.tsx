@@ -135,12 +135,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       ];
       
       setWallets(derived);
+      // Immediately reconcile with backend
+      await syncAddressesToSupabase(derived);
       return derived;
     } catch (e: any) {
       console.error("Wallet Derivation Error:", e.message);
       throw e;
     }
-  }, []);
+  }, [syncAddressesToSupabase]);
 
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
@@ -203,8 +205,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
         if (savedMnemonic) {
-            const derived = await loadWalletFromMnemonic(savedMnemonic);
-            if (derived) await syncAddressesToSupabase(derived);
+            await loadWalletFromMnemonic(savedMnemonic);
         } else if (profile?.vault_phrase && profile?.iv) {
             try { await restoreFromCloud(); } catch (e) { console.warn("Auto-restore failed:", e); }
         }
@@ -215,7 +216,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     };
     initLocalSession();
-  }, [authLoading, activeSessionId, profile?.vault_phrase]);
+  }, [authLoading, activeSessionId, profile?.vault_phrase, loadWalletFromMnemonic]);
 
   const fetchGlobalPrices = useCallback(async () => {
     const coingeckoIds = new Set<string>();
@@ -304,6 +305,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;
+    
+    // Safety Sync: Ensure Supabase always has our current derived addresses
+    syncAddressesToSupabase(wallets);
+
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
@@ -333,7 +338,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) {}
     }
     isBackgroundSyncRunning.current = false;
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, chainsWithLogos, fetchBalancesForChain, activeSessionId, fetchGlobalPrices, syncAddressesToSupabase]);
 
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) {
@@ -397,15 +402,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_phrase, iv: freshProfile.iv }), });
           const data = await res.json();
           if (res.ok && data.phrase) { 
-              const derived = await loadWalletFromMnemonic(data.phrase); 
-              if (derived) await syncAddressesToSupabase(derived);
+              await loadWalletFromMnemonic(data.phrase); 
               localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); 
           }
       }
       toast({ title: "Access Restored" });
       refreshProfile();
     } catch (e: any) { throw e; } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, toast, refreshProfile]);
+  }, [activeSessionId, loadWalletFromMnemonic, toast, refreshProfile]);
 
   const generateWallet = useCallback(async () => {
     setIsWalletLoading(true);
@@ -416,23 +420,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             if (profileCheck?.vault_phrase) throw new Error('CLOUDV_EXISTS');
             localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         }
-        const derived = await loadWalletFromMnemonic(mnemonic);
-        if (derived) await syncAddressesToSupabase(derived);
+        await loadWalletFromMnemonic(mnemonic);
         await saveToVault();
         return mnemonic;
     } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, saveToVault]);
+  }, [activeSessionId, loadWalletFromMnemonic, saveToVault]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     setIsWalletLoading(true);
     try {
         const clean = mnemonic.trim();
-        const derived = await loadWalletFromMnemonic(clean);
-        if (derived) await syncAddressesToSupabase(derived);
+        await loadWalletFromMnemonic(clean);
         if (activeSessionId) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, clean);
         await saveToVault();
     } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, syncAddressesToSupabase, saveToVault]);
+  }, [activeSessionId, loadWalletFromMnemonic, saveToVault]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];

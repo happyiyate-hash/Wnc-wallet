@@ -157,7 +157,7 @@ function SendClient() {
     return activeType !== addrType;
   }, [addrType, activeNetwork.type]);
 
-  // HARDENED RESOLUTION EFFECT
+  // HARDENED RESOLUTION EFFECT (2-Step Logic)
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
@@ -166,6 +166,7 @@ function SendClient() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
       
+      // Clear previous resolution data immediately on new input
       if (!input || input.length < 3 || isValidBase) {
         if (isMounted) {
           setResolvedAddress(isValidBase ? input : '');
@@ -177,6 +178,8 @@ function SendClient() {
       }
 
       if (isMounted) {
+        setResolvedAddress('');
+        setRecipientProfile(null);
         setIsResolving(true);
         setResolutionError(null);
       }
@@ -186,14 +189,14 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 8-second safety timeout
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000));
-        const rpcPromise = supabase.rpc('fetch_recipient_details', {
-          search_account_number: searchHandle,
-          selected_chain: activeNetwork.type || 'evm'
-        });
-
-        const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
+        // 8-second safety timeout for institutional lookup
+        const { data, error } = await Promise.race([
+          supabase.rpc('fetch_recipient_details', {
+            search_account_number: searchHandle,
+            selected_chain: activeNetwork.type || 'evm'
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+        ]) as any;
         
         if (!isMounted) return;
 
@@ -201,22 +204,32 @@ function SendClient() {
 
         if (data && data.length > 0) {
           const result = data[0];
+          
+          // Identity found
           setRecipientProfile({ 
             avatar: result.profile_pic, 
             verified: result.verified, 
             name: result.name || searchHandle 
           });
-          setResolvedAddress(result.target_address || '');
+
+          // Step 2: Address Hydration check
+          if (result.target_address) {
+            setResolvedAddress(result.target_address);
+            setResolutionError(null);
+          } else {
+            setResolvedAddress('');
+            setResolutionError(`Recipient found, but has no address linked for ${activeNetwork.name}.`);
+          }
         } else {
           setResolvedAddress('');
           setRecipientProfile(null);
-          setResolutionError("Recipient node not found or no address linked for this network.");
+          setResolutionError("Recipient account ID not found. Please verify and try again.");
         }
       } catch (e: any) {
         if (isMounted) {
           setResolvedAddress('');
           setRecipientProfile(null);
-          setResolutionError(e.message === 'TIMEOUT' ? "Lookup timed out. Please try again." : "Identity resolution failed.");
+          setResolutionError(e.message === 'TIMEOUT' ? "Identity resolution timed out. Network is congested." : "P2P Dispatch Error: Identity lookup failed.");
         }
       } finally {
         if (isMounted) setIsResolving(false);
@@ -225,7 +238,7 @@ function SendClient() {
     
     resolve();
     return () => { isMounted = false; controller.abort(); };
-  }, [debouncedRecipient, addrType, activeNetwork.type]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, activeNetwork.name]);
 
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress) return;
@@ -368,9 +381,11 @@ function SendClient() {
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Profile" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
-                                    </div>
+                                    {resolvedAddress && (
+                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                            <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                        </div>
+                                    )}
                                 </div>
                              ) : isNetworkMismatch ? (
                                 <div className="relative">
