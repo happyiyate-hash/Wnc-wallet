@@ -94,6 +94,7 @@ function SwapClient() {
         setQuotes([]);
         setQuotePhase('IDLE');
         setSelectedQuoteId(null);
+        setFetchError(null);
         return;
       }
 
@@ -105,7 +106,7 @@ function SwapClient() {
         // Resolve Source Wallet Address for Quote Accuracy
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const sourceWallets = wallets?.filter(w => w.type === (sourceChainConfig?.type || 'evm')) || [];
-        const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; // Failsafe addr if not loaded
+        const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
 
         const params = new URLSearchParams({
           fromChain: fromToken.chainId.toString(),
@@ -121,8 +122,8 @@ function SwapClient() {
         const response = await fetch(`/api/bridge/quote?${params.toString()}`);
         const lifiQuote = await response.json();
 
-        if (lifiQuote.error) {
-          throw new Error(lifiQuote.details || "No institutional route found.");
+        if (lifiQuote.error || response.status >= 400) {
+          throw new Error("UNAVAILABLE");
         }
 
         const realAmount = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
@@ -130,7 +131,6 @@ function SwapClient() {
         const providerName = lifiQuote.tool?.toUpperCase() || 'Aggregator';
 
         // 2. Generate Institutional Stagger Batch (Benchmark + Real)
-        // We use the real LI.FI result as the anchor and simulate checking other nodes
         const batch: SwapQuote[] = [
           { id: 'lifi-real', provider: providerName, logo: null, receiveAmount: realAmount, fee: realFee, eta: '~30s', isBest: true },
           { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: realAmount * 0.9985, fee: realFee * 1.1, eta: '~15s' },
@@ -138,7 +138,6 @@ function SwapClient() {
           { id: 'bench-3', provider: 'ParaSwap', logo: null, receiveAmount: realAmount * 0.9978, fee: realFee * 1.2, eta: '~12s' },
         ].sort((a, b) => (b.receiveAmount - b.fee) - (a.receiveAmount - a.fee));
 
-        // Mark the actual best one (which might be the real LIFI one or a benchmark)
         const finalBatch = batch.map((q, idx) => ({ ...q, isBest: idx === 0 }));
         
         setQuotes(finalBatch);
@@ -160,8 +159,8 @@ function SwapClient() {
 
         setQuotePhase('COLLAPSE');
       } catch (e: any) {
-        console.error("[SWAP_QUOTE_ERROR]", e);
-        setFetchError(e.message || "Market nodes unavailable.");
+        console.warn("[SWAP_QUOTE_HANDSHAKE_ERROR]", e);
+        setFetchError("Please it looks like there's no available code for this Cross swap right now please try again later or contact support.");
         setQuotePhase('IDLE');
       } finally {
         setIsQuoteLoading(false);
@@ -184,6 +183,7 @@ function SwapClient() {
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
+    setFetchError(null);
   };
 
   const handleSwapTokens = () => {
@@ -195,6 +195,7 @@ function SwapClient() {
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
+    setFetchError(null);
   };
 
   const startVoltageHold = () => {
@@ -223,7 +224,7 @@ function SwapClient() {
     scanning: { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.5)', scale: 1.02, x: 0, y: 0, opacity: 1 },
     accepted: { backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)', scale: 1, x: 0, y: 0, opacity: 1 },
     best: { backgroundColor: 'rgba(139, 92, 246, 0.2)', borderColor: '#6366f1', scale: 1.05, opacity: 1, x: 0, y: 0 },
-    rejected: { opacity: 0.4, scale: 0.95, grayscale: 1, x: 0, y: 0 }
+    rejected: { opacity: 0.4, scale: 0.95, filter: 'grayscale(1)', x: 0, y: 0 }
   };
 
   const getRowState = (index: number, isBest: boolean) => {
@@ -275,7 +276,7 @@ function SwapClient() {
                       <TrendingUp className="w-4 h-4 text-primary" />
                     )}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                      {fetchError ? 'Route Error' :
+                      {fetchError ? 'Route Unreachable' :
                        quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 
                        quotePhase === 'SCANNING' ? 'Analyzing Nodes...' : 
                        'Institutional Choice'}
@@ -285,9 +286,13 @@ function SwapClient() {
 
                 <div className="space-y-2">
                   {fetchError ? (
-                    <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 text-center space-y-2">
-                        <p className="text-xs font-bold text-red-400">{fetchError}</p>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Try adjusting the amount or selecting different tokens.</p>
+                    <div className="p-6 rounded-[2rem] bg-red-500/10 border border-red-500/20 text-center space-y-3 shadow-[0_0_30px_rgba(239,68,68,0.1)]">
+                        <p className="text-xs font-bold text-red-400 leading-relaxed">
+                          {fetchError}
+                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button size="sm" variant="ghost" className="h-8 rounded-xl text-[9px] uppercase tracking-widest font-black bg-white/5 border border-white/10" onClick={() => window.location.reload()}>Retry Discovery</Button>
+                        </div>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">
@@ -309,7 +314,7 @@ function SwapClient() {
                           delay: quotePhase === 'SHOW_ALL' ? idx * 0.15 : 0 
                         }}
                         className={cn(
-                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-colors duration-300 relative overflow-hidden bg-white/[0.02] border-white/5"
+                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden bg-white/[0.02] border-white/5"
                         )}
                       >
                         <div className="flex items-center gap-3">
@@ -422,7 +427,7 @@ function SwapClient() {
               </div>
             ) : (
               <motion.span 
-                key={selectedQuoteId}
+                key={selectedQuoteId || 'empty'}
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 className="tabular-nums"
