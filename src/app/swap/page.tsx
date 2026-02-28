@@ -87,7 +87,7 @@ function SwapClient() {
 
   useEffect(() => {
     const runSequence = async () => {
-      // FIX 1: Guard Clause - Stop fetch and reset UI when input is empty or 0
+      // GUARD: Stop fetch and reset UI when input is empty or 0
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
         setQuotePhase('IDLE');
@@ -100,7 +100,7 @@ function SwapClient() {
       setFetchError(null);
 
       try {
-        // Simulate fetch delay
+        // Simulate fetch delay for high-fidelity feel
         await new Promise(r => setTimeout(r, 1200));
         
         const basePrice = prices[(fromToken.priceId || fromToken.address)?.toLowerCase()]?.price || 1;
@@ -128,21 +128,21 @@ function SwapClient() {
         setQuotes(finalBatch);
         setIsQuoteLoading(false);
         
-        // PHASE 1: SHOW ALL (Staggered entrance starts here)
+        // PHASE 1: SHOW ALL (Staggered entrance from corner)
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 1000)); // Wait for staggered entrance
+        await new Promise(r => setTimeout(r, 1500)); // Increased to allow staggered one-by-one entrance
 
         // PHASE 2: SCANNING
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatch.length; i++) {
           setScanningIndex(i);
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 200));
         }
 
         // PHASE 3: FINAL SELECTION
         setQuotePhase('FINAL_SELECTED');
         setSelectedQuoteId(finalBatch[0].id);
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1000));
 
         // PHASE 4: COLLAPSE
         setQuotePhase('COLLAPSE');
@@ -203,17 +203,27 @@ function SwapClient() {
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
+  const rowVariants = {
+    hidden: { x: 40, y: 40, opacity: 0, scale: 0.8 },
+    entrance: { x: 0, y: 0, opacity: 1, scale: 1 },
+    scanning: { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.5)', scale: 1.02, x: 0, y: 0, opacity: 1 },
+    accepted: { backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)', scale: 1, x: 0, y: 0, opacity: 1 },
+    best: { backgroundColor: 'rgba(139, 92, 246, 0.2)', borderColor: '#6366f1', scale: 1.05, opacity: 1, x: 0, y: 0 },
+    rejected: { opacity: 0.4, scale: 0.95, grayscale: 1, x: 0, y: 0 }
+  };
+
   const getRowState = (index: number, isBest: boolean) => {
-    if (quotePhase === 'SHOW_ALL') return 'neutral';
+    if (quotePhase === 'IDLE' || quotePhase === 'FETCHING') return 'hidden';
+    if (quotePhase === 'SHOW_ALL') return 'entrance';
     if (quotePhase === 'SCANNING') {
       if (index === scanningIndex) return 'scanning';
       if (index < scanningIndex) return 'accepted';
-      return 'neutral';
+      return 'entrance';
     }
     if (quotePhase === 'FINAL_SELECTED' || quotePhase === 'COLLAPSE') {
       return isBest ? 'best' : 'rejected';
     }
-    return 'neutral';
+    return 'entrance';
   };
 
   return (
@@ -256,18 +266,7 @@ function SwapClient() {
                   </div>
                 </div>
 
-                <motion.div 
-                  initial="hidden"
-                  animate="visible"
-                  variants={{
-                    visible: {
-                      transition: {
-                        staggerChildren: 0.08,
-                      }
-                    }
-                  }}
-                  className="space-y-2"
-                >
+                <div className="space-y-2">
                   {isQuoteLoading ? (
                     <div className="space-y-2">
                       {[1, 2, 3, 4].map(i => (
@@ -275,65 +274,58 @@ function SwapClient() {
                       ))}
                     </div>
                   ) : (
-                    quotes.map((quote, idx) => {
-                      const state = getRowState(idx, quote.isBest || false);
-                      return (
-                        <motion.div
-                          key={quote.id}
-                          variants={{
-                            hidden: { x: 24, y: 24, opacity: 0, scale: 0.95 },
-                            visible: { x: 0, y: 0, opacity: 1, scale: 1 }
-                          }}
-                          animate={quotePhase === 'SHOW_ALL' ? undefined : { 
-                            scale: state === 'rejected' ? 0.95 : state === 'best' ? 1.02 : 1,
-                            opacity: state === 'rejected' ? 0.4 : 1,
-                          }}
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden",
-                            state === 'neutral' && "bg-white/[0.02] border-white/5",
-                            state === 'scanning' && "bg-blue-500/10 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.3)]",
-                            state === 'accepted' && "bg-emerald-500/5 border-emerald-500/20",
-                            state === 'best' && "bg-primary/20 border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]",
-                            state === 'rejected' && "bg-red-500/5 border-red-500/10"
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-white">
-                              {quote.provider[0]}
-                            </div>
-                            <div className="text-left">
-                              <p className="text-xs font-black text-white flex items-center gap-2">
-                                {quote.provider}
-                                {state === 'best' && <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
-                              </p>
-                              <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
-                                <span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span>
-                                <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
-                              </div>
-                            </div>
+                    quotes.map((quote, idx) => (
+                      <motion.div
+                        key={quote.id}
+                        variants={rowVariants}
+                        initial="hidden"
+                        animate={getRowState(idx, quote.isBest || false)}
+                        transition={{ 
+                          type: 'spring', 
+                          damping: 25, 
+                          stiffness: 120,
+                          delay: quotePhase === 'SHOW_ALL' ? idx * 0.15 : 0 
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-colors duration-300 relative overflow-hidden bg-white/[0.02] border-white/5"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-white">
+                            {quote.provider[0]}
                           </div>
-                          <div className="text-right">
-                            <p className={cn(
-                              "text-sm font-black tabular-nums transition-colors",
-                              state === 'best' ? "text-white" : "text-white/60"
-                            )}>
-                              {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                          <div className="text-left">
+                            <p className="text-xs font-black text-white flex items-center gap-2">
+                              {quote.provider}
+                              {getRowState(idx, quote.isBest || false) === 'best' && <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
                             </p>
-                            <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
-                          </div>
-
-                          {state === 'best' && (
-                            <div className="absolute top-0 right-0 p-1.5">
-                              <div className="bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-lg">
-                                <span className="text-[7px] font-black text-blue-400 uppercase tracking-tighter">Best Rate</span>
-                              </div>
+                            <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
+                              <span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span>
+                              <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
                             </div>
-                          )}
-                        </motion.div>
-                      );
-                    })
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={cn(
+                            "text-sm font-black tabular-nums transition-colors",
+                            getRowState(idx, quote.isBest || false) === 'best' ? "text-white" : "text-white/60"
+                          )}>
+                            {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                          </p>
+                          <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
+                        </div>
+
+                        {getRowState(idx, quote.isBest || false) === 'best' && (
+                          <div className="absolute top-0 right-0 p-1.5">
+                            <div className="bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-lg">
+                              <span className="text-[7px] font-black text-blue-400 uppercase tracking-tighter">Best Rate</span>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))
                   )}
-                </motion.div>
+                </div>
               </div>
             </div>
           </motion.div>
