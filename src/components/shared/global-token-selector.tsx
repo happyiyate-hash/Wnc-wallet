@@ -69,6 +69,11 @@ export default function GlobalTokenSelector({
         return getAddressForChain(selectedChain, wallets) || '';
     }, [selectedChain, wallets, getAddressForChain]);
 
+    const maskedAddress = useMemo(() => {
+        if (!activeAddress) return 'Initializing...';
+        return `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}`;
+    }, [activeAddress]);
+
     const currentAssets = useMemo(() => {
         const base = getAvailableAssetsForChain(selectedChain.chainId);
         const chainBalances = balances[selectedChain.chainId] || [];
@@ -105,25 +110,11 @@ export default function GlobalTokenSelector({
 
                 {/* HEADER COCKPIT */}
                 <div className="p-6 border-b border-white/5 space-y-4 shrink-0 bg-gradient-to-b from-white/[0.02] to-transparent">
-                    <div className="flex items-center justify-between gap-4">
-                        {/* IDENTITY NODE */}
-                        <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/5 group">
-                            <Cpu className="w-3 h-3 text-primary opacity-40" />
-                            <p className="text-[10px] font-mono text-white/40 truncate flex-1">
-                                {activeAddress || 'Initializing...'}
-                            </p>
-                            <button 
-                                onClick={() => copy(activeAddress)}
-                                className="text-primary hover:text-primary/80 transition-colors"
-                            >
-                                {isCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                        </div>
-
-                        {/* NETWORK SWITCHER DROPDOWN */}
+                    <div className="flex items-center justify-between gap-3">
+                        {/* NETWORK SWITCHER DROPDOWN (LEFT) */}
                         <button 
                             onClick={() => setIsNetworkListOpen(!isNetworkListOpen)}
-                            className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all active:scale-95"
+                            className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all active:scale-95 shrink-0"
                         >
                             <TokenLogoDynamic 
                                 logoUrl={selectedChain.iconUrl} 
@@ -136,6 +127,20 @@ export default function GlobalTokenSelector({
                             <span className="text-[10px] font-black uppercase text-white tracking-tighter">{selectedChain.name}</span>
                             <ChevronDown className={cn("w-3 h-3 text-primary transition-transform duration-300", isNetworkListOpen && "rotate-180")} />
                         </button>
+
+                        {/* IDENTITY NODE (RIGHT - MASKED) */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/5 group min-w-0">
+                            <Cpu className="w-3 h-3 text-primary opacity-40 shrink-0" />
+                            <p className="text-[10px] font-mono text-white/40 truncate">
+                                {maskedAddress}
+                            </p>
+                            <button 
+                                onClick={() => copy(activeAddress)}
+                                className="text-primary hover:text-primary/80 transition-colors shrink-0"
+                            >
+                                {isCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                        </div>
                     </div>
 
                     <div className="relative">
