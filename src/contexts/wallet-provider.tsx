@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -12,7 +11,7 @@ import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
-import { fetchPriceMap } from '@/lib/coingecko';
+import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
@@ -90,6 +89,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
   }, [chainsWithLogos]);
 
+  const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
+    const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
+    const combined = [...base, ...custom].reduce((acc, curr) => {
+        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+        return acc;
+    }, [] as AssetRow[]);
+    return combined;
+  }, []);
+
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const chainId = viewingNetwork.chainId;
@@ -101,11 +110,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return acc;
     }, [] as AssetRow[]);
 
-    return combined.filter(asset => {
+    return combined.map(asset => {
+      const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
+      const priceInfo = prices[priceId];
+      const price = priceInfo?.price ?? 0;
+      const change = priceInfo?.change ?? 0;
+      
+      return {
+        ...asset,
+        priceUsd: price,
+        pctChange24h: change,
+        fiatValueUsd: price * (parseFloat(asset.balance) || 0)
+      };
+    }).filter(asset => {
       const key = `${chainId}:${asset.symbol}`;
       return !hiddenTokenKeys.has(key);
     });
-  }, [viewingNetwork, balances, hiddenTokenKeys, userAddedTokens]);
+  }, [viewingNetwork, balances, hiddenTokenKeys, userAddedTokens, prices]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
@@ -175,21 +196,69 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const fetchGlobalPrices = useCallback(async () => {
     const coingeckoIds = new Set<string>();
-    chainsWithLogos.forEach(chain => {
-        getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase()); });
-    });
-    latestUserTokensRef.current.forEach(t => { if (t.coingeckoId) coingeckoIds.add(t.coingeckoId.toLowerCase()); });
+    const platformTokens: { [platform: string]: Set<string> } = {};
 
-    const newPrices: { [key: string]: PriceInfo } = {};
-    try {
-        if (coingeckoIds.size > 0) {
-            const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
-            Object.entries(priceMap).forEach(([id, data]) => {
-                if (data && typeof data.usd === 'number') newPrices[id.toLowerCase()] = { price: data.usd, change: data.usd_24h_change || 0 };
-            });
+    // Collect all tokens that need pricing
+    chainsWithLogos.forEach(chain => {
+        getInitialAssets(chain.chainId).forEach(a => { 
+            if (a.coingeckoId) {
+                coingeckoIds.add(a.coingeckoId.toLowerCase());
+            } else if (!a.isNative && a.address && a.address.startsWith('0x')) {
+                const platform = COINGECKO_PLATFORM_MAP[chain.chainId];
+                if (platform) {
+                    if (!platformTokens[platform]) platformTokens[platform] = new Set();
+                    platformTokens[platform].add(a.address.toLowerCase());
+                }
+            }
+        });
+    });
+
+    latestUserTokensRef.current.forEach(t => { 
+        if (t.coingeckoId) {
+            coingeckoIds.add(t.coingeckoId.toLowerCase());
+        } else if (t.address && t.address.startsWith('0x')) {
+            const platform = COINGECKO_PLATFORM_MAP[t.chainId];
+            if (platform) {
+                if (!platformTokens[platform]) platformTokens[platform] = new Set();
+                platformTokens[platform].add(t.address.toLowerCase());
+            }
         }
-        setPrices(prev => ({ ...prev, ...newPrices }));
-    } catch (e) {}
+    });
+
+    try {
+        const fetchPromises = [];
+        
+        // 1. Fetch by IDs
+        if (coingeckoIds.size > 0) {
+            fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
+        }
+
+        // 2. Fetch by contract addresses per platform
+        Object.entries(platformTokens).forEach(([platform, addresses]) => {
+            fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
+        });
+
+        const results = await Promise.allSettled(fetchPromises);
+        const newPrices: { [id: string]: PriceInfo } = {};
+
+        results.forEach(res => {
+            if (res.status === 'fulfilled' && res.value) {
+                Object.entries(res.value).forEach(([key, data]: [string, any]) => {
+                    const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
+                    const change = data.usd_24h_change || 0;
+                    if (price > 0) {
+                        newPrices[key.toLowerCase()] = { price, change };
+                    }
+                });
+            }
+        });
+
+        if (Object.keys(newPrices).length > 0) {
+            setPrices(prev => ({ ...prev, ...newPrices }));
+        }
+    } catch (e) {
+        console.warn("[PRICE_ORACLE_REFRESH_FAILED]", e);
+    }
   }, [chainsWithLogos]);
 
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
@@ -211,16 +280,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } catch (e) { return combinedAssetsList; }
     }
     return combinedAssetsList;
-  }, [wallets, infuraApiKey]);
-
-  const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
-    const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
-    return [...base, ...custom].reduce((acc, curr) => {
-        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
-        return acc;
-    }, [] as AssetRow[]);
-  }, []);
+  }, [wallets, infuraApiKey, getAvailableAssetsForChain]);
 
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;

@@ -31,18 +31,17 @@ export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
  * A generic fetcher function for CoinGecko API.
  */
 async function fetcher(url: string) {
-    const res = await fetch(url);
-    if (!res.ok) {
-        const error = new Error('An error occurred while fetching CoinGecko data.');
-        try {
-            const info = await res.json();
-            console.error('CoinGecko API Error:', info);
-        } catch (e) {
-            console.error('Could not parse CoinGecko error JSON');
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            const error = new Error(`CoinGecko Error: ${res.status}`);
+            console.warn(`[COINGECKO_FETCH_WARNING] ${url} returned ${res.status}`);
+            throw error;
         }
-        throw error;
+        return res.json();
+    } catch (e) {
+        return null;
     }
-    return res.json();
 }
 
 /**
@@ -57,7 +56,8 @@ export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { us
     
     try {
         const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
-        return await fetcher(priceUrl);
+        const data = await fetcher(priceUrl);
+        return data || {};
     } catch (e) {
         console.warn("CoinGecko fetchPriceMap failed:", e);
         return {};
@@ -82,11 +82,13 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
         const url = `${COINGECKO_API_URL}/simple/token_price/${platformId}?contract_addresses=${cleanAddresses}&vs_currencies=usd&include_24hr_change=true`;
         const data = await fetcher(url);
         
+        if (!data) return {};
+
         const result: any = {};
         Object.entries(data).forEach(([addr, info]: [string, any]) => {
             result[addr.toLowerCase()] = {
-                usd: info.usd,
-                usd_24h_change: info.usd_24h_change
+                usd: info.usd || 0,
+                usd_24h_change: info.usd_24h_change || 0
             };
         });
         return result;
