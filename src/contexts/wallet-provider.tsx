@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -5,12 +6,13 @@ import type { AssetRow, ChainConfig, WalletWithMetadata, LocalSession } from '@/
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
+import * as bip39 from 'bip39';
 import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useToast } from '@/hooks/use-toast';
-import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
+import { fetchPriceMap } from '@/lib/coingecko';
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
@@ -61,7 +63,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile, activeSessionId, addSession } = useUser();
+  const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -78,14 +80,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
 
-  const isBackgroundSyncRunning = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const latestBalancesRef = useRef(balances);
   const latestUserTokensRef = useRef(userAddedTokens);
 
-  useEffect(() => { latestBalancesRef.current = balances; }, [balances]);
   useEffect(() => { latestUserTokensRef.current = userAddedTokens; }, [userAddedTokens]);
 
   const allChainsMap = useMemo(() => {
@@ -109,6 +107,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [viewingNetwork, balances, hiddenTokenKeys, userAddedTokens]);
 
+  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
+    if (!mnemonic) return null;
+    try {
+      const cleanMnemonic = mnemonic.trim();
+      if (!bip39.validateMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
+      
+      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
+      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
+      
+      await cryptoWaitReady();
+      const keyring = new Keyring({ type: 'sr25519' });
+      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
+      
+      const derived: WalletWithMetadata[] = [
+        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
+        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
+        { address: dotWallet.address, type: 'polkadot' }
+      ];
+      setWallets(derived);
+      return derived;
+    } catch (e: any) { 
+      console.error("Wallet Derivation Error:", e.message);
+      throw e; 
+    }
+  }, []);
+
+  const generateWallet = async (): Promise<string> => {
+    const mnemonic = bip39.generateMnemonic();
+    await loadWalletFromMnemonic(mnemonic);
+    if (activeSessionId) {
+        localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
+        localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
+        setIsSynced(false);
+    }
+    return mnemonic;
+  };
+
+  const importWallet = async (mnemonic: string) => {
+    await loadWalletFromMnemonic(mnemonic);
+    if (activeSessionId) {
+        localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
+        localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
+        setIsSynced(false);
+    }
+  };
+
   const syncAllAddresses = async () => {
     if (!activeSessionId || !supabase || !wallets) return;
     try {
@@ -129,25 +173,69 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
-    if (!mnemonic) return null;
+  const fetchGlobalPrices = useCallback(async () => {
+    const coingeckoIds = new Set<string>();
+    chainsWithLogos.forEach(chain => {
+        getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase()); });
+    });
+    latestUserTokensRef.current.forEach(t => { if (t.coingeckoId) coingeckoIds.add(t.coingeckoId.toLowerCase()); });
+
+    const newPrices: { [key: string]: PriceInfo } = {};
     try {
-      const cleanMnemonic = mnemonic.trim();
-      if (!ethers.Mnemonic.isValidMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
-      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
-      await cryptoWaitReady();
-      const keyring = new Keyring({ type: 'sr25519' });
-      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
-      const derived: WalletWithMetadata[] = [
-        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
-        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
-        { address: dotWallet.address, type: 'polkadot' }
-      ];
-      setWallets(derived);
-      return derived;
-    } catch (e: any) { throw e; }
+        if (coingeckoIds.size > 0) {
+            const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
+            Object.entries(priceMap).forEach(([id, data]) => {
+                if (data && typeof data.usd === 'number') newPrices[id.toLowerCase()] = { price: data.usd, change: data.usd_24h_change || 0 };
+            });
+        }
+        setPrices(prev => ({ ...prev, ...newPrices }));
+    } catch (e) {}
+  }, [chainsWithLogos]);
+
+  const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
+    if (!wallets || !infuraApiKey) return [];
+    const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
+    if (!walletForChain) return [];
+    
+    const combinedAssetsList = getAvailableAssetsForChain(chain.chainId);
+    let adapter = null;
+    
+    if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
+    else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
+    else adapter = evmAdapterFactory(chain, infuraApiKey);
+    
+    if (adapter) {
+        try {
+            const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+            return results.map(r => ({ ...r, updatedAt: Date.now() }));
+        } catch (e) { return combinedAssetsList; }
+    }
+    return combinedAssetsList;
+  }, [wallets, infuraApiKey]);
+
+  const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
+    const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
+    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
+    return [...base, ...custom].reduce((acc, curr) => {
+        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+        return acc;
+    }, [] as AssetRow[]);
   }, []);
+
+  const startEngine = useCallback(async () => {
+    if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+    setIsRefreshing(true);
+    try {
+        const priorityBalances = await fetchBalancesForChain(viewingNetwork);
+        setBalances(prev => {
+            const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
+            localStorage.setItem(`wallet_balances_${activeSessionId}`, JSON.stringify(next));
+            return next;
+        });
+    } catch (e) {} finally { setIsRefreshing(false); }
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
 
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
@@ -201,26 +289,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [authLoading, activeSessionId, loadWalletFromMnemonic]);
 
-  const fetchGlobalPrices = useCallback(async () => {
-    const coingeckoIds = new Set<string>();
-    const contractLookups: { [chainId: number]: Set<string> } = {};
-    chainsWithLogos.forEach(chain => {
-        getInitialAssets(chain.chainId).forEach(a => { if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase()); });
-    });
-    latestUserTokensRef.current.forEach(t => { if (t.coingeckoId) coingeckoIds.add(t.coingeckoId.toLowerCase()); });
-
-    const newPrices: { [key: string]: PriceInfo } = {};
-    try {
-        if (coingeckoIds.size > 0) {
-            const priceMap = await fetchPriceMap(Array.from(coingeckoIds));
-            Object.entries(priceMap).forEach(([id, data]) => {
-                if (data && typeof data.usd === 'number') newPrices[id.toLowerCase()] = { price: data.usd, change: data.usd_24h_change || 0 };
-            });
-        }
-        setPrices(prev => ({ ...prev, ...newPrices }));
-    } catch (e) {}
-  }, [chainsWithLogos]);
-
   useEffect(() => {
     if (isInitialized) {
         fetchGlobalPrices(); 
@@ -229,48 +297,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, fetchGlobalPrices]);
-
-  const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
-    if (!wallets || !infuraApiKey) return [];
-    const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
-    if (!walletForChain) return [];
-    const combinedAssetsList = getAvailableAssetsForChain(chain.chainId);
-    let adapter = null;
-    if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
-    else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
-    else adapter = evmAdapterFactory(chain, infuraApiKey);
-    if (adapter) {
-        try {
-            const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
-            return results.map(r => ({ ...r, updatedAt: Date.now() }));
-        } catch (e) { return combinedAssetsList; }
-    }
-    return combinedAssetsList;
-  }, [wallets, infuraApiKey]);
-
-  const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
-    const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
-    return [...base, ...custom].reduce((acc, curr) => {
-        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
-        return acc;
-    }, [] as AssetRow[]);
-  }, []);
-
-  const startEngine = useCallback(async () => {
-    if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    abortControllerRef.current = new AbortController();
-    setIsRefreshing(true);
-    try {
-        const priorityBalances = await fetchBalancesForChain(viewingNetwork);
-        setBalances(prev => {
-            const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
-            localStorage.setItem(`wallet_balances_${activeSessionId}`, JSON.stringify(next));
-            return next;
-        });
-    } catch (e) {} finally { setIsRefreshing(false); }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
 
   useEffect(() => {
     if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) startEngine();
@@ -284,21 +310,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
     }
   }, [areLogosLoading, chainsWithLogos, isInitialized]);
-
-  const restoreFromCloud = useCallback(async () => {
-    if (!activeSessionId || !supabase) return;
-    setIsWalletLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', activeSessionId).single();
-      if (freshProfile?.vault_phrase && freshProfile.iv) {
-          const res = await fetch('/api/wallet/decrypt-phrase', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ encrypted: freshProfile.vault_phrase, iv: freshProfile.iv }), });
-          const data = await res.json();
-          if (res.ok && data.phrase) { await loadWalletFromMnemonic(data.phrase); localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase); }
-      }
-      toast({ title: "Access Restored" });
-    } catch (e: any) { throw e; } finally { setIsWalletLoading(false); }
-  }, [activeSessionId, loadWalletFromMnemonic, toast]);
 
   const logout = useCallback(async () => {
     setIsWalletLoading(true);
@@ -330,10 +341,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     balances,
     prices,
     refresh: startEngine,
-    generateWallet: async () => { return ''; },
-    importWallet: async (m) => { await importWallet(m); },
+    generateWallet,
+    importWallet,
     saveToVault: async () => {},
-    restoreFromCloud,
+    restoreFromCloud: async () => {},
     logout,
     deleteWallet: () => {},
     fetchError,
