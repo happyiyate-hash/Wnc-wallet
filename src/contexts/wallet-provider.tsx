@@ -62,7 +62,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
-  const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId } = useUser();
+  const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId, refreshProfile } = useUser();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -192,9 +192,81 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
-      toast({ title: "Cloud Registry Synced" });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Sync Failed", description: e.message });
+      console.error("Address Sync Failed:", e.message);
+      throw e;
+    }
+  };
+
+  const saveToVault = async () => {
+    const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+    if (!mnemonic || !activeSessionId || !supabase) return;
+
+    try {
+      // 1. Encrypt the phrase via API
+      const res = await fetch('/api/wallet/encrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phrase: mnemonic })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Encryption failed");
+
+      // 2. Save encrypted phrase + iv to profile
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          vault_phrase: data.encrypted, 
+          iv: data.iv 
+        })
+        .eq('id', activeSessionId);
+
+      if (error) throw error;
+
+      // 3. Also sync addresses to registry
+      await syncAllAddresses();
+      
+      setIsSynced(true);
+      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
+      toast({ title: "Cloud Backup Active", description: "Your vault is now synchronized." });
+      await refreshProfile(); // Refresh profile state to reflect changes
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Backup Failed", description: e.message });
+    }
+  };
+
+  const restoreFromCloud = async () => {
+    if (!profile?.vault_phrase || !profile?.iv || !activeSessionId) {
+      throw new Error("No cloud backup found for this identity.");
+    }
+
+    try {
+      // 1. Decrypt via API
+      const res = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          encrypted: profile.vault_phrase, 
+          iv: profile.iv 
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Decryption failed");
+
+      // 2. Load and derive
+      const phrase = data.phrase;
+      await loadWalletFromMnemonic(phrase);
+      
+      // 3. Persist locally for session
+      localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, phrase);
+      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
+      setIsSynced(true);
+      
+      toast({ title: "Vault Access Restored", description: "Your multi-chain nodes are now active." });
+    } catch (e: any) {
+      console.error("Cloud Restore Error:", e);
+      throw e;
     }
   };
 
@@ -382,8 +454,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: startEngine,
     generateWallet,
     importWallet,
-    saveToVault: async () => {},
-    restoreFromCloud: async () => {},
+    saveToVault,
+    restoreFromCloud,
     logout,
     deleteWallet: () => {},
     fetchError,

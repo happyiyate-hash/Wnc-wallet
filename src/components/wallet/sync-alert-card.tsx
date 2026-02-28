@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -9,7 +8,7 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 export default function SyncAlertCard() {
-  const { isSynced, syncAllAddresses, wallets } = useWallet();
+  const { isSynced, saveToVault, wallets } = useWallet();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -18,7 +17,7 @@ export default function SyncAlertCard() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await syncAllAddresses();
+      await saveToVault();
     } finally {
       setIsSyncing(false);
     }
@@ -42,7 +41,7 @@ export default function SyncAlertCard() {
             </div>
             <div className="text-left">
               <p className="text-sm font-black text-white uppercase tracking-tight">Sync Required</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">Addresses only stored locally</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">Vault only stored locally</p>
             </div>
           </div>
           <ChevronDown className={cn("w-5 h-5 text-muted-foreground transition-transform duration-500", isExpanded && "rotate-180")} />
@@ -61,7 +60,7 @@ export default function SyncAlertCard() {
                   <div className="flex items-start gap-3">
                     <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                     <p className="text-[11px] text-zinc-400 leading-relaxed font-medium">
-                      Your wallet addresses are stored locally. To enable <span className="text-white font-bold">P2P transfers</span> and cross-chain node resolution, sync your addresses securely to our cloud registry.
+                      Your wallet addresses and secret phrase are stored locally. To enable <span className="text-white font-bold">Cloud Recovery</span> and P2P transfers, sync your vault securely to our encrypted registry.
                     </p>
                   </div>
                 </div>
