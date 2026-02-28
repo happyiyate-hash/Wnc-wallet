@@ -68,6 +68,11 @@ interface WalletContextType {
   syncAllAddresses: () => Promise<void>;
   syncDiagnostic: SyncDiagnosticState;
   runCloudDiagnostic: () => Promise<void>;
+  // Overlay States
+  isRequestOverlayOpen: boolean;
+  setIsRequestOverlayOpen: (open: boolean) => void;
+  activeFulfillmentId: string | null;
+  setActiveFulfillmentId: (id: string | null) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -88,6 +93,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [infuraApiKey, setInfuraApiKey] = useState<string | null>(null);
   const [isSynced, setIsSynced] = useState(true);
+
+  // Overlay Controls
+  const [isRequestOverlayOpen, setIsRequestOverlayOpen] = useState(false);
+  const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
   // Sync Diagnostic State
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnosticState>({
@@ -657,7 +666,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isSynced,
     syncAllAddresses,
     syncDiagnostic,
-    runCloudDiagnostic
+    runCloudDiagnostic,
+    isRequestOverlayOpen,
+    setIsRequestOverlayOpen,
+    activeFulfillmentId,
+    setActiveFulfillmentId
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

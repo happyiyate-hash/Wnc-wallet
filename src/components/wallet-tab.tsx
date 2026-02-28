@@ -101,7 +101,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey } = useWallet();
+  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
   const { user } = useUser();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
@@ -173,6 +173,10 @@ export default function WalletTab() {
   const openAction = (type: 'send' | 'receive' | 'swap' | 'request') => {
     if (type === 'swap') {
         setIsQuickSwapOpen(true);
+        return;
+    }
+    if (type === 'request') {
+        setIsRequestOverlayOpen(true);
         return;
     }
     router.push(`/${type}`);

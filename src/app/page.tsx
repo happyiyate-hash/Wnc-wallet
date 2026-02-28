@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,13 +9,24 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
+import { RequestCreateMoment, RequestReviewMoment } from '@/components/wallet/request-moments';
 import { cn } from '@/lib/utils';
+import { useSearchParams } from 'next/navigation';
 
 export default function Home() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const { user, profile, loading } = useUser();
-  const { wallets, isInitialized, isWalletLoading } = useWallet();
+  const { 
+    wallets, 
+    isInitialized, 
+    isWalletLoading, 
+    isRequestOverlayOpen, 
+    setIsRequestOverlayOpen, 
+    activeFulfillmentId, 
+    setActiveFulfillmentId 
+  } = useWallet();
 
+  const searchParams = useSearchParams();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
@@ -42,6 +54,17 @@ export default function Home() {
       setIsAuthOpen(true);
     }
   }, [isSettled, shouldShowAuth, shouldShowSetup, loading, user]);
+
+  // Deep Link Interceptor: Check for fulfillment ID in URL or search params
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const match = path.match(/\/request\/([^\/]+)/);
+      if (match && match[1]) {
+        setActiveFulfillmentId(match[1]);
+      }
+    }
+  }, [setActiveFulfillmentId]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -93,13 +116,17 @@ export default function Home() {
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <main className={cn(
         "flex flex-col items-center transition-all duration-700 ease-out",
-        (isAuthOpen || isWalletSetupOpen) && "blur-xl scale-95 opacity-50 pointer-events-none"
+        (isAuthOpen || isWalletSetupOpen || isRequestOverlayOpen || activeFulfillmentId) && "blur-xl scale-95 opacity-50 pointer-events-none"
       )}>
         <div className="w-full mx-auto max-w-4xl pt-4">
           <WalletTab />
         </div>
       </main>
       
+      {/* GLOBAL P2P OVERLAY MOMENTS */}
+      <RequestCreateMoment isOpen={isRequestOverlayOpen} onClose={() => setIsRequestOverlayOpen(false)} />
+      {activeFulfillmentId && <RequestReviewMoment requestId={activeFulfillmentId} onClose={() => setActiveFulfillmentId(null)} />}
+
       <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
       <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={setIsWalletSetupOpen} />
     </div>
