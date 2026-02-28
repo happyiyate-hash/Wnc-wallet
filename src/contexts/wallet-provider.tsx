@@ -175,17 +175,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const syncAllAddresses = async () => {
-    if (!activeSessionId || !supabase || !wallets) return;
+    if (!activeSessionId || !supabase || !wallets || !profile?.account_number) return;
     try {
-      const updates = wallets.map(w => ({
-        user_id: activeSessionId,
-        chain: w.type,
-        address: w.address,
-        is_synced: true,
-        updated_at: new Date().toISOString()
-      }));
-      const { error } = await supabase.from('user_wallet_addresses').upsert(updates, { onConflict: 'user_id,chain' });
-      if (error) throw error;
+      const syncPromises = wallets.map(w => 
+        supabase.rpc('sync_user_addresses', {
+          p_user_id: activeSessionId,
+          p_chain: w.type,
+          p_address: w.address,
+          p_account_number: profile.account_number
+        })
+      );
+      
+      const results = await Promise.all(syncPromises);
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) throw new Error(errors[0].error.message);
+
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       toast({ title: "Cloud Registry Synced" });
@@ -198,12 +202,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const coingeckoIds = new Set<string>();
     const platformTokens: { [platform: string]: Set<string> } = {};
 
-    // Collect all tokens that need pricing
     chainsWithLogos.forEach(chain => {
         getInitialAssets(chain.chainId).forEach(a => { 
-            if (a.coingeckoId) {
-                coingeckoIds.add(a.coingeckoId.toLowerCase());
-            } else if (!a.isNative && a.address && a.address.startsWith('0x')) {
+            if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase());
+            else if (!a.isNative && a.address?.startsWith('0x')) {
                 const platform = COINGECKO_PLATFORM_MAP[chain.chainId];
                 if (platform) {
                     if (!platformTokens[platform]) platformTokens[platform] = new Set();
@@ -213,27 +215,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
     });
 
-    latestUserTokensRef.current.forEach(t => { 
-        if (t.coingeckoId) {
-            coingeckoIds.add(t.coingeckoId.toLowerCase());
-        } else if (t.address && t.address.startsWith('0x')) {
-            const platform = COINGECKO_PLATFORM_MAP[t.chainId];
-            if (platform) {
-                if (!platformTokens[platform]) platformTokens[platform] = new Set();
-                platformTokens[platform].add(t.address.toLowerCase());
-            }
-        }
-    });
-
     try {
         const fetchPromises = [];
-        
-        // 1. Fetch by IDs
-        if (coingeckoIds.size > 0) {
-            fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
-        }
-
-        // 2. Fetch by contract addresses per platform
+        if (coingeckoIds.size > 0) fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
         Object.entries(platformTokens).forEach(([platform, addresses]) => {
             fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
         });
@@ -246,16 +230,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 Object.entries(res.value).forEach(([key, data]: [string, any]) => {
                     const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
                     const change = data.usd_24h_change || 0;
-                    if (price > 0) {
-                        newPrices[key.toLowerCase()] = { price, change };
-                    }
+                    if (price > 0) newPrices[key.toLowerCase()] = { price, change };
                 });
             }
         });
 
-        if (Object.keys(newPrices).length > 0) {
-            setPrices(prev => ({ ...prev, ...newPrices }));
-        }
+        if (Object.keys(newPrices).length > 0) setPrices(prev => ({ ...prev, ...newPrices }));
     } catch (e) {
         console.warn("[PRICE_ORACLE_REFRESH_FAILED]", e);
     }
@@ -268,7 +248,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     const combinedAssetsList = getAvailableAssetsForChain(chain.chainId);
     let adapter = null;
-    
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
@@ -297,12 +276,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
 
-  const handleSetApiKey = useCallback((key: string | null) => {
-    setInfuraApiKey(key);
-    if (key) localStorage.setItem('infura_api_key', key);
-    else localStorage.removeItem('infura_api_key');
-  }, []);
-
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
     setHiddenTokenKeys(prev => {
       const next = new Set(prev);
@@ -323,6 +296,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, [activeSessionId]);
+
+  const handleSetApiKey = useCallback((key: string | null) => {
+    setInfuraApiKey(key);
+    if (key) localStorage.setItem('infura_api_key', key);
+    else localStorage.removeItem('infura_api_key');
+  }, []);
 
   useEffect(() => {
     const initLocalSession = async () => {
