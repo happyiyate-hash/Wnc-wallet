@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   AlertCircle,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
