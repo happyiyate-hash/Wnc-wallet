@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -150,7 +151,6 @@ function SendClient() {
 
   useEffect(() => {
     let isMounted = true;
-    const abortCtrl = new AbortController();
     const timeoutId = setTimeout(() => { if (isResolving) setIsResolving(false); }, 8000);
 
     async function resolve() {
@@ -177,11 +177,11 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 2-STEP INSTITUTIONAL HANDSHAKE
-        // PHASE 1: IDENTIFY TARGET NODE
+        // HARDENED 2-STEP HANDSHAKE
+        // STEP 1: RESOLVE RECIPIENT NODE (Identity Only)
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
-          .select('id, name, photo_url, account_number')
+          .select('id, name, photo_url')
           .eq('account_number', input)
           .maybeSingle();
 
@@ -191,15 +191,15 @@ function SendClient() {
           setRecipientProfile({ 
             avatar: userRecord.photo_url || '', 
             verified: true, 
-            name: userRecord.name || userRecord.account_number || ''
+            name: userRecord.name || input
           });
 
-          // PHASE 2: HYDRATE CRYPTOGRAPHIC ROUTE
-          // Uses standardized chain identifier (e.g., 'evm', 'xrp')
+          // STEP 2: HYDRATE NETWORK NODE (Chain Specific)
+          // Always requests the address format matching the terminal's active ecosystem (evm, xrp, polkadot)
           const targetChainType = activeNetwork.type || 'evm';
           
           const { data: addrRecord, error: addrError } = await supabase.rpc('fetch_user_addresses_by_account', {
-            p_account_number: userRecord.account_number,
+            p_account_number: input,
             p_chain: targetChainType
           });
 
@@ -230,7 +230,7 @@ function SendClient() {
     }
     
     resolve();
-    return () => { isMounted = false; clearTimeout(timeoutId); abortCtrl.abort(); };
+    return () => { isMounted = false; clearTimeout(timeoutId); };
   }, [debouncedRecipient, addrType, activeNetwork.type, activeNetwork.name]);
 
   const handleSendRequest = async () => {
@@ -304,8 +304,8 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
-                        {/* UNLOCKED BADGE: LAYERED OUTSIDE OVERFLOW */}
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
+                        {/* UNLOCKED BADGE: ABSOLUTE TOP LAYER */}
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
                     </div>
@@ -358,7 +358,7 @@ function SendClient() {
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     {resolvedAddress && (
-                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
+                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                                             <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                         </div>
                                     )}
@@ -368,7 +368,7 @@ function SendClient() {
                                     <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-[60]">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-[70]">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={20} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
                                 </div>
@@ -377,7 +377,7 @@ function SendClient() {
                                     <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                                         <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>

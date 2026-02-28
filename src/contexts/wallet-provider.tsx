@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -38,6 +39,7 @@ interface WalletContextType {
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
   prices: { [key: string]: PriceInfo };
+  accountNumber: string | null;
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
@@ -69,6 +71,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [prices, setPrices] = useState<{ [key: string]: PriceInfo }>({});
+  const [accountNumber, setAccountNumber] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isWalletLoading, setIsWalletLoading] = useState(true);
@@ -161,6 +164,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
+        // Generate new-gen account number locally
+        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+        const newId = `835${randomSuffix}`;
+        setAccountNumber(newId);
+        localStorage.setItem(`account_number_${activeSessionId}`, newId);
     }
     return mnemonic;
   };
@@ -171,19 +179,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         localStorage.setItem(`is_synced_${activeSessionId}`, 'false');
         setIsSynced(false);
+        // Generate account number locally if missing
+        if (!accountNumber) {
+            const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+            const newId = `835${randomSuffix}`;
+            setAccountNumber(newId);
+            localStorage.setItem(`account_number_${activeSessionId}`, newId);
+        }
     }
   };
 
   const syncAllAddresses = async () => {
-    if (!activeSessionId || !supabase || !wallets || !profile?.account_number) return;
+    if (!activeSessionId || !supabase || !wallets || !accountNumber) return;
     try {
-      // STANDARD IDENTIFIERS: 'evm', 'xrp', 'polkadot'
       const syncPromises = wallets.map(w => 
         supabase!.rpc('sync_user_addresses', {
           p_user_id: activeSessionId,
-          p_chain: w.type, // 'evm', 'xrp', or 'polkadot'
+          p_chain: w.type,
           p_address: w.address,
-          p_account_number: profile.account_number
+          p_account_number: accountNumber
         })
       );
       
@@ -207,7 +221,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase!.auth.getSession();
       const updates: any = {};
 
-      // 1. Encrypt Mnemonic
       if (mnemonic) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
@@ -224,7 +237,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 2. Encrypt Infura API Key
       if (infuraApiKey) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
@@ -249,7 +261,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
       }
 
-      // 3. Sync Standard Multi-Chain Registry
       await syncAllAddresses();
       
       setIsSynced(true);
@@ -269,7 +280,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const { data: { session } } = await supabase!.auth.getSession();
 
-      // 1. Restore Mnemonic
       if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -277,10 +287,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`
           },
-          body: JSON.stringify({ 
-            encrypted: profile.vault_phrase, 
-            iv: profile.iv 
-          })
+          body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
         });
 
         const data = await res.json();
@@ -291,7 +298,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 2. Restore Infura API Key
       if (profile.vault_infura_key && profile.infura_iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -299,10 +305,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`
           },
-          body: JSON.stringify({ 
-            encrypted: profile.vault_infura_key, 
-            iv: profile.infura_iv 
-          })
+          body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
         });
 
         const data = await res.json();
@@ -313,6 +316,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
       
+      // Fetch synced account number from registry
+      const { data: addrData } = await supabase!
+        .from('user_wallet_addresses')
+        .select('account_number')
+        .eq('user_id', activeSessionId)
+        .limit(1)
+        .maybeSingle();
+
+      if (addrData?.account_number) {
+          setAccountNumber(addrData.account_number);
+          localStorage.setItem(`account_number_${activeSessionId}`, addrData.account_number);
+      }
+
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       setIsSynced(true);
       
@@ -432,20 +448,42 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const initLocalSession = async () => {
       if (authLoading) return;
       if (!activeSessionId) {
-          setWallets(null); setBalances({}); setIsWalletLoading(false); return;
+          setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return;
       }
       setIsWalletLoading(true);
       try {
         const savedKey = localStorage.getItem('infura_api_key');
         if (savedKey) setInfuraApiKey(savedKey);
+        
         const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
         if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
+        
         const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
         if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
+        
         const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
         if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
+        
         const syncStatus = localStorage.getItem(`is_synced_${activeSessionId}`);
         setIsSynced(syncStatus === 'true');
+
+        // Fetch account number from new registry or local cache
+        const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
+        if (localAcc) {
+            setAccountNumber(localAcc);
+        } else if (supabase) {
+            const { data } = await supabase
+                .from('user_wallet_addresses')
+                .select('account_number')
+                .eq('user_id', activeSessionId)
+                .limit(1)
+                .maybeSingle();
+            if (data?.account_number) {
+                setAccountNumber(data.account_number);
+                localStorage.setItem(`account_number_${activeSessionId}`, data.account_number);
+            }
+        }
+
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
         if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
       } catch (e) {} finally { setIsWalletLoading(false); }
@@ -477,16 +515,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     setIsWalletLoading(true);
+    const prevSessionId = activeSessionId;
     await authSignOut();
     localStorage.removeItem('infura_api_key');
-    if (activeSessionId) {
-        localStorage.removeItem(`wallet_mnemonic_${activeSessionId}`);
-        localStorage.removeItem(`wallet_balances_${activeSessionId}`);
-        localStorage.removeItem(`hidden_tokens_${activeSessionId}`);
-        localStorage.removeItem(`custom_tokens_${activeSessionId}`);
-        localStorage.removeItem(`is_synced_${activeSessionId}`);
+    if (prevSessionId) {
+        localStorage.removeItem(`wallet_mnemonic_${prevSessionId}`);
+        localStorage.removeItem(`wallet_balances_${prevSessionId}`);
+        localStorage.removeItem(`hidden_tokens_${prevSessionId}`);
+        localStorage.removeItem(`custom_tokens_${prevSessionId}`);
+        localStorage.removeItem(`is_synced_${prevSessionId}`);
+        localStorage.removeItem(`account_number_${prevSessionId}`);
     }
-    setWallets(null); setBalances({}); setIsSynced(true); setIsWalletLoading(false);
+    setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
   const value: WalletContextType = {
@@ -504,6 +544,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     wallets,
     balances,
     prices,
+    accountNumber,
     refresh: startEngine,
     generateWallet,
     importWallet,

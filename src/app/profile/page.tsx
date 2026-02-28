@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-provider";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -22,7 +23,8 @@ import {
   Coins,
   User,
   ExternalLink,
-  Cpu
+  Cpu,
+  Loader2
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -30,14 +32,13 @@ import { cn } from "@/lib/utils";
 export default function ProfilePage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
-    const { allAssets, viewingNetwork, wallets, getAddressForChain } = useWallet();
+    const { allAssets, viewingNetwork, wallets, getAddressForChain, accountNumber } = useWallet();
     const { formatFiat, rates } = useCurrency();
     const [isAddressCopied, copyAddress] = useCopyToClipboard();
     const [isIdCopied, copyId] = useCopyToClipboard();
     const [isSyncing, setIsSyncing] = useState(false);
 
     const displayName = profile?.name || 'Institutional User';
-    const accountNumber = profile?.account_number || 'Generating...';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
     const totalPortfolioValue = useMemo(() => {
@@ -103,9 +104,19 @@ export default function ProfilePage() {
                         </div>
                         <div className="space-y-3 flex flex-col items-center w-full">
                             <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
-                            <div onClick={() => accountNumber !== 'Generating...' && copyId(accountNumber)} className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group">
-                                <div className="flex items-center gap-2"><span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span><div className={cn("transition-colors", isIdCopied ? "text-green-500" : "text-primary opacity-40")}>{isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}</div></div>
-                                <p className="text-lg font-mono font-black text-white tracking-[0.1em]">{accountNumber}</p>
+                            <div 
+                                onClick={() => accountNumber && copyId(accountNumber)} 
+                                className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Account ID</span>
+                                    <div className={cn("transition-colors", isIdCopied ? "text-green-500" : "text-primary opacity-40")}>
+                                        {isIdCopied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    </div>
+                                </div>
+                                <p className="text-lg font-mono font-black text-white tracking-[0.1em]">
+                                    {accountNumber || (isSyncing ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Initializing...')}
+                                </p>
                             </div>
                             <div className="flex items-center justify-center gap-1.5 pt-1"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] font-black text-primary uppercase tracking-tighter">Verified Institutional Node</span></div>
                         </div>
