@@ -51,6 +51,12 @@ export default function RequestPage() {
         return;
     }
     
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        toast({ title: "Invalid Amount", description: "Please enter a valid amount to request.", variant: "destructive" });
+        return;
+    }
+
     setIsCreating(true);
     try {
       const activeType = viewingNetwork.type || 'evm';
@@ -63,7 +69,7 @@ export default function RequestPage() {
           chain_type: activeType,
           token_symbol: selectedToken.symbol,
           token_address: selectedToken.isNative ? null : selectedToken.address,
-          amount: parseFloat(amount),
+          amount: parsedAmount,
           note: note.trim() || null,
           status: 'pending'
         })
@@ -74,10 +80,10 @@ export default function RequestPage() {
       setRequestId(data.id);
       toast({ title: "Request Generated", description: "P2P handshake node created successfully." });
     } catch (e: any) {
-      console.error("Failed to create request", e);
+      console.error("[PROTOCOL_REJECTION]", e);
       toast({ 
         title: "Protocol Rejection", 
-        description: e.message || "The network rejected the request node. Please check your connection.", 
+        description: e.message || "The network rejected the request node. Please check your RLS policies.", 
         variant: "destructive" 
       });
     } finally {
