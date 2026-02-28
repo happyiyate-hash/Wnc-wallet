@@ -201,40 +201,60 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const saveToVault = async () => {
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-    if (!mnemonic || !activeSessionId || !supabase) return;
+    if (!activeSessionId || !supabase) return;
 
     try {
       const { data: { session } } = await supabase!.auth.getSession();
-      
-      // 1. Encrypt the phrase via API
-      const res = await fetch('/api/wallet/encrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify({ phrase: mnemonic })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Encryption failed");
+      const updates: any = {};
 
-      // 2. Save encrypted phrase + iv to profile
-      const { error } = await supabase!
-        .from('profiles')
-        .update({ 
-          vault_phrase: data.encrypted, 
-          iv: data.iv 
-        })
-        .eq('id', activeSessionId);
+      // 1. Encrypt Mnemonic
+      if (mnemonic) {
+        const res = await fetch('/api/wallet/encrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ phrase: mnemonic })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          updates.vault_phrase = data.encrypted;
+          updates.iv = data.iv;
+        }
+      }
 
-      if (error) throw error;
+      // 2. Encrypt Infura API Key
+      if (infuraApiKey) {
+        const res = await fetch('/api/wallet/encrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ phrase: infuraApiKey })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          updates.vault_infura_key = data.encrypted;
+          updates.infura_iv = data.iv;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase!
+          .from('profiles')
+          .update(updates)
+          .eq('id', activeSessionId);
+        if (error) throw error;
+      }
 
       // 3. Also sync addresses to registry
       await syncAllAddresses();
       
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
-      toast({ title: "Cloud Backup Active", description: "Your vault is now synchronized." });
+      toast({ title: "Vault Backup Active", description: "Identity and connection nodes are synchronized." });
       await refreshProfile();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Backup Failed", description: e.message });
@@ -242,39 +262,61 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreFromCloud = async () => {
-    if (!profile?.vault_phrase || !profile?.iv || !activeSessionId || !supabase) {
+    if (!profile || !activeSessionId || !supabase) {
       throw new Error("No cloud backup found for this identity.");
     }
 
     try {
       const { data: { session } } = await supabase!.auth.getSession();
 
-      // 1. Decrypt via API
-      const res = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify({ 
-          encrypted: profile.vault_phrase, 
-          iv: profile.iv 
-        })
-      });
+      // 1. Restore Mnemonic
+      if (profile.vault_phrase && profile.iv) {
+        const res = await fetch('/api/wallet/decrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ 
+            encrypted: profile.vault_phrase, 
+            iv: profile.iv 
+          })
+        });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Decryption failed");
+        const data = await res.json();
+        if (res.ok) {
+          const phrase = data.phrase;
+          await loadWalletFromMnemonic(phrase);
+          localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, phrase);
+        }
+      }
 
-      // 2. Load and derive
-      const phrase = data.phrase;
-      await loadWalletFromMnemonic(phrase);
+      // 2. Restore Infura API Key
+      if (profile.vault_infura_key && profile.infura_iv) {
+        const res = await fetch('/api/wallet/decrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ 
+            encrypted: profile.vault_infura_key, 
+            iv: profile.infura_iv 
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          const key = data.phrase;
+          setInfuraApiKey(key);
+          localStorage.setItem('infura_api_key', key);
+        }
+      }
       
-      // 3. Persist locally for session
-      localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, phrase);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       setIsSynced(true);
       
-      toast({ title: "Vault Access Restored", description: "Your multi-chain nodes are now active." });
+      toast({ title: "Vault Access Restored", description: "Your multi-chain nodes and RPCs are now active." });
     } catch (e: any) {
       console.error("Cloud Restore Error:", e);
       throw e;
