@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -178,7 +179,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!activeSessionId || !supabase || !wallets || !profile?.account_number) return;
     try {
       const syncPromises = wallets.map(w => 
-        supabase.rpc('sync_user_addresses', {
+        supabase!.rpc('sync_user_addresses', {
           p_user_id: activeSessionId,
           p_chain: w.type,
           p_address: w.address,
@@ -203,17 +204,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!mnemonic || !activeSessionId || !supabase) return;
 
     try {
+      const { data: { session } } = await supabase!.auth.getSession();
+      
       // 1. Encrypt the phrase via API
       const res = await fetch('/api/wallet/encrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ phrase: mnemonic })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Encryption failed");
 
       // 2. Save encrypted phrase + iv to profile
-      const { error } = await supabase
+      const { error } = await supabase!
         .from('profiles')
         .update({ 
           vault_phrase: data.encrypted, 
@@ -229,22 +235,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       toast({ title: "Cloud Backup Active", description: "Your vault is now synchronized." });
-      await refreshProfile(); // Refresh profile state to reflect changes
+      await refreshProfile();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Backup Failed", description: e.message });
     }
   };
 
   const restoreFromCloud = async () => {
-    if (!profile?.vault_phrase || !profile?.iv || !activeSessionId) {
+    if (!profile?.vault_phrase || !profile?.iv || !activeSessionId || !supabase) {
       throw new Error("No cloud backup found for this identity.");
     }
 
     try {
+      const { data: { session } } = await supabase!.auth.getSession();
+
       // 1. Decrypt via API
       const res = await fetch('/api/wallet/decrypt-phrase', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ 
           encrypted: profile.vault_phrase, 
           iv: profile.iv 
