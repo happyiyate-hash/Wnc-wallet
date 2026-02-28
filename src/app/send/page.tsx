@@ -177,7 +177,7 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 1. Resolve Identity via profiles table
+        // 1. Resolve Identity via profiles table using the Account ID
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
@@ -193,10 +193,11 @@ function SendClient() {
             name: userRecord.name || input
           });
 
-          // 2. Hydrate specific node for active network
+          // 2. Hydrate specific node based on ecosystem type (NOT chain name)
           const targetChainType = activeNetwork.type || 'evm';
           let chainAddress = '';
           
+          // CRITICAL: Always pull from the standardized column based on network type
           if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
           else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
           else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
@@ -300,7 +301,7 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
-                        {/* UNLOCKED BADGE: ABSOLUTE TOP LAYER */}
+                        {/* UNLOCKED BADGE: FIXED CLIPPING */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>

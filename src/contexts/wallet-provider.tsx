@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
@@ -220,19 +220,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       await refreshProfile();
+      
+      toast({ title: "Sync Successful", description: "Identity registry updated." });
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
+      toast({ variant: "destructive", title: "Sync Failed", description: e.message });
       throw e;
     }
   };
 
   const saveToVault = async () => {
-    const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-    if (!activeSessionId || !supabase) return;
+    if (!activeSessionId || !supabase || !wallets) return;
 
     try {
       const { data: { session } } = await supabase!.auth.getSession();
       const updates: any = {};
+      const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
 
       if (mnemonic) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
@@ -266,15 +269,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (Object.keys(updates).length > 0) {
-        const { error } = await supabase!
-          .from('profiles')
-          .update(updates)
-          .eq('id', activeSessionId);
-        if (error) throw error;
+      // Merge addresses into profile update
+      wallets.forEach(w => {
+        if (w.type === 'evm') updates.evm_address = w.address;
+        if (w.type === 'xrp') updates.xrp_address = w.address;
+        if (w.type === 'polkadot') updates.polkadot_address = w.address;
+      });
+      
+      if (!accountNumber) {
+          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+          updates.account_number = `835${randomSuffix}`;
+          setAccountNumber(updates.account_number);
+          localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
+      } else {
+          updates.account_number = accountNumber;
       }
 
-      await syncAllAddresses();
+      const { error } = await supabase!
+        .from('profiles')
+        .update(updates)
+        .eq('id', activeSessionId);
+      if (error) throw error;
+
+      setIsSynced(true);
+      localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
       toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
       await refreshProfile();
     } catch (e: any) {
@@ -464,8 +482,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
         if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
         
-        const syncStatus = localStorage.getItem(`is_synced_${activeSessionId}`);
-        setIsSynced(syncStatus === 'true');
+        // Sync Status Check
+        if (profile) {
+            const hasLocalWallets = !!localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+            const hasCloudAddresses = !!(profile.evm_address || profile.xrp_address);
+            setIsSynced(hasCloudAddresses || !hasLocalWallets);
+        }
 
         if (profile?.account_number) {
             setAccountNumber(profile.account_number);
@@ -480,7 +502,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } catch (e) {} finally { setIsWalletLoading(false); }
     };
     initLocalSession();
-  }, [authLoading, activeSessionId, profile?.account_number, loadWalletFromMnemonic]);
+  }, [authLoading, activeSessionId, profile, loadWalletFromMnemonic]);
 
   useEffect(() => {
     if (isInitialized) {
