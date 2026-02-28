@@ -18,8 +18,6 @@ import {
   ArrowRight,
   ShieldAlert,
   AlertCircle,
-  Copy,
-  CheckCircle2,
   ChevronDown
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -138,15 +136,10 @@ function SendClient() {
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
   
-  // SELF-TRANSFER PROTECTION
   const isSelfTransfer = useMemo(() => {
     const input = debouncedRecipient.trim().toLowerCase();
     if (!input) return false;
-    
-    // Check Account Number
     if (accountNumber && input === accountNumber.toLowerCase()) return true;
-    
-    // Check Multi-chain nodes
     if (wallets) {
         return wallets.some(w => w.address.toLowerCase() === input);
     }
@@ -154,7 +147,7 @@ function SendClient() {
   }, [debouncedRecipient, accountNumber, wallets]);
 
   const validationError = useMemo(() => {
-    if (isSelfTransfer) return null; // Handled by separate UI block
+    if (isSelfTransfer) return null;
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
@@ -193,16 +186,11 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // Identity Resolution Handshake with Timeout
-        const lookup = supabase
+        const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
           .eq('account_number', input)
           .maybeSingle();
-
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000));
-        
-        const { data: userRecord, error: userError } = await (Promise.race([lookup, timeout]) as any);
 
         if (userError) throw userError;
 
@@ -238,7 +226,7 @@ function SendClient() {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress('');
           setRecipientProfile(null);
-          setResolutionError(e.message === 'TIMEOUT' ? "Handshake Error: Network slow." : "Handshake Error: Identity lookup failed.");
+          setResolutionError("Handshake Error: Identity lookup failed.");
         }
       } finally {
         if (currentId === resolutionCounter.current) setIsResolving(false);
