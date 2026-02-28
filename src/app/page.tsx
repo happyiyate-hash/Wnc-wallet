@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
@@ -13,7 +13,7 @@ import { RequestCreateMoment, RequestReviewMoment } from '@/components/wallet/re
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 
-export default function Home() {
+function HomeContent() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const { user, profile, loading } = useUser();
   const { 
@@ -130,5 +130,17 @@ export default function Home() {
       <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
       <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={setIsWalletSetupOpen} />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+        <div className="h-12 w-12 rounded-2xl border-t-2 border-primary animate-spin" />
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
