@@ -107,7 +107,7 @@ function SendClient() {
   const [resolvedAddress, setResolvedAddress] = useState('');
   const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
-  const debouncedRecipient = useDebounce(recipientInput, 300); // Snappier response
+  const debouncedRecipient = useDebounce(recipientInput, 300);
 
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -180,7 +180,6 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // Add a 10s timeout to the resolution
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000));
         const rpcPromise = supabase.rpc('fetch_recipient_details', {
           search_account_number: searchHandle,
@@ -298,8 +297,8 @@ function SendClient() {
                                 <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{profile?.name?.[0] || 'U'}</AvatarFallback>
                             </Avatar>
                         </div>
-                        {/* UNLOCKED BADGE: Always visible above clipping */}
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                        {/* UNLOCKED BADGE: Sender active network */}
+                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || 'Network'} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>
                     </div>
@@ -315,7 +314,7 @@ function SendClient() {
                     
                     {/* FLOATING ADDRESS BRIDGE */}
                     <AnimatePresence>
-                        {isActuallyValid && !isResolving && (
+                        {resolvedAddress && !isResolving && (
                             <motion.div 
                                 initial={{ y: 15, opacity: 0, scale: 0.9 }}
                                 animate={{ y: 5, opacity: 1, scale: 1 }}
@@ -323,8 +322,16 @@ function SendClient() {
                                 className="absolute top-10 left-0 right-0 text-center z-20"
                             >
                                 <div className="inline-flex flex-col items-center gap-1">
-                                    <p className="text-[7px] font-black text-primary uppercase tracking-[0.2em]">Resolved Route</p>
-                                    <div className="bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl">
+                                    <p className={cn(
+                                        "text-[7px] font-black uppercase tracking-[0.2em]",
+                                        isNetworkMismatch ? "text-red-500" : "text-primary"
+                                    )}>
+                                        {isNetworkMismatch ? 'Incompatible Route' : 'Resolved Route'}
+                                    </p>
+                                    <div className={cn(
+                                        "bg-black/40 border px-3 py-1.5 rounded-xl backdrop-blur-md shadow-2xl",
+                                        isNetworkMismatch ? "border-red-500/30" : "border-primary/20"
+                                    )}>
                                         <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
                                             {resolvedAddress.slice(0, 10)}...{resolvedAddress.slice(-8)}
                                         </p>
@@ -339,7 +346,9 @@ function SendClient() {
                     <div className="relative">
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black",
-                            !isActuallyValid ? "border-dashed border-white/10" : (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 bg-primary/5"
+                            (!isActuallyValid && !isNetworkMismatch && !validationError) ? "border-dashed border-white/10" : 
+                            (isNetworkMismatch || validationError) ? "border-red-500 bg-red-500/10 border-dashed" : 
+                            "border-primary/50 bg-primary/5"
                         )}>
                             {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
                              recipientProfile ? (
@@ -348,18 +357,26 @@ function SendClient() {
                                         <AvatarImage src={recipientProfile.avatar} className="rounded-[2.5rem] object-cover" alt="Recipient Profile" />
                                         <AvatarFallback className="bg-primary/20 text-primary font-black text-xl rounded-[2.5rem]">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                     </Avatar>
-                                    {/* NETWORK BADGE FOR RECIPIENT */}
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
-                             ) : (isActuallyValid && !isNetworkMismatch && !validationError) ? (
+                             ) : isNetworkMismatch ? (
+                                <div className="relative">
+                                    <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                                        <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || 'Detected'} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
+                                    </div>
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-red-500/20 shadow-xl z-50">
+                                        <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || 'Detected'} size={20} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
+                                    </div>
+                                </div>
+                             ) : (isActuallyValid && !validationError) ? (
                                 <div className="relative">
                                     <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
                                         <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token Logo" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                                     </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
-                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt="Target Network" size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
+                                    <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-50">
+                                        <TokenLogoDynamic logoUrl={activeNetwork.iconUrl} alt={activeNetwork.name} size={20} chainId={activeNetwork.chainId} symbol={activeNetwork.symbol} name={activeNetwork.name} />
                                     </div>
                                 </div>
                              ) : (
@@ -371,7 +388,10 @@ function SendClient() {
                         "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center flex flex-col items-center gap-1",
                         (isNetworkMismatch || validationError) ? "text-red-500" : "text-white/40"
                     )}>
-                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : (isNetworkMismatch || validationError) ? 'ROUTE BLOCKED' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
+                        {recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : 
+                         isNetworkMismatch ? 'ROUTE BLOCKED' : 
+                         validationError ? 'INVALID ADDR' : 
+                         resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
                 </div>
             </section>
