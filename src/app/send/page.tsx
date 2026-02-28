@@ -150,6 +150,7 @@ function SendClient() {
 
   useEffect(() => {
     let isMounted = true;
+    const abortCtrl = new AbortController();
     const timeoutId = setTimeout(() => { if (isResolving) setIsResolving(false); }, 8000);
 
     async function resolve() {
@@ -176,8 +177,8 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 2-STEP ATOMIC HANDSHAKE
-        // STEP 1: RESOLVE IDENTITY
+        // 2-STEP INSTITUTIONAL HANDSHAKE
+        // PHASE 1: IDENTIFY TARGET NODE
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, account_number')
@@ -193,10 +194,13 @@ function SendClient() {
             name: userRecord.name || userRecord.account_number || ''
           });
 
-          // STEP 2: HYDRATE ADDRESS FOR ACTIVE NETWORK
+          // PHASE 2: HYDRATE CRYPTOGRAPHIC ROUTE
+          // Uses standardized chain identifier (e.g., 'evm', 'xrp')
+          const targetChainType = activeNetwork.type || 'evm';
+          
           const { data: addrRecord, error: addrError } = await supabase.rpc('fetch_user_addresses_by_account', {
             p_account_number: userRecord.account_number,
-            p_chain: activeNetwork.type || 'evm'
+            p_chain: targetChainType
           });
 
           if (addrError) throw addrError;
@@ -226,7 +230,7 @@ function SendClient() {
     }
     
     resolve();
-    return () => { isMounted = false; clearTimeout(timeoutId); };
+    return () => { isMounted = false; clearTimeout(timeoutId); abortCtrl.abort(); };
   }, [debouncedRecipient, addrType, activeNetwork.type, activeNetwork.name]);
 
   const handleSendRequest = async () => {
@@ -300,6 +304,7 @@ function SendClient() {
                             <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
+                        {/* UNLOCKED BADGE: LAYERED OUTSIDE OVERFLOW */}
                         <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[60]">
                             <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
                         </div>

@@ -177,10 +177,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const syncAllAddresses = async () => {
     if (!activeSessionId || !supabase || !wallets || !profile?.account_number) return;
     try {
+      // STANDARD IDENTIFIERS: 'evm', 'xrp', 'polkadot'
       const syncPromises = wallets.map(w => 
         supabase!.rpc('sync_user_addresses', {
           p_user_id: activeSessionId,
-          p_chain: w.type,
+          p_chain: w.type, // 'evm', 'xrp', or 'polkadot'
           p_address: w.address,
           p_account_number: profile.account_number
         })
@@ -248,12 +249,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
       }
 
-      // 3. Also sync addresses to registry
+      // 3. Sync Standard Multi-Chain Registry
       await syncAllAddresses();
       
       setIsSynced(true);
       localStorage.setItem(`is_synced_${activeSessionId}`, 'true');
-      toast({ title: "Vault Backup Active", description: "Identity and connection nodes are synchronized." });
+      toast({ title: "Vault Backup Complete", description: "Identity nodes and keys are securely synchronized." });
       await refreshProfile();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Backup Failed", description: e.message });
