@@ -1,21 +1,20 @@
 
 'use client';
 
-import {
-  JsonRpcProvider,
-  Connection,
-} from "@mysten/sui.js";
+import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * Sui (SUI) Adapter
  * Handles real-time balance discovery via the Sui Fullnode API.
+ * Re-engineered for modern modular SDK (@mysten/sui).
  */
 class SuiAdapter implements IWalletAdapter {
-    private provider: JsonRpcProvider;
+    private client: SuiClient;
 
     constructor(chain: ChainConfig) {
-        this.provider = new JsonRpcProvider(new Connection({ fullnode: chain.rpcUrl }));
+        this.client = new SuiClient({ url: chain.rpcUrl || getFullnodeUrl('mainnet') });
     }
 
     async fetchBalances(
@@ -24,7 +23,7 @@ class SuiAdapter implements IWalletAdapter {
     ): Promise<AssetRow[]> {
         try {
             // Sui balances are aggregated from coin objects
-            const coins = await this.provider.getCoins({ 
+            const coins = await this.client.getCoins({ 
                 owner: ownerAddress, 
                 coinType: "0x2::sui::SUI" 
             });

@@ -22,7 +22,7 @@ import * as algosdk from "algosdk";
 import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
 import { InMemorySigner } from "@taquito/signer";
 import { AptosAccount } from "aptos";
-import { Ed25519Keypair } from "@mysten/sui.js";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -439,7 +439,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const aptosSeed = derivePath("m/44'/637'/0'/0'/0'", seed.toString('hex'));
       const aptosAccount = new AptosAccount(aptosSeed.key);
 
-      const suiKeypair = Ed25519Keypair.deriveKeypair(cleanMnemonic, "m/44'/784'/0'/0'/0'");
+      const suiKeypair = Ed25519Keypair.deriveKeypair(cleanMnemonic);
       const suiAddress = suiKeypair.getPublicKey().toSuiAddress();
 
       const derived: WalletWithMetadata[] = [
