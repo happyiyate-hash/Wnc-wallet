@@ -9,6 +9,7 @@ import {
   DialogDescription 
 } from "@/components/ui/dialog";
 import { useWallet } from '@/contexts/wallet-provider';
+import { useUser } from '@/contexts/user-provider';
 import { 
   Copy, 
   CheckCircle2, 
@@ -17,7 +18,8 @@ import {
   X, 
   Globe, 
   Cpu,
-  ArrowRight
+  ArrowRight,
+  Lock
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,13 +35,15 @@ interface GlobalTokenSelectorProps {
     onOpenChange: (open: boolean) => void;
     onSelect: (token: AssetRow) => void;
     title?: string;
+    isSwapContext?: boolean;
 }
 
 export default function GlobalTokenSelector({
     isOpen,
     onOpenChange,
     onSelect,
-    title = "Select Asset"
+    title = "Select Asset",
+    isSwapContext = false
 }: GlobalTokenSelectorProps) {
     const { 
         allChains, 
@@ -49,6 +53,8 @@ export default function GlobalTokenSelector({
         wallets, 
         getAddressForChain 
     } = useWallet();
+    
+    const { profile } = useUser();
 
     const [selectedChain, setSelectedNetwork] = useState<ChainConfig>(viewingNetwork);
     const [isNetworkListOpen, setIsNetworkListOpen] = useState(false);
@@ -78,17 +84,34 @@ export default function GlobalTokenSelector({
         const base = getAvailableAssetsForChain(selectedChain.chainId);
         const chainBalances = balances[selectedChain.chainId] || [];
         
-        return base.map(asset => {
+        // 1. Inject WNC as a high-priority internal asset
+        const wncAsset: AssetRow = {
+            chainId: selectedChain.chainId,
+            address: 'internal:wnc',
+            symbol: 'WNC',
+            name: 'Wevina Cloud',
+            balance: profile?.wnc_earnings?.toString() || '0',
+            isNative: false,
+            priceUsd: 0.0006,
+            fiatValueUsd: (profile?.wnc_earnings || 0) * 0.0006,
+            pctChange24h: 0,
+            decimals: 0
+        };
+
+        const onChainAssets = base.map(asset => {
             const balDoc = chainBalances.find(b => b.symbol === asset.symbol);
             return {
                 ...asset,
                 balance: balDoc?.balance || '0'
             };
-        }).filter(a => 
+        });
+
+        // WNC should appear at the top
+        return [wncAsset, ...onChainAssets].filter(a => 
             a.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || 
             a.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
-    }, [selectedChain, balances, searchTerm, getAvailableAssetsForChain]);
+    }, [selectedChain, balances, searchTerm, getAvailableAssetsForChain, profile]);
 
     const filteredChains = useMemo(() => {
         return allChains.filter(c => 
@@ -98,6 +121,7 @@ export default function GlobalTokenSelector({
     }, [allChains, searchTerm]);
 
     const handleTokenClick = (token: AssetRow) => {
+        if (token.symbol === 'WNC' && isSwapContext) return;
         onSelect(token);
         onOpenChange(false);
     };
@@ -194,53 +218,69 @@ export default function GlobalTokenSelector({
                     <ScrollArea className="h-full">
                         <div className="p-4 space-y-2 pb-24">
                             <AnimatePresence mode="popLayout">
-                                {currentAssets.map((asset, index) => (
-                                    <motion.button 
-                                        key={`${selectedChain.chainId}-${asset.symbol}`}
-                                        initial={{ x: 20, opacity: 0 }}
-                                        animate={{ x: 0, opacity: 1 }}
-                                        transition={{ delay: index * 0.03 }}
-                                        onClick={() => handleTokenClick(asset)}
-                                        className="w-full flex items-center justify-between p-4 rounded-[2rem] bg-white/[0.02] border border-white/5 hover:bg-white/[0.08] transition-all group active:scale-[0.98]"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative">
-                                                <TokenLogoDynamic 
-                                                    logoUrl={asset.iconUrl} 
-                                                    alt={asset.symbol} 
-                                                    size={44} 
-                                                    chainId={asset.chainId} 
-                                                    symbol={asset.symbol} 
-                                                    name={asset.name}
-                                                />
-                                                {/* DYNAMIC NETWORK BADGE - SHOWS NATIVE COIN OF THE CHAIN */}
-                                                <div className="absolute -bottom-1 -right-1 bg-black rounded-xl p-1 border border-white/10 shadow-2xl z-10">
+                                {currentAssets.map((asset, index) => {
+                                    const isDisabledWnc = asset.symbol === 'WNC' && isSwapContext;
+                                    
+                                    return (
+                                        <motion.button 
+                                            key={`${selectedChain.chainId}-${asset.symbol}`}
+                                            initial={{ x: 20, opacity: 0 }}
+                                            animate={{ x: 0, opacity: 1 }}
+                                            transition={{ delay: index * 0.03 }}
+                                            onClick={() => handleTokenClick(asset)}
+                                            disabled={isDisabledWnc}
+                                            className={cn(
+                                                "w-full flex items-center justify-between p-4 rounded-[2rem] border transition-all group active:scale-[0.98]",
+                                                isDisabledWnc 
+                                                    ? "bg-white/[0.01] border-white/5 opacity-40 cursor-not-allowed grayscale" 
+                                                    : "bg-white/[0.02] border border-white/5 hover:bg-white/[0.08]"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative">
                                                     <TokenLogoDynamic 
-                                                        logoUrl={selectedChain.iconUrl} 
-                                                        alt="chain" 
-                                                        size={14} 
-                                                        chainId={selectedChain.chainId} 
-                                                        symbol={selectedChain.symbol}
-                                                        name={selectedChain.name}
+                                                        logoUrl={asset.iconUrl} 
+                                                        alt={asset.symbol} 
+                                                        size={44} 
+                                                        chainId={asset.chainId} 
+                                                        symbol={asset.symbol} 
+                                                        name={asset.name}
                                                     />
+                                                    {!isDisabledWnc && (
+                                                        <div className="absolute -bottom-1 -right-1 bg-black rounded-xl p-1 border border-white/10 shadow-2xl z-10">
+                                                            <TokenLogoDynamic 
+                                                                logoUrl={selectedChain.iconUrl} 
+                                                                alt="chain" 
+                                                                size={14} 
+                                                                chainId={selectedChain.chainId} 
+                                                                symbol={selectedChain.symbol}
+                                                                name={selectedChain.name}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="text-left">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-black text-base text-white tracking-tight">{asset.symbol}</p>
+                                                        {isDisabledWnc && <Lock className="w-3 h-3 text-muted-foreground" />}
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-40">
+                                                        {isDisabledWnc ? 'Internal Asset: Not Swappable' : asset.name}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="text-left">
-                                                <p className="font-black text-base text-white tracking-tight">{asset.symbol}</p>
-                                                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-40">{asset.name}</p>
+                                            <div className="text-right">
+                                                <p className="font-mono text-sm font-black text-white">
+                                                    {parseFloat(asset.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                                                </p>
+                                                <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-60 transition-opacity">
+                                                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Available</span>
+                                                    <ArrowRight className="w-2 h-2" />
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-mono text-sm font-black text-white">
-                                                {parseFloat(asset.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })}
-                                            </p>
-                                            <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-60 transition-opacity">
-                                                <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Available</span>
-                                                <ArrowRight className="w-2 h-2" />
-                                            </div>
-                                        </div>
-                                    </motion.button>
-                                ))}
+                                        </motion.button>
+                                    );
+                                })}
                             </AnimatePresence>
                         </div>
                     </ScrollArea>

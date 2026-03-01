@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
@@ -94,11 +93,11 @@ function SwapClient() {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
       const chainIdParam = parseInt(searchParams.get('chainId') || '');
       const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
-      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId) || allAssets[0];
+      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
       if (found) setFromToken({ ...found });
     }
     if (!toToken && allAssets.length > 0 && fromToken) {
-      const found = allAssets.find(a => a.symbol !== fromToken?.symbol) || allAssets[allAssets.length - 1];
+      const found = allAssets.find(a => a.symbol !== fromToken?.symbol && a.symbol !== 'WNC') || allAssets.find(a => a.symbol !== 'WNC') || allAssets[allAssets.length - 1];
       if (found) setToToken({ ...found });
     }
   }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
@@ -502,7 +501,7 @@ function SwapClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Network Selector" />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Network Selector" isSwapContext={true} />
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40"><button className={cn("w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 transition-all active:scale-[0.98] flex items-center justify-center", quotePhase === 'COMPLETED' ? "bg-primary border-primary/50 text-white shadow-primary/30" : "bg-zinc-900 border-zinc-950 text-zinc-600 opacity-50 cursor-not-allowed")} disabled={quotePhase !== 'COMPLETED' || isQuoteLoading || !!fetchError}>{isQuoteLoading ? 'Syncing Liquidity Nodes...' : quotePhase === 'COMPLETED' ? 'Execute Institutional Swap' : 'Discovering Routes...'}</button></div>
     </div>
   );

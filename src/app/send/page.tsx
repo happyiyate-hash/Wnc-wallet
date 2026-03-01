@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -165,7 +164,7 @@ function SendClient() {
   const isNetworkMismatch = useMemo(() => {
     if (isSelfTransfer || selectedToken?.symbol === 'WNC') return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
-    if (addrType === 'account-id') return false; // Account IDs are chain-agnostic until resolved
+    if (addrType === 'account-id') return false; 
     
     const activeType = activeNetwork.type || 'evm';
     return activeType !== addrType;
@@ -179,8 +178,6 @@ function SendClient() {
       const isRawChainAddress = ['evm', 'xrp', 'polkadot'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
-      // LOGIC FIX: Always lookup if it's an account ID OR if it's a raw address we want to resolve to a name.
-      // We only exit early if it's completely empty or a self-transfer.
       if (!input || input.length < 3 || isSelfTransfer) {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress(isRawChainAddress ? input : '');
@@ -191,10 +188,7 @@ function SendClient() {
         return;
       }
 
-      // If it's a valid raw chain address and NOT sending WNC, we can use it directly,
-      // but we still want to check if it belongs to a user for the avatar.
       if (isRawChainAddress && !isInternalWnc) {
-          // Fallback to raw address while we search for profile
           setResolvedAddress(input);
       } else {
           setResolvedAddress('');
@@ -207,7 +201,6 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // Identity Handshake: Search by Account ID or any linked chain address
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, account_number, evm_address, xrp_address, polkadot_address')
@@ -241,15 +234,13 @@ function SendClient() {
               setResolvedAddress(chainAddress);
               setResolutionError(null);
             } else {
-              // Recipient found but doesn't have an address for this network
               setResolvedAddress('');
               setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
             }
           }
         } else {
-          // No profile found
           if (isRawChainAddress) {
-              setResolvedAddress(input); // Use raw address
+              setResolvedAddress(input);
               setRecipientProfile(null);
               setResolutionError(null);
           } else {
@@ -280,13 +271,14 @@ function SendClient() {
     setIsSubmitting(true);
 
     try {
-      // 1. Internal WNC Transfer Logic
       if (selectedToken.symbol === 'WNC') {
         if (!recipientProfile) throw new Error("Internal recipient node not identified.");
         
         const transferAmount = parseFloat(amount);
         if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
 
+        // ATOMIC SETTLEMENT HANDSHAKE
+        // 1. Deduct from sender
         const { error: deductError } = await supabase!
             .from('profiles')
             .update({ wnc_earnings: profile.wnc_earnings - transferAmount })
@@ -294,7 +286,11 @@ function SendClient() {
         
         if (deductError) throw deductError;
 
-        const { data: targetProfile } = await supabase!.from('profiles').select('wnc_earnings').eq('id', recipientProfile.id).single();
+        // 2. Fetch recipient current balance to ensure fresh credit
+        const { data: targetProfile, error: fetchTargetError } = await supabase!.from('profiles').select('wnc_earnings').eq('id', recipientProfile.id).single();
+        if (fetchTargetError) throw fetchTargetError;
+
+        // 3. Credit recipient
         const { error: creditError } = await supabase!
             .from('profiles')
             .update({ wnc_earnings: (targetProfile?.wnc_earnings || 0) + transferAmount })
@@ -302,6 +298,7 @@ function SendClient() {
 
         if (creditError) throw creditError;
 
+        // 4. Record Ledger Entry
         await supabase!.from('transactions').insert({
             user_id: profile.id,
             type: 'withdrawal',
@@ -314,7 +311,6 @@ function SendClient() {
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
-      // 2. XRPL Logic
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
@@ -345,7 +341,6 @@ function SendClient() {
           }
         }
       } 
-      // 3. EVM Logic
       else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
