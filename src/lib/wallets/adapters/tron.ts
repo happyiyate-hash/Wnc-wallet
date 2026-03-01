@@ -1,7 +1,7 @@
 
 'use client';
 
-import TronWeb from "tronweb";
+import { TronWeb } from "tronweb";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
@@ -10,7 +10,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
  * Includes multi-signer (multi-sig) detection logic.
  */
 class TronAdapter implements IWalletAdapter {
-    private tronWeb: TronWeb;
+    private tronWeb: any;
 
     constructor(chain: ChainConfig) {
         this.tronWeb = new TronWeb({

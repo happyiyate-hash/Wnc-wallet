@@ -1,7 +1,7 @@
 
 'use client';
 
-import algosdk from "algosdk";
+import * as algosdk from "algosdk";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
@@ -9,11 +9,11 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
  * Handles real-time balance discovery via the Algorand Node API.
  */
 class AlgorandAdapter implements IWalletAdapter {
-    private client: algosdk.Algodv2;
+    private client: any;
 
     constructor(chain: ChainConfig) {
         // Institutional access via Algonode
-        this.client = new algosdk.Algodv2("", chain.rpcUrl, "");
+        this.client = new (algosdk as any).Algodv2("", chain.rpcUrl, "");
     }
 
     async fetchBalances(

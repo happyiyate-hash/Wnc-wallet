@@ -17,8 +17,8 @@ import { derivePath } from "ed25519-hd-key";
 import { Keypair as SolanaKeypair } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { stringToPath } from "@cosmjs/crypto";
-import TronWeb from "tronweb";
-import algosdk from "algosdk";
+import { TronWeb } from "tronweb";
+import * as algosdk from "algosdk";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -378,10 +378,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const solRoot = derivePath("m/44'/501'/0'/0'", seed.toString('hex'));
       const solKeypair = SolanaKeypair.fromSeed(solRoot.key);
 
-      const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "cosmos" });
+      const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
+        prefix: "cosmos",
+        hdPaths: [stringToPath("m/44'/118'/0'/0/0")]
+      });
       const [cosmosAccount] = await cosmosWallet.getAccounts();
 
-      const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "osmo" });
+      const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
+        prefix: "osmo",
+        hdPaths: [stringToPath("m/44'/118'/0'/0/0")]
+      });
       const [osmosisAccount] = await osmosisWallet.getAccounts();
 
       const secretWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
@@ -396,7 +402,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
       const [injectiveAccount] = await injectiveWallet.getAccounts();
 
-      const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia" });
+      const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
+        prefix: "celestia",
+        hdPaths: [stringToPath("m/44'/118'/0'/0/0")]
+      });
       const [celestiaAccount] = await celestiaWallet.getAccounts();
 
       const adaRoot = btcRoot.derivePath("m/1852'/1815'/0'/0/0");
