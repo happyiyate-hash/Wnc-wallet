@@ -10,7 +10,6 @@ import GradientGlobeIcon from './GradientGlobeIcon';
 import GradientUserIcon from './GradientUserIcon';
 import GradientSettingsIcon from './GradientSettingsIcon';
 import GradientSwapIcon from './GradientSwapIcon';
-import { Users } from 'lucide-react';
 import React from 'react';
 
 interface NavItem {
@@ -31,7 +30,6 @@ export default function MobileNav() {
 
   // HIDE ON ACTION PAGES & REQUEST FLOWS
   const isActionPage = 
-    pathname === '/swap' || 
     pathname === '/send' || 
     pathname === '/receive' || 
     pathname === '/buy' ||
@@ -43,7 +41,7 @@ export default function MobileNav() {
   const navItems: NavItem[] = [
     { href: '/', label: 'Wallet', icon: GradientWalletIcon },
     { href: '/browse', label: 'Browse', icon: GradientGlobeIcon },
-    { href: '/invites', label: 'Invites', icon: Users },
+    { href: '/swap', label: 'Swap', icon: GradientSwapIcon }, // CENTERED SWAP
     { href: '/profile', label: 'Profile', icon: GradientUserIcon },
     { href: '/settings', label: 'Settings', icon: GradientSettingsIcon },
   ];
@@ -54,12 +52,14 @@ export default function MobileNav() {
 
     return (
         <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0.5">
-            {item.label === 'Invites' ? (
-                <Icon className={cn('h-6 w-6 transition-all', isActive ? 'text-primary scale-110' : 'text-muted-foreground opacity-40 group-hover:opacity-100')} />
-            ) : (
-                <Icon className={cn('h-6 w-6 transition-all', isActive ? 'opacity-100 scale-110' : 'opacity-40 group-hover:opacity-100')} />
-            )}
-            <span className={cn("text-[9px] font-black uppercase tracking-tighter transition-colors", isActive ? "text-primary" : "text-muted-foreground")}>
+            <Icon className={cn(
+                'h-6 w-6 transition-all duration-500', 
+                isActive ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]' : 'opacity-40 group-hover:opacity-100'
+            )} />
+            <span className={cn(
+                "text-[9px] font-black uppercase tracking-tighter transition-colors", 
+                isActive ? "text-primary" : "text-muted-foreground"
+            )}>
               {item.label}
             </span>
         </Link>
@@ -68,8 +68,8 @@ export default function MobileNav() {
 
   return (
     <footer className="fixed z-50 left-4 right-4 transition-all duration-500 ease-in-out bottom-6 md:hidden">
-      <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem]">
-          <nav className="flex h-[60px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-xl px-1 shadow-2xl">
+      <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem] shadow-2xl">
+          <nav className="flex h-[64px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-3xl px-1">
               {navItems.map((item) => <NavLink key={item.label} item={item} />)}
           </nav>
       </div>

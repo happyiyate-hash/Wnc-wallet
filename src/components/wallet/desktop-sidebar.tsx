@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,11 @@ export default function DesktopSidebar() {
   const { logout, deleteWallet } = useWallet();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -63,6 +68,8 @@ export default function DesktopSidebar() {
         setIsLoggingOut(false);
     }
   };
+
+  if (!mounted) return null;
 
   return (
     <Sidebar className="hidden md:flex border-r border-white/5 bg-black/20 backdrop-blur-3xl w-64 shrink-0 overflow-hidden">
@@ -94,17 +101,10 @@ export default function DesktopSidebar() {
                       isActive ? "bg-primary/10 border border-primary/20" : "hover:bg-white/5 border border-transparent"
                     )}
                   >
-                    {item.label === 'Affiliate Hub' ? (
-                        <Icon className={cn(
-                            "w-6 h-6 transition-all",
-                            isActive ? "text-primary scale-110" : "text-muted-foreground opacity-40 group-hover:opacity-100 group-hover:text-white"
-                        )} />
-                    ) : (
-                        <Icon className={cn(
-                            "w-6 h-6 transition-all",
-                            isActive ? "opacity-100 scale-110" : "opacity-40 group-hover:opacity-100"
-                        )} />
-                    )}
+                    <Icon className={cn(
+                        "w-6 h-6 transition-all duration-500",
+                        isActive ? "opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(139,92,246,0.3)]" : "opacity-40 group-hover:opacity-100"
+                    )} />
                     <span className={cn(
                       "text-xs font-black uppercase tracking-widest transition-colors",
                       isActive ? "text-white" : "text-muted-foreground group-hover:text-white"
