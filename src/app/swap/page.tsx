@@ -157,7 +157,6 @@ function SwapClient() {
         const finalBatch = batch.map((q, idx) => ({ ...q, isBest: idx === 0 }));
         
         setQuotes(finalBatch);
-        setSelectedQuoteId(finalBatch[0].id);
         setIsQuoteLoading(false);
         
         // PHASE 1: MARKET REVELATION
@@ -168,11 +167,12 @@ function SwapClient() {
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatch.length; i++) {
           setActiveScanIndex(i);
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 120));
         }
 
         // PHASE 3: DECISION MOMENT
         setQuotePhase('FINAL_SELECTED');
+        setSelectedQuoteId(finalBatch[0].id);
         await new Promise(r => setTimeout(r, 1000));
 
         // PHASE 4: STABLE TRANSITION (SEQUENTIAL FADE OUT)
@@ -264,16 +264,37 @@ function SwapClient() {
 
   const rowVariants = {
     hidden: { opacity: 0, scale: 0.95 },
-    visible: (i: number) => ({
-      opacity: 1,
+    visible: { 
+      opacity: 1, 
       scale: 1,
-      transition: { delay: i * 0.15, duration: 0.4, ease: "easeOut" }
-    }),
-    scanning: { scale: 1.02, borderColor: 'rgba(59, 130, 246, 0.5)', backgroundColor: 'rgba(59, 130, 246, 0.1)' },
-    accepted: { borderColor: 'rgba(34, 197, 94, 0.3)' },
-    best: { scale: 1.02, borderColor: 'rgba(59, 130, 246, 0.8)', backgroundColor: 'rgba(59, 130, 246, 0.05)' },
-    rejected: { scale: 0.95, opacity: 0.3, filter: 'grayscale(1)' },
-    fading: { opacity: 0, transition: { duration: 0.3 } }
+      transition: { duration: 0.3 } 
+    },
+    scanning: { 
+      scale: 1.02, 
+      borderColor: 'rgba(59, 130, 246, 0.8)', 
+      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+      boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
+    },
+    accepted: { 
+      borderColor: 'rgba(34, 197, 94, 0.4)',
+      backgroundColor: 'rgba(34, 197, 94, 0.05)'
+    },
+    best: { 
+      scale: 1.05, 
+      borderColor: 'rgba(59, 130, 246, 1)', 
+      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+      boxShadow: '0 0 30px rgba(59, 130, 246, 0.5)',
+    },
+    rejected: { 
+      scale: 0.92, 
+      opacity: 0.3, 
+      filter: 'grayscale(1)',
+      borderColor: 'rgba(239, 68, 68, 0.2)'
+    },
+    fading: { 
+      opacity: 0, 
+      transition: { duration: 0.3 } 
+    }
   };
 
   return (
@@ -287,7 +308,6 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* STABILITY FIX: Use absolute positioning for the floating cockpit to prevent layout reflows */}
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div 
@@ -335,7 +355,6 @@ function SwapClient() {
                         return (
                           <motion.div
                             key={quote.id}
-                            custom={idx}
                             variants={rowVariants}
                             initial="hidden"
                             animate={variant}
@@ -349,7 +368,12 @@ function SwapClient() {
                                 {isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}
                               </div>
                               <div className="text-left">
-                                <p className="text-xs font-black text-white">{quote.provider}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-black text-white">{quote.provider}</p>
+                                  {isBest && (
+                                    <span className="text-[7px] font-black text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded-full uppercase tracking-widest border border-blue-400/20">Best Rate</span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
                                   <span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}>
                                     <Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}
@@ -377,7 +401,6 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10">
-        {/* FROM NODE */}
         <section style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl relative">
           <div className="flex items-center justify-between">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-full border border-white/10 transition-all">
@@ -390,7 +413,6 @@ function SwapClient() {
           <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-[2.8rem] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
         </section>
 
-        {/* VOLTAGE DIVIDER */}
         <div className="relative h-8 flex items-center justify-center z-20">
           <motion.div 
             animate={{ rotate: isHolding ? [rotation, rotation + 360] : rotation }}
@@ -404,7 +426,6 @@ function SwapClient() {
           </motion.div>
         </div>
 
-        {/* TO NODE */}
         <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl relative overflow-hidden">
           <div className="flex items-center justify-between relative z-10">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-full border border-white/10 transition-all">
@@ -433,7 +454,6 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INFO SEQUENCE AREA - STABLE GRID */}
         <div className="mt-8 px-4 grid grid-cols-2 gap-4 relative min-h-[120px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div 
@@ -454,7 +474,6 @@ function SwapClient() {
           ))}
         </div>
 
-        {/* MAIN VISUAL ANIMATION CARD - STABLE HEIGHT */}
         <div className="relative min-h-[180px] w-full">
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
@@ -467,7 +486,6 @@ function SwapClient() {
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
                 
                 <div className="flex items-center justify-between gap-2 relative z-10 py-2">
-                  {/* FROM ASSET NODE */}
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative p-2">
                       <motion.div 
@@ -485,7 +503,6 @@ function SwapClient() {
                     </div>
                   </div>
 
-                  {/* KINETIC CONNECTOR 1 (LEFT TO RIGHT FLOW) */}
                   <div className="flex-1 px-2 relative h-4 overflow-hidden">
                     <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
@@ -498,7 +515,6 @@ function SwapClient() {
                     </svg>
                   </div>
 
-                  {/* ROBOT NODE - OPTIMIZER */}
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20">
                       <Bot className="w-8 h-8 text-purple-500" />
@@ -511,7 +527,6 @@ function SwapClient() {
                     <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
                   </div>
 
-                  {/* KINETIC CONNECTOR 2 (LEFT TO RIGHT FLOW) */}
                   <div className="flex-1 px-2 relative h-4 overflow-hidden">
                     <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
@@ -524,7 +539,6 @@ function SwapClient() {
                     </svg>
                   </div>
 
-                  {/* TO ASSET NODE */}
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative p-2">
                       <motion.div 
@@ -547,7 +561,6 @@ function SwapClient() {
           </AnimatePresence>
         </div>
 
-        {/* META INFO ROW */}
         <div className="min-h-[40px]">
           <AnimatePresence>
             {quotePhase === 'COMPLETED' && (
@@ -575,15 +588,15 @@ function SwapClient() {
       />
 
       <div className="fixed bottom-8 left-0 right-0 px-6 z-40">
-          <Button 
+          <button 
             className={cn(
-              "w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 transition-all active:scale-[0.98]",
+              "w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 transition-all active:scale-[0.98] flex items-center justify-center",
               quotePhase === 'COMPLETED' ? "bg-primary border-primary/50 text-white shadow-primary/30" : "bg-zinc-900 border-zinc-950 text-zinc-600 opacity-50 cursor-not-allowed"
             )} 
             disabled={quotePhase !== 'COMPLETED' || isQuoteLoading || !!fetchError}
           >
             {isQuoteLoading ? 'Syncing Liquidity Nodes...' : quotePhase === 'COMPLETED' ? 'Execute Institutional Swap' : 'Discovering Routes...'}
-          </Button>
+          </button>
       </div>
     </div>
   );
