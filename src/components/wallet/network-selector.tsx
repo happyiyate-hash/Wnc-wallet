@@ -154,7 +154,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
       <Button
         variant="ghost"
         onClick={() => setIsOpen(true)}
-        className={cn('flex items-center gap-2 p-1.5 h-auto hover:bg-white/5 rounded-full transition-all active:scale-95', className)}
+        className={cn('flex items-center gap-1 p-1 h-auto hover:bg-white/5 rounded-full transition-all active:scale-95', className)}
       >
         <div className="relative p-0.5 rounded-full bg-white/5 border border-white/5">
             <TokenLogoDynamic 
@@ -167,10 +167,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
                 FallbackComponent={<GenericCoinIcon />}
             />
         </div>
-        <div className="flex items-center gap-1 pr-1">
-            <span className="text-[10px] font-black uppercase text-white tracking-tight">{viewingNetwork.name}</span>
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-        </div>
+        <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>

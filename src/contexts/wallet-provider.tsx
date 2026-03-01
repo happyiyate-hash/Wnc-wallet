@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile, WalletRegistryEntry } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile, WalletRegistryEntry, LocalSession } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
@@ -21,6 +20,7 @@ import { TronWeb } from "tronweb";
 import * as algosdk from "algosdk";
 import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
 import { InMemorySigner } from "@taquito/signer";
+import { b58cencode, prefix } from "@taquito/utils";
 import { AptosAccount } from "aptos";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { getInitialAssets } from '@/lib/wallets/balances';
@@ -433,7 +433,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const hbarMnemonic = await HederaMnemonic.fromString(cleanMnemonic);
       const hbarPrivateKey = await hbarMnemonic.toStandardEd25519PrivateKey();
       
-      const xtzSigner = await InMemorySigner.fromSecretKey(cleanMnemonic);
+      const xtzDerivationPath = "m/44'/1729'/0'/0'";
+      const xtzSeed = derivePath(xtzDerivationPath, seed.toString('hex'));
+      const xtzSecretKey = b58cencode(xtzSeed.key, prefix.edsk2); 
+      const xtzSigner = await InMemorySigner.fromSecretKey(xtzSecretKey);
       const xtzAddress = await xtzSigner.publicKeyHash();
 
       const aptosSeed = derivePath("m/44'/637'/0'/0'/0'", seed.toString('hex'));
