@@ -46,7 +46,7 @@ type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTE
 
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap, prices, infuraApiKey } = useWallet();
-  const { formatFiat } = useCurrency();
+  const { formatFiat, rates } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -215,15 +215,22 @@ function SwapClient() {
 
   const fromTokenPrice = useMemo(() => {
     if (!fromToken) return 0;
+    // WNC logic: 1 WNC = 1 Naira. Convert to selected currency (usually USD base rate in prices)
+    if (fromToken.symbol === 'WNC') {
+        return 1 / (rates['NGN'] || 1650);
+    }
     const priceId = (fromToken.priceId || fromToken.address || fromToken.coingeckoId)?.toLowerCase();
     return prices[priceId]?.price || 0;
-  }, [fromToken, prices]);
+  }, [fromToken, prices, rates]);
 
   const toTokenPrice = useMemo(() => {
     if (!toToken) return 0;
+    if (toToken.symbol === 'WNC') {
+        return 1 / (rates['NGN'] || 1650);
+    }
     const priceId = (toToken.priceId || toToken.address || toToken.coingeckoId)?.toLowerCase();
     return prices[priceId]?.price || 0;
-  }, [toToken, prices]);
+  }, [toToken, prices, rates]);
 
   const handleOpenSelector = (type: 'from' | 'to') => {
     setSelectionType(type);
@@ -365,13 +372,13 @@ function SwapClient() {
         {/* YOU PAY CARD */}
         <section 
           style={{ 
-            backgroundColor: `${fromChainColor}15`, 
-            borderColor: `${fromChainColor}ee`,
+            backgroundColor: `${fromChainColor}20`, 
+            borderColor: `${fromChainColor}cc`,
             boxShadow: `0 0 50px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}10`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
-          <div className="flex items-center justify-between h-8 shrink-0">
+          <div className="flex items-center justify-between h-10 shrink-0">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
@@ -380,7 +387,7 @@ function SwapClient() {
             <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
           </div>
           
-          <div className="relative pt-1 flex-1 flex flex-col justify-center">
+          <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>
               {showPrecision && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
@@ -407,13 +414,13 @@ function SwapClient() {
         {/* YOU RECEIVE CARD */}
         <section 
           style={{ 
-            backgroundColor: `${toChainColor}15`, 
-            borderColor: `${toChainColor}ee`,
+            backgroundColor: `${toChainColor}20`, 
+            borderColor: `${toChainColor}cc`,
             boxShadow: `0 0 50px ${toChainColor}40, inset 0 0 20px ${toChainColor}10`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
-          <div className="flex items-center justify-between h-8 shrink-0 relative">
+          <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
@@ -428,7 +435,7 @@ function SwapClient() {
               )}
             </div>
           </div>
-          <div className="relative pt-1 flex-1 flex flex-col justify-center">
+          <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>
               {showOutputPrecision && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
@@ -476,7 +483,7 @@ function SwapClient() {
                     </div>
                     <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20">
                       <Bot className="w-6 h-6 text-purple-500" />
@@ -484,7 +491,7 @@ function SwapClient() {
                     </div>
                     <span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
