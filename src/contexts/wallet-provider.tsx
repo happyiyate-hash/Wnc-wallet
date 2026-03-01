@@ -122,13 +122,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const custom = latestUserTokensRef.current.filter(t => t.chainId === chainId);
+    // Important: Use latest state if available, otherwise fallback to ref
+    const currentCustom = userAddedTokens.length > 0 ? userAddedTokens : latestUserTokensRef.current;
+    const custom = currentCustom.filter(t => t.chainId === chainId);
+    
     const combined = [...base, ...custom].reduce((acc, curr) => {
-        if (!acc.find(a => a.symbol === curr.symbol)) acc.push(curr);
+        const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
+        if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === identifier)) {
+            acc.push(curr);
+        }
         return acc;
     }, [] as AssetRow[]);
     return combined;
-  }, []);
+  }, [userAddedTokens]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
@@ -155,10 +161,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const onChainAssets = available
       .map((asset) => {
-        const balDoc = chainBalances.find((b) => b.symbol === asset.symbol);
+        const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
+        
+        // Priority key mapping for price lookup
         const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
         const priceInfo = prices[priceId];
+        
         const priceUsd = priceInfo?.price || 0;
         const pctChange24h = priceInfo?.change || 0;
         const fiatValueUsd = parseFloat(balance) * priceUsd;
@@ -397,7 +406,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
     });
-    allKnownAssets.push(...latestUserTokensRef.current);
+    // Use the latest state for CDN assets
+    allKnownAssets.push(...userAddedTokens);
 
     allKnownAssets.forEach(a => { 
         if (a.coingeckoId) {
@@ -435,7 +445,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {
         console.warn("[PRICE_ORACLE_REFRESH_FAILED]", e);
     }
-  }, [chainsWithLogos]);
+  }, [chainsWithLogos, userAddedTokens]);
 
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || !infuraApiKey) return [];
@@ -463,6 +473,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
     try {
+        // Also fetch prices immediately to keep value nodes up to date
+        await fetchGlobalPrices();
+        
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -470,7 +483,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return next;
         });
     } catch (e) {} finally { setIsRefreshing(false); }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId]);
+  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId) return;
@@ -556,7 +569,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const addUserToken = useCallback((token: AssetRow) => {
     setUserAddedTokens(prev => {
-      const exists = prev.find(t => t.chainId === token.chainId && t.symbol === token.symbol);
+      const exists = prev.find(t => t.chainId === token.chainId && (t.isNative ? t.symbol === token.symbol : t.address?.toLowerCase() === token.address?.toLowerCase()));
       if (exists) return prev;
       const next = [...prev, token];
       if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
