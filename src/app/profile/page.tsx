@@ -199,7 +199,7 @@ export default function ProfilePage() {
                         <div className="space-y-2">
                             <ProfileAction icon={Fingerprint} label="Node Alias" value={displayName} accentColor="text-purple-400" onClick={() => router.push('/settings')} />
                             <ProfileAction icon={Store} label="Marketplace" value="Business Mode" accentColor="text-emerald-400" onClick={() => router.push('/settings')} />
-                            <ProfileAction icon={Users} label="Affiliate" value="Invite Nodes" accentColor="text-blue-400" onClick={() => router.push('/browse')} />
+                            <ProfileAction icon={Users} label="Affiliate" value="Invite Nodes" accentColor="text-blue-400" onClick={() => router.push('/invites')} />
                         </div>
                     </section>
 
