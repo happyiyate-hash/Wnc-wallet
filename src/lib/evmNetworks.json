@@ -224,5 +224,14 @@
     "coingeckoId": "dogecoin",
     "themeColor": "#C2A633",
     "type": "doge"
+  },
+  "501": {
+    "name": "Solana",
+    "symbol": "SOL",
+    "chainId": 501,
+    "rpcUrl": "https://api.mainnet-beta.solana.com",
+    "coingeckoId": "solana",
+    "themeColor": "#9945FF",
+    "type": "solana"
   }
 }

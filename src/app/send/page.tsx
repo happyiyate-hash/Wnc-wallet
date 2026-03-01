@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, and DOGE formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, and SOL formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -86,6 +86,10 @@ const detectAddressType = (input: string) => {
   if (clean.endsWith('.near') || clean.endsWith('.testnet') || /^[a-f0-9]{64}$/.test(clean)) {
     return 'near';
   }
+
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(clean)) {
+    return 'solana';
+  }
   
   return 'invalid';
 };
@@ -98,6 +102,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'btc') return { name: 'Bitcoin', symbol: 'BTC' };
     if (type === 'ltc') return { name: 'Litecoin', symbol: 'LTC' };
     if (type === 'doge') return { name: 'Dogecoin', symbol: 'DOGE' };
+    if (type === 'solana') return { name: 'Solana', symbol: 'SOL' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -196,7 +201,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -313,6 +318,10 @@ function SendClient() {
       else if (activeNetwork.type === 'btc' || activeNetwork.type === 'ltc' || activeNetwork.type === 'doge') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "UTXO building requires backend signing for institutional nodes." });
           throw new Error(`${selectedToken.symbol} Signing restricted to hardware modules.`);
+      }
+      else if (activeNetwork.type === 'solana') {
+          toast({ title: `Institutional Solana`, description: "Account-based SOL signing restricted to hardware modules." });
+          throw new Error("SOL Signing restricted to hardware modules.");
       }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');

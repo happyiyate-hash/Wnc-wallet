@@ -13,6 +13,8 @@ import { KeyPair, utils } from "near-api-js";
 import * as bitcoin from "bitcoinjs-lib";
 import BIP32Factory from "bip32";
 import * as ecc from "tiny-secp256k1";
+import { derivePath } from "ed25519-hd-key";
+import { Keypair as SolanaKeypair } from "@solana/web3.js";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -26,13 +28,14 @@ import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { bitcoinAdapterFactory } from '@/lib/wallets/adapters/bitcoin';
 import { litecoinAdapterFactory, litecoinNetwork } from '@/lib/wallets/adapters/litecoin';
 import { dogecoinAdapterFactory, dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
+import { solanaAdapterFactory } from '@/lib/wallets/adapters/solana';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -211,6 +214,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
     else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
     else if (chain.type === 'doge') adapter = dogecoinAdapterFactory(chain);
+    else if (chain.type === 'solana') adapter = solanaAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -330,6 +334,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           network: dogecoinNetwork,
       });
 
+      // DETERMINISTIC SOLANA DERIVATION
+      const solRoot = derivePath("m/44'/501'/0'/0'", seed.toString('hex'));
+      const solKeypair = SolanaKeypair.fromSeed(solRoot.key);
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -337,7 +345,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: nearAddress, type: 'near' },
         { address: btcAddress!, type: 'btc' },
         { address: ltcAddress!, privateKey: ltcChild.toWIF(), type: 'ltc' },
-        { address: dogeAddress!, privateKey: dogeChild.toWIF(), type: 'doge' }
+        { address: dogeAddress!, privateKey: dogeChild.toWIF(), type: 'doge' },
+        { address: solKeypair.publicKey.toBase58(), privateKey: Buffer.from(solKeypair.secretKey).toString('hex'), type: 'solana' }
       ];
       setWallets(derived);
       return derived;
@@ -487,7 +496,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
