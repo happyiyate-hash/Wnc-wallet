@@ -7,6 +7,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 /**
  * TRON Protocol Adapter
  * Handles real-time balance discovery via the TRON Grid API.
+ * Includes multi-signer (multi-sig) detection logic.
  */
 class TronAdapter implements IWalletAdapter {
     private tronWeb: TronWeb;
@@ -15,6 +16,35 @@ class TronAdapter implements IWalletAdapter {
         this.tronWeb = new TronWeb({
             fullHost: chain.rpcUrl || "https://api.trongrid.io"
         });
+    }
+
+    /**
+     * Checks if a TRON account has multiple signers enabled on-chain.
+     */
+    async checkMultiSigner(address: string) {
+        try {
+            const account = await this.tronWeb.trx.getAccount(address);
+            
+            if (!account.owner_permission) {
+                return { isMultiSigner: false };
+            }
+
+            const keys = account.owner_permission.keys || [];
+            const threshold = account.owner_permission.threshold;
+
+            if (keys.length > 1) {
+                return {
+                    isMultiSigner: true,
+                    numKeys: keys.length,
+                    threshold: threshold
+                };
+            }
+
+            return { isMultiSigner: false };
+        } catch (error) {
+            console.warn(`[TRX_SECURITY_SCAN_FAIL] ${address}:`, error);
+            return { isMultiSigner: false };
+        }
     }
 
     async fetchBalances(
@@ -30,7 +60,6 @@ class TronAdapter implements IWalletAdapter {
                 if (asset.symbol === 'TRX') {
                     return { ...asset, balance: balanceTrx } as AssetRow;
                 }
-                // TODO: Implement TRC20/TRC10 token discovery
                 return { ...asset, balance: '0' } as AssetRow;
             });
         } catch (error: any) {

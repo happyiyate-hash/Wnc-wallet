@@ -25,6 +25,9 @@ export interface WalletWithMetadata {
   privateKey?: string;
   seed?: string; // For XRP
   type: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'injective' | 'celestia' | 'cardano' | 'tron';
+  isMultiSigner?: boolean;
+  multiSignerThreshold?: number;
+  multiSignerKeys?: number;
 }
 
 export interface ChainConfig {

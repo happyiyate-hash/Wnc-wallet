@@ -235,7 +235,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     else if (chain.type === 'celestia') adapter = celestiaAdapterFactory(chain);
     else if (chain.type === 'cardano') adapter = cardanoAdapterFactory(chain);
-    else if (chain.type === 'tron') adapter = tronAdapterFactory(chain);
+    else if (chain.type === 'tron') {
+        adapter = tronAdapterFactory(chain);
+        // Security Protocol: Perform on-chain multi-signer scan
+        if (adapter && (adapter as any).checkMultiSigner) {
+            (adapter as any).checkMultiSigner(walletForChain.address).then((res: any) => {
+                if (res.isMultiSigner) {
+                    setWallets(prev => {
+                        if (!prev) return null;
+                        return prev.map(w => w.type === 'tron' ? { 
+                            ...w, 
+                            isMultiSigner: true, 
+                            multiSignerThreshold: res.threshold, 
+                            multiSignerKeys: res.numKeys 
+                        } : w);
+                    });
+                }
+            });
+        }
+    }
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {

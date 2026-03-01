@@ -21,7 +21,8 @@ import {
   AlertCircle,
   ChevronDown,
   Zap,
-  XCircle
+  XCircle,
+  Lock
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -174,6 +175,11 @@ function SendClient() {
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
+
+  const currentWallet = useMemo(() => {
+    if (!wallets) return null;
+    return wallets.find(w => w.type === activeNetwork.type);
+  }, [wallets, activeNetwork.type]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -391,7 +397,8 @@ function SendClient() {
   const amountUsdValue = amountNum * (selectedToken?.priceUsd || 0);
   
   const hasInsufficientFunds = amountNum > balance;
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
+  const isBlockedByMultiSigner = currentWallet?.isMultiSigner && activeNetwork.type === 'tron';
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isBlockedByMultiSigner;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -532,6 +539,18 @@ function SendClient() {
                         {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                     </div>
                 </div>
+
+                {isBlockedByMultiSigner && (
+                    <div className="p-5 rounded-[2rem] bg-orange-500/10 border border-orange-500/20 flex gap-4 animate-in slide-in-from-top-2">
+                        <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center shrink-0"><Lock className="w-6 h-6 text-orange-500" /></div>
+                        <div className="space-y-1.5 text-left">
+                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em]">Security Alert: Multi-Signer Active</p>
+                            <p className="text-xs font-bold text-white/80 leading-relaxed">
+                                This TRON node has <span className="text-orange-400">{currentWallet?.multiSignerKeys} signers</span> configured on-chain. Standard signing is restricted to prevent unauthorized partial authorizations.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {isSelfTransfer && (
                     <div className="p-5 rounded-[2rem] bg-primary/10 border border-primary/20 flex gap-4 animate-in slide-in-from-top-2">
