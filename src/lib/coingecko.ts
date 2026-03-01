@@ -46,7 +46,6 @@ async function fetcher(url: string) {
 
 /**
  * Generates synthetic historical data for internal assets (WNC).
- * Fluctuates relative to a base value to simulate a "live" comparison chart.
  */
 function generateInternalChartData(baseValue: number, days: string) {
     const data = [];
@@ -63,88 +62,69 @@ function generateInternalChartData(baseValue: number, days: string) {
     const points = days === '1D' ? 48 : 100;
     const interval = (daysNum * dayMs) / points;
 
-    // Start from a simulated past value and walk to the current baseValue
-    // This ensures the chart ends at the "current" price shown in the UI
-    let currentValue = baseValue * (1 + (Math.random() * 0.1 - 0.05)); // +/- 5% start
+    let currentValue = baseValue * (1 + (Math.random() * 0.1 - 0.05)); 
     const stepSize = (baseValue - currentValue) / points;
 
     for (let i = 0; i <= points; i++) {
         const time = now - ((points - i) * interval);
-        // Add random walk "noise"
         const noise = 1 + (Math.random() * 0.01 - 0.005); 
         currentValue = (currentValue + stepSize) * noise;
-        
-        // Ensure we strictly end at baseValue for the last point
         const finalVal = i === points ? baseValue : currentValue;
         data.push({ time, price: finalVal });
     }
     return data;
 }
 
-/**
- * Fetches a map of prices and 24h changes for a list of CoinGecko IDs.
- */
 export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { usd: number, usd_24h_change: number } }> {
     if (ids.length === 0) return {};
-    
     const uniqueIds = Array.from(new Set(ids.filter(Boolean).map(id => id.toLowerCase().trim())));
     if (uniqueIds.length === 0) return {};
-    
     try {
         const priceUrl = `${COINGECKO_API_URL}/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=usd&include_24hr_change=true`;
         const data = await fetcher(priceUrl);
         return data || {};
     } catch (e) {
-        console.warn("CoinGecko fetchPriceMap failed:", e);
         return {};
     }
 }
 
-/**
- * Fetches prices for tokens on a specific platform using contract addresses.
- */
 export async function fetchPricesByContract(platformId: string, addresses: string[]): Promise<{ [address: string]: { usd: number, usd_24h_change: number } }> {
     if (!platformId || addresses.length === 0) return {};
-    
-    const cleanAddresses = addresses
-        .filter(addr => addr && addr.startsWith('0x'))
-        .map(addr => addr.toLowerCase().trim())
-        .join(',');
-        
+    const cleanAddresses = addresses.filter(addr => addr && addr.startsWith('0x')).map(addr => addr.toLowerCase().trim()).join(',');
     if (!cleanAddresses) return {};
-
     try {
         const url = `${COINGECKO_API_URL}/simple/token_price/${platformId}?contract_addresses=${cleanAddresses}&vs_currencies=usd&include_24hr_change=true`;
         const data = await fetcher(url);
-        
         if (!data) return {};
-
         const result: any = {};
         Object.entries(data).forEach(([addr, info]: [string, any]) => {
-            result[addr.toLowerCase()] = {
-                usd: info.usd || 0,
-                usd_24h_change: info.usd_24h_change || 0
-            };
+            result[addr.toLowerCase()] = { usd: info.usd || 0, usd_24h_change: info.usd_24h_change || 0 };
         });
         return result;
     } catch (e) {
-        console.warn(`CoinGecko contract fetch failed for ${platformId}:`, e);
         return {};
     }
 }
 
 /**
- * Fetches historical chart data for a specific token from CoinGecko.
+ * Unified Chart Fetcher
+ * Supports Coin ID, Internal Handshake, and Contract-based discovery.
  */
-export async function fetchChartData(coingeckoId: string, days: string, currentPrice?: number) {
-    // Handle Internal Wevinacoin Handshake with dynamic current price
+export async function fetchChartData(coingeckoId: string, days: string, currentPrice?: number, chainId?: number, contractAddress?: string) {
     if (coingeckoId === 'internal:wnc') {
-        const price = currentPrice || 0.000606;
-        return generateInternalChartData(price, days);
+        return generateInternalChartData(currentPrice || 0.000606, days);
     }
 
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
-    const url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
+    let url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
+
+    // If ID is missing but contract details exist, attempt platform discovery
+    if ((!coingeckoId || coingeckoId === 'undefined') && chainId && contractAddress && contractAddress.startsWith('0x')) {
+        const platform = COINGECKO_PLATFORM_MAP[chainId];
+        if (platform) {
+            url = `${COINGECKO_API_URL}/coins/${platform}/contract/${contractAddress.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
+        }
+    }
     
     try {
         const data = await fetcher(url);
@@ -159,16 +139,13 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
     }
 }
 
-/**
- * Fetches detailed market statistics for a single token.
- */
 export async function fetchSingleTokenDetails(coingeckoId: string, currentPrice?: number) {
     if (coingeckoId === 'internal:wnc') {
         const price = currentPrice || 0.000606;
         return {
             id: 'wnc',
             symbol: 'wnc',
-            name: 'Wevinacoin', // Institutional Branding
+            name: 'Wevinacoin',
             market_cap_rank: 0,
             market_data: {
                 current_price: { usd: price },

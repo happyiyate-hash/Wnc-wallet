@@ -41,6 +41,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
+ * Hardened logic for EVM, XRP, and Polkadot formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -49,6 +50,7 @@ const detectAddressType = (input: string) => {
   // Internal WNC / Account ID Logic (10 digits starting with 835)
   if (/^835\d{7}$/.test(clean)) return 'account-id';
 
+  // 1. EVM Detection (Standard 0x40 hex)
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
@@ -56,15 +58,22 @@ const detectAddressType = (input: string) => {
     return 'evm';
   }
   
+  // 2. XRP Ledger Detection (Base58 starting with 'r')
   if (clean.startsWith('r')) {
     if (xrpl.isValidClassicAddress(clean)) return 'xrp';
     return 'invalid-xrp';
   }
   
+  // 3. Polkadot Ecosystem Detection (SS58 Format)
+  // Typically starts with 1 (Polkadot), 5 (Substrate), d (Kusama)
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        const [isValid] = checkAddress(clean, 42);
-        if (isValid) return 'polkadot';
+        // We verify against common prefixes (0: Polkadot, 2: Kusama, 42: Generic)
+        const [isValid] = checkAddress(clean, 42); 
+        const [isValidPolkadot] = checkAddress(clean, 0);
+        const [isValidKusama] = checkAddress(clean, 2);
+        
+        if (isValid || isValidPolkadot || isValidKusama) return 'polkadot';
     } catch (e) {}
     return 'invalid-polkadot';
   }
@@ -159,6 +168,7 @@ function SendClient() {
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
+    if (addrType === 'invalid-polkadot') return { title: "Invalid Polkadot", message: "Address failed SS58 checksum." };
     if (debouncedRecipient.length > 0 && addrType === 'invalid') return { title: "Unknown Format", message: "I could not find any account or blockchain related to this symbols" };
     return null;
   }, [addrType, isSelfTransfer, debouncedRecipient]);
@@ -279,7 +289,6 @@ function SendClient() {
         const transferAmount = parseFloat(amount);
         if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
 
-        // ATOMIC SETTLEMENT HANDSHAKE via RPC
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
             p_recipient_id: recipientProfile.id,
             p_amount: Math.floor(transferAmount)
@@ -289,7 +298,6 @@ function SendClient() {
             throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
         }
 
-        // Record Ledger Entry
         await supabase!.from('transactions').insert({
             user_id: profile.id,
             type: 'withdrawal',
@@ -367,8 +375,8 @@ function SendClient() {
             onClick={() => setIsSelectorOpen(true)}
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
         >
-            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-            <div className="flex flex-col items-start leading-none">
+            <TokenLogoDynamic key={`send-token-${selectedToken?.symbol}`} logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+            <div className="flex items-start leading-none">
                 <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span>
                 <span className="text-[7px] font-bold text-primary uppercase opacity-60">{activeNetwork.name}</span>
             </div>

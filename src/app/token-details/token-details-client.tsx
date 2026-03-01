@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import "chartjs-adapter-date-fns";
 import type { AssetRow } from "@/lib/types";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -76,7 +75,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 
 export default function TokenDetailsClientPage() {
-  const { allAssets, viewingNetwork, isInitialized, prices } = useWallet();
+  const { allAssets, viewingNetwork, isInitialized } = useWallet();
   const { formatFiat, selectedCurrency } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,7 +84,6 @@ export default function TokenDetailsClientPage() {
 
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
-  // Dynamically find the token in allAssets. 
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
     return allAssets.find(a => a.symbol === tokenSymbol);
@@ -106,7 +104,6 @@ export default function TokenDetailsClientPage() {
   }
 
   const price = token?.priceUsd ?? 0;
-  // Pull live percentage trend from WalletProvider
   const priceChange24h = token?.pctChange24h ?? 0;
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
@@ -133,9 +130,14 @@ export default function TokenDetailsClientPage() {
           </div>
         </div>
 
-        {/* FULL BLEED CHART */}
         <div className="h-64 relative w-full overflow-hidden mt-4">
-          <RechartsChart coingeckoId={coingeckoId} days={chartRange} isNegative={isNegativeChange}/>
+          <RechartsChart 
+            coingeckoId={coingeckoId} 
+            days={chartRange} 
+            isNegative={isNegativeChange}
+            chainId={token.chainId}
+            contractAddress={token.address}
+          />
         </div>
 
         <div className="flex justify-between w-full mt-4 px-6">
@@ -146,7 +148,7 @@ export default function TokenDetailsClientPage() {
               variant="ghost"
               size="sm"
               className={cn("text-[10px] font-black h-8 px-3 rounded-xl transition-all", chartRange === r ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5")}
-              disabled={!coingeckoId}
+              disabled={!coingeckoId && !token.address}
             >
               {r}
             </Button>

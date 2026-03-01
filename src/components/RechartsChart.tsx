@@ -3,41 +3,57 @@ import React from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchChartData } from '@/lib/coingecko';
 import { Skeleton } from './ui/skeleton';
-import { TrendingUp, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 
-const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string | null, days: string, isNegative: boolean }) => {
+interface RechartsChartProps {
+    coingeckoId?: string | null;
+    days: string;
+    isNegative: boolean;
+    chainId?: number;
+    contractAddress?: string;
+}
+
+const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress }: RechartsChartProps) => {
     const { prices, allAssets } = useWallet();
     const [data, setData] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(false);
 
     React.useEffect(() => {
-        if (coingeckoId) {
+        const resolveAndFetch = async () => {
+            // Need at least an ID or a contract to attempt a fetch
+            if (!coingeckoId && !contractAddress) return;
+
             setLoading(true);
             setError(false);
             
-            // Resolve current price for accurate charting
             let currentPrice = 0;
             if (coingeckoId === 'internal:wnc') {
                 const wnc = allAssets.find(a => a.symbol === 'WNC');
                 currentPrice = wnc?.priceUsd || 0.000606;
-            } else {
+            } else if (coingeckoId) {
                 currentPrice = prices[coingeckoId.toLowerCase()]?.price || 0;
+            } else if (contractAddress) {
+                currentPrice = prices[contractAddress.toLowerCase()]?.price || 0;
             }
 
-            fetchChartData(coingeckoId, days, currentPrice)
-                .then((res) => {
-                    if (!res || res.length === 0) {
-                        setError(true);
-                    } else {
-                        setData(res);
-                    }
-                })
-                .catch(() => setError(true))
-                .finally(() => setLoading(false));
-        }
-    }, [coingeckoId, days, prices, allAssets]);
+            try {
+                const res = await fetchChartData(coingeckoId || '', days, currentPrice, chainId, contractAddress);
+                if (!res || res.length === 0) {
+                    setError(true);
+                } else {
+                    setData(res);
+                }
+            } catch (e) {
+                setError(true);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        resolveAndFetch();
+    }, [coingeckoId, days, prices, allAssets, chainId, contractAddress]);
 
     if (loading) {
         return (
