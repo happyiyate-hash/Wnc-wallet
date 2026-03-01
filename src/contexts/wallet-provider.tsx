@@ -10,6 +10,7 @@ import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
+import { useCurrency } from './currency-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
 import { supabase } from '@/lib/supabase/client';
@@ -78,6 +79,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
   const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId, refreshProfile } = useUser();
+  const { rates } = useCurrency();
   const { toast } = useToast();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
@@ -131,9 +133,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // Virtual WNC Token Injection
-    // Dynamic price based on 1/1650 USD (Naira Peg)
-    const wncPriceUsd = 0.000606; 
+    // Virtual WNC Token Injection - RECALCULATED BASED ON NGN RATE
+    const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
     
     const wncAsset: AssetRow = {
         chainId: viewingNetwork.chainId,
@@ -144,7 +145,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isNative: false,
         priceUsd: wncPriceUsd,
         fiatValueUsd: (profile?.wnc_earnings || 0) * wncPriceUsd,
-        pctChange24h: 1.25, // Mock rise relative to recent trends
+        pctChange24h: -0.42, // Simulated trend relative to NGN volatility
         decimals: 0
     };
 
@@ -170,10 +171,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } as AssetRow;
       });
 
-    // Always keep WNC visible if active
-    const final = [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-    return final;
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
+    return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;

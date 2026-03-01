@@ -4,8 +4,10 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { fetchChartData } from '@/lib/coingecko';
 import { Skeleton } from './ui/skeleton';
 import { TrendingUp, AlertCircle } from 'lucide-react';
+import { useWallet } from '@/contexts/wallet-provider';
 
 const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string | null, days: string, isNegative: boolean }) => {
+    const { prices, allAssets } = useWallet();
     const [data, setData] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(false);
@@ -14,7 +16,17 @@ const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string
         if (coingeckoId) {
             setLoading(true);
             setError(false);
-            fetchChartData(coingeckoId, days)
+            
+            // Resolve current price for accurate charting
+            let currentPrice = 0;
+            if (coingeckoId === 'internal:wnc') {
+                const wnc = allAssets.find(a => a.symbol === 'WNC');
+                currentPrice = wnc?.priceUsd || 0.000606;
+            } else {
+                currentPrice = prices[coingeckoId.toLowerCase()]?.price || 0;
+            }
+
+            fetchChartData(coingeckoId, days, currentPrice)
                 .then((res) => {
                     if (!res || res.length === 0) {
                         setError(true);
@@ -25,7 +37,7 @@ const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string
                 .catch(() => setError(true))
                 .finally(() => setLoading(false));
         }
-    }, [coingeckoId, days]);
+    }, [coingeckoId, days, prices, allAssets]);
 
     if (loading) {
         return (
@@ -73,7 +85,7 @@ const RechartsChart = ({ coingeckoId, days, isNegative }: { coingeckoId?: string
                     labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: '900' }}
                     labelFormatter={(label) => new Date(label).toLocaleString()}
-                    formatter={(value: any) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Price']}
+                    formatter={(value: any) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`, 'Price']}
                 />
                 <Area
                     type="monotone"

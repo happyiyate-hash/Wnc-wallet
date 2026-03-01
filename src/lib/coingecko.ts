@@ -60,16 +60,23 @@ function generateInternalChartData(baseValue: number, days: string) {
     else if (days === '1Y') daysNum = 365;
     else if (days === 'All') daysNum = 730;
 
-    const points = days === '1D' ? 48 : 100; // 30 min intervals for 1D, or 100 points total
+    const points = days === '1D' ? 48 : 100;
     const interval = (daysNum * dayMs) / points;
 
-    let currentValue = baseValue;
-    for (let i = points; i >= 0; i--) {
-        const time = now - (i * interval);
-        // Add random "walk" fluctuation
-        const change = 1 + (Math.random() * 0.04 - 0.02); // +/- 2% max per step
-        currentValue = currentValue * change;
-        data.push({ time, price: currentValue });
+    // Start from a simulated past value and walk to the current baseValue
+    // This ensures the chart ends at the "current" price shown in the UI
+    let currentValue = baseValue * (1 + (Math.random() * 0.1 - 0.05)); // +/- 5% start
+    const stepSize = (baseValue - currentValue) / points;
+
+    for (let i = 0; i <= points; i++) {
+        const time = now - ((points - i) * interval);
+        // Add random walk "noise"
+        const noise = 1 + (Math.random() * 0.01 - 0.005); 
+        currentValue = (currentValue + stepSize) * noise;
+        
+        // Ensure we strictly end at baseValue for the last point
+        const finalVal = i === points ? baseValue : currentValue;
+        data.push({ time, price: finalVal });
     }
     return data;
 }
@@ -80,7 +87,6 @@ function generateInternalChartData(baseValue: number, days: string) {
 export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { usd: number, usd_24h_change: number } }> {
     if (ids.length === 0) return {};
     
-    // Ensure unique, clean IDs
     const uniqueIds = Array.from(new Set(ids.filter(Boolean).map(id => id.toLowerCase().trim())));
     if (uniqueIds.length === 0) return {};
     
@@ -96,7 +102,6 @@ export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { us
 
 /**
  * Fetches prices for tokens on a specific platform using contract addresses.
- * CRITICAL: Addresses MUST be lowercased for CoinGecko.
  */
 export async function fetchPricesByContract(platformId: string, addresses: string[]): Promise<{ [address: string]: { usd: number, usd_24h_change: number } }> {
     if (!platformId || addresses.length === 0) return {};
@@ -131,11 +136,11 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
 /**
  * Fetches historical chart data for a specific token from CoinGecko.
  */
-export async function fetchChartData(coingeckoId: string, days: string) {
-    // Handle Internal WNC Handshake
+export async function fetchChartData(coingeckoId: string, days: string, currentPrice?: number) {
+    // Handle Internal WNC Handshake with dynamic current price
     if (coingeckoId === 'internal:wnc') {
-        // Mock base value for WNC (approx 1 Naira in USD)
-        return generateInternalChartData(0.000606, days);
+        const price = currentPrice || 0.000606;
+        return generateInternalChartData(price, days);
     }
 
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
@@ -157,25 +162,26 @@ export async function fetchChartData(coingeckoId: string, days: string) {
 /**
  * Fetches detailed market statistics for a single token.
  */
-export async function fetchSingleTokenDetails(coingeckoId: string) {
+export async function fetchSingleTokenDetails(coingeckoId: string, currentPrice?: number) {
     if (coingeckoId === 'internal:wnc') {
+        const price = currentPrice || 0.000606;
         return {
             id: 'wnc',
             symbol: 'wnc',
             name: 'Wevina Cloud',
             market_cap_rank: 0,
             market_data: {
-                current_price: { usd: 0.000606 },
-                high_24h: { usd: 0.000615 },
-                low_24h: { usd: 0.000595 },
+                current_price: { usd: price },
+                high_24h: { usd: price * 1.02 },
+                low_24h: { usd: price * 0.98 },
                 price_change_percentage_24h: 1.25,
                 market_cap: { usd: 0 },
                 total_volume: { usd: 0 },
                 circulating_supply: 0,
                 total_supply: 0,
                 max_supply: null,
-                ath: { usd: 0.0007 },
-                atl: { usd: 0.0004 }
+                ath: { usd: price * 1.5 },
+                atl: { usd: price * 0.5 }
             }
         };
     }
