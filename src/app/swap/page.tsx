@@ -46,8 +46,8 @@ interface SwapQuote {
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap, prices, infuraApiKey } = useWallet();
-  const { formatFiat, rates } = useCurrency();
+  const { viewingNetwork, wallets, allAssets, allChainsMap, prices, rates } = useWallet();
+  const { formatFiat } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -198,7 +198,6 @@ function SwapClient() {
                     throw new Error("API_FAIL");
                 }
             } catch (e) {
-                // Fallback to market rates if API fails
                 const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
                 batch = [
                     { id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: estAmt * 0.995, fee: 0.15, eta: '~10s', isBest: true },
@@ -206,7 +205,6 @@ function SwapClient() {
                 ];
             }
         } else {
-            // Market Rate Fallback for Non-EVM or Internal Assets
             const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
             batch = [
                 { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: estAmt * 0.997, fee: 0.05, eta: '~5s', isBest: true },
@@ -329,6 +327,44 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
+      {/* INSTITUTIONAL ACTION NODE (TOP POSITIONED) */}
+      <AnimatePresence>
+        {quotePhase === 'COMPLETED' && !fetchError && (
+          <motion.div 
+            initial={{ y: 800, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 120, mass: 0.8 }}
+            className="sticky top-[73px] z-[60] px-4 py-3 bg-[#050505]/80 backdrop-blur-3xl border-b border-white/5"
+          >
+            <motion.button 
+              whileTap={{ scale: 0.98 }}
+              className={cn(
+                "w-full h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl transition-all duration-500",
+                "bg-primary text-white shadow-[0_0_40px_rgba(139,92,246,0.3)] border-b-4 border-primary/50"
+              )}
+            >
+              {/* Mirror Reflect Shine Effect */}
+              <motion.div 
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "linear", repeatDelay: 1 }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 pointer-events-none"
+              />
+              
+              {/* Pulsing "Biting" Animation */}
+              <motion.div
+                animate={{ scale: [1, 1.03, 1], opacity: [0.9, 1, 0.9] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                className="flex items-center justify-center gap-3 relative z-10"
+              >
+                <Zap className="w-4 h-4 fill-current text-white" />
+                Authorize Institutional Swap
+              </motion.div>
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div 
@@ -386,7 +422,7 @@ function SwapClient() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10">
+      <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10 overflow-y-auto thin-scrollbar">
         {/* YOU PAY CARD */}
         <section 
           style={{ 
@@ -539,7 +575,6 @@ function SwapClient() {
       </main>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Network Selector" isSwapContext={true} />
-      <div className="fixed bottom-8 left-0 right-0 px-6 z-40"><button className={cn("w-full h-14 rounded-full font-black text-base shadow-2xl border-b-4 transition-all active:scale-[0.98] flex items-center justify-center", quotePhase === 'COMPLETED' ? "bg-primary border-primary/50 text-white shadow-primary/30" : "bg-zinc-900 border-zinc-950 text-zinc-600 opacity-50 cursor-not-allowed")} disabled={quotePhase !== 'COMPLETED' || isQuoteLoading || !!fetchError}>{isQuoteLoading ? 'Syncing Liquidity Nodes...' : quotePhase === 'COMPLETED' ? 'Execute Institutional Swap' : 'Discovering Routes...'}</button></div>
     </div>
   );
 }
