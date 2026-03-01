@@ -408,8 +408,8 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INFO SEQUENCE AREA */}
-        <div className="mt-8 px-4 grid grid-cols-2 gap-4 h-24 relative overflow-hidden">
+        {/* INFO SEQUENCE AREA - DRAGGED DOWN SPACING */}
+        <div className="mt-8 px-4 grid grid-cols-2 gap-4 relative">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div 
               key={idx}
@@ -429,12 +429,12 @@ function SwapClient() {
           ))}
         </div>
 
-        {/* MAIN VISUAL ANIMATION CARD - VISUAL ONLY */}
+        {/* MAIN VISUAL ANIMATION CARD - DRAGGED DOWN TO PREVENT OVERLAP */}
         <AnimatePresence>
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
             <motion.div 
               initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              className="mt-4 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
+              className="mt-10 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
               
