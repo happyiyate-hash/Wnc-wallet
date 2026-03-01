@@ -1,60 +1,46 @@
 
 {
   "entities": {
-    "Blockchain": {
-      "title": "Blockchain",
-      "description": "Configuration for supported blockchain networks.",
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Extended SmarterSeller identity with multi-chain registry nodes.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "symbol": { "type": "string" },
-        "type": { "enum": ["evm", "xrp", "polkadot", "kusama", "near", "btc", "ltc", "doge", "solana", "cosmos", "osmosis", "secret", "celestia", "cardano", "tron", "algorand", "hedera", "tezos", "aptos", "sui"], "type": "string" },
-        "chainId": { "type": "number" },
-        "rpcUrl": { "type": "string" }
-      }
-    },
-    "Asset": {
-      "title": "Asset",
-      "description": "A token or native coin supported by the platform.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "blockchainId": { "type": "string" },
-        "symbol": { "type": "string" },
-        "decimals": { "type": "number" },
-        "contractAddress": { "type": "string" }
-      }
-    },
-    "UserProfile": {
-      "title": "UserProfile",
-      "description": "User profile, referral data, and encrypted vault data.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "username": { "type": "string" },
         "wnc_earnings": { "type": "number" },
         "account_number": { "type": "string" },
-        "referral_code": { "type": "string" },
-        "referred_by": { "type": "string" },
-        "signup_date": { "type": "string", "format": "date-time" },
-        "is_active": { "type": "boolean" },
         "vault_phrase": { "type": "string" },
-        "iv": { "type": "string" }
+        "iv": { "type": "string" },
+        "evm_address": { "type": "string" },
+        "xrp_address": { "type": "string" },
+        "near_address": { "type": "string" },
+        "referral_code": { "type": "string" }
+      }
+    },
+    "PaymentRequest": {
+      "title": "PaymentRequest",
+      "description": "A P2P handshake node for requesting multi-chain assets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requester_id": { "type": "string" },
+        "chain_type": { "type": "string" },
+        "token_symbol": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "enum": ["pending", "paid", "expired", "cancelled"], "type": "string" }
       }
     },
     "Referral": {
       "title": "Referral",
-      "description": "A record of a successful user referral.",
+      "description": "Growth event record for the 400 WNC protocol.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "referrer_id": { "type": "string" },
         "referred_id": { "type": "string" },
         "status": { "enum": ["pending", "credited"], "type": "string" },
-        "reward_amount": { "type": "number", "default": 400 },
-        "created_at": { "type": "string", "format": "date-time" },
-        "credited_at": { "type": "string", "format": "date-time" }
+        "reward_amount": { "type": "number", "default": 400 }
       }
     }
   },
@@ -64,11 +50,7 @@
   "firestore": {
     "/profiles/{userId}": {
       "schema": "UserProfile",
-      "description": "Institutional identity and referral registry."
-    },
-    "/referrals/{referralId}": {
-      "schema": "Referral",
-      "description": "Registry of ecosystem growth events."
+      "description": "Institutional identity registry."
     }
   }
 }
