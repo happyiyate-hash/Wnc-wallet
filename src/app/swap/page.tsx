@@ -362,15 +362,16 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10">
+        {/* YOU PAY CARD */}
         <section 
           style={{ 
-            backgroundColor: `${fromChainColor}20`, 
+            backgroundColor: `${fromChainColor}25`, 
             borderColor: `${fromChainColor}60`,
-            boxShadow: `0 0 30px ${fromChainColor}15`
+            boxShadow: `0 0 40px ${fromChainColor}20`
           }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500"
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 min-h-[140px] flex flex-col justify-center"
         >
-          <div className="flex items-center justify-between h-8">
+          <div className="flex items-center justify-between h-6">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
@@ -403,25 +404,26 @@ function SwapClient() {
           </motion.div>
         </div>
 
+        {/* YOU RECEIVE CARD */}
         <section 
           style={{ 
-            backgroundColor: `${toChainColor}20`, 
+            backgroundColor: `${toChainColor}25`, 
             borderColor: `${toChainColor}60`,
-            boxShadow: `0 0 30px ${toChainColor}15`
+            boxShadow: `0 0 40px ${toChainColor}20`
           }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500"
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 min-h-[140px] flex flex-col justify-center"
         >
-          <div className="flex items-center justify-between relative z-10 h-8">
+          <div className="flex items-center justify-between h-6">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex flex-col items-end">
               <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
               {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} LOCK</span>
+                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 mt-0.5 h-3">
+                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest leading-none">{selectedQuote.provider} LOCK</span>
                 </motion.div>
               )}
             </div>
@@ -475,7 +477,13 @@ function SwapClient() {
                     <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
-                  <div className="flex flex-col items-center gap-2"><div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20"><Bot className="w-6 h-6 text-purple-500" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" /></div><span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span></div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20">
+                      <Bot className="w-6 h-6 text-purple-500" />
+                      <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" />
+                    </div>
+                    <span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
+                  </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
