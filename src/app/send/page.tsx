@@ -43,7 +43,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano and TRON formats.
+ * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON and Algorand formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -63,6 +63,7 @@ const detectAddressType = (input: string) => {
     return 'invalid-xrp';
   }
 
+  if (clean.length === 58 && /^[A-Z2-7]{58}$/.test(clean)) return 'algorand';
   if (clean.startsWith('T') && clean.length === 34) return 'tron';
   if (clean.startsWith('D')) return 'doge';
   if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) return 'btc';
@@ -112,6 +113,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'celestia') return { name: 'Celestia', symbol: 'TIA' };
     if (type === 'cardano') return { name: 'Cardano', symbol: 'ADA' };
     if (type === 'tron') return { name: 'TRON', symbol: 'TRX' };
+    if (type === 'algorand') return { name: 'Algorand', symbol: 'ALGO' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -222,7 +224,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -355,6 +357,10 @@ function SendClient() {
       else if (activeNetwork.type === 'polkadot' || activeNetwork.type === 'kusama') {
           toast({ title: `Institutional Substrate`, description: "Substrate signing restricted to hardware modules." });
           throw new Error("Substrate Signing restricted to hardware modules.");
+      }
+      else if (activeNetwork.type === 'algorand') {
+          toast({ title: `Institutional Algorand`, description: "Pure Proof-of-Stake signing restricted to hardware modules." });
+          throw new Error("Algorand Signing restricted to hardware modules.");
       }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
@@ -616,7 +622,7 @@ function SendClient() {
           </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
-          <div className="max-w-md mx-auto">
+          <div className="max-md mx-auto">
             <Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", canSend ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none")} disabled={!canSend} onClick={() => setIsConfirmOpen(true)}>
               {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
             </Button>

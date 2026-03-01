@@ -17,6 +17,7 @@ import { derivePath } from "ed25519-hd-key";
 import { Keypair as SolanaKeypair } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import TronWeb from "tronweb";
+import algosdk from "algosdk";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -39,13 +40,14 @@ import { injectiveAdapterFactory } from '@/lib/wallets/adapters/injective';
 import { celestiaAdapterFactory } from '@/lib/wallets/adapters/celestia';
 import { cardanoAdapterFactory } from '@/lib/wallets/adapters/cardano';
 import { tronAdapterFactory } from '@/lib/wallets/adapters/tron';
+import { algorandAdapterFactory } from '@/lib/wallets/adapters/algorand';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -237,7 +239,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'cardano') adapter = cardanoAdapterFactory(chain);
     else if (chain.type === 'tron') {
         adapter = tronAdapterFactory(chain);
-        // Security Protocol: Perform on-chain multi-signer scan
         if (adapter && (adapter as any).checkMultiSigner) {
             (adapter as any).checkMultiSigner(walletForChain.address).then((res: any) => {
                 if (res.isMultiSigner) {
@@ -254,6 +255,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             });
         }
     }
+    else if (chain.type === 'algorand') adapter = algorandAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -400,6 +402,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const tronPrivateKey = tronRoot.privateKey!.toString('hex');
       const tronAddress = TronWeb.address.fromPrivateKey(tronPrivateKey);
 
+      const algoRoot = btcRoot.derivePath("m/44'/283'/0'/0/0");
+      const algoAddress = algosdk.encodeAddress(algoRoot.privateKey!);
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -416,7 +421,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: injectiveAccount.address, type: 'injective' },
         { address: celestiaAccount.address, type: 'celestia' },
         { address: adaAddress, type: 'cardano' },
-        { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' }
+        { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
+        { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' }
       ];
       setWallets(derived);
       return derived;
@@ -571,7 +577,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

@@ -305,5 +305,14 @@
     "coingeckoId": "tron",
     "themeColor": "#FF0013",
     "type": "tron"
+  },
+  "283": {
+    "name": "Algorand",
+    "symbol": "ALGO",
+    "chainId": 283,
+    "rpcUrl": "https://mainnet-api.algonode.cloud",
+    "coingeckoId": "algorand",
+    "themeColor": "#000000",
+    "type": "algorand"
   }
 }
