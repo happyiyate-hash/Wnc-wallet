@@ -29,24 +29,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<LocalSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const savedSessions = localStorage.getItem('wevina_sessions');
-    const savedActiveId = localStorage.getItem('wevina_active_session_id');
-    
-    if (savedSessions) {
-        try { setSessions(JSON.parse(savedSessions)); } catch (e) {}
-    }
-    
-    if (savedActiveId) {
-        setActiveSessionId(savedActiveId);
-        const cacheKey = `profile_cache_${savedActiveId}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try { setProfile(JSON.parse(cached)); } catch (e) {}
-        }
-    }
-  }, []);
-
   const fetchProfile = async (userId: string) => {
     if (!supabase) return null;
     
@@ -67,6 +49,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     return null;
   };
+
+  useEffect(() => {
+    const savedSessions = localStorage.getItem('wevina_sessions');
+    const savedActiveId = localStorage.getItem('wevina_active_session_id');
+    
+    if (savedSessions) {
+        try { setSessions(JSON.parse(savedSessions)); } catch (e) {}
+    }
+    
+    if (savedActiveId) {
+        setActiveSessionId(savedActiveId);
+        const cacheKey = `profile_cache_${savedActiveId}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try { setProfile(JSON.parse(cached)); } catch (e) {}
+        }
+    }
+  }, []);
 
   useEffect(() => {
     if (!supabase) {

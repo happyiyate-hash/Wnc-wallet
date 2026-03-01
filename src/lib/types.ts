@@ -79,6 +79,7 @@ export interface UserProfile {
     tezos_address?: string;
     aptos_address?: string;
     sui_address?: string;
+    onboarding_completed?: boolean;
 }
 
 export interface WalletRegistryEntry {

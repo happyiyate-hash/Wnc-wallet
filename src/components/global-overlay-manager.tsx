@@ -7,52 +7,60 @@ import { useWallet } from '@/contexts/wallet-provider';
 import AuthSheet from '@/components/auth/auth-sheet';
 import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
+import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * GLOBAL OVERLAY MANAGER
- * Centralized sentinel that enforces identity and wallet requirements app-wide.
- * Optimized to prevent flickering during omni-chain identity handshake.
+ * Centralized sentinel that enforces identity and onboarding flow.
  */
 export default function GlobalOverlayManager() {
-  const { user, loading: userLoading } = useUser();
+  const { user, profile, loading: userLoading } = useUser();
   const { wallets, isInitialized, isWalletLoading } = useWallet();
+  const pathname = usePathname();
+  const router = useRouter();
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isWalletSetupOpen, setIsWalletSetupOpen] = useState(false);
 
-  // APP SETTLED CHECK: Ensure core identity, wallet context, and key derivation are ALL established.
-  const isSettled = !userLoading && isInitialized && !isWalletLoading;
+  // Define onboarding pages to avoid redirect loops
+  const onboardingPages = ['/verify-email', '/complete-profile', '/wallet-session'];
+  const isOnboardingPage = onboardingPages.includes(pathname);
 
   useEffect(() => {
-    // If the system is still establishing nodes, do nothing to prevent layout flickering.
-    if (!isSettled) {
+    if (userLoading || !isInitialized || isWalletLoading) return;
+
+    // 1. If no user, show Auth Sheet
+    if (!user) {
+      setIsAuthOpen(true);
+      return;
+    } else {
       setIsAuthOpen(false);
-      setIsWalletSetupOpen(false);
+    }
+
+    // 2. Email Verification Check
+    if (!user.email_confirmed_at && pathname !== '/verify-email') {
+      router.push(`/verify-email?email=${encodeURIComponent(user.email || '')}`);
       return;
     }
 
-    // RULE 1: If not logged in, show Auth Sheet
-    if (!user) {
-      setIsAuthOpen(true);
-      setIsWalletSetupOpen(false);
-    } 
-    // RULE 2: If logged in but no wallet derived (and derivation is finished), show Setup Sheet
-    else if (!wallets || wallets.length === 0) {
-      setIsAuthOpen(false);
-      setIsWalletSetupOpen(true);
-    } 
-    // ALL GOOD: Close overlays
-    else {
-      setIsAuthOpen(false);
-      setIsWalletSetupOpen(false);
+    // 3. Profile Completion Check (Need Username)
+    if (user.email_confirmed_at && !profile?.name && pathname !== '/complete-profile') {
+      router.push('/complete-profile');
+      return;
     }
-  }, [isSettled, user, wallets]);
+
+    // 4. Wallet Session Check
+    if (profile?.name && (!wallets || wallets.length === 0) && pathname !== '/wallet-session' && !profile?.onboarding_completed) {
+      router.push('/wallet-session');
+      return;
+    }
+
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router]);
 
   return (
     <>
       <CloudSyncCard />
       <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
-      <WalletManagementSheet isOpen={isWalletSetupOpen} onOpenChange={setIsWalletSetupOpen} />
+      {/* WalletManagementSheet kept for manual editing later, but flow now uses /wallet-session */}
     </>
   );
 }

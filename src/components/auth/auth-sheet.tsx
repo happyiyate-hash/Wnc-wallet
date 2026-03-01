@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +9,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Loader2, Zap, Users, ShieldCheck } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 interface AuthSheetProps {
     isOpen: boolean;
@@ -17,6 +18,7 @@ interface AuthSheetProps {
 
 export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,22 +44,24 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast({ title: "Welcome back!" });
+        onOpenChange(false);
       } else {
-        const { error } = await supabase.auth.signUp({ 
+        const { data, error } = await supabase.auth.signUp({ 
             email, 
             password,
             options: {
                 data: {
-                    username: email.split('@')[0],
                     referral_code: referralCode.trim() || null,
-                    signup_date: new Date().toISOString()
                 }
             }
         });
         if (error) throw error;
-        toast({ title: "Account created!", description: "Please verify your email." });
+        
+        toast({ title: "Verification Sent", description: "Please check your email for the code." });
+        onOpenChange(false);
+        // Navigate to dedicated verification page
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
       }
-      onOpenChange(false);
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -154,7 +158,7 @@ export default function AuthSheet({ isOpen, onOpenChange }: AuthSheetProps) {
             className="w-full h-12 rounded-xl text-sm font-bold bg-primary hover:bg-primary/90 transition-transform active:scale-[0.98] mt-2 shadow-xl shadow-primary/20"
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : (mode === 'login' ? 'Login' : 'Initialize Node')}
+            {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : (mode === 'login' ? 'Login' : 'Start Onboarding')}
           </Button>
         </form>
 
