@@ -9,7 +9,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "symbol": { "type": "string" },
-        "type": { "enum": ["evm", "btc", "solana"], "type": "string" },
+        "type": { "enum": ["evm", "xrp", "polkadot", "kusama", "near", "btc", "ltc", "doge", "solana", "cosmos", "osmosis", "secret", "celestia", "cardano", "tron", "algorand", "hedera", "tezos", "aptos", "sui"], "type": "string" },
         "chainId": { "type": "number" },
         "rpcUrl": { "type": "string" }
       }
@@ -26,39 +26,35 @@
         "contractAddress": { "type": "string" }
       }
     },
-    "Wallet": {
-      "title": "Wallet",
-      "description": "A custodial address derived for a user on a specific chain.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "blockchainId": { "type": "string" },
-        "address": { "type": "string" },
-        "derivationPath": { "type": "string" }
-      }
-    },
-    "Balance": {
-      "title": "Balance",
-      "description": "User's internal ledger balance for a specific asset.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "assetId": { "type": "string" },
-        "amount": { "type": "number" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
-    },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User profile and encrypted vault data.",
+      "description": "User profile, referral data, and encrypted vault data.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "username": { "type": "string" },
-        "vault_phrase": { "type": "string", "description": "Encrypted mnemonic" },
-        "iv": { "type": "string", "description": "IV for mnemonic" },
-        "vault_infura_key": { "type": "string", "description": "Encrypted Infura Key" },
-        "infura_iv": { "type": "string", "description": "IV for infura key" }
+        "wnc_earnings": { "type": "number" },
+        "account_number": { "type": "string" },
+        "referral_code": { "type": "string" },
+        "referred_by": { "type": "string" },
+        "signup_date": { "type": "string", "format": "date-time" },
+        "is_active": { "type": "boolean" },
+        "vault_phrase": { "type": "string" },
+        "iv": { "type": "string" }
+      }
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "A record of a successful user referral.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referrer_id": { "type": "string" },
+        "referred_id": { "type": "string" },
+        "status": { "enum": ["pending", "credited"], "type": "string" },
+        "reward_amount": { "type": "number", "default": 400 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "credited_at": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -66,21 +62,13 @@
     "providers": ["google.com", "password"]
   },
   "firestore": {
-    "/blockchains/{chainId}": {
-      "schema": "Blockchain",
-      "description": "Global config for supported chains."
+    "/profiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "Institutional identity and referral registry."
     },
-    "/assets/{assetId}": {
-      "schema": "Asset",
-      "description": "Global config for supported tokens."
-    },
-    "/users/{userId}/wallets/{chainId}": {
-      "schema": "Wallet",
-      "description": "User's custodial addresses per chain."
-    },
-    "/users/{userId}/balances/{assetId}": {
-      "schema": "Balance",
-      "description": "User's internal ledger balances."
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Registry of ecosystem growth events."
     }
   }
 }
