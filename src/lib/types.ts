@@ -24,7 +24,7 @@ export interface WalletWithMetadata {
   avatarUrl?: string;
   privateKey?: string;
   seed?: string; // For XRP
-  type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret';
+  type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'injective';
 }
 
 export interface ChainConfig {
@@ -66,6 +66,7 @@ export interface UserProfile {
     cosmos_address?: string;
     osmosis_address?: string;
     secret_address?: string;
+    injective_address?: string;
 }
 
 export interface WalletRegistryEntry {

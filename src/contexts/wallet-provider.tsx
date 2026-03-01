@@ -33,13 +33,14 @@ import { solanaAdapterFactory } from '@/lib/wallets/adapters/solana';
 import { cosmosAdapterFactory } from '@/lib/wallets/adapters/cosmos';
 import { osmosisAdapterFactory } from '@/lib/wallets/adapters/osmosis';
 import { secretAdapterFactory } from '@/lib/wallets/adapters/secret';
+import { injectiveAdapterFactory } from '@/lib/wallets/adapters/injective';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -219,9 +220,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
     else if (chain.type === 'doge') adapter = dogecoinAdapterFactory(chain);
     else if (chain.type === 'solana') adapter = solanaAdapterFactory(chain);
-    else if (chain.type === 'cosmos') adapter = cosmosAdapterFactory(chain);
-    else if (chain.type === 'osmosis') adapter = osmosisAdapterFactory(chain);
-    else if (chain.type === 'secret') adapter = secretAdapterFactory(chain);
+    else if (chain.type === 'cosmos') {
+        if (chain.name.toLowerCase().includes('injective')) adapter = injectiveAdapterFactory(chain);
+        else if (chain.name.toLowerCase().includes('osmosis')) adapter = osmosisAdapterFactory(chain);
+        else if (chain.name.toLowerCase().includes('secret')) adapter = secretAdapterFactory(chain);
+        else adapter = cosmosAdapterFactory(chain);
+    }
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -310,14 +314,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
-      // DETERMINISTIC NEAR DERIVATION
       const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
       const nearSecretKey = seed.slice(0, 32);
       const nearBase58Secret = utils.serialize.base_encode(nearSecretKey);
       const nearKeyPair = KeyPair.fromString(`ed25519:${nearBase58Secret}`);
       const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
 
-      // DETERMINISTIC BITCOIN DERIVATION (BIP84 Native SegWit)
       const btcRoot = bip32.fromSeed(seed);
       const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
       const { address: btcAddress } = bitcoin.payments.p2wpkh({
@@ -325,7 +327,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           network: bitcoin.networks.bitcoin,
       });
 
-      // DETERMINISTIC LITECOIN DERIVATION (BIP84 Native SegWit)
       const ltcRoot = bip32.fromSeed(seed, litecoinNetwork);
       const ltcChild = ltcRoot.derivePath("m/84'/2'/0'/0/0");
       const { address: ltcAddress } = bitcoin.payments.p2wpkh({
@@ -333,7 +334,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           network: litecoinNetwork,
       });
 
-      // DETERMINISTIC DOGECOIN DERIVATION (BIP44 Legacy)
       const dogeRoot = bip32.fromSeed(seed, dogecoinNetwork);
       const dogeChild = dogeRoot.derivePath("m/44'/3'/0'/0/0");
       const { address: dogeAddress } = bitcoin.payments.p2pkh({
@@ -341,29 +341,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           network: dogecoinNetwork,
       });
 
-      // DETERMINISTIC SOLANA DERIVATION
       const solRoot = derivePath("m/44'/501'/0'/0'", seed.toString('hex'));
       const solKeypair = SolanaKeypair.fromSeed(solRoot.key);
 
-      // DETERMINISTIC COSMOS DERIVATION
       const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "cosmos" });
       const [cosmosAccount] = await cosmosWallet.getAccounts();
 
-      // DETERMINISTIC OSMOSIS DERIVATION
       const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "osmo" });
       const [osmosisAccount] = await osmosisWallet.getAccounts();
 
-      // DETERMINISTIC SECRET DERIVATION (BIP44 Coin Type 529)
       const secretWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
         prefix: "secret",
-        hdPaths: [{
-          account: 0,
-          change: 0,
-          addressIndex: 0
-        } as any] // Note: cosmjs DirectSecp256k1HdWallet uses 118 by default, but we can override if needed. 
-        // For Secret official, we should ideally use 529. 
+        hdPaths: [{ account: 0, change: 0, addressIndex: 0 } as any]
       });
       const [secretAccount] = await secretWallet.getAccounts();
+
+      const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "inj" });
+      const [injectiveAccount] = await injectiveWallet.getAccounts();
 
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
@@ -376,7 +370,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: solKeypair.publicKey.toBase58(), privateKey: Buffer.from(solKeypair.secretKey).toString('hex'), type: 'solana' },
         { address: cosmosAccount.address, type: 'cosmos' },
         { address: osmosisAccount.address, type: 'osmosis' },
-        { address: secretAccount.address, type: 'secret' }
+        { address: secretAccount.address, type: 'secret' },
+        { address: injectiveAccount.address, type: 'injective' }
       ];
       setWallets(derived);
       return derived;
@@ -526,11 +521,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
-      const type = chain === 'OSMO' ? 'osmosis' : chain.toLowerCase();
+      const type = chain === 'OSMO' ? 'osmosis' : chain === 'INJ' ? 'injective' : chain.toLowerCase();
       const local = wallets.find(w => w.type === type)?.address || null;
       const cloud = getCloudAddr(type);
       setSyncDiagnostic(prev => ({ ...prev, chain: chain as any, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
@@ -575,7 +570,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // 1. INITIAL SESSION HYDRATION
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -609,7 +603,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [authLoading, activeSessionId, profile, loadWalletFromMnemonic, isInitialized, fetchGlobalPrices]);
 
-  // 2. AGGRESSIVE INITIAL FETCH TRIGGER
   useEffect(() => {
     if (isInitialized && wallets && !initialFetchTriggeredRef.current) {
       initialFetchTriggeredRef.current = true;
@@ -618,7 +611,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [isInitialized, wallets, fetchGlobalPrices, startEngine]);
 
-  // 3. REGULAR INTERVAL REFRESH
   useEffect(() => {
     if (isInitialized) {
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
@@ -627,7 +619,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, fetchGlobalPrices, startEngine]);
 
-  // 4. CLOUD DIAGNOSTIC
   useEffect(() => {
     if (!profile || !activeSessionId || !wallets || !isInitialized) return;
     if (hasRunInitialDiagnostic.current !== activeSessionId) {
@@ -636,7 +627,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [profile, activeSessionId, wallets, isInitialized, runCloudDiagnostic]);
 
-  // 5. ASSET READY HANDLER
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
       const savedChainId = localStorage.getItem('last_viewed_chain_id');

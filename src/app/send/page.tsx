@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis and Secret formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret and Injective formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -85,6 +85,10 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('secret1')) {
       return 'secret';
   }
+
+  if (clean.startsWith('inj1')) {
+      return 'injective';
+  }
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
@@ -118,6 +122,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'cosmos') return { name: 'Cosmos Hub', symbol: 'ATOM' };
     if (type === 'osmosis') return { name: 'Osmosis', symbol: 'OSMO' };
     if (type === 'secret') return { name: 'Secret Network', symbol: 'SCRT' };
+    if (type === 'injective') return { name: 'Injective', symbol: 'INJ' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -208,7 +213,8 @@ function SendClient() {
     if (addrType === 'account-id') return false; 
     
     const activeType = activeNetwork.type || 'evm';
-    return activeType !== addrType;
+    const finalAddrType = addrType === 'injective' ? 'cosmos' : addrType;
+    return activeType !== finalAddrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
   useEffect(() => {
@@ -216,7 +222,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -276,7 +282,7 @@ function SendClient() {
           if (isInternalWnc) {
             setResolvedAddress(finalProfile.account_number || '');
           } else {
-            const targetChainType = activeNetwork.type || 'evm';
+            const targetChainType = (activeNetwork.type === 'cosmos' && activeNetwork.name.toLowerCase().includes('injective')) ? 'injective' : (activeNetwork.type || 'evm');
             const { data: chainWallet } = await supabase
                 .from('wallets')
                 .select('address')
@@ -310,7 +316,7 @@ function SendClient() {
     }
     
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, activeNetwork.name]);
 
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
@@ -566,7 +572,7 @@ function SendClient() {
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all group", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4">
                     <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
-                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                    <span className="textxl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                   </div>
                   <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
                     {hasInsufficientFunds ? (

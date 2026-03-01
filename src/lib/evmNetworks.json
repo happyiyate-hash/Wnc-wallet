@@ -260,5 +260,14 @@
     "coingeckoId": "secret",
     "themeColor": "#1B1B1B",
     "type": "secret"
+  },
+  "99": {
+    "name": "Injective",
+    "symbol": "INJ",
+    "chainId": 99,
+    "rpcUrl": "https://rpc.injective.network",
+    "coingeckoId": "injective-protocol",
+    "themeColor": "#B02026",
+    "type": "cosmos"
   }
 }

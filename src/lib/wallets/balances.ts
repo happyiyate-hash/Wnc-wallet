@@ -26,7 +26,7 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
         symbol: config.symbol,
         isNative: true,
         coingeckoId: config.coingeckoId,
-        decimals: (config.type === 'btc' || config.type === 'ltc' || config.type === 'doge') ? 8 : (config.type === 'solana' ? 9 : (config.type === 'cosmos' || config.type === 'osmosis' || config.type === 'secret') ? 6 : 18)
+        decimals: (config.type === 'btc' || config.type === 'ltc' || config.type === 'doge') ? 8 : (config.type === 'solana' ? 9 : (config.type === 'cosmos' || config.type === 'osmosis' || config.type === 'secret') ? 6 : (config.name.toLowerCase().includes('injective') ? 18 : 18))
     };
 
     return [nativeAsset, ...(MOCK_EXTRAS[chainId] || [])];
