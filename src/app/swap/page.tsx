@@ -327,39 +327,42 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* INSTITUTIONAL ACTION NODE (TOP POSITIONED) */}
+      {/* INSTITUTIONAL OVERLAY ACTION NODE */}
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !fetchError && (
           <motion.div 
-            initial={{ y: 800, opacity: 0 }}
+            initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 120, mass: 0.8 }}
-            className="sticky top-[73px] z-[60] px-4 py-3 bg-[#050505]/80 backdrop-blur-3xl border-b border-white/5"
+            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+            className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none"
           >
             <motion.button 
               whileTap={{ scale: 0.98 }}
+              animate={{ 
+                boxShadow: [
+                  "0 0 15px rgba(139, 92, 246, 0.3)", 
+                  "0 0 45px rgba(139, 92, 246, 0.7)", 
+                  "0 0 15px rgba(139, 92, 246, 0.3)"
+                ] 
+              }}
+              transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
               className={cn(
-                "w-full h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl transition-all duration-500",
-                "bg-primary text-white shadow-[0_0_40px_rgba(139,92,246,0.3)] border-b-4 border-primary/50"
+                "w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl transition-all duration-500",
+                "bg-primary text-white border border-primary/50 pointer-events-auto"
               )}
             >
               {/* Mirror Reflect Shine Effect */}
               <motion.div 
-                animate={{ x: ['-100%', '200%'] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: "linear", repeatDelay: 1 }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 pointer-events-none"
+                animate={{ x: ['-150%', '300%'] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 pointer-events-none"
               />
               
-              {/* Pulsing "Biting" Animation */}
-              <motion.div
-                animate={{ scale: [1, 1.03, 1], opacity: [0.9, 1, 0.9] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center justify-center gap-3 relative z-10"
-              >
-                <Zap className="w-4 h-4 fill-current text-white" />
-                Authorize Institutional Swap
-              </motion.div>
+              <div className="flex items-center justify-center gap-3 relative z-10">
+                <Zap className="w-4 h-4 fill-current text-white animate-pulse" />
+                Execute Swap
+              </div>
             </motion.button>
           </motion.div>
         )}
@@ -581,7 +584,11 @@ function SwapClient() {
 
 export default function SwapPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-[#050505]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
       <SwapClient />
     </Suspense>
   );
