@@ -171,24 +171,6 @@
     "themeColor": "#FF007A",
     "type": "evm"
   },
-  "9991": {
-    "name": "MegaETH",
-    "symbol": "MEGA",
-    "chainId": 9991,
-    "rpcUrl": "https://megaeth-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "megaeth",
-    "themeColor": "#FFFDD0",
-    "type": "evm"
-  },
-  "9992": {
-    "name": "Monad",
-    "symbol": "MON",
-    "chainId": 9992,
-    "rpcUrl": "https://monad-mainnet.infura.io/v3/{API_KEY}",
-    "coingeckoId": "monad",
-    "themeColor": "#8A2BE2",
-    "type": "evm"
-  },
   "144": {
     "name": "XRP Ledger",
     "symbol": "XRP",

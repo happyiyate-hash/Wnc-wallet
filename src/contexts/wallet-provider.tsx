@@ -68,7 +68,7 @@ interface WalletContextType {
   addUserToken: (token: AssetRow) => void;
   getAvailableAssetsForChain: (chainId: number) => AssetRow[];
   isSynced: boolean;
-  syncAllAddresses: () => Promise<void>;
+  syncAllAddresses: (providedWallets?: WalletWithMetadata[]) => Promise<void>;
   syncDiagnostic: SyncDiagnosticState;
   runCloudDiagnostic: (options?: { forceUI?: boolean }) => Promise<void>;
   isRequestOverlayOpen: boolean;
@@ -198,7 +198,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
-      const nearKeyPair = KeyPair.fromRandom("ed25519"); 
+      // DETERMINISTIC NEAR DERIVATION
+      const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
+      const nearKeyPair = KeyPair.fromSeed(seed.slice(0, 32));
       const nearAddress = nearKeyPair.getPublicKey().toString().replace("ed25519:", "").toLowerCase();
 
       const derived: WalletWithMetadata[] = [
@@ -243,8 +245,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const syncAllAddresses = async () => {
-    if (!activeSessionId || !supabase || !wallets) return;
+  const syncAllAddresses = async (providedWallets?: WalletWithMetadata[]) => {
+    const currentWallets = providedWallets || wallets;
+    if (!activeSessionId || !supabase || !currentWallets) return;
     
     let targetAcc = accountNumber;
     if (!targetAcc) {
@@ -260,7 +263,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
         .eq('id', activeSessionId);
 
-      const walletPayload = wallets.map(w => ({ type: w.type, address: w.address }));
+      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
       const { error: syncError } = await supabase.rpc('sync_user_wallets', {
           p_user_id: activeSessionId,
           p_wallets: walletPayload
@@ -439,13 +442,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         if (Object.keys(newPrices).length > 0) {
             setPrices(prev => ({ ...prev, ...newPrices }));
-        } else {
-            // Aggressive retry if no prices found
-            setTimeout(fetchGlobalPrices, 5000);
         }
     } catch (e) {
         console.warn("[PRICE_ORACLE_RETRY]", e);
-        setTimeout(fetchGlobalPrices, 10000);
     }
   }, [chainsWithLogos]);
 
@@ -531,7 +530,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
         await wait(600);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-        await syncAllAddresses(); 
+        await syncAllAddresses(wallets); 
         await wait(800);
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
         await wait(600);
@@ -606,7 +605,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (profile?.account_number) setAccountNumber(profile.account_number);
 
       if (savedMnemonic) {
-          // Bypass splash if we have cached node identities
+          // Priority derivation to bypass splash
           setIsWalletLoading(false); 
           await loadWalletFromMnemonic(savedMnemonic);
       } else {
