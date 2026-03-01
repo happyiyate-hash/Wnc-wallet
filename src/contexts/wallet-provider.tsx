@@ -133,10 +133,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // WNC (Wevinacoin) - 1 WNC = 1 NGN
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
-    
-    // Simulate a dynamic 24h percentage based on time cycles
     const wncPctChange = -0.42 + (Math.sin(Date.now() / 3600000) * 0.2); 
 
     const wncAsset: AssetRow = {
@@ -395,17 +392,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const coingeckoIds = new Set<string>();
     const platformTokens: { [platform: string]: Set<string> } = {};
 
+    // 1. COLLECT ALL ACTIVE ASSETS (INITIAL + USER ADDED)
+    const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
-        getInitialAssets(chain.chainId).forEach(a => { 
-            if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase());
-            else if (!a.isNative && a.address?.startsWith('0x')) {
-                const platform = COINGECKO_PLATFORM_MAP[chain.chainId];
-                if (platform) {
-                    if (!platformTokens[platform]) platformTokens[platform] = new Set();
-                    platformTokens[platform].add(a.address.toLowerCase());
-                }
+        allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
+    });
+    allKnownAssets.push(...latestUserTokensRef.current);
+
+    allKnownAssets.forEach(a => { 
+        if (a.coingeckoId) {
+            coingeckoIds.add(a.coingeckoId.toLowerCase());
+        } else if (!a.isNative && a.address?.startsWith('0x')) {
+            const platform = COINGECKO_PLATFORM_MAP[a.chainId];
+            if (platform) {
+                if (!platformTokens[platform]) platformTokens[platform] = new Set();
+                platformTokens[platform].add(a.address.toLowerCase());
             }
-        });
+        }
     });
 
     try {
