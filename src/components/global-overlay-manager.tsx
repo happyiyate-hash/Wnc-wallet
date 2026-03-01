@@ -4,14 +4,12 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
-import AuthSheet from '@/components/auth/auth-sheet';
-import WalletManagementSheet from '@/components/wallet/wallet-management-sheet';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 import { usePathname, useRouter } from 'next/navigation';
 
 /**
- * GLOBAL OVERLAY MANAGER
- * Centralized sentinel that enforces identity and onboarding flow.
+ * GLOBAL IDENTITY SENTINEL
+ * Enforces route protection and onboarding state management.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -19,48 +17,52 @@ export default function GlobalOverlayManager() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-
-  // Define onboarding pages to avoid redirect loops
-  const onboardingPages = ['/verify-email', '/complete-profile', '/wallet-session'];
-  const isOnboardingPage = onboardingPages.includes(pathname);
+  // Define route groups
+  const isAuthRoute = pathname.startsWith('/auth');
+  const isOnboardingRoute = ['/complete-profile', '/wallet-session'].includes(pathname);
+  const isProtectedRoute = !isAuthRoute && !isOnboardingRoute && pathname !== '/';
 
   useEffect(() => {
     if (userLoading || !isInitialized || isWalletLoading) return;
 
-    // 1. If no user, show Auth Sheet
+    // 1. ROUTE PROTECTION: Redirect to login if session missing
     if (!user) {
-      setIsAuthOpen(true);
-      return;
-    } else {
-      setIsAuthOpen(false);
-    }
-
-    // 2. Email Verification Check
-    if (!user.email_confirmed_at && pathname !== '/verify-email') {
-      router.push(`/verify-email?email=${encodeURIComponent(user.email || '')}`);
+      if (!isAuthRoute) {
+        router.replace('/auth/login');
+      }
       return;
     }
 
-    // 3. Profile Completion Check (Need Username)
-    if (user.email_confirmed_at && !profile?.name && pathname !== '/complete-profile') {
-      router.push('/complete-profile');
+    // 2. ONBOARDING SEQUENCE: Verify Email
+    if (!user.email_confirmed_at) {
+      if (pathname !== '/auth/verify-email') {
+        router.replace(`/auth/verify-email?email=${encodeURIComponent(user.email || '')}`);
+      }
       return;
     }
 
-    // 4. Wallet Session Check
+    // 3. ONBOARDING SEQUENCE: Complete Profile
+    if (!profile?.name && pathname !== '/complete-profile') {
+      router.replace('/complete-profile');
+      return;
+    }
+
+    // 4. ONBOARDING SEQUENCE: Establish Wallet
     if (profile?.name && (!wallets || wallets.length === 0) && pathname !== '/wallet-session' && !profile?.onboarding_completed) {
-      router.push('/wallet-session');
+      router.replace('/wallet-session');
       return;
     }
 
-  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router]);
+    // 5. REDIRECT: If on auth/onboarding but everything is ready, go home
+    if ((isAuthRoute || isOnboardingRoute) && profile?.onboarding_completed && wallets && wallets.length > 0) {
+      router.replace('/');
+    }
+
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isOnboardingRoute]);
 
   return (
     <>
       <CloudSyncCard />
-      <AuthSheet isOpen={isAuthOpen} onOpenChange={setIsAuthOpen} />
-      {/* WalletManagementSheet kept for manual editing later, but flow now uses /wallet-session */}
     </>
   );
 }
