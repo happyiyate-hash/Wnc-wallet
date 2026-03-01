@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,11 +12,8 @@ import {
   CheckCircle2, 
   Share2, 
   Clock, 
-  Coins,
-  ChevronRight,
-  TrendingUp,
-  Cpu,
-  Fingerprint
+  Fingerprint,
+  Cpu
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/user-provider';
@@ -31,7 +27,7 @@ import { cn } from '@/lib/utils';
  */
 export default function BrowsePage() {
     const router = useRouter();
-    const { profile, user } = useUser();
+    const { profile } = useUser();
     const { accountNumber } = useWallet();
     const [isCopied, copy] = useCopyToClipboard();
     const [currentStep, setCurrentStep] = useState(0);
@@ -96,10 +92,10 @@ export default function BrowsePage() {
                     <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div className="flex flex-col items-center text-center">
-                    <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">Affiliate Hub</h1>
+                    <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Affiliate Hub</h1>
                     <div className="flex items-center gap-1.5 mt-1.5">
                         <Users className="w-2.5 h-2.5 text-primary" />
-                        <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Institutional Growth Registry</span>
+                        <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Growth Registry</span>
                     </div>
                 </div>
                 <div className="w-10" />
@@ -127,7 +123,10 @@ export default function BrowsePage() {
                                     scenes[currentStep].border,
                                     scenes[currentStep].color
                                 )}>
-                                    <scenes[currentStep].icon className="w-10 h-10" />
+                                    {(() => {
+                                        const Icon = scenes[currentStep].icon;
+                                        return <Icon className="w-10 h-10" />;
+                                    })()}
                                 </div>
                                 <div className="space-y-2 px-4">
                                     <h2 className="text-xl font-black uppercase tracking-tight text-white">{scenes[currentStep].title}</h2>
@@ -218,7 +217,7 @@ export default function BrowsePage() {
                         <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Registry Integrity: SECURE</span>
                     </div>
                     <p className="text-[8px] text-white/20 uppercase font-black tracking-widest text-center max-w-[240px] leading-relaxed">
-                        Referral settlemet subject to institutional activity verification protocol v2.1
+                        Referral settlement subject to institutional activity verification protocol v2.1
                     </p>
                 </div>
             </main>
