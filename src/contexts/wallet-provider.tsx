@@ -21,6 +21,7 @@ import { TronWeb } from "tronweb";
 import * as algosdk from "algosdk";
 import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
 import { InMemorySigner } from "@taquito/signer";
+import { AptosAccount } from "aptos";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -46,13 +47,14 @@ import { tronAdapterFactory } from '@/lib/wallets/adapters/tron';
 import { algorandAdapterFactory } from '@/lib/wallets/adapters/algorand';
 import { hederaAdapterFactory } from '@/lib/wallets/adapters/hedera';
 import { tezosAdapterFactory } from '@/lib/wallets/adapters/tezos';
+import { aptosAdapterFactory } from '@/lib/wallets/adapters/aptos';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -263,6 +265,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'algorand') adapter = algorandAdapterFactory(chain);
     else if (chain.type === 'hedera') adapter = hederaAdapterFactory(chain);
     else if (chain.type === 'tezos') adapter = tezosAdapterFactory(chain);
+    else if (chain.type === 'aptos') adapter = aptosAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -430,6 +433,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const xtzSigner = await InMemorySigner.fromSecretKey(cleanMnemonic);
       const xtzAddress = await xtzSigner.publicKeyHash();
 
+      const aptosSeed = derivePath("m/44'/637'/0'/0'/0'", seed.toString('hex'));
+      const aptosAccount = new AptosAccount(aptosSeed.key);
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -449,7 +455,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
         { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
         { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
-        { address: xtzAddress, type: 'tezos' }
+        { address: xtzAddress, type: 'tezos' },
+        { address: aptosAccount.address().toHex(), privateKey: Buffer.from(aptosAccount.signingKey.secretKey).toString('hex'), type: 'aptos' }
       ];
       setWallets(derived);
       return derived;
@@ -604,11 +611,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ', 'APT'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
-      const type = chain === 'OSMO' ? 'osmosis' : chain === 'INJ' ? 'injective' : chain.toLowerCase();
+      const type = chain === 'OSMO' ? 'osmosis' : chain === 'INJ' ? 'injective' : chain === 'APT' ? 'aptos' : chain.toLowerCase();
       const local = wallets.find(w => w.type === type)?.address || null;
       const cloud = getCloudAddr(type);
       setSyncDiagnostic(prev => ({ ...prev, chain: chain as any, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));

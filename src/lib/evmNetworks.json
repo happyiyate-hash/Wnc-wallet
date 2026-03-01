@@ -332,5 +332,14 @@
     "coingeckoId": "tezos",
     "themeColor": "#2C7DF7",
     "type": "tezos"
+  },
+  "637": {
+    "name": "Aptos",
+    "symbol": "APT",
+    "chainId": 637,
+    "rpcUrl": "https://fullnode.mainnet.aptoslabs.com",
+    "coingeckoId": "aptos",
+    "themeColor": "#000000",
+    "type": "aptos"
   }
 }

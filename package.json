@@ -55,6 +55,7 @@
     "@taquito/taquito": "^21.0.1",
     "@taquito/utils": "^21.0.1",
     "algosdk": "^3.0.0",
+    "aptos": "^1.21.0",
     "axios": "^1.7.9",
     "bip32": "^4.0.0",
     "bip39": "^3.1.0",
