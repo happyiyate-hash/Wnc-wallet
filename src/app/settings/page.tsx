@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
 import { useCurrency } from "@/contexts/currency-provider";
+import { supabase } from "@/lib/supabase/client";
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -41,7 +42,9 @@ import {
   Search,
   Check,
   Loader2,
-  ShieldX
+  ShieldX,
+  AlertTriangle,
+  Fingerprint
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -53,7 +56,7 @@ import AccountSwitcherSheet from "@/components/wallet/account-switcher-sheet";
 
 export default function SettingsPage() {
     const { deleteWallet, logout } = useWallet();
-    const { user, profile, activeSessionId } = useUser();
+    const { user, profile, activeSessionId, refreshProfile } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
     const router = useRouter();
@@ -65,12 +68,82 @@ export default function SettingsPage() {
     const [currencySearch, setCurrencySearch] = useState('');
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+    // SECURITY PROTOCOL STATE
+    const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy'>('idle');
+    const [passwordInput, setPasswordInput] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [isVerified, setIsVerified] = useState(false);
+    const [confirmInput, setConfirmInput] = useState('');
+    const [isDestroying, setIsDestroying] = useState(false);
+
     useEffect(() => {
         if (activeSessionId) {
             const saved = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
             setMnemonic(saved);
         }
     }, [activeSessionId]);
+
+    const handleVerifyPassword = async () => {
+        if (!user?.email || !passwordInput) return;
+        setIsVerifying(true);
+        try {
+            const { error } = await supabase!.auth.signInWithPassword({
+                email: user.email,
+                password: passwordInput
+            });
+            if (error) throw error;
+            
+            setIsVerified(true);
+            if (securityMode === 'reveal') {
+                setShowPhrase(true);
+            }
+        } catch (e: any) {
+            toast({ title: "Verification Failed", description: "Incorrect password. Access denied.", variant: "destructive" });
+            setPasswordInput('');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    const handlePermanentDestroy = async () => {
+        if (confirmInput !== 'DELETE' || !activeSessionId || !supabase) return;
+        setIsDestroying(true);
+        try {
+            // 1. ATOMIC CLOUD DELETION
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    vault_phrase: null,
+                    iv: null,
+                    vault_infura_key: null,
+                    infura_iv: null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', activeSessionId);
+
+            if (error) throw error;
+
+            // 2. LOCAL CLEANUP
+            deleteWallet();
+            await refreshProfile();
+            
+            toast({ title: "Vault Destroyed", description: "Cloud credentials and local keys have been purged." });
+            setSecurityMode('idle');
+            router.push('/');
+        } catch (e: any) {
+            toast({ title: "Destruction Error", description: e.message, variant: "destructive" });
+        } finally {
+            setIsDestroying(false);
+        }
+    };
+
+    const resetSecurityFlow = () => {
+        setSecurityMode('idle');
+        setPasswordInput('');
+        setIsVerified(false);
+        setConfirmInput('');
+        setShowPhrase(false);
+    };
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -211,59 +284,23 @@ export default function SettingsPage() {
                                 href="/settings/api-keys" 
                             />
                             
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <button className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
-                                        <div className="flex items-center justify-between w-full">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-400">
-                                                    <ShieldCheck className="w-5 h-5" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-sm font-bold text-white/90">Show Recovery Phrase</p>
-                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Master Secret Key</p>
-                                                </div>
-                                            </div>
-                                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                            <button 
+                                onClick={() => setSecurityMode('reveal')}
+                                className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group"
+                            >
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-400">
+                                            <ShieldCheck className="w-5 h-5" />
                                         </div>
-                                    </button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px] shadow-2xl">
-                                    <AlertDialogHeader className="space-y-4">
-                                        <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto">
-                                            <ShieldAlert className="w-8 h-8" />
+                                        <div className="text-left">
+                                            <p className="text-sm font-bold text-white/90">Show Recovery Phrase</p>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Master Secret Key</p>
                                         </div>
-                                        <AlertDialogTitle className="text-2xl font-black text-center text-white">Security Check</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-center text-zinc-400 leading-relaxed font-medium">
-                                            Never share your recovery phrase. It gives <span className="text-red-400 font-black underline">complete control</span> over your assets.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    
-                                    <div className="mt-6 p-6 rounded-3xl bg-white/[0.03] border border-white/5 relative overflow-hidden group">
-                                        <div className={cn(
-                                            "text-center font-mono text-sm leading-loose tracking-wide transition-all duration-700 blur-xl select-none", 
-                                            showPhrase && "blur-none select-text text-white"
-                                        )}>
-                                            {mnemonic || "No institutional phrase found on this node."}
-                                        </div>
-                                        {!showPhrase && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-md">
-                                                <Button 
-                                                    variant="secondary" 
-                                                    className="rounded-2xl h-12 gap-3 font-black px-6 shadow-2xl bg-white text-black hover:bg-zinc-200"
-                                                    onClick={() => setShowPhrase(true)}
-                                                >
-                                                    <Eye className="w-4 h-4" /> Reveal Secret
-                                                </Button>
-                                            </div>
-                                        )}
                                     </div>
-
-                                    <AlertDialogFooter className="mt-8">
-                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10 font-bold" onClick={() => setShowPhrase(false)}>Done & Secure</AlertDialogCancel>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                                </div>
+                            </button>
                         </div>
                     </section>
 
@@ -298,6 +335,21 @@ export default function SettingsPage() {
                                 </AlertDialogContent>
                             </AlertDialog>
 
+                            <button 
+                                onClick={() => setSecurityMode('destroy')}
+                                className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform">
+                                        <ShieldAlert className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-bold text-red-500">Destroy Cloud Vault</p>
+                                        <p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Permanent Global Removal</p>
+                                    </div>
+                                </div>
+                            </button>
+
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <button className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
@@ -331,6 +383,113 @@ export default function SettingsPage() {
                     </section>
                 </div>
             </main>
+
+            {/* SECURITY PROTOCOL DIALOG (Reveal / Destroy) */}
+            <AlertDialog open={securityMode !== 'idle'} onOpenChange={(open) => !open && resetSecurityFlow()}>
+                <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px] shadow-2xl overflow-hidden relative">
+                    <div className={cn(
+                        "absolute top-0 inset-x-0 h-1.5 transition-colors duration-500",
+                        securityMode === 'destroy' ? "bg-red-500" : "bg-primary"
+                    )} />
+
+                    <AlertDialogHeader className="space-y-4">
+                        <div className={cn(
+                            "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto transition-colors duration-500",
+                            securityMode === 'destroy' ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary"
+                        )}>
+                            {securityMode === 'destroy' ? <ShieldAlert className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+                        </div>
+                        <AlertDialogTitle className="text-2xl font-black text-center text-white">
+                            {securityMode === 'destroy' ? 'Vault Destruction' : 'Identity Verification'}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-center text-zinc-400 leading-relaxed font-medium">
+                            {securityMode === 'destroy' 
+                                ? 'This will permanently delete your master credentials from our cloud registry. This action cannot be reversed.' 
+                                : 'Please verify your identity to reveal your master recovery phrase.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    <div className="mt-6 space-y-6">
+                        {!isVerified ? (
+                            <div className="space-y-3">
+                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">Account Password</p>
+                                <Input 
+                                    type="password" 
+                                    placeholder="Enter your password" 
+                                    value={passwordInput}
+                                    onChange={(e) => setPasswordInput(e.target.value)}
+                                    className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
+                                />
+                                <Button 
+                                    className={cn(
+                                        "w-full h-14 rounded-2xl font-black transition-all",
+                                        securityMode === 'destroy' ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary/90"
+                                    )}
+                                    onClick={handleVerifyPassword}
+                                    disabled={!passwordInput || isVerifying}
+                                >
+                                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify Identity"}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-6 animate-in fade-in zoom-in duration-500">
+                                {securityMode === 'reveal' ? (
+                                    <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 relative overflow-hidden group">
+                                        <div className={cn(
+                                            "text-center font-mono text-sm leading-loose tracking-wide transition-all duration-700 blur-xl select-none", 
+                                            showPhrase && "blur-none select-text text-white"
+                                        )}>
+                                            {mnemonic || "No institutional phrase found on this node."}
+                                        </div>
+                                        {!showPhrase && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-md">
+                                                <Button 
+                                                    variant="secondary" 
+                                                    className="rounded-2xl h-12 gap-3 font-black px-6 shadow-2xl bg-white text-black hover:bg-zinc-200"
+                                                    onClick={() => setShowPhrase(true)}
+                                                >
+                                                    <Eye className="w-4 h-4" /> Reveal Secret
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3">
+                                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+                                            <p className="text-xs text-red-200 font-bold leading-relaxed">
+                                                Destroying your cloud vault will remove all recovery options. Ensure you have your phrase backed up manually.
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black text-red-500/60 uppercase tracking-widest px-1">Type "DELETE" to confirm</p>
+                                            <Input 
+                                                placeholder="DELETE" 
+                                                value={confirmInput}
+                                                onChange={(e) => setConfirmInput(e.target.value)}
+                                                className="h-14 bg-red-500/5 border-red-500/20 rounded-2xl focus-visible:ring-red-500 text-center font-black tracking-widest placeholder:opacity-20"
+                                            />
+                                        </div>
+                                        <Button 
+                                            className="w-full h-14 rounded-2xl font-black bg-red-500 hover:bg-red-600 shadow-2xl shadow-red-500/20"
+                                            disabled={confirmInput !== 'DELETE' || isDestroying}
+                                            onClick={handlePermanentDestroy}
+                                        >
+                                            {isDestroying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Destruction"}
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <AlertDialogFooter className="mt-8">
+                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10 font-bold" onClick={resetSecurityFlow}>
+                            {isVerified && securityMode === 'reveal' ? 'Done & Secure' : 'Cancel Protocol'}
+                        </AlertDialogCancel>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* CURRENCY SELECTION SHEET */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
