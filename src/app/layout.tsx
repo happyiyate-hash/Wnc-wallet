@@ -4,7 +4,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
 import { CurrencyProvider } from '@/contexts/currency-provider';
-import MobileNav from '@/components/wallet/mobile-nav';
 import DesktopSidebar from '@/components/wallet/desktop-sidebar';
 import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
@@ -67,7 +66,6 @@ export default function RootLayout({
                       <div className="flex-1 relative">
                         {children}
                       </div>
-                      <MobileNav />
                     </div>
                   </div>
                   {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS */}
