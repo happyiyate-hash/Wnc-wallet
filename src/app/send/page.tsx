@@ -277,28 +277,17 @@ function SendClient() {
         const transferAmount = parseFloat(amount);
         if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
 
-        // ATOMIC SETTLEMENT HANDSHAKE
-        // 1. Deduct from sender
-        const { error: deductError } = await supabase!
-            .from('profiles')
-            .update({ wnc_earnings: profile.wnc_earnings - transferAmount })
-            .eq('id', profile.id);
-        
-        if (deductError) throw deductError;
+        // ATOMIC SETTLEMENT HANDSHAKE via RPC
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
+            p_recipient_id: recipientProfile.id,
+            p_amount: Math.floor(transferAmount)
+        });
 
-        // 2. Fetch recipient current balance to ensure fresh credit
-        const { data: targetProfile, error: fetchTargetError } = await supabase!.from('profiles').select('wnc_earnings').eq('id', recipientProfile.id).single();
-        if (fetchTargetError) throw fetchTargetError;
+        if (rpcError || !data?.success) {
+            throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
+        }
 
-        // 3. Credit recipient
-        const { error: creditError } = await supabase!
-            .from('profiles')
-            .update({ wnc_earnings: (targetProfile?.wnc_earnings || 0) + transferAmount })
-            .eq('id', recipientProfile.id);
-
-        if (creditError) throw creditError;
-
-        // 4. Record Ledger Entry
+        // Record Ledger Entry
         await supabase!.from('transactions').insert({
             user_id: profile.id,
             type: 'withdrawal',

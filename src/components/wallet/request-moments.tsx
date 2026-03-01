@@ -194,7 +194,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
  */
 export function RequestReviewMoment({ requestId, onClose }: { requestId: string, onClose: () => void }) {
   const { wallets, infuraApiKey, allChainsMap, allAssets, refresh } = useWallet();
-  const { profile: currentUserProfile } = useUser();
+  const { profile: currentUserProfile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
 
   const [request, setRequest] = useState<PaymentRequest | null>(null);
@@ -223,7 +223,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   }, [requestId]);
 
   const handlePay = async () => {
-    if (!wallets || !request || !requester || !infuraApiKey) return;
+    if (!wallets || !request || !requester) return;
     setIsStatusVisible(true);
     setTxStatus('pending');
     setIsSubmitting(true);
@@ -231,13 +231,25 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
     try {
       const chainType = request.chain_type;
       const amountStr = request.amount.toString();
-      const recipientAddress = chainType === 'evm' ? requester.evm_address : chainType === 'xrp' ? requester.xrp_address : requester.polkadot_address;
-      if (!recipientAddress) throw new Error("Requester node incompatible.");
+      
+      if (request.token_symbol === 'WNC') {
+        // ATOMIC SETTLEMENT via RPC
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
+            p_recipient_id: requester.id,
+            p_amount: Math.floor(request.amount)
+        });
 
-      if (chainType === 'xrp') {
+        if (rpcError || !data?.success) {
+            throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
+        }
+        setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
+      } 
+      else if (chainType === 'xrp') {
         const xrpWallet = wallets.find(w => w.type === 'xrp');
         const network = Object.values(allChainsMap).find(c => c.type === 'xrp');
         const client = new xrpl.Client(network?.rpcUrl || 'wss://xrplcluster.com');
+        const recipientAddress = requester.xrp_address;
+        if (!recipientAddress) throw new Error("Recipient XRP node not initialized.");
         
         try {
           await Promise.race([
@@ -265,11 +277,15 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
           }
         }
       } else {
+        if (!infuraApiKey) throw new Error("Connection Error: Infura key missing.");
         const evmWallet = wallets.find(w => w.type === 'evm');
         const network = Object.values(allChainsMap).find(c => c.type === 'evm');
         const provider = new ethers.JsonRpcProvider(network!.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
-        const decimals = 18; // Default
+        const recipientAddress = requester.evm_address;
+        if (!recipientAddress) throw new Error("Recipient EVM node not initialized.");
+        
+        const decimals = 18; 
         let tx;
         if (!request.token_address) tx = await wallet.sendTransaction({ to: recipientAddress, value: ethers.parseEther(amountStr) });
         else {
@@ -281,6 +297,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
       await supabase?.from('payment_requests').update({ status: 'paid' }).eq('id', requestId);
       setTxStatus('success');
+      await refreshProfile();
       refresh();
     } catch (e: any) {
       setTxStatus('error');
