@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -114,8 +115,8 @@ export default function WalletManagementSheet({ isOpen, onOpenChange }: WalletMa
     startTimer();
     
     try {
-      setStatus('Fetching Vault...');
-      await restoreFromCloud();
+      // Pass the setStatus function to receive real-time updates from the provider
+      await restoreFromCloud(setStatus);
       setStatus('Access Restored!');
       setTimeout(() => {
         onOpenChange(false);

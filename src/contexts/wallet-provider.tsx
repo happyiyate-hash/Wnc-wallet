@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -88,7 +89,7 @@ interface WalletContextType {
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
   resolveLocalDerivation: (mnemonic: string) => Promise<void>;
-  restoreFromCloud: () => Promise<void>;
+  restoreFromCloud: (onStatusUpdate?: (status: string) => void) => Promise<void>;
   logout: () => Promise<void>;
   deleteWallet: () => void;
   fetchError: string | null;
@@ -591,10 +592,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
   };
 
-  const restoreFromCloud = async () => {
+  const restoreFromCloud = async (onStatusUpdate?: (status: string) => void) => {
     if (!activeSessionId || !supabase) throw new Error("Registry connection failed.");
     setIsWalletLoading(true);
     try {
+      onStatusUpdate?.('Fetching Vault...');
       const { data: latestProfile, error: pError } = await supabase
         .from('profiles')
         .select('*')
@@ -606,30 +608,48 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
+      onStatusUpdate?.('Decrypting Nodes...');
+      const tasks: Promise<any>[] = [];
+      
       if (latestProfile.vault_phrase && latestProfile.iv) {
-        const res = await fetch('/api/wallet/decrypt-phrase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ encrypted: latestProfile.vault_phrase, iv: latestProfile.iv })
-        });
-        const data = await res.json();
-        if (data.phrase) {
-          localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase);
-          const derived = await loadWalletFromMnemonic(data.phrase);
-          if (derived) await syncAllAddresses(derived);
-        }
+        tasks.push(
+          fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ encrypted: latestProfile.vault_phrase, iv: latestProfile.iv })
+          }).then(r => r.json()).then(d => ({ type: 'mnemonic', val: d.phrase }))
+        );
       }
 
       if (latestProfile.vault_infura_key && latestProfile.infura_iv) {
-        const res = await fetch('/api/wallet/decrypt-phrase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ encrypted: latestProfile.vault_infura_key, iv: latestProfile.infura_iv })
-        });
-        const data = await res.json();
-        if (data.phrase) {
-          setInfuraApiKey(data.phrase);
-          localStorage.setItem('infura_api_key', data.phrase);
+        tasks.push(
+          fetch('/api/wallet/decrypt-phrase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ encrypted: latestProfile.vault_infura_key, iv: latestProfile.infura_iv })
+          }).then(r => r.json()).then(d => ({ type: 'infura', val: d.phrase }))
+        );
+      }
+
+      const results = await Promise.all(tasks);
+      
+      let mnemonicVal = null;
+      results.forEach(res => {
+        if (res.type === 'mnemonic' && res.val) {
+          mnemonicVal = res.val;
+          localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, res.val);
+        } else if (res.type === 'infura' && res.val) {
+          setInfuraApiKey(res.val);
+          localStorage.setItem('infura_api_key', res.val);
+        }
+      });
+
+      if (mnemonicVal) {
+        onStatusUpdate?.('Establishing Identity...');
+        const derived = await loadWalletFromMnemonic(mnemonicVal);
+        if (derived) {
+            onStatusUpdate?.('Synchronizing Registry...');
+            await syncAllAddresses(derived);
         }
       }
 
@@ -639,6 +659,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       await refreshProfile();
+      onStatusUpdate?.('Restoration Complete');
       toast({ title: "Vault Restored" });
     } catch (e: any) {
       console.error("RESTORE_FAILURE:", e.message);
