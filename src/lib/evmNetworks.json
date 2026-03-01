@@ -206,5 +206,14 @@
     "coingeckoId": "polkadot",
     "themeColor": "#E6007A",
     "type": "polkadot"
+  },
+  "397": {
+    "name": "NEAR Protocol",
+    "symbol": "NEAR",
+    "chainId": 397,
+    "rpcUrl": "https://rpc.mainnet.near.org",
+    "coingeckoId": "near",
+    "themeColor": "#000000",
+    "type": "near"
   }
 }

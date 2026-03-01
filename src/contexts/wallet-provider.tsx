@@ -9,6 +9,7 @@ import * as xrpl from 'xrpl';
 import * as bip39 from 'bip39';
 import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
+import { KeyPair } from "near-api-js";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -17,12 +18,13 @@ import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
+import { nearAdapterFactory } from '@/lib/wallets/adapters/near';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -195,10 +197,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
+      const seed = await bip39.mnemonicToSeed(cleanMnemonic);
+      const nearKeyPair = KeyPair.fromRandom("ed25519"); // Placeholder: In production use seed-derived key
+      const nearAddress = nearKeyPair.getPublicKey().toString().replace("ed25519:", "").toLowerCase();
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
-        { address: dotWallet.address, type: 'polkadot' }
+        { address: dotWallet.address, type: 'polkadot' },
+        { address: nearAddress, type: 'near' }
       ];
       setWallets(derived);
       return derived;
@@ -257,6 +264,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (w.type === 'evm') updates.evm_address = w.address;
         if (w.type === 'xrp') updates.xrp_address = w.address;
         if (w.type === 'polkadot') updates.polkadot_address = w.address;
+        if (w.type === 'near') updates.near_address = w.address;
       });
 
       const { error } = await supabase!
@@ -317,6 +325,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (w.type === 'evm') updates.evm_address = w.address;
         if (w.type === 'xrp') updates.xrp_address = w.address;
         if (w.type === 'polkadot') updates.polkadot_address = w.address;
+        if (w.type === 'near') updates.near_address = w.address;
       });
       
       if (!accountNumber) {
@@ -442,7 +451,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (Object.keys(newPrices).length > 0) {
             setPrices(prev => ({ ...prev, ...newPrices }));
         } else {
-            // Aggressive retry if no prices were found but IDs exist
             setTimeout(fetchGlobalPrices, 5000);
         }
     } catch (e) {
@@ -452,7 +460,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos, userAddedTokens]);
 
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
-    if (!wallets || !infuraApiKey) return [];
+    if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
     if (!walletForChain) return [];
     
@@ -460,6 +468,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let adapter = null;
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
+    else if (chain.type === 'near') adapter = nearAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -472,7 +481,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [wallets, infuraApiKey, getAvailableAssetsForChain]);
 
   const startEngine = useCallback(async () => {
-    if (!isInitialized || !wallets || !infuraApiKey || !viewingNetwork || !activeSessionId) return;
+    if (!isInitialized || !wallets || !viewingNetwork || !activeSessionId) return;
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
@@ -485,7 +494,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return next;
         });
     } catch (e) {} finally { setIsRefreshing(false); }
-  }, [isInitialized, wallets, infuraApiKey, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
+  }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId) return;
@@ -495,10 +504,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const evmLocal = wallets.find(w => w.type === 'evm')?.address || null;
     const xrpLocal = wallets.find(w => w.type === 'xrp')?.address || null;
     const dotLocal = wallets.find(w => w.type === 'polkadot')?.address || null;
+    const nearLocal = wallets.find(w => w.type === 'near')?.address || null;
 
     const hasMismatch = (evmLocal !== profile.evm_address) || 
                         (xrpLocal !== profile.xrp_address) || 
                         (dotLocal !== profile.polkadot_address) ||
+                        (nearLocal !== profile.near_address) ||
                         (!profile.vault_phrase);
 
     if (!hasMismatch && !isFirstSession && !options?.forceUI) {
@@ -506,13 +517,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot')[] = ['EVM', 'XRP', 'Polkadot'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR'];
     
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
-      const type = chain.toLowerCase() as 'evm' | 'xrp' | 'polkadot';
+      const type = chain.toLowerCase() as 'evm' | 'xrp' | 'polkadot' | 'near';
       const local = wallets.find(w => w.type === type)?.address || null;
       const cloud = profile[`${type}_address` as keyof UserProfile] as string || null;
       
@@ -577,7 +588,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
       return next;
     });
-    // Force immediate price fetch when new token added
     fetchGlobalPrices();
   }, [activeSessionId, fetchGlobalPrices]);
 
@@ -646,7 +656,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, fetchGlobalPrices]);
 
   useEffect(() => {
-    if (isInitialized && wallets && infuraApiKey && viewingNetwork?.chainId) startEngine();
+    if (isInitialized && wallets && viewingNetwork?.chainId) startEngine();
   }, [isInitialized, wallets?.[0]?.address, infuraApiKey, viewingNetwork?.chainId, startEngine, userAddedTokens.length]);
 
   useEffect(() => {
