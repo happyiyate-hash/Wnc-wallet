@@ -365,15 +365,15 @@ function SwapClient() {
         {/* YOU PAY CARD */}
         <section 
           style={{ 
-            backgroundColor: `${fromChainColor}40`, 
-            borderColor: `${fromChainColor}cc`,
-            boxShadow: `0 0 60px ${fromChainColor}35`
+            backgroundColor: `${fromChainColor}15`, 
+            borderColor: `${fromChainColor}ee`,
+            boxShadow: `0 0 50px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}10`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
           <div className="flex items-center justify-between h-8 shrink-0">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
+                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
@@ -407,15 +407,15 @@ function SwapClient() {
         {/* YOU RECEIVE CARD */}
         <section 
           style={{ 
-            backgroundColor: `${toChainColor}40`, 
-            borderColor: `${toChainColor}cc`,
-            boxShadow: `0 0 60px ${toChainColor}35`
+            backgroundColor: `${toChainColor}15`, 
+            borderColor: `${toChainColor}ee`,
+            boxShadow: `0 0 50px ${toChainColor}40, inset 0 0 20px ${toChainColor}10`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
           <div className="flex items-center justify-between h-8 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} />
+                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
