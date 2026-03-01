@@ -45,6 +45,36 @@ async function fetcher(url: string) {
 }
 
 /**
+ * Generates synthetic historical data for internal assets (WNC).
+ * Fluctuates relative to a base value to simulate a "live" comparison chart.
+ */
+function generateInternalChartData(baseValue: number, days: string) {
+    const data = [];
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    
+    let daysNum = 1;
+    if (days === '1W') daysNum = 7;
+    else if (days === '1M') daysNum = 30;
+    else if (days === '3M') daysNum = 90;
+    else if (days === '1Y') daysNum = 365;
+    else if (days === 'All') daysNum = 730;
+
+    const points = days === '1D' ? 48 : 100; // 30 min intervals for 1D, or 100 points total
+    const interval = (daysNum * dayMs) / points;
+
+    let currentValue = baseValue;
+    for (let i = points; i >= 0; i--) {
+        const time = now - (i * interval);
+        // Add random "walk" fluctuation
+        const change = 1 + (Math.random() * 0.04 - 0.02); // +/- 2% max per step
+        currentValue = currentValue * change;
+        data.push({ time, price: currentValue });
+    }
+    return data;
+}
+
+/**
  * Fetches a map of prices and 24h changes for a list of CoinGecko IDs.
  */
 export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { usd: number, usd_24h_change: number } }> {
@@ -102,6 +132,12 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
  * Fetches historical chart data for a specific token from CoinGecko.
  */
 export async function fetchChartData(coingeckoId: string, days: string) {
+    // Handle Internal WNC Handshake
+    if (coingeckoId === 'internal:wnc') {
+        // Mock base value for WNC (approx 1 Naira in USD)
+        return generateInternalChartData(0.000606, days);
+    }
+
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
     const url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
     
@@ -122,6 +158,27 @@ export async function fetchChartData(coingeckoId: string, days: string) {
  * Fetches detailed market statistics for a single token.
  */
 export async function fetchSingleTokenDetails(coingeckoId: string) {
+    if (coingeckoId === 'internal:wnc') {
+        return {
+            id: 'wnc',
+            symbol: 'wnc',
+            name: 'Wevina Cloud',
+            market_cap_rank: 0,
+            market_data: {
+                current_price: { usd: 0.000606 },
+                high_24h: { usd: 0.000615 },
+                low_24h: { usd: 0.000595 },
+                price_change_percentage_24h: 1.25,
+                market_cap: { usd: 0 },
+                total_volume: { usd: 0 },
+                circulating_supply: 0,
+                total_supply: 0,
+                max_supply: null,
+                ath: { usd: 0.0007 },
+                atl: { usd: 0.0004 }
+            }
+        };
+    }
     const url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
     return fetcher(url);
 }

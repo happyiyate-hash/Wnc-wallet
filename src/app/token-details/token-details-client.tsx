@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import "chartjs-adapter-date-fns";
 import type { AssetRow } from "@/lib/types";
 import { useWallet } from "@/contexts/wallet-provider";
+import { useCurrency } from "@/contexts/currency-provider";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight,
@@ -11,7 +12,9 @@ import {
   QrCode,
   DollarSign,
   ArrowLeft,
-  Info
+  Info,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarketStats from "./market-stats";
@@ -45,19 +48,6 @@ const ActionButton = ({
   </button>
 );
 
-const formatDisplayPrice = (price: number) => {
-  if (price === 0) return "0.00";
-  if (price < 1.0) {
-    const priceStr = price.toPrecision(4);
-    if (priceStr.includes('e-')) return priceStr;
-    return parseFloat(priceStr).toString();
-  }
-  return price.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
 const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => void, onInfo: () => void, token: AssetRow, network: any }) => (
     <div className="flex items-center justify-between p-4 border-b border-white/5 bg-background/80 backdrop-blur-xl">
         <Button onClick={onBack} variant="ghost" size="icon" className="rounded-xl">
@@ -75,7 +65,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
                 />
                 <span className="font-semibold">{token.symbol}</span>
             </div>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">{network?.name}</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">{token.symbol === 'WNC' ? 'Internal Cloud Node' : network?.name}</span>
         </div>
         <Button onClick={onInfo} variant="ghost" size="icon" className="rounded-xl">
             <Info className="w-5 h-5" />
@@ -86,6 +76,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 export default function TokenDetailsClientPage() {
   const { allAssets, viewingNetwork, isInitialized, prices } = useWallet();
+  const { formatFiat, selectedCurrency } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -94,14 +85,12 @@ export default function TokenDetailsClientPage() {
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
   // Dynamically find the token in allAssets. 
-  // Since allAssets reactively updates when the global prices pulse, 
-  // this token object will automatically stay current without re-fetches.
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
-    return allAssets.find(a => a.symbol === tokenSymbol && a.chainId === viewingNetwork.chainId);
-  }, [tokenSymbol, allAssets, viewingNetwork.chainId, isInitialized]);
+    return allAssets.find(a => a.symbol === tokenSymbol);
+  }, [tokenSymbol, allAssets, isInitialized]);
 
-  const coingeckoId = token?.coingeckoId;
+  const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
   if (!token) {
@@ -116,7 +105,8 @@ export default function TokenDetailsClientPage() {
   }
 
   const price = token?.priceUsd ?? 0;
-  const priceChange24h = token?.pctChange24h ?? 0;
+  // If WNC, we might want to simulate a percentage change based on Naira volatility
+  const priceChange24h = token?.symbol === 'WNC' ? 1.25 : (token?.pctChange24h ?? 0);
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
   const fiatValue = token.fiatValueUsd ?? (price * balance);
@@ -130,29 +120,31 @@ export default function TokenDetailsClientPage() {
       <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={viewingNetwork} />
       <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-8 pb-4">
-          <div className="flex items-center justify-center gap-2">
-            <h2 className="text-4xl font-black tracking-tight text-white transition-all duration-500">
-              ${formatDisplayPrice(price)}
+          <div className="flex flex-col items-center justify-center gap-1">
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">Market Evaluation ({selectedCurrency})</p>
+            <h2 className="text-5xl font-black tracking-tighter text-white transition-all duration-500">
+              {formatFiat(price)}
             </h2>
           </div>
-          <div className={cn("mt-1 text-sm font-bold transition-colors duration-500", isNegativeChange ? "text-red-400" : "text-green-400")}>
+          <div className={cn("mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest transition-all duration-500", isNegativeChange ? "bg-red-500/10 text-red-400" : "bg-green-500/10 text-green-400")}>
+            {isNegativeChange ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
             {priceChange24h !== null ? `${priceChange24h >= 0 ? "+" : ""}${priceChange24h.toFixed(2)}%` : "..."}
           </div>
         </div>
 
-        {/* FULL BLEED CHART - NO HORIZONTAL PADDING */}
-        <div className="h-64 relative w-full overflow-hidden">
+        {/* FULL BLEED CHART */}
+        <div className="h-64 relative w-full overflow-hidden mt-4">
           <RechartsChart coingeckoId={coingeckoId} days={chartRange} isNegative={isNegativeChange}/>
         </div>
 
-        <div className="flex justify-between w-full mt-2 px-6">
+        <div className="flex justify-between w-full mt-4 px-6">
           {(["1D", "1W", "1M", "3M", "1Y", "All"] as const).map((r) => (
             <Button
               key={r}
               onClick={() => setChartRange(r)}
               variant="ghost"
               size="sm"
-              className={cn("text-[10px] font-black h-7 rounded-lg", chartRange === r ? "bg-primary/20 text-primary" : "text-muted-foreground")}
+              className={cn("text-[10px] font-black h-8 px-3 rounded-xl transition-all", chartRange === r ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-muted-foreground hover:bg-white/5")}
               disabled={!coingeckoId}
             >
               {r}
@@ -168,31 +160,35 @@ export default function TokenDetailsClientPage() {
         </div>
         
         <div className="px-6 pb-12 space-y-8">
-            <div className="flex items-center justify-between w-full p-4 rounded-2xl bg-secondary/30 border border-white/5">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between w-full p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex items-center gap-4 relative z-10">
                     <TokenLogoDynamic 
                       logoUrl={token.iconUrl} 
-                      size={40} 
+                      size={44} 
                       alt={token.name} 
                       chainId={token.chainId} 
                       name={token.name} 
                       symbol={token.symbol}
                     />
                     <div>
-                        <p className="font-bold text-base text-white">{token.symbol} Balance</p>
-                        <p className="text-xs text-muted-foreground">{viewingNetwork.name}</p>
+                        <p className="font-black text-sm text-white tracking-tight">{token.symbol} Balance</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{token.symbol === 'WNC' ? 'SmarterSeller Registry' : viewingNetwork.name}</p>
                     </div>
                 </div>
-                <div className="text-right">
-                    <p className="font-bold text-lg text-white">{balance.toLocaleString('en-US', { maximumFractionDigits: 6 })}</p>
-                    <p className="text-xs text-muted-foreground">≈ ${fiatValue.toLocaleString("en", { minimumFractionDigits: 2 })}</p>
+                <div className="text-right relative z-10">
+                    <p className="font-black text-lg text-white">{balance.toLocaleString('en-US', { maximumFractionDigits: 6 })}</p>
+                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">≈ {formatFiat(fiatValue)}</p>
                 </div>
             </div>
             
             <MarketStats stats={marketStats} tokenSymbol={token.symbol} />
             
-            <div>
-                <h3 className="text-lg font-black uppercase tracking-tight mb-4">Activity</h3>
+            <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground">Activity Log</h3>
+                    <div className="h-px flex-1 bg-white/5" />
+                </div>
                 <TransactionHistory token={token} />
             </div>
         </div>
