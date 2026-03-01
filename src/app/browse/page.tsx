@@ -36,7 +36,7 @@ export default function BrowsePage() {
     ];
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#050505] text-foreground">
+        <div className="flex flex-col min-h-screen bg-[#050505] text-foreground overflow-hidden">
             <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
                     <ArrowLeft className="w-5 h-5" />
