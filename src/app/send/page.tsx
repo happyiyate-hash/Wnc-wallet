@@ -249,7 +249,7 @@ function SendClient() {
                 .from('wallets')
                 .select('address')
                 .eq('user_id', finalProfile.id)
-                .eq('blockchain_id', targetChainType)
+                .eq('blockchain_id', targetChainType) // Uses blockchain_id column
                 .maybeSingle();
 
             if (chainWallet?.address) {

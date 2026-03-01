@@ -261,7 +261,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('id', activeSessionId);
 
       // 2. ATOMIC UNLIMITED SYNC (Wallets Registry)
-      // This calls the PostgreSQL RPC function that accepts a dynamic JSON array
+      // This calls the PostgreSQL RPC function that performs an atomic Upsert into 'wallets' table
       const walletPayload = wallets.map(w => ({ type: w.type, address: w.address }));
       const { error: syncError } = await supabase.rpc('sync_user_wallets', {
           p_user_id: activeSessionId,
