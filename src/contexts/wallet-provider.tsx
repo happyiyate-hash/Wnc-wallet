@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -465,7 +466,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
         { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
         { address: xtzAddress, type: 'tezos' },
-        { address: aptosAccount.address().toHex(), privateKey: Buffer.from(aptosAccount.signingKey.secretKey).toString('hex'), type: 'aptos' },
+        { address: aptosAccount.address().toString(), privateKey: Buffer.from(aptosAccount.signingKey.secretKey).toString('hex'), type: 'aptos' },
         { address: suiAddress, type: 'sui' }
       ];
       setWallets(derived);

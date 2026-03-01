@@ -1,12 +1,13 @@
 
 'use client';
 
-import { AptosClient } from "aptos";
+import { AptosClient, AptosAccount } from "aptos";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * Aptos (APT) Adapter
  * Handles real-time balance discovery via the Aptos Fullnode API.
+ * Updated for modern SDK v1.x standards using .toString() instead of .toHex().
  */
 class AptosAdapter implements IWalletAdapter {
     private client: AptosClient;
