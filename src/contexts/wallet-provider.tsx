@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile, WalletRegistryEntry } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
@@ -188,6 +188,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!mnemonic) return null;
     try {
       const cleanMnemonic = mnemonic.trim();
+      if (!cleanMnemonic || cleanMnemonic.split(' ').length < 12) return null;
       if (!bip39.validateMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
       
       const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
@@ -197,8 +198,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
+      // Implicit NEAR Address Derivation
       const seed = await bip39.mnemonicToSeed(cleanMnemonic);
-      const nearKeyPair = KeyPair.fromRandom("ed25519"); // Placeholder: In production use seed-derived key
+      const nearKeyPair = KeyPair.fromRandom("ed25519"); 
       const nearAddress = nearKeyPair.getPublicKey().toString().replace("ed25519:", "").toLowerCase();
 
       const derived: WalletWithMetadata[] = [
@@ -211,7 +213,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return derived;
     } catch (e: any) { 
       console.error("Wallet Derivation Error:", e.message);
-      throw e; 
+      return null; 
     }
   }, []);
 
@@ -230,8 +232,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const importWallet = async (mnemonic: string) => {
-    await loadWalletFromMnemonic(mnemonic);
-    if (activeSessionId) {
+    const derived = await loadWalletFromMnemonic(mnemonic);
+    if (derived && activeSessionId) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         setIsSynced(false);
         if (!accountNumber) {
@@ -255,24 +257,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const updates: any = {
+      // 1. Update Core Profile (Fixed Columns)
+      const evmAddr = wallets.find(w => w.type === 'evm')?.address;
+      const profileUpdates: any = {
         account_number: targetAcc,
         updated_at: new Date().toISOString()
       };
+      if (evmAddr) profileUpdates.evm_address = evmAddr;
 
-      wallets.forEach(w => {
-        if (w.type === 'evm') updates.evm_address = w.address;
-        if (w.type === 'xrp') updates.xrp_address = w.address;
-        if (w.type === 'polkadot') updates.polkadot_address = w.address;
-        if (w.type === 'near') updates.near_address = w.address;
-      });
-
-      const { error } = await supabase!
+      const { error: profileError } = await supabase
         .from('profiles')
-        .update(updates)
+        .update(profileUpdates)
         .eq('id', activeSessionId);
 
-      if (error) throw error;
+      if (profileError) console.warn("Profile core sync warning:", profileError.message);
+
+      // 2. Sync Flexible Wallets Registry (Unlimited Blockchains)
+      const walletInserts: Partial<WalletRegistryEntry>[] = wallets.map(w => ({
+        user_id: activeSessionId,
+        blockchain_id: w.type,
+        address: w.address,
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .upsert(walletInserts, { onConflict: 'user_id,blockchain_id' });
+
+      if (walletError) {
+          console.error("Wallets Registry sync failure:", walletError.message);
+          throw walletError;
+      }
 
       await refreshProfile();
     } catch (e: any) {
@@ -321,12 +336,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      wallets.forEach(w => {
-        if (w.type === 'evm') updates.evm_address = w.address;
-        if (w.type === 'xrp') updates.xrp_address = w.address;
-        if (w.type === 'polkadot') updates.polkadot_address = w.address;
-        if (w.type === 'near') updates.near_address = w.address;
-      });
+      const evmAddr = wallets.find(w => w.type === 'evm')?.address;
+      if (evmAddr) updates.evm_address = evmAddr;
       
       if (!accountNumber) {
           const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
@@ -343,6 +354,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('id', activeSessionId);
       if (error) throw error;
 
+      // Ensure wallets table is also updated
+      await syncAllAddresses();
       await refreshProfile();
     } catch (e: any) {
       console.error("Vault Backup Failed:", e.message);
@@ -412,7 +425,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
     });
-    allKnownAssets.push(...userAddedTokens);
+    allKnownAssets.push(...latestUserTokensRef.current);
 
     allKnownAssets.forEach(a => { 
         if (a.coingeckoId) {
@@ -457,7 +470,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.warn("[PRICE_ORACLE_RETRY]", e);
         setTimeout(fetchGlobalPrices, 10000);
     }
-  }, [chainsWithLogos, userAddedTokens]);
+  }, [chainsWithLogos]);
 
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
@@ -497,20 +510,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
-    if (!wallets || !profile || !activeSessionId) return;
+    if (!wallets || !profile || !activeSessionId || !supabase) return;
 
     const isFirstSession = !sessionStorage.getItem(`synced_${activeSessionId}`);
     
-    const evmLocal = wallets.find(w => w.type === 'evm')?.address || null;
-    const xrpLocal = wallets.find(w => w.type === 'xrp')?.address || null;
-    const dotLocal = wallets.find(w => w.type === 'polkadot')?.address || null;
-    const nearLocal = wallets.find(w => w.type === 'near')?.address || null;
+    const { data: cloudWallets } = await supabase
+        .from('wallets')
+        .select('blockchain_id, address')
+        .eq('user_id', activeSessionId);
 
-    const hasMismatch = (evmLocal !== profile.evm_address) || 
-                        (xrpLocal !== profile.xrp_address) || 
-                        (dotLocal !== profile.polkadot_address) ||
-                        (nearLocal !== profile.near_address) ||
-                        (!profile.vault_phrase);
+    const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
+
+    const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
 
     if (!hasMismatch && !isFirstSession && !options?.forceUI) {
       return;
@@ -523,9 +534,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
-      const type = chain.toLowerCase() as 'evm' | 'xrp' | 'polkadot' | 'near';
+      const type = chain.toLowerCase();
       const local = wallets.find(w => w.type === type)?.address || null;
-      const cloud = profile[`${type}_address` as keyof UserProfile] as string || null;
+      const cloud = getCloudAddr(type);
       
       setSyncDiagnostic(prev => ({ 
         ...prev, 

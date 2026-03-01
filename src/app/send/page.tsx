@@ -199,12 +199,6 @@ function SendClient() {
         return;
       }
 
-      if (isRawChainAddress && !isInternalWnc) {
-          setResolvedAddress(input);
-      } else {
-          setResolvedAddress('');
-      }
-
       setRecipientProfile(null);
       setIsResolving(true);
       setResolutionError(null);
@@ -212,42 +206,70 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
+        // 1. Dual-Layer Resolution: Search Profiles + Flexible Wallets Registry
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
-          .select('id, name, photo_url, account_number, evm_address, xrp_address, polkadot_address, near_address')
-          .or(`account_number.eq.${input},evm_address.eq.${input},xrp_address.eq.${input},polkadot_address.eq.${input},near_address.eq.${input}`)
+          .select('id, name, photo_url, account_number, evm_address')
+          .or(`account_number.eq.${input},evm_address.eq.${input}`)
           .maybeSingle();
 
         if (userError) throw userError;
 
         if (currentId !== resolutionCounter.current) return;
 
-        if (userRecord) {
+        let targetProfileId = userRecord?.id;
+        let finalProfile = userRecord;
+
+        // 2. If no profile found by core columns, search wallets table (Unlimited support)
+        if (!targetProfileId && isRawChainAddress) {
+            const { data: walletMatch } = await supabase
+                .from('wallets')
+                .select('user_id, address')
+                .eq('address', input)
+                .maybeSingle();
+            
+            if (walletMatch) {
+                targetProfileId = walletMatch.user_id;
+                const { data: linkedProfile } = await supabase
+                    .from('profiles')
+                    .select('id, name, photo_url, account_number, evm_address')
+                    .eq('id', targetProfileId)
+                    .single();
+                finalProfile = linkedProfile;
+            }
+        }
+
+        if (finalProfile) {
           setRecipientProfile({ 
-            id: userRecord.id,
-            avatar: userRecord.photo_url || '', 
+            id: finalProfile.id,
+            avatar: finalProfile.photo_url || '', 
             verified: true, 
-            name: userRecord.name || input
+            name: finalProfile.name || input
           });
 
           if (isInternalWnc) {
-            setResolvedAddress(userRecord.account_number || '');
+            setResolvedAddress(finalProfile.account_number || '');
             setResolutionError(null);
           } else {
             const targetChainType = activeNetwork.type || 'evm';
-            let chainAddress = '';
             
-            if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
-            else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
-            else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
-            else if (targetChainType === 'near') chainAddress = userRecord.near_address || '';
+            // Lookup specific chain address in flexible registry
+            const { data: chainWallet } = await supabase
+                .from('wallets')
+                .select('address')
+                .eq('user_id', finalProfile.id)
+                .eq('blockchain_id', targetChainType)
+                .maybeSingle();
 
-            if (chainAddress) {
-              setResolvedAddress(chainAddress);
+            if (chainWallet?.address) {
+              setResolvedAddress(chainWallet.address);
+              setResolutionError(null);
+            } else if (targetChainType === 'evm' && finalProfile.evm_address) {
+              setResolvedAddress(finalProfile.evm_address);
               setResolutionError(null);
             } else {
               setResolvedAddress('');
-              setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
+              setResolutionError(`Recipient found, but no node configured for ${targetChainType.toUpperCase()}.`);
             }
           }
         } else {
@@ -341,7 +363,6 @@ function SendClient() {
         }
       } 
       else if (activeNetwork.type === 'near') {
-          // NEAR Transfer Logic
           setTxHash(`near_${Math.random().toString(36).substring(7)}`);
           await new Promise(r => setTimeout(r, 2000));
       }

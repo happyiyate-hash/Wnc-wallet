@@ -54,11 +54,15 @@ export interface UserProfile {
     iv?: string;
     vault_infura_key?: string;
     infura_iv?: string;
-    // Direct address columns for P2P Handshake
+    // Legacy support for primary EVM node
     evm_address?: string;
-    xrp_address?: string;
-    polkadot_address?: string;
-    near_address?: string;
+}
+
+export interface WalletRegistryEntry {
+    user_id: string;
+    blockchain_id: string; // 'evm', 'xrp', 'near', etc.
+    address: string;
+    updated_at: string;
 }
 
 export interface PaymentRequest {
@@ -81,22 +85,6 @@ export interface LocalSession {
     encryptedMnemonic: string | null;
     encryptedApiKey: string | null;
     lastActive: number;
-}
-
-export interface UserIdentity {
-    user_id: string;
-    account_number: string;
-    blockchain_name: string;
-    wallet_address: string;
-}
-
-export interface RecentRecipient {
-    id: string;
-    sender_id: string;
-    recipient_account_number: string;
-    current_pfp: string;
-    last_blockchain_used: string;
-    last_address_used: string;
 }
 
 export interface IWalletAdapter {
