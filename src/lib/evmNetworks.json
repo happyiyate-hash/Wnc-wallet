@@ -215,5 +215,14 @@
     "coingeckoId": "litecoin",
     "themeColor": "#345D9D",
     "type": "ltc"
+  },
+  "3": {
+    "name": "Dogecoin",
+    "symbol": "DOGE",
+    "chainId": 3,
+    "rpcUrl": "https://explorer.dogecoinev.com/api",
+    "coingeckoId": "dogecoin",
+    "themeColor": "#C2A633",
+    "type": "doge"
   }
 }

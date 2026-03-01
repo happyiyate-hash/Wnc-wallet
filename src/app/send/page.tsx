@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, and LTC formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, and DOGE formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -62,9 +62,11 @@ const detectAddressType = (input: string) => {
     return 'invalid-xrp';
   }
 
+  if (clean.startsWith('D')) {
+      return 'doge';
+  }
+
   if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) {
-      // Simple BTC/LTC differentiation: bc1 is always BTC, ltc1 is always LTC.
-      // 3/1 can be both but we prioritize active network if ambiguity exists.
       return 'btc';
   }
 
@@ -95,6 +97,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'near') return { name: 'NEAR Protocol', symbol: 'NEAR' };
     if (type === 'btc') return { name: 'Bitcoin', symbol: 'BTC' };
     if (type === 'ltc') return { name: 'Litecoin', symbol: 'LTC' };
+    if (type === 'doge') return { name: 'Dogecoin', symbol: 'DOGE' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -193,7 +196,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -307,9 +310,7 @@ function SendClient() {
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
-      else if (activeNetwork.type === 'btc' || activeNetwork.type === 'ltc') {
-          // BTC/LTC transfers are complex (UTXO management). 
-          // Placeholder for production signing logic via Backend/HSM.
+      else if (activeNetwork.type === 'btc' || activeNetwork.type === 'ltc' || activeNetwork.type === 'doge') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "UTXO building requires backend signing for institutional nodes." });
           throw new Error(`${selectedToken.symbol} Signing restricted to hardware modules.`);
       }
