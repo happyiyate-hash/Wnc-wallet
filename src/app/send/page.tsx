@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective and Celestia formats.
+ * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective and Celestia formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -96,6 +96,9 @@ const detectAddressType = (input: string) => {
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
+        // Kusama addresses usually start with 'K' (Prefix 2)
+        if (clean.startsWith('K')) return 'kusama';
+        
         const [isValid] = checkAddress(clean, 42); 
         const [isValidPolkadot] = checkAddress(clean, 0);
         const [isValidKusama] = checkAddress(clean, 2);
@@ -117,6 +120,7 @@ const detectAddressType = (input: string) => {
 const getDetectedNetworkMeta = (type: string) => {
     if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
     if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
+    if (type === 'kusama') return { name: 'Kusama', symbol: 'KSM' };
     if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'Ethereum', symbol: 'ETH' };
     if (type === 'near') return { name: 'NEAR Protocol', symbol: 'NEAR' };
     if (type === 'btc') return { name: 'Bitcoin', symbol: 'BTC' };
@@ -223,6 +227,9 @@ function SendClient() {
     if (activeType === 'cosmos' || activeType === 'celestia') {
         return !['cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
     }
+    if (activeType === 'polkadot' || activeType === 'kusama') {
+        return !['polkadot', 'kusama'].includes(addrType);
+    }
     return activeType !== finalAddrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
@@ -231,7 +238,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -358,6 +365,10 @@ function SendClient() {
       else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis' || activeNetwork.type === 'secret' || activeNetwork.type === 'celestia') {
           toast({ title: `Institutional Interchain`, description: "Cosmos-family signing restricted to hardware modules." });
           throw new Error("Interchain Signing restricted to hardware modules.");
+      }
+      else if (activeNetwork.type === 'polkadot' || activeNetwork.type === 'kusama') {
+          toast({ title: `Institutional Substrate`, description: "Substrate signing restricted to hardware modules." });
+          throw new Error("Substrate Signing restricted to hardware modules.");
       }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');

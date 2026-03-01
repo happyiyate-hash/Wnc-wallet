@@ -189,6 +189,15 @@
     "themeColor": "#E6007A",
     "type": "polkadot"
   },
+  "2": {
+    "name": "Kusama",
+    "symbol": "KSM",
+    "chainId": 2,
+    "rpcUrl": "wss://kusama-rpc.polkadot.io",
+    "coingeckoId": "kusama",
+    "themeColor": "#E6007A",
+    "type": "kusama"
+  },
   "397": {
     "name": "NEAR Protocol",
     "symbol": "NEAR",
@@ -207,19 +216,19 @@
     "themeColor": "#F7931A",
     "type": "btc"
   },
-  "2": {
+  "33": {
     "name": "Litecoin",
     "symbol": "LTC",
-    "chainId": 2,
+    "chainId": 33,
     "rpcUrl": "https://litecoinblockexplorer.net",
     "coingeckoId": "litecoin",
     "themeColor": "#345D9D",
     "type": "ltc"
   },
-  "3": {
+  "4": {
     "name": "Dogecoin",
     "symbol": "DOGE",
-    "chainId": 3,
+    "chainId": 4,
     "rpcUrl": "https://explorer.dogecoinev.com/api",
     "coingeckoId": "dogecoin",
     "themeColor": "#C2A633",

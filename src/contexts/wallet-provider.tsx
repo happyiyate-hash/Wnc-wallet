@@ -24,6 +24,7 @@ import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/
 import { supabase } from '@/lib/supabase/client';
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
+import { kusamaAdapterFactory } from '@/lib/wallets/adapters/kusama';
 import { nearAdapterFactory } from '@/lib/wallets/adapters/near';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { bitcoinAdapterFactory } from '@/lib/wallets/adapters/bitcoin';
@@ -41,7 +42,7 @@ const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -216,6 +217,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let adapter = null;
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
+    else if (chain.type === 'kusama') adapter = kusamaAdapterFactory(chain);
     else if (chain.type === 'near') adapter = nearAdapterFactory(chain);
     else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
     else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
@@ -316,6 +318,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
+      const ksmKeyring = new Keyring({ type: 'sr25519', ss58Format: 2 });
+      const ksmWallet = ksmKeyring.addFromMnemonic(cleanMnemonic);
+
       const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
       const nearSecretKey = seed.slice(0, 32);
       const nearBase58Secret = utils.serialize.base_encode(nearSecretKey);
@@ -368,6 +373,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
         { address: dotWallet.address, type: 'polkadot' },
+        { address: ksmWallet.address, type: 'kusama' },
         { address: nearAddress, type: 'near' },
         { address: btcAddress!, type: 'btc' },
         { address: ltcAddress!, privateKey: ltcChild.toWIF(), type: 'ltc' },
@@ -527,7 +533,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
