@@ -137,7 +137,7 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
  * Fetches historical chart data for a specific token from CoinGecko.
  */
 export async function fetchChartData(coingeckoId: string, days: string, currentPrice?: number) {
-    // Handle Internal WNC Handshake with dynamic current price
+    // Handle Internal Wevinacoin Handshake with dynamic current price
     if (coingeckoId === 'internal:wnc') {
         const price = currentPrice || 0.000606;
         return generateInternalChartData(price, days);
@@ -168,7 +168,7 @@ export async function fetchSingleTokenDetails(coingeckoId: string, currentPrice?
         return {
             id: 'wnc',
             symbol: 'wnc',
-            name: 'Wevina Cloud',
+            name: 'Wevinacoin', // Institutional Branding
             market_cap_rank: 0,
             market_data: {
                 current_price: { usd: price },

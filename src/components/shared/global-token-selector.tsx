@@ -84,12 +84,12 @@ export default function GlobalTokenSelector({
         const base = getAvailableAssetsForChain(selectedChain.chainId);
         const chainBalances = balances[selectedChain.chainId] || [];
         
-        // 1. Inject WNC as a high-priority internal asset
+        // 1. Inject Wevinacoin (WNC) as a high-priority internal asset
         const wncAsset: AssetRow = {
             chainId: selectedChain.chainId,
             address: 'internal:wnc',
             symbol: 'WNC',
-            name: 'Wevina Cloud',
+            name: 'Wevinacoin', // Institutional Branding
             balance: profile?.wnc_earnings?.toString() || '0',
             isNative: false,
             priceUsd: 0.0006,

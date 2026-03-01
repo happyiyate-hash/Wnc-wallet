@@ -129,24 +129,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return combined;
   }, []);
 
-  // PRIMARY DATA ENGINE: Hydrates assets with balances and prices
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // Virtual WNC Token Injection - RECALCULATED BASED ON NGN RATE
+    // WNC (Wevinacoin) - 1 WNC = 1 NGN
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
     
     const wncAsset: AssetRow = {
         chainId: viewingNetwork.chainId,
         address: 'internal:wnc',
         symbol: 'WNC',
-        name: 'Wevina Cloud',
+        name: 'Wevinacoin', // Institutional Branding
         balance: profile?.wnc_earnings?.toString() || '0',
         isNative: false,
         priceUsd: wncPriceUsd,
         fiatValueUsd: (profile?.wnc_earnings || 0) * wncPriceUsd,
-        pctChange24h: -0.42, // Simulated trend relative to NGN volatility
-        decimals: 0
+        pctChange24h: -0.42, 
+        decimals: 0,
+        iconUrl: null // Force dynamic CDN lookup by Name/Symbol
     };
 
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
