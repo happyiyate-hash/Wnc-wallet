@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, Mail, Lock, UserPlus, Zap } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Loader2, ShieldCheck, Mail, Lock, UserPlus, Zap, X, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
 export default function SignupPage() {
@@ -23,9 +23,22 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // Verification State
+  const [showVerifyPanel, setShowVerifyPanel] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
   useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) setReferralCode(ref.toUpperCase());
+    
+    const verifyRequested = searchParams.get('verify');
+    const existingEmail = searchParams.get('email');
+    if (verifyRequested === 'true' && existingEmail) {
+      setEmail(existingEmail);
+      setShowVerifyPanel(true);
+    }
   }, [searchParams]);
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -45,8 +58,8 @@ export default function SignupPage() {
       });
       if (error) throw error;
       
-      toast({ title: "Node Provisioned", description: "Please check your email for verification." });
-      router.replace(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+      toast({ title: "Node Provisioned", description: "Verification code sent to your inbox." });
+      setShowVerifyPanel(true);
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -55,6 +68,51 @@ export default function SignupPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || verificationCode.length !== 6) return;
+
+    setIsVerifying(true);
+    try {
+      const { error } = await supabase!.auth.verifyOtp({
+        email,
+        token: verificationCode,
+        type: 'signup'
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Identity Verified!", description: "Initializing profile node..." });
+      setShowVerifyPanel(false);
+      router.replace('/complete-profile');
+    } catch (error: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Verification Failed", 
+        description: error.message 
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    setIsResending(true);
+    try {
+      const { error } = await supabase!.auth.resend({
+        type: 'signup',
+        email,
+      });
+      if (error) throw error;
+      toast({ title: "Code Resent", description: "Check your inbox again." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -138,7 +196,7 @@ export default function SignupPage() {
           <Button 
             type="submit"
             className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-            disabled={isLoading}
+            disabled={isLoading || showVerifyPanel}
           >
             {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Authorize Registry Entry"}
           </Button>
@@ -155,7 +213,7 @@ export default function SignupPage() {
           variant="outline" 
           className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-white/5 border-white/10 hover:bg-white/10"
           onClick={handleGoogleLogin}
-          disabled={isGoogleLoading}
+          disabled={isGoogleLoading || showVerifyPanel}
         >
           {isGoogleLoading ? <Loader2 className="animate-spin w-5 h-5" /> : (
             <div className="flex items-center gap-3">
@@ -177,6 +235,82 @@ export default function SignupPage() {
           </p>
         </div>
       </motion.div>
+
+      {/* VERIFICATION PANEL (Slide-Up) */}
+      <AnimatePresence>
+        {showVerifyPanel && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setShowVerifyPanel(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 inset-x-0 bg-[#0a0a0c] border-t border-white/10 rounded-t-[3rem] z-[101] p-8 pb-12 shadow-2xl"
+            >
+              <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
+              
+              <div className="max-w-sm mx-auto space-y-8">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+                    <Mail className="w-8 h-8" />
+                  </div>
+                  <h2 className="text-2xl font-black text-white uppercase tracking-tight">Verify Your Email</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    We sent a 6-digit cryptographic handshake to <br/>
+                    <span className="text-white font-bold">{email}</span>
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerify} className="space-y-6">
+                  <div className="space-y-4">
+                    <Input 
+                      type="text" 
+                      placeholder="000000"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white"
+                      required
+                    />
+                    <div className="flex justify-center">
+                      <Button 
+                        type="button" 
+                        variant="link" 
+                        onClick={handleResend}
+                        disabled={isResending}
+                        className="text-primary font-bold text-xs uppercase tracking-widest"
+                      >
+                        {isResending ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
+                        Resend Code
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="submit"
+                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
+                    disabled={isVerifying || verificationCode.length !== 6}
+                  >
+                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Authority"}
+                  </Button>
+                </form>
+
+                <div className="pt-4 flex items-center justify-center gap-2 opacity-20">
+                  <ShieldCheck className="w-3 h-3 text-white" />
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white">Registry Protocol v3.1</span>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
