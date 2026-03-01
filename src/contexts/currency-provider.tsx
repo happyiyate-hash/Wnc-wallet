@@ -8,7 +8,7 @@ interface CurrencyContextType {
   setCurrency: (code: string) => void;
   rates: { [key: string]: number };
   currentSymbol: string;
-  formatFiat: (val: number) => string;
+  formatFiat: (val: number, decimals?: number) => string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
@@ -33,10 +33,18 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   const currentSymbol = SYMBOLS[selectedCurrency] || selectedCurrency;
 
-  const formatFiat = (val: number) => {
+  const formatFiat = (val: number, decimals?: number) => {
     const rate = rates[selectedCurrency] || 1;
     const converted = val * rate;
-    return `${currentSymbol}${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    
+    // Auto-detect precision for micro-assets like WNC/USD
+    // If less than 0.01, we use 6 decimals to prevent showing $0.00
+    const precision = decimals !== undefined ? decimals : (converted < 0.01 && converted > 0 ? 6 : 2);
+    
+    return `${currentSymbol}${converted.toLocaleString('en-US', { 
+      minimumFractionDigits: precision, 
+      maximumFractionDigits: precision 
+    })}`;
   };
 
   return (

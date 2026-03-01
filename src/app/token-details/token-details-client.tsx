@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
@@ -105,8 +106,8 @@ export default function TokenDetailsClientPage() {
   }
 
   const price = token?.priceUsd ?? 0;
-  // If WNC, we might want to simulate a percentage change based on Naira volatility
-  const priceChange24h = token?.symbol === 'WNC' ? 1.25 : (token?.pctChange24h ?? 0);
+  // Pull live percentage trend from WalletProvider
+  const priceChange24h = token?.pctChange24h ?? 0;
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
   const fiatValue = token.fiatValueUsd ?? (price * balance);

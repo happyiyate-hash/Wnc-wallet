@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -135,18 +136,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // WNC (Wevinacoin) - 1 WNC = 1 NGN
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
     
+    // Simulate a dynamic 24h percentage based on time cycles
+    const wncPctChange = -0.42 + (Math.sin(Date.now() / 3600000) * 0.2); 
+
     const wncAsset: AssetRow = {
         chainId: viewingNetwork.chainId,
         address: 'internal:wnc',
         symbol: 'WNC',
-        name: 'Wevinacoin', // Institutional Branding
+        name: 'Wevinacoin', 
         balance: profile?.wnc_earnings?.toString() || '0',
         isNative: false,
         priceUsd: wncPriceUsd,
         fiatValueUsd: (profile?.wnc_earnings || 0) * wncPriceUsd,
-        pctChange24h: -0.42, 
+        pctChange24h: wncPctChange, 
         decimals: 0,
-        iconUrl: null // Force dynamic CDN lookup by Name/Symbol
+        iconUrl: null 
     };
 
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
