@@ -14,7 +14,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import BIP32Factory from "bip32";
 import * as ecc from "tiny-secp256k1";
 import { derivePath } from "ed25519-hd-key";
-import { Keypair as SolanaKeypair } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { stringToPath } from "@cosmjs/crypto";
 import { TronWeb } from "tronweb";
@@ -596,6 +596,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!profile || !activeSessionId || !supabase) throw new Error("No cloud backup found.");
     try {
       const { data: { session } } = await supabase!.auth.getSession();
+      
+      // RESTORE MASTER PHRASE
       if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -609,9 +611,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           if (derived) await syncAllAddresses(derived);
         }
       }
+
+      // RESTORE INFURA KEY
+      if (profile.vault_infura_key && profile.infura_iv) {
+        const res = await fetch('/api/wallet/decrypt-phrase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setInfuraApiKey(data.phrase);
+          localStorage.setItem('infura_api_key', data.phrase);
+        }
+      }
+
       if (profile.account_number) { setAccountNumber(profile.account_number); localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number); }
       toast({ title: "Vault Restored" });
-    } catch (e: any) { throw e; }
+    } catch (e: any) {
+      throw e;
+    }
   };
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
@@ -687,8 +706,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (profile?.account_number) setAccountNumber(profile.account_number);
 
       if (savedMnemonic) {
-          setIsWalletLoading(false); 
+          setIsWalletLoading(true); 
           await loadWalletFromMnemonic(savedMnemonic);
+          setIsWalletLoading(false);
           if (isInitialized) fetchGlobalPrices();
       } else {
           setIsWalletLoading(true);
