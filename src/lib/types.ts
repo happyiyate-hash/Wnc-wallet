@@ -24,7 +24,7 @@ export interface WalletWithMetadata {
   avatarUrl?: string;
   privateKey?: string;
   seed?: string; // For XRP
-  type: 'evm' | 'xrp' | 'polkadot' | 'near';
+  type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
 }
 
 export interface ChainConfig {
@@ -36,7 +36,7 @@ export interface ChainConfig {
     iconUrl?: string | null;
     coingeckoId?: string;
     themeColor?: string;
-    type?: 'evm' | 'xrp' | 'polkadot' | 'near';
+    type?: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
 }
 
 export interface UserProfile {
@@ -69,7 +69,7 @@ export interface PaymentRequest {
     id: string;
     requester_id: string;
     requester_account_number: string;
-    chain_type: 'evm' | 'xrp' | 'polkadot' | 'near';
+    chain_type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
     token_symbol: string;
     token_address?: string;
     amount: number;

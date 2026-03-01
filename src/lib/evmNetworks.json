@@ -197,5 +197,14 @@
     "coingeckoId": "near",
     "themeColor": "#00EC97",
     "type": "near"
+  },
+  "0": {
+    "name": "Bitcoin",
+    "symbol": "BTC",
+    "chainId": 0,
+    "rpcUrl": "https://blockstream.info/api",
+    "coingeckoId": "bitcoin",
+    "themeColor": "#F7931A",
+    "type": "btc"
   }
 }

@@ -10,6 +10,9 @@ import * as bip39 from 'bip39';
 import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
 import { KeyPair, utils } from "near-api-js";
+import * as bitcoin from "bitcoinjs-lib";
+import BIP32Factory from "bip32";
+import * as ecc from "tiny-secp256k1";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -20,11 +23,14 @@ import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { nearAdapterFactory } from '@/lib/wallets/adapters/near';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
+import { bitcoinAdapterFactory } from '@/lib/wallets/adapters/bitcoin';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
+
+const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -200,6 +206,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else if (chain.type === 'near') adapter = nearAdapterFactory(chain);
+    else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -290,16 +297,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       // DETERMINISTIC NEAR DERIVATION
       const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
-      const secretKey = seed.slice(0, 32);
-      const base58Secret = utils.serialize.base_encode(secretKey);
-      const nearKeyPair = KeyPair.fromString(`ed25519:${base58Secret}`);
+      const nearSecretKey = seed.slice(0, 32);
+      const nearBase58Secret = utils.serialize.base_encode(nearSecretKey);
+      const nearKeyPair = KeyPair.fromString(`ed25519:${nearBase58Secret}`);
       const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
+
+      // DETERMINISTIC BITCOIN DERIVATION (BIP84 Native SegWit)
+      const btcSeed = bip39.mnemonicToSeedSync(cleanMnemonic);
+      const btcRoot = bip32.fromSeed(btcSeed);
+      const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
+      const { address: btcAddress } = bitcoin.payments.p2wpkh({
+          pubkey: btcChild.publicKey,
+          network: bitcoin.networks.bitcoin,
+      });
 
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
         { address: dotWallet.address, type: 'polkadot' },
-        { address: nearAddress, type: 'near' }
+        { address: nearAddress, type: 'near' },
+        { address: btcAddress!, type: 'btc' }
       ];
       setWallets(derived);
       return derived;
@@ -449,7 +466,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
@@ -517,7 +534,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (savedMnemonic) {
           setIsWalletLoading(false); 
           await loadWalletFromMnemonic(savedMnemonic);
-          // AGGRESSIVE: Trigger price fetch the moment mnemonic is derived
           if (isInitialized) fetchGlobalPrices();
       } else {
           setIsWalletLoading(true);
@@ -537,7 +553,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isInitialized && wallets && !initialFetchTriggeredRef.current) {
       initialFetchTriggeredRef.current = true;
-      console.log("[ORACLE] Aggressive Price & Balance Handshake Triggered");
       fetchGlobalPrices();
       startEngine();
     }
@@ -566,7 +581,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!areLogosLoading && !isInitialized) {
       const savedChainId = localStorage.getItem('last_viewed_chain_id');
       const restoredChain = savedChainId ? chainsWithLogos.find(c => c.chainId === parseInt(savedChainId)) : null;
-      setViewingNetwork(restoredChain || chainsWithLogos[0] || null);
+      setViewingNetwork(restoredChain || chainsWithLogos.find(c => c.chainId === 1) || chainsWithLogos[0] || null);
       setIsInitialized(true);
     }
   }, [areLogosLoading, chainsWithLogos, isInitialized]);

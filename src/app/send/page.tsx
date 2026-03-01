@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -41,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, and NEAR formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, and BTC formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -60,14 +61,16 @@ const detectAddressType = (input: string) => {
     if (xrpl.isValidClassicAddress(clean)) return 'xrp';
     return 'invalid-xrp';
   }
+
+  if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) {
+      return 'btc';
+  }
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        // Polkadot prefixes: 0=Polkadot, 2=Kusama, 42=Generic
         const [isValid] = checkAddress(clean, 42); 
         const [isValidPolkadot] = checkAddress(clean, 0);
         const [isValidKusama] = checkAddress(clean, 2);
-        
         if (isValid || isValidPolkadot || isValidKusama) return 'polkadot';
     } catch (e) {}
   }
@@ -84,6 +87,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
     if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'Ethereum', symbol: 'ETH' };
     if (type === 'near') return { name: 'NEAR Protocol', symbol: 'NEAR' };
+    if (type === 'btc') return { name: 'Bitcoin', symbol: 'BTC' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -182,7 +186,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -202,7 +206,6 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 1. DUAL-LAYER RESOLUTION: Profiles -> Wallets Registry
         const { data: userRecord } = await supabase
           .from('profiles')
           .select('id, name, photo_url, account_number')
@@ -214,7 +217,6 @@ function SendClient() {
         let finalProfile = userRecord;
         let targetAddr = isRawChainAddress ? input : '';
 
-        // 2. Search Unlimited Wallets Registry if no profile found by Account ID
         if (!finalProfile && isRawChainAddress) {
             const { data: walletMatch } = await supabase
                 .from('wallets')
@@ -249,7 +251,7 @@ function SendClient() {
                 .from('wallets')
                 .select('address')
                 .eq('user_id', finalProfile.id)
-                .eq('blockchain_id', targetChainType) // Uses blockchain_id column
+                .eq('blockchain_id', targetChainType) 
                 .maybeSingle();
 
             if (chainWallet?.address) {
@@ -289,16 +291,20 @@ function SendClient() {
 
     try {
       if (selectedToken.symbol === 'WNC') {
-        if (!recipientProfile) throw new Error("Internal recipient node not identified.");
         const transferAmount = parseFloat(amount);
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
-            p_recipient_id: recipientProfile.id,
+            p_recipient_id: recipientProfile!.id,
             p_amount: Math.floor(transferAmount)
         });
         if (rpcError || !data?.success) throw new Error(rpcError?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
+      else if (activeNetwork.type === 'btc') {
+          // BTC transfers are complex (UTXO management). Placeholder for production logic.
+          toast({ title: "Institutional BTC", description: "UTXO building requires backend signing for institutional nodes." });
+          throw new Error("BTC Signing restricted to hardware modules.");
+      }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);

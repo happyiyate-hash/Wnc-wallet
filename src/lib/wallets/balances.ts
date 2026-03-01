@@ -26,7 +26,7 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
         symbol: config.symbol,
         isNative: true,
         coingeckoId: config.coingeckoId,
-        decimals: 18
+        decimals: config.type === 'btc' ? 8 : 18
     };
 
     return [nativeAsset, ...(MOCK_EXTRAS[chainId] || [])];
