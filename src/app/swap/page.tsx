@@ -74,6 +74,7 @@ function SwapClient() {
   const isLongPressRef = useRef(false);
   
   const lastFetchedAmountRef = useRef<string>('');
+  const errorDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
@@ -98,6 +99,36 @@ function SwapClient() {
       setSelectedQuoteId(null);
     }
   }, [quotePhase, amount]);
+
+  // ERROR AUTO-DISMISS LOGIC
+  useEffect(() => {
+    if (fetchError) {
+      startErrorTimer();
+    }
+    return () => stopErrorTimer();
+  }, [fetchError]);
+
+  const startErrorTimer = () => {
+    stopErrorTimer();
+    errorDismissTimerRef.current = setTimeout(() => {
+      setFetchError(null);
+    }, 5000);
+  };
+
+  const stopErrorTimer = () => {
+    if (errorDismissTimerRef.current) {
+      clearTimeout(errorDismissTimerRef.current);
+      errorDismissTimerRef.current = null;
+    }
+  };
+
+  const handlePointerDownError = () => {
+    stopErrorTimer();
+  };
+
+  const handlePointerUpError = () => {
+    startErrorTimer();
+  };
 
   // REAL QUOTE FETCH ENGINE
   useEffect(() => {
@@ -192,7 +223,7 @@ function SwapClient() {
         setQuotePhase('COMPLETED');
 
       } catch (e: any) {
-        setFetchError("Please it looks like there's no available code for this Cross swap right now please try again later or contact support.");
+        setFetchError("Route Unavailable. No liquidity routes were found for this pair at this time. Please adjust your swap amount or try again in a moment.");
         setQuotePhase('IDLE');
       } finally {
         setIsQuoteLoading(false);
@@ -355,10 +386,25 @@ function SwapClient() {
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
-                    <div className="p-6 rounded-[2rem] bg-red-500/10 border border-red-500/20 text-center space-y-3">
-                        <p className="text-xs font-bold text-red-400 leading-relaxed">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-8 rounded-xl text-[9px] uppercase tracking-widest font-black bg-white/5 border border-white/10" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Retry Handshake</Button>
-                    </div>
+                    <motion.div 
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      onPointerDown={handlePointerDownError}
+                      onPointerUp={handlePointerUpError}
+                      className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)] text-center space-y-4 cursor-default"
+                    >
+                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">
+                          {fetchError}
+                        </p>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-9 rounded-xl text-[10px] uppercase tracking-widest font-black bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white" 
+                          onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}
+                        >
+                          Re-sync Routes
+                        </Button>
+                    </motion.div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
