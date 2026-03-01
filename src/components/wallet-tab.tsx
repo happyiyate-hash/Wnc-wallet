@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -26,6 +25,7 @@ import { cn } from '@/lib/utils';
 import TokenManager from '@/components/wallet/tokens/token-manager';
 import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
+import { useCurrency } from '@/contexts/currency-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import MoreActionsSheet from './wallet/more-actions-sheet';
@@ -37,6 +37,7 @@ import SyncAlertCard from './wallet/sync-alert-card';
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
+  const { formatFiat } = useCurrency();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
   const isFirstLoad = isLoading && (token.priceUsd === 0 || token.priceUsd === undefined);
 
@@ -88,10 +89,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
               })}{' '}
             </p>
             <p className="text-[10px] font-medium text-muted-foreground/60 mt-2 uppercase">
-              ≈ ${(token.fiatValueUsd ?? 0).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              ≈ {formatFiat(token.fiatValueUsd ?? 0)}
             </p>
           </>
         )}
@@ -103,6 +101,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 export default function WalletTab() {
   const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
   const { user } = useUser();
+  const { formatFiat } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -210,10 +209,7 @@ export default function WalletTab() {
                   getBalanceFontSize(Number(totalFiatValue ?? 0)),
                   isRefreshing && "opacity-80"
                 )}>
-                  US${(totalFiatValue || 0).toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatFiat(totalFiatValue || 0)}
                 </h2>
                 
                 <div className="flex items-center gap-3 mt-1.5">
@@ -223,8 +219,7 @@ export default function WalletTab() {
                       total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
                     )}
                   >
-                    {total24hChange >= 0 ? '+' : ''}$
-                    {Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))).toFixed(2)}
+                    {total24hChange >= 0 ? '+' : '-'}{formatFiat(Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))))}
                     <span className="text-gray-500 font-medium text-xs">
                       ({total24hChange >= 0 ? '+' : ''}
                       {total24hChange.toFixed(2)}%)

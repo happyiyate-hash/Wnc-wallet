@@ -44,15 +44,6 @@ interface SwapQuote {
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
-function formatCompactNumber(val: string): string {
-  const num = parseFloat(val);
-  if (isNaN(num) || num < 1000) return val;
-  return new Intl.NumberFormat('en-US', {
-    notation: 'compact',
-    maximumFractionDigits: 2,
-  }).format(num);
-}
-
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap, prices, infuraApiKey } = useWallet();
   const { formatFiat } = useCurrency();
@@ -72,12 +63,10 @@ function SwapClient() {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // CHOREOGRAPHY STATE
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
   const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
-  // INTERACTION STATE
   const [showPrecision, setShowPrecision] = useState(false);
   const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -90,7 +79,6 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
-  // INITIAL TOKEN HYDRATION
   useEffect(() => {
     if (!fromToken && allAssets.length > 0) {
       const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
@@ -105,14 +93,12 @@ function SwapClient() {
     }
   }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
 
-  // STABILITY FIX: Use layout effect to sync the received amount display before next paint
   useLayoutEffect(() => {
     if (quotePhase === 'IDLE' && !amount) {
       setSelectedQuoteId(null);
     }
   }, [quotePhase, amount]);
 
-  // ERROR AUTO-DISMISS LOGIC
   useEffect(() => {
     if (fetchError) {
       startErrorTimer();
@@ -134,15 +120,9 @@ function SwapClient() {
     }
   };
 
-  const handlePointerDownError = () => {
-    stopErrorTimer();
-  };
+  const handlePointerDownError = () => stopErrorTimer();
+  const handlePointerUpError = () => startErrorTimer();
 
-  const handlePointerUpError = () => {
-    startErrorTimer();
-  };
-
-  // REAL QUOTE FETCH ENGINE
   useEffect(() => {
     const runSequence = async () => {
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
@@ -201,32 +181,26 @@ function SwapClient() {
         
         setQuotes(finalBatch);
         setIsQuoteLoading(false);
-        
         setQuotePhase('SHOW_ALL');
         await new Promise(r => setTimeout(r, 1000));
-
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatch.length; i++) {
           setActiveScanIndex(i);
           await new Promise(r => setTimeout(r, 200));
         }
-
         setQuotePhase('FINAL_SELECTED');
         const best = finalBatch.find(q => q.isBest);
         setSelectedQuoteId(best?.id || null);
         await new Promise(r => setTimeout(r, 1500));
-
         setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatch.length; i++) {
           setFadedIndices(prev => new Set(prev).add(i));
           await new Promise(r => setTimeout(r, 100));
         }
-
         await new Promise(r => setTimeout(r, 200));
         setQuotePhase('SHOW_VISUAL');
         await new Promise(r => setTimeout(r, 4500));
         setQuotePhase('COMPLETED');
-
       } catch (e: any) {
         setFetchError("Liquidity Synchronization Failed. No viable routes were found for this cross-chain pair. This may be due to high volatility or low pool depth.");
         setQuotePhase('IDLE');
@@ -234,7 +208,6 @@ function SwapClient() {
         setIsQuoteLoading(false);
       }
     };
-
     runSequence();
   }, [debouncedAmount, fromToken, toToken, wallets, allChainsMap, prices]);
 
@@ -287,9 +260,7 @@ function SwapClient() {
   const startVoltageHold = () => {
     isLongPressRef.current = false;
     setIsHolding(true);
-    holdTimerRef.current = setTimeout(() => {
-      isLongPressRef.current = true;
-    }, 400);
+    holdTimerRef.current = setTimeout(() => { isLongPressRef.current = true; }, 400);
   };
 
   const endVoltageHold = () => {
@@ -346,18 +317,12 @@ function SwapClient() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <AlertCircle className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                      {fetchError ? 'Sync Failure' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Market Analysis'}
-                    </h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{fetchError ? 'Sync Failure' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Market Analysis'}</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
-                    <motion.div 
-                      initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                      onPointerDown={handlePointerDownError} onPointerUp={handlePointerUpError}
-                      className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)] text-center space-y-4 cursor-default"
-                    >
+                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onPointerDown={handlePointerDownError} onPointerUp={handlePointerUpError} className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)] text-center space-y-4 cursor-default">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
                         <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest font-black bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
                     </motion.div>
@@ -397,20 +362,20 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10">
-        <section style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl relative">
+        <section style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30` }} className="w-full border p-4 rounded-[2rem] space-y-1 shadow-2xl relative">
           <div className="flex items-center justify-between">
-            <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={22} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
-                <span className="font-black text-[11px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
+                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
+                <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
+                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="text-right"><span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
+            <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
           </div>
           
-          <div className="relative pt-2">
+          <div className="relative pt-1">
             <AnimatePresence>
               {showPrecision && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -45, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1.5 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
+                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
                   <p className="text-[10px] font-mono text-primary font-black uppercase tracking-widest flex items-center gap-2">
                     <Zap className="w-3 h-3" /> Exact: {amount || '0'} {fromToken?.symbol}
                   </p>
@@ -418,54 +383,39 @@ function SwapClient() {
               )}
             </AnimatePresence>
             
-            <div 
-              onPointerDown={() => { setShowPrecision(true); }} 
-              onPointerUp={() => setShowPrecision(false)} 
-              onPointerLeave={() => setShowPrecision(false)}
-              className="cursor-help"
-            >
-              <Input 
-                type="number" 
-                placeholder="0.00" 
-                value={amount} 
-                onChange={(e) => setAmount(e.target.value)} 
-                className="text-4xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" 
-              />
-              <div className="mt-1">
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                  ≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}
-                </span>
-              </div>
+            <div onPointerDown={() => setShowPrecision(true)} onPointerUp={() => setShowPrecision(false)} onPointerLeave={() => setShowPrecision(false)} className="cursor-help">
+              <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
+              <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
             </div>
           </div>
         </section>
 
-        <div className="relative h-8 flex items-center justify-center z-20">
-          <motion.div animate={{ rotate: isHolding ? [rotation, rotation + 360] : rotation }} transition={{ rotate: { duration: isHolding ? 0.3 : 0.6, repeat: isHolding ? Infinity : 0, ease: "linear" } }} onPointerDown={startVoltageHold} onPointerUp={endVoltageHold} onPointerLeave={() => { setIsHolding(false); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }} className="w-14 h-14 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl shadow-primary/20 cursor-pointer active:scale-90 transition-transform relative">
-            <div className="absolute inset-0 rounded-full bg-primary/5 animate-pulse" /><Zap className="w-6 h-6 fill-current relative z-10" />
+        <div className="relative h-6 flex items-center justify-center z-20">
+          <motion.div animate={{ rotate: isHolding ? [rotation, rotation + 360] : rotation }} transition={{ rotate: { duration: 0.3, repeat: isHolding ? Infinity : 0, ease: "linear" } }} onPointerDown={startVoltageHold} onPointerUp={endVoltageHold} onPointerLeave={() => { setIsHolding(false); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl shadow-primary/20 cursor-pointer active:scale-90 transition-transform relative">
+            <div className="absolute inset-0 rounded-full bg-primary/5 animate-pulse" /><Zap className="w-5 h-5 fill-current relative z-10" />
           </motion.div>
         </div>
 
-        <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-5 rounded-[2.5rem] space-y-2 shadow-2xl relative overflow-hidden">
+        <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-4 rounded-[2rem] space-y-1 shadow-2xl relative overflow-hidden">
           <div className="flex items-center justify-between relative z-10">
-            <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={22} chainId={toToken?.chainId} symbol={toToken?.symbol} />
-                <span className="font-black text-[11px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
+                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} />
+                <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
+                <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
               {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
                 <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} LOCK</span>
+                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} LOCK</span>
                 </motion.div>
               )}
             </div>
           </div>
-          <div className="relative pt-2">
+          <div className="relative pt-1">
             <AnimatePresence>
               {showOutputPrecision && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -45, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1.5 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
+                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
                   <p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2">
                     <CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount || '0'} {toToken?.symbol}
                   </p>
@@ -473,61 +423,52 @@ function SwapClient() {
               )}
             </AnimatePresence>
 
-            <div 
-              className="text-5xl font-black tracking-tighter text-white flex flex-col h-[1.8em] transition-all relative z-10 cursor-pointer"
-              onPointerDown={() => setShowOutputPrecision(true)}
-              onPointerUp={() => setShowOutputPrecision(false)}
-              onPointerLeave={() => setShowOutputPrecision(false)}
-            >
+            <div className="text-3xl font-black tracking-tighter text-white flex flex-col min-h-[1.4em] transition-all relative z-10 cursor-pointer" onPointerDown={() => setShowOutputPrecision(true)} onPointerUp={() => setShowOutputPrecision(false)} onPointerLeave={() => setShowOutputPrecision(false)}>
               {isQuoteLoading && !selectedQuote ? (
-                <div className="flex gap-1 h-full items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-3 h-3 rounded-full bg-primary/20" />)}</div>
+                <div className="flex gap-1 h-full items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-2 h-2 rounded-full bg-primary/20" />)}</div>
               ) : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
                     {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                   </motion.span>
-                  <div className="mt-1">
-                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                      ≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}
-                    </span>
-                  </div>
+                  <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}</span></div>
                 </>
               )}
             </div>
           </div>
         </section>
 
-        <div className="mt-8 px-4 grid grid-cols-2 gap-4 relative min-h-[120px]">
+        <div className="mt-6 px-4 grid grid-cols-2 gap-3 relative min-h-[100px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
-            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: idx * 0.1 }} className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 h-fit">
-              <div className="flex items-center gap-2"><div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><item.icon className="w-3.5 h-3.5" /></div><span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{item.label}</span></div>
-              <span className="text-[10px] font-black text-white">{item.value}</span>
+            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 h-fit">
+              <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><item.icon className="w-3 h-3" /></div><span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest">{item.label}</span></div>
+              <span className="text-[9px] font-black text-white">{item.value}</span>
             </motion.div>
           ))}
         </div>
 
-        <div className="relative mt-10 w-full min-h-[180px]">
+        <div className="relative mt-8 w-full min-h-[160px]">
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-              <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+              <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-5 bg-white/[0.03] border border-white/5 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
-                <div className="flex items-center justify-between gap-2 relative z-10 py-2">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="relative p-2">
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border-2 border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-12 h-12 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={40} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
+                <div className="flex items-center justify-between gap-2 relative z-10 py-1">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative p-1.5">
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[10px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
-                  <div className="flex-1 px-2 relative h-4 overflow-hidden"><svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" /><motion.line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeWidth="2" strokeDasharray="4 4" animate={{ strokeDashoffset: [20, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
-                  <div className="flex flex-col items-center gap-3"><div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20"><Bot className="w-8 h-8 text-purple-500" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border-2 border-dashed border-purple-500/30" /></div><span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Routing</span></div>
-                  <div className="flex-1 px-2 relative h-4 overflow-hidden"><svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" /><motion.line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeWidth="2" strokeDasharray="4 4" animate={{ strokeDashoffset: [20, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="relative p-2">
-                      <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border-2 border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-12 h-12 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={40} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex flex-col items-center gap-2"><div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20"><Bot className="w-6 h-6 text-purple-500" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" /></div><span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative p-1.5">
+                      <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[10px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[toToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[toToken?.chainId || 1]?.name}</p></div>
                   </div>
                 </div>
               </motion.div>
@@ -535,13 +476,13 @@ function SwapClient() {
           </AnimatePresence>
         </div>
 
-        <div className="min-h-[40px]">
-          <AnimatePresence>{quotePhase === 'COMPLETED' && <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="mt-4 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"><div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20"><Zap className="w-3 h-3 text-primary fill-primary" /><span className="text-[9px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span></div><div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10"><ShieldCheck className="w-3 h-3 text-white/40" /><span className="text-[9px] font-black text-white/40 uppercase whitespace-nowrap">SmarterSeller Verified</span></div></motion.div>}</AnimatePresence>
+        <div className="min-h-[30px]">
+          <AnimatePresence>{quotePhase === 'COMPLETED' && <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="mt-2 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"><div className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20"><Zap className="w-2.5 h-2.5 text-primary fill-primary" /><span className="text-[8px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span></div><div className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10"><ShieldCheck className="w-2.5 h-2.5 text-white/40" /><span className="text-[8px] font-black text-white/40 uppercase whitespace-nowrap">SmarterSeller Verified</span></div></motion.div>}</AnimatePresence>
         </div>
       </main>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Network Selector" isSwapContext={true} />
-      <div className="fixed bottom-8 left-0 right-0 px-6 z-40"><button className={cn("w-full h-16 rounded-full font-black text-lg shadow-2xl border-b-4 transition-all active:scale-[0.98] flex items-center justify-center", quotePhase === 'COMPLETED' ? "bg-primary border-primary/50 text-white shadow-primary/30" : "bg-zinc-900 border-zinc-950 text-zinc-600 opacity-50 cursor-not-allowed")} disabled={quotePhase !== 'COMPLETED' || isQuoteLoading || !!fetchError}>{isQuoteLoading ? 'Syncing Liquidity Nodes...' : quotePhase === 'COMPLETED' ? 'Execute Institutional Swap' : 'Discovering Routes...'}</button></div>
+      <div className="fixed bottom-8 left-0 right-0 px-6 z-40"><button className={cn("w-full h-14 rounded-full font-black text-base shadow-2xl border-b-4 transition-all active:scale-[0.98] flex items-center justify-center", quotePhase === 'COMPLETED' ? "bg-primary border-primary/50 text-white shadow-primary/30" : "bg-zinc-900 border-zinc-950 text-zinc-600 opacity-50 cursor-not-allowed")} disabled={quotePhase !== 'COMPLETED' || isQuoteLoading || !!fetchError}>{isQuoteLoading ? 'Syncing Liquidity Nodes...' : quotePhase === 'COMPLETED' ? 'Execute Institutional Swap' : 'Discovering Routes...'}</button></div>
     </div>
   );
 }
