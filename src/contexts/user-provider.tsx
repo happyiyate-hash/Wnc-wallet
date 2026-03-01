@@ -41,6 +41,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!error && data) {
         setProfile(data as UserProfile);
+        // Cache profile for offline/instant use
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(data));
         return data as UserProfile;
       }
@@ -60,6 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     if (savedActiveId) {
         setActiveSessionId(savedActiveId);
+        // Load stale profile from cache immediately
         const cacheKey = `profile_cache_${savedActiveId}`;
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
@@ -157,6 +159,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
         setActiveSessionId(sessionId);
         localStorage.setItem('wevina_active_session_id', sessionId);
+        // Load target cache instantly
         const cached = localStorage.getItem(`profile_cache_${sessionId}`);
         if (cached) setProfile(JSON.parse(cached));
         await fetchProfile(sessionId);
@@ -172,7 +175,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setActiveSessionId(null);
         localStorage.removeItem('wevina_active_session_id');
-        localStorage.removeItem('wevina_sessions');
+        // We don't remove sessions here so they stay in switcher
     }
   };
 

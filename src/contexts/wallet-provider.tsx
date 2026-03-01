@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -118,7 +119,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
   const { toast } = useToast();
   
-  // 1. STATE INITIALIZATION (MUST BE AT TOP)
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
@@ -148,8 +148,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 2. STAGE 1: CORE UTILITIES (NO DEPENDENCIES)
-  useEffect(() => { latestUserTokensRef.current = userAddedTokens; }, [userAddedTokens]);
+  useEffect(() => {
+    latestUserTokensRef.current = userAddedTokens;
+  }, [userAddedTokens]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
@@ -241,7 +242,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos]);
 
-  // 3. STAGE 2: SYNC & REGISTRY (DEPENDS ON UTILITIES)
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -322,7 +322,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
   }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
 
-  // 4. STAGE 3: WALLET DERIVATION ENGINE
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
     try {
@@ -441,7 +440,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.hedera_address]);
 
-  // 5. STAGE 4: INTERACTION & DIAGNOSTICS (DEPENDS ON DERIVATION & SYNC)
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId || !supabase) return;
     if (wallets.length === 0) return;
@@ -593,7 +591,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 6. STAGE 5: ENGINE & BALANCES (DEPENDS ON ALL PREVIOUS)
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
@@ -689,7 +686,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
-  // 7. EFFECTS & LISTENERS
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
