@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { Suspense } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
@@ -70,8 +71,10 @@ export default function RootLayout({
                       <MobileNav />
                     </div>
                   </div>
-                  {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS */}
-                  <GlobalOverlayManager />
+                  {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS - WRAPPED IN SUSPENSE FOR BUILD STABILITY */}
+                  <Suspense fallback={null}>
+                    <GlobalOverlayManager />
+                  </Suspense>
                 </SidebarProvider>
               </WalletProvider>
             </CurrencyProvider>

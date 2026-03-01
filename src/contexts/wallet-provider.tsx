@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -119,7 +118,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
   const { toast } = useToast();
   
-  // 1. STATE INITIALIZATION
+  // 1. STATE INITIALIZATION (MUST BE AT TOP)
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
@@ -149,13 +148,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
+  // 2. STAGE 1: CORE UTILITIES (NO DEPENDENCIES)
   useEffect(() => { latestUserTokensRef.current = userAddedTokens; }, [userAddedTokens]);
 
   const allChainsMap = useMemo(() => {
     return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
   }, [chainsWithLogos]);
 
-  // 2. STAGE 1: INDEPENDENT UTILITIES
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
     const currentCustom = userAddedTokens.length > 0 ? userAddedTokens : latestUserTokensRef.current;
@@ -242,7 +241,88 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos]);
 
-  // 3. STAGE 2: WALLET DERIVATION
+  // 3. STAGE 2: SYNC & REGISTRY (DEPENDS ON UTILITIES)
+  const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
+    const currentWallets = providedWallets || wallets;
+    if (!activeSessionId || !supabase || !currentWallets) return;
+    
+    let targetAcc = accountNumber;
+    if (!targetAcc) {
+        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+        targetAcc = `835${randomSuffix}`;
+        setAccountNumber(targetAcc);
+        localStorage.setItem(`account_number_${activeSessionId}`, targetAcc);
+    }
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
+        .eq('id', activeSessionId);
+
+      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
+      const { error: syncError } = await supabase.rpc('sync_user_wallets', {
+          p_user_id: activeSessionId,
+          p_wallets: walletPayload
+      });
+
+      if (syncError) throw syncError;
+      setIsSynced(true);
+      await refreshProfile();
+    } catch (e: any) {
+      console.error("Address Sync Failed:", e.message);
+      throw e;
+    }
+  }, [activeSessionId, wallets, accountNumber, refreshProfile]);
+
+  const saveToVault = useCallback(async () => {
+    if (!activeSessionId || !supabase || !wallets) return;
+    try {
+      const { data: { session } } = await supabase!.auth.getSession();
+      const updates: any = {};
+      const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+
+      if (mnemonic) {
+        const res = await fetch('/api/wallet/encrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ phrase: mnemonic })
+        });
+        const data = await res.json();
+        if (res.ok) { updates.vault_phrase = data.encrypted; updates.iv = data.iv; }
+      }
+
+      if (infuraApiKey) {
+        const res = await fetch('/api/wallet/encrypt-phrase', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ phrase: infuraApiKey })
+        });
+        const data = await res.json();
+        if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
+      }
+
+      if (!accountNumber) {
+          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+          updates.account_number = `835${randomSuffix}`;
+          setAccountNumber(updates.account_number);
+          localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
+      } else { updates.account_number = accountNumber; }
+
+      const { error } = await supabase!.from('profiles').update(updates).eq('id', activeSessionId);
+      if (error) throw error;
+      await syncAllAddresses();
+      await refreshProfile();
+    } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
+  }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
+
+  // 4. STAGE 3: WALLET DERIVATION ENGINE
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
     try {
@@ -361,87 +441,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.hedera_address]);
 
-  // 4. STAGE 3: CLOUD SYNC
-  const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
-    const currentWallets = providedWallets || wallets;
-    if (!activeSessionId || !supabase || !currentWallets) return;
-    
-    let targetAcc = accountNumber;
-    if (!targetAcc) {
-        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-        targetAcc = `835${randomSuffix}`;
-        setAccountNumber(targetAcc);
-        localStorage.setItem(`account_number_${activeSessionId}`, targetAcc);
-    }
-
-    try {
-      await supabase
-        .from('profiles')
-        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
-        .eq('id', activeSessionId);
-
-      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
-      const { error: syncError } = await supabase.rpc('sync_user_wallets', {
-          p_user_id: activeSessionId,
-          p_wallets: walletPayload
-      });
-
-      if (syncError) throw syncError;
-      setIsSynced(true);
-      await refreshProfile();
-    } catch (e: any) {
-      console.error("Address Sync Failed:", e.message);
-      throw e;
-    }
-  }, [activeSessionId, wallets, accountNumber, refreshProfile]);
-
-  const saveToVault = useCallback(async () => {
-    if (!activeSessionId || !supabase || !wallets) return;
-    try {
-      const { data: { session } } = await supabase!.auth.getSession();
-      const updates: any = {};
-      const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-
-      if (mnemonic) {
-        const res = await fetch('/api/wallet/encrypt-phrase', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({ phrase: mnemonic })
-        });
-        const data = await res.json();
-        if (res.ok) { updates.vault_phrase = data.encrypted; updates.iv = data.iv; }
-      }
-
-      if (infuraApiKey) {
-        const res = await fetch('/api/wallet/encrypt-phrase', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({ phrase: infuraApiKey })
-        });
-        const data = await res.json();
-        if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
-      }
-
-      if (!accountNumber) {
-          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-          updates.account_number = `835${randomSuffix}`;
-          setAccountNumber(updates.account_number);
-          localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
-      } else { updates.account_number = accountNumber; }
-
-      const { error } = await supabase!.from('profiles').update(updates).eq('id', activeSessionId);
-      if (error) throw error;
-      await syncAllAddresses();
-      await refreshProfile();
-    } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
-  }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
-
+  // 5. STAGE 4: INTERACTION & DIAGNOSTICS (DEPENDS ON DERIVATION & SYNC)
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId || !supabase) return;
     if (wallets.length === 0) return;
@@ -593,7 +593,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 5. STAGE 4: ENGINE & BALANCES
+  // 6. STAGE 5: ENGINE & BALANCES (DEPENDS ON ALL PREVIOUS)
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
@@ -650,7 +650,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
-  // 6. COMPUTED ASSETS
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
@@ -690,7 +689,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
-  // 7. EFFECTS
+  // 7. EFFECTS & LISTENERS
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
