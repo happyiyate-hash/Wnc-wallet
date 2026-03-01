@@ -29,7 +29,9 @@ export default function MobileNav() {
 
   if (!mounted) return null;
 
-  // HIDE ON ACTION PAGES & REQUEST FLOWS
+  // HIDE ON AUTH, ONBOARDING, ACTION PAGES & REQUEST FLOWS
+  const isAuthRoute = pathname.startsWith('/auth');
+  const isOnboardingRoute = ['/complete-profile', '/wallet-session'].includes(pathname);
   const isActionPage = 
     pathname === '/send' || 
     pathname === '/receive' || 
@@ -37,7 +39,7 @@ export default function MobileNav() {
     pathname === '/request' ||
     pathname.startsWith('/request/');
 
-  if (isActionPage) return null;
+  if (isAuthRoute || isOnboardingRoute || isActionPage) return null;
 
   const NavLink = ({ item }: { item: NavItem; }) => {
     const isActive = pathname === item.href;
