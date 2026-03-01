@@ -198,8 +198,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
-      // Implicit NEAR Address Derivation
-      const seed = await bip39.mnemonicToSeed(cleanMnemonic);
       const nearKeyPair = KeyPair.fromRandom("ed25519"); 
       const nearAddress = nearKeyPair.getPublicKey().toString().replace("ed25519:", "").toLowerCase();
 
@@ -257,38 +255,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // 1. Update Core Profile (Fixed Columns)
-      const evmAddr = wallets.find(w => w.type === 'evm')?.address;
-      const profileUpdates: any = {
-        account_number: targetAcc,
-        updated_at: new Date().toISOString()
-      };
-      if (evmAddr) profileUpdates.evm_address = evmAddr;
-
-      const { error: profileError } = await supabase
+      // 1. Update Core Identity (Profiles)
+      await supabase
         .from('profiles')
-        .update(profileUpdates)
+        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
         .eq('id', activeSessionId);
 
-      if (profileError) console.warn("Profile core sync warning:", profileError.message);
+      // 2. ATOMIC UNLIMITED SYNC (Wallets Registry)
+      const walletPayload = wallets.map(w => ({ type: w.type, address: w.address }));
+      const { error: syncError } = await supabase.rpc('sync_user_wallets', {
+          p_user_id: activeSessionId,
+          p_wallets: walletPayload
+      });
 
-      // 2. Sync Flexible Wallets Registry (Unlimited Blockchains)
-      const walletInserts: Partial<WalletRegistryEntry>[] = wallets.map(w => ({
-        user_id: activeSessionId,
-        blockchain_id: w.type,
-        address: w.address,
-        updated_at: new Date().toISOString()
-      }));
-
-      const { error: walletError } = await supabase
-        .from('wallets')
-        .upsert(walletInserts, { onConflict: 'user_id,blockchain_id' });
-
-      if (walletError) {
-          console.error("Wallets Registry sync failure:", walletError.message);
-          throw walletError;
-      }
-
+      if (syncError) throw syncError;
       await refreshProfile();
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
@@ -336,9 +316,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const evmAddr = wallets.find(w => w.type === 'evm')?.address;
-      if (evmAddr) updates.evm_address = evmAddr;
-      
       if (!accountNumber) {
           const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
           updates.account_number = `835${randomSuffix}`;
@@ -354,7 +331,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('id', activeSessionId);
       if (error) throw error;
 
-      // Ensure wallets table is also updated
       await syncAllAddresses();
       await refreshProfile();
     } catch (e: any) {

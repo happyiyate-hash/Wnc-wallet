@@ -72,7 +72,6 @@ const detectAddressType = (input: string) => {
     } catch (e) {}
   }
 
-  // NEAR Detection: Account IDs (node.near) or Implicit (64 hex)
   if (clean.endsWith('.near') || clean.endsWith('.testnet') || /^[a-f0-9]{64}$/.test(clean)) {
     return 'near';
   }
@@ -91,10 +90,9 @@ const getDetectedNetworkMeta = (type: string) => {
 
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds') || msg.includes('insufficient node funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer.";
-  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
-  if (msg.includes('websocket') || msg.includes('disconnected')) return "Network Timeout: The blockchain node closed the connection. Please try again.";
-  return "Dispatch Error: The transaction was rejected by the registry or network.";
+  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low.";
+  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request.";
+  return "Dispatch Error: The transaction was rejected by the network.";
 };
 
 function SendClient() {
@@ -157,9 +155,7 @@ function SendClient() {
     const input = debouncedRecipient.trim().toLowerCase();
     if (!input) return false;
     if (accountNumber && input === accountNumber.toLowerCase()) return true;
-    if (wallets) {
-        return wallets.some(w => w.address.toLowerCase() === input);
-    }
+    if (wallets) return wallets.some(w => w.address.toLowerCase() === input);
     return false;
   }, [debouncedRecipient, accountNumber, wallets]);
 
@@ -206,22 +202,20 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // 1. Dual-Layer Resolution: Search Profiles + Flexible Wallets Registry
-        const { data: userRecord, error: userError } = await supabase
+        // 1. DUAL-LAYER RESOLUTION: Profiles -> Wallets Registry
+        const { data: userRecord } = await supabase
           .from('profiles')
-          .select('id, name, photo_url, account_number, evm_address')
-          .or(`account_number.eq.${input},evm_address.eq.${input}`)
+          .select('id, name, photo_url, account_number')
+          .eq('account_number', input)
           .maybeSingle();
-
-        if (userError) throw userError;
 
         if (currentId !== resolutionCounter.current) return;
 
-        let targetProfileId = userRecord?.id;
         let finalProfile = userRecord;
+        let targetAddr = isRawChainAddress ? input : '';
 
-        // 2. If no profile found by core columns, search wallets table (Unlimited support)
-        if (!targetProfileId && isRawChainAddress) {
+        // 2. Search Unlimited Wallets Registry if no profile found by Account ID
+        if (!finalProfile && isRawChainAddress) {
             const { data: walletMatch } = await supabase
                 .from('wallets')
                 .select('user_id, address')
@@ -229,13 +223,13 @@ function SendClient() {
                 .maybeSingle();
             
             if (walletMatch) {
-                targetProfileId = walletMatch.user_id;
                 const { data: linkedProfile } = await supabase
                     .from('profiles')
-                    .select('id, name, photo_url, account_number, evm_address')
-                    .eq('id', targetProfileId)
+                    .select('id, name, photo_url, account_number')
+                    .eq('id', walletMatch.user_id)
                     .single();
                 finalProfile = linkedProfile;
+                targetAddr = input;
             }
         }
 
@@ -249,11 +243,8 @@ function SendClient() {
 
           if (isInternalWnc) {
             setResolvedAddress(finalProfile.account_number || '');
-            setResolutionError(null);
           } else {
             const targetChainType = activeNetwork.type || 'evm';
-            
-            // Lookup specific chain address in flexible registry
             const { data: chainWallet } = await supabase
                 .from('wallets')
                 .select('address')
@@ -263,10 +254,6 @@ function SendClient() {
 
             if (chainWallet?.address) {
               setResolvedAddress(chainWallet.address);
-              setResolutionError(null);
-            } else if (targetChainType === 'evm' && finalProfile.evm_address) {
-              setResolvedAddress(finalProfile.evm_address);
-              setResolutionError(null);
             } else {
               setResolvedAddress('');
               setResolutionError(`Recipient found, but no node configured for ${targetChainType.toUpperCase()}.`);
@@ -275,18 +262,14 @@ function SendClient() {
         } else {
           if (isRawChainAddress) {
               setResolvedAddress(input);
-              setRecipientProfile(null);
-              setResolutionError(null);
           } else {
               setResolvedAddress('');
-              setRecipientProfile(null);
               setResolutionError("I could not find any account or blockchain related to this symbols");
           }
         }
       } catch (e: any) {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress(isRawChainAddress ? input : '');
-          setRecipientProfile(null);
           setResolutionError("Handshake Error: Identity lookup failed.");
         }
       } finally {
@@ -307,65 +290,31 @@ function SendClient() {
     try {
       if (selectedToken.symbol === 'WNC') {
         if (!recipientProfile) throw new Error("Internal recipient node not identified.");
-        
         const transferAmount = parseFloat(amount);
-        if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
-
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
             p_recipient_id: recipientProfile.id,
             p_amount: Math.floor(transferAmount)
         });
-
-        if (rpcError || !data?.success) {
-            throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
-        }
-
-        await supabase!.from('transactions').insert({
-            user_id: profile.id,
-            type: 'withdrawal',
-            asset_symbol: 'WNC',
-            amount: transferAmount,
-            status: 'completed',
-            recipient_address: resolvedAddress
-        });
-
+        if (rpcError || !data?.success) throw new Error(rpcError?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
-        
-        try {
-          await Promise.race([
-            client.connect(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 10000))
-          ]);
-
-          const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-          const prepared = await client.autofill({ 
-            TransactionType: "Payment", 
-            Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(amount), 
-            Destination: resolvedAddress 
-          });
-          
-          const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
-            setTxHash(result.result.hash);
-          } else { 
-            throw new Error((result.result.meta as any)?.TransactionResult || "XRPL Error"); 
-          }
-        } finally {
-          if (client.isConnected()) {
-            await client.disconnect();
-          }
-        }
+        await client.connect();
+        const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
+        const prepared = await client.autofill({ 
+          TransactionType: "Payment", 
+          Account: wallet.address, 
+          Amount: xrpl.xrpToDrops(amount), 
+          Destination: resolvedAddress 
+        });
+        const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
+        await client.disconnect();
+        if ((result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
+        else throw new Error("XRPL Error");
       } 
-      else if (activeNetwork.type === 'near') {
-          setTxHash(`near_${Math.random().toString(36).substring(7)}`);
-          await new Promise(r => setTimeout(r, 2000));
-      }
       else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
