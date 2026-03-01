@@ -440,6 +440,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (Object.keys(newPrices).length > 0) {
             setPrices(prev => ({ ...prev, ...newPrices }));
         } else {
+            // Aggressive retry if no prices found
             setTimeout(fetchGlobalPrices, 5000);
         }
     } catch (e) {
@@ -586,6 +587,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
+  // PRODUCTION HYDRATION STRATEGY: Immediate Load from Cache
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -604,6 +606,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (profile?.account_number) setAccountNumber(profile.account_number);
 
       if (savedMnemonic) {
+          // Bypass splash if we have cached node identities
           setIsWalletLoading(false); 
           await loadWalletFromMnemonic(savedMnemonic);
       } else {
