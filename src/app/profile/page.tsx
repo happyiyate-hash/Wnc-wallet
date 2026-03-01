@@ -25,7 +25,9 @@ import {
   ExternalLink,
   Cpu,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Activity
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -33,7 +35,16 @@ import { cn } from "@/lib/utils";
 export default function ProfilePage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
-    const { allAssets, viewingNetwork, wallets, getAddressForChain, accountNumber, isRefreshing, syncAllAddresses } = useWallet();
+    const { 
+        allAssets, 
+        viewingNetwork, 
+        wallets, 
+        getAddressForChain, 
+        accountNumber, 
+        isRefreshing, 
+        syncAllAddresses,
+        runCloudDiagnostic 
+    } = useWallet();
     const { formatFiat, rates } = useCurrency();
     const [isAddressCopied, copyAddress] = useCopyToClipboard();
     const [isIdCopied, copyId] = useCopyToClipboard();
@@ -61,6 +72,10 @@ export default function ProfilePage() {
         } finally {
             setTimeout(() => setIsSyncing(false), 1000);
         }
+    };
+
+    const handleActivateScan = () => {
+        runCloudDiagnostic({ forceUI: true });
     };
 
     const ProfileAction = ({ 
@@ -147,10 +162,35 @@ export default function ProfilePage() {
                     </div>
 
                     <section className="space-y-3">
-                        <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Network Hub</p><div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500"><Cpu className="w-2.5 h-2.5 animate-pulse" />Watchdog Sync: Active</div></div>
-                        <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative">
-                            <div className="flex items-center gap-2"><QrCode className="w-4 h-4 text-primary" /><span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span></div>
-                            <div onClick={() => address && copyAddress(address)} className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all"><p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">{address || 'Initializing...'}</p><div className={cn("shrink-0 w-10 h-10 rounded-xl flex items-center justify-center", isAddressCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>{isAddressCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}</div></div>
+                        <div className="flex justify-between items-center px-2">
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Network Hub</p>
+                            <div className="flex items-center gap-1 text-[8px] font-black uppercase text-green-500">
+                                <Cpu className="w-2.5 h-2.5 animate-pulse" />Watchdog Sync: Active
+                            </div>
+                        </div>
+                        
+                        <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl rounded-full -mr-16 -mt-16" />
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <QrCode className="w-4 h-4 text-primary" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Address</span>
+                                </div>
+                                <Button 
+                                    onClick={handleActivateScan}
+                                    variant="ghost" 
+                                    className="h-8 px-3 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 gap-2"
+                                >
+                                    <Activity className="w-3 h-3 animate-pulse" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest">Audit Nodes</span>
+                                </Button>
+                            </div>
+                            <div onClick={() => address && copyAddress(address)} className="bg-black/40 border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-primary/50 transition-all relative z-10">
+                                <p className="text-xs font-mono text-white/70 break-all leading-relaxed mr-4">{address || 'Initializing...'}</p>
+                                <div className={cn("shrink-0 w-10 h-10 rounded-xl flex items-center justify-center", isAddressCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>
+                                    {isAddressCopied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                </div>
+                            </div>
                         </div>
                     </section>
 
@@ -164,7 +204,10 @@ export default function ProfilePage() {
                     </section>
 
                     <div className="pt-4 flex flex-col items-center gap-3">
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5"><RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} /><span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Global Watchdog Sync: Active</span></div>
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
+                            <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isSyncing && "animate-spin")} />
+                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Global Watchdog Sync: Active</span>
+                        </div>
                         <p className="text-[8px] text-muted-foreground/40 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">Secured by Master Wevina Cloud Protocol v3.0</p>
                     </div>
             </main>
