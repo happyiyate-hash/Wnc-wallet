@@ -689,28 +689,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cloud = getCloudAddr(chainInfo.type);
       
       setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(600);
+      await wait(1000);
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(400);
+        await wait(800);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         await syncAllAddresses(wallets);
-        await wait(600);
+        await wait(1200);
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(400);
+        await wait(800);
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(300);
+        await wait(600);
       }
     }
 
     setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
-    await wait(800);
+    await wait(1200);
     if (!profile.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(800);
+      await wait(1500);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
