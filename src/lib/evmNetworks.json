@@ -323,5 +323,14 @@
     "coingeckoId": "hedera-hashgraph",
     "themeColor": "#00AD7C",
     "type": "hedera"
+  },
+  "1729": {
+    "name": "Tezos",
+    "symbol": "XTZ",
+    "chainId": 1729,
+    "rpcUrl": "https://mainnet.api.tez.ie",
+    "coingeckoId": "tezos",
+    "themeColor": "#2C7DF7",
+    "type": "tezos"
   }
 }

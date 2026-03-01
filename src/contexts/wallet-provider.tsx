@@ -20,6 +20,7 @@ import { stringToPath } from "@cosmjs/crypto";
 import { TronWeb } from "tronweb";
 import * as algosdk from "algosdk";
 import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
+import { InMemorySigner } from "@taquito/signer";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -44,13 +45,14 @@ import { cardanoAdapterFactory } from '@/lib/wallets/adapters/cardano';
 import { tronAdapterFactory } from '@/lib/wallets/adapters/tron';
 import { algorandAdapterFactory } from '@/lib/wallets/adapters/algorand';
 import { hederaAdapterFactory } from '@/lib/wallets/adapters/hedera';
+import { tezosAdapterFactory } from '@/lib/wallets/adapters/tezos';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -260,6 +262,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     else if (chain.type === 'algorand') adapter = algorandAdapterFactory(chain);
     else if (chain.type === 'hedera') adapter = hederaAdapterFactory(chain);
+    else if (chain.type === 'tezos') adapter = tezosAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -423,7 +426,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const hbarMnemonic = await HederaMnemonic.fromString(cleanMnemonic);
       const hbarPrivateKey = await hbarMnemonic.toStandardEd25519PrivateKey();
-      const hbarPublicKey = hbarPrivateKey.publicKey;
+      
+      const xtzSigner = await InMemorySigner.fromSecretKey(cleanMnemonic);
+      const xtzAddress = await xtzSigner.publicKeyHash();
 
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
@@ -443,7 +448,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: adaAddress, type: 'cardano' },
         { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
         { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
-        { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' }
+        { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
+        { address: xtzAddress, type: 'tezos' }
       ];
       setWallets(derived);
       return derived;
@@ -598,7 +604,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

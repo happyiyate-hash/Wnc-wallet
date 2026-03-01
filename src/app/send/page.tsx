@@ -43,7 +43,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON, Algorand and Hedera formats.
+ * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON, Algorand, Hedera and Tezos formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -51,6 +51,7 @@ const detectAddressType = (input: string) => {
   
   if (/^835\d{7}$/.test(clean)) return 'account-id';
   if (/^\d+\.\d+\.\d+$/.test(clean)) return 'hedera';
+  if (/^tz[123][a-km-zA-HJ-NP-Z1-9]{33}$/.test(clean)) return 'tezos';
 
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
@@ -116,6 +117,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'tron') return { name: 'TRON', symbol: 'TRX' };
     if (type === 'algorand') return { name: 'Algorand', symbol: 'ALGO' };
     if (type === 'hedera') return { name: 'Hedera', symbol: 'HBAR' };
+    if (type === 'tezos') return { name: 'Tezos', symbol: 'XTZ' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -226,7 +228,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -343,6 +345,10 @@ function SendClient() {
       else if (activeNetwork.type === 'hedera') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "Hedera signing restricted to hardware modules." });
           throw new Error("Hedera Signing restricted to hardware modules.");
+      }
+      else if (activeNetwork.type === 'tezos') {
+          toast({ title: `Institutional ${selectedToken.symbol}`, description: "Tezos signing restricted to hardware modules." });
+          throw new Error("Tezos Signing restricted to hardware modules.");
       }
       else if (activeNetwork.type === 'tron') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "TRON signing restricted to hardware modules." });
