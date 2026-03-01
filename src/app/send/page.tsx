@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -64,6 +63,7 @@ const detectAddressType = (input: string) => {
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
+        // Polkadot prefixes: 0=Polkadot, 2=Kusama, 42=Generic
         const [isValid] = checkAddress(clean, 42); 
         const [isValidPolkadot] = checkAddress(clean, 0);
         const [isValidKusama] = checkAddress(clean, 2);

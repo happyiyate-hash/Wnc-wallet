@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -262,6 +261,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('id', activeSessionId);
 
       // 2. ATOMIC UNLIMITED SYNC (Wallets Registry)
+      // This calls the PostgreSQL RPC function that accepts a dynamic JSON array
       const walletPayload = wallets.map(w => ({ type: w.type, address: w.address }));
       const { error: syncError } = await supabase.rpc('sync_user_wallets', {
           p_user_id: activeSessionId,
@@ -269,6 +269,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
 
       if (syncError) throw syncError;
+      
+      setIsSynced(true);
       await refreshProfile();
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
@@ -440,6 +442,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (Object.keys(newPrices).length > 0) {
             setPrices(prev => ({ ...prev, ...newPrices }));
         } else {
+            // Heartbeat Retry: if no data found, retry faster
             setTimeout(fetchGlobalPrices, 5000);
         }
     } catch (e) {
@@ -490,6 +493,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const isFirstSession = !sessionStorage.getItem(`synced_${activeSessionId}`);
     
+    // Fetch the Unlimited Wallets Registry
     const { data: cloudWallets } = await supabase
         .from('wallets')
         .select('blockchain_id, address')
@@ -500,6 +504,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
 
     if (!hasMismatch && !isFirstSession && !options?.forceUI) {
+      setIsSynced(true);
       return;
     }
 
@@ -549,6 +554,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     sessionStorage.setItem(`synced_${activeSessionId}`, 'true');
+    setIsSynced(true);
     
     setTimeout(() => {
       setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
