@@ -596,7 +596,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!activeSessionId || !supabase) throw new Error("Registry connection failed.");
     setIsWalletLoading(true);
     try {
-      // 1. Fetch FRESH cloud profile data to ensure we have current encrypted fields
       const { data: latestProfile, error: pError } = await supabase
         .from('profiles')
         .select('*')
@@ -608,7 +607,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      // 2. Restore Master Mnemonic
       if (latestProfile.vault_phrase && latestProfile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -623,7 +621,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 3. Restore Infura API Key
       if (latestProfile.vault_infura_key && latestProfile.infura_iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -654,32 +651,94 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId || !supabase) return;
+    
+    // Ensure wallets is fully hydrated
+    if (wallets.length === 0) return;
+
     const isFirstSession = !sessionStorage.getItem(`synced_${activeSessionId}`);
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', activeSessionId);
+    
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
-    const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
-    if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
+    
+    // Support chains list with explicit identifier mapping
+    const chains: { label: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI'; type: string }[] = [
+      { label: 'EVM', type: 'evm' },
+      { label: 'XRP', type: 'xrp' },
+      { label: 'Polkadot', type: 'polkadot' },
+      { label: 'Kusama', type: 'kusama' },
+      { label: 'NEAR', type: 'near' },
+      { label: 'BTC', type: 'btc' },
+      { label: 'LTC', type: 'ltc' },
+      { label: 'DOGE', type: 'doge' },
+      { label: 'SOL', type: 'solana' },
+      { label: 'Cosmos', type: 'cosmos' },
+      { label: 'OSMO', type: 'osmosis' },
+      { label: 'SECRET', type: 'secret' },
+      { label: 'INJ', type: 'injective' },
+      { label: 'TIA', type: 'celestia' },
+      { label: 'ADA', type: 'cardano' },
+      { label: 'TRX', type: 'tron' },
+      { label: 'ALGO', type: 'algorand' },
+      { label: 'HBAR', type: 'hedera' },
+      { label: 'XTZ', type: 'tezos' },
+      { label: 'APT', type: 'aptos' },
+      { label: 'SUI', type: 'sui' }
+    ];
+
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama' , 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ', 'APT', 'SUI'];
+    
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
+
     for (let i = 0; i < chains.length; i++) {
-      const chain = chains[i];
-      const type = chain === 'OSMO' ? 'osmosis' : chain === 'INJ' ? 'injective' : chain === 'APT' ? 'aptos' : chain.toLowerCase();
-      const local = wallets.find(w => w.type === type)?.address || null;
-      const cloud = getCloudAddr(type);
-      setSyncDiagnostic(prev => ({ ...prev, chain: chain as any, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(800);
-      if (local !== cloud) {
-        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' })); await wait(600);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' })); await syncAllAddresses(wallets); await wait(800);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local })); await wait(600);
-      } else { setSyncDiagnostic(prev => ({ ...prev, status: 'success' })); await wait(400); }
+      const chainInfo = chains[i];
+      const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
+      const cloud = getCloudAddr(chainInfo.type);
+      
+      setSyncDiagnostic(prev => ({ 
+        ...prev, 
+        chain: chainInfo.label, 
+        status: 'checking', 
+        localValue: local, 
+        cloudValue: cloud, 
+        progress: (i / chains.length) * 100 
+      }));
+
+      await wait(600);
+
+      // If missing in cloud but exists locally, trigger atomic sync immediately
+      if (local && local !== cloud) {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
+        await wait(400);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+        await syncAllAddresses(wallets);
+        await wait(600);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await wait(400);
+      } else {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
+        await wait(300);
+      }
     }
-    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing' }));
+
+    setSyncDiagnostic(prev => ({ 
+      ...prev, 
+      chain: 'Vault', 
+      status: 'checking', 
+      localValue: 'Encrypted Phrase', 
+      cloudValue: profile.vault_phrase ? 'Stored' : 'Missing',
+      progress: 95
+    }));
+
     await wait(800);
-    if (!profile.vault_phrase) { setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' })); await saveToVault(); await wait(800); }
+    if (!profile.vault_phrase) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+      await saveToVault();
+      await wait(800);
+    }
+
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
-    sessionStorage.setItem(`synced_${activeSessionId}`, 'true'); setIsSynced(true);
+    sessionStorage.setItem(`synced_${activeSessionId}`, 'true');
+    setIsSynced(true);
     setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
   }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault]);
 
@@ -739,7 +798,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           if (isInitialized) fetchGlobalPrices();
       }
       
-      // Load preferences
       const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
