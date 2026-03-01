@@ -159,23 +159,24 @@ function SwapClient() {
         setQuotes(finalBatch);
         setIsQuoteLoading(false);
         
-        // PHASE 1: MARKET REVELATION
+        // PHASE 1: MARKET REVELATION (Show all neutral)
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1000));
 
-        // PHASE 2: IDENTITY SCAN
+        // PHASE 2: IDENTITY SCAN (Kinetic light trail)
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatch.length; i++) {
           setActiveScanIndex(i);
-          await new Promise(r => setTimeout(r, 120));
+          await new Promise(r => setTimeout(r, 200));
         }
 
-        // PHASE 3: DECISION MOMENT
+        // PHASE 3: DECISION MOMENT (Pulsing best route)
         setQuotePhase('FINAL_SELECTED');
-        setSelectedQuoteId(finalBatch[0].id);
-        await new Promise(r => setTimeout(r, 1000));
+        const best = finalBatch.find(q => q.isBest);
+        setSelectedQuoteId(best?.id || null);
+        await new Promise(r => setTimeout(r, 1500));
 
-        // PHASE 4: STABLE TRANSITION (SEQUENTIAL FADE OUT)
+        // PHASE 4: TRANSITION (Sequential fade out)
         setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatch.length; i++) {
           setFadedIndices(prev => new Set(prev).add(i));
@@ -262,37 +263,61 @@ function SwapClient() {
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
 
+  // CINEMATIC ROW VARIANTS
   const rowVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
+    hidden: { opacity: 0, scale: 0.95, y: 10 },
     visible: { 
       opacity: 1, 
       scale: 1,
-      transition: { duration: 0.3 } 
+      y: 0,
+      borderColor: 'rgba(255,255,255,0.05)',
+      backgroundColor: 'rgba(255,255,255,0.02)',
+      transition: { duration: 0.4 } 
+    },
+    pending: {
+      opacity: 0.3,
+      scale: 0.98,
+      transition: { duration: 0.3 }
     },
     scanning: { 
-      scale: 1.02, 
+      opacity: 1,
+      scale: 1.05, 
       borderColor: 'rgba(59, 130, 246, 0.8)', 
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)'
+      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+      boxShadow: '0 0 30px rgba(59, 130, 246, 0.4)',
+      zIndex: 20,
+      transition: { duration: 0.1 }
     },
     accepted: { 
+      opacity: 0.8,
+      scale: 1,
       borderColor: 'rgba(34, 197, 94, 0.4)',
-      backgroundColor: 'rgba(34, 197, 94, 0.05)'
+      backgroundColor: 'rgba(34, 197, 94, 0.05)',
+      transition: { duration: 0.3 }
     },
     best: { 
-      scale: 1.05, 
+      opacity: 1,
+      scale: 1.08, 
       borderColor: 'rgba(59, 130, 246, 1)', 
-      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-      boxShadow: '0 0 30px rgba(59, 130, 246, 0.5)',
+      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+      boxShadow: '0 0 40px rgba(59, 130, 246, 0.6)',
+      zIndex: 30,
+      transition: { 
+        duration: 0.4,
+        repeat: Infinity,
+        repeatType: 'reverse'
+      } as any
     },
     rejected: { 
       scale: 0.92, 
-      opacity: 0.3, 
+      opacity: 0.2, 
       filter: 'grayscale(1)',
-      borderColor: 'rgba(239, 68, 68, 0.2)'
+      borderColor: 'rgba(239, 68, 68, 0.2)',
+      transition: { duration: 0.5 }
     },
     fading: { 
       opacity: 0, 
+      y: -10,
       transition: { duration: 0.3 } 
     }
   };
@@ -341,8 +366,9 @@ function SwapClient() {
                       {quotes.map((quote, idx) => {
                         const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
                         const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
-                        const isBest = quotePhase === 'FINAL_SELECTED' && quote.isBest;
-                        const isRejected = quotePhase === 'FINAL_SELECTED' && !quote.isBest;
+                        const isPending = quotePhase === 'SCANNING' && idx > activeScanIndex;
+                        const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
+                        const isRejected = quotePhase === 'FINAL_SELECTED' && quote.id !== selectedQuoteId;
                         const isFading = fadedIndices.has(idx);
 
                         let variant: string = 'visible';
@@ -351,6 +377,7 @@ function SwapClient() {
                         else if (isRejected) variant = 'rejected';
                         else if (isScanning) variant = 'scanning';
                         else if (isAccepted) variant = 'accepted';
+                        else if (isPending) variant = 'pending';
 
                         return (
                           <motion.div
@@ -358,12 +385,25 @@ function SwapClient() {
                             variants={rowVariants}
                             initial="hidden"
                             animate={variant}
-                            className="w-full flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/[0.02] shadow-2xl"
+                            className="w-full flex items-center justify-between p-4 rounded-2xl border relative overflow-hidden"
                           >
-                            <div className="flex items-center gap-3">
+                            {/* SCANNER LIGHT TRAIL */}
+                            <AnimatePresence>
+                              {isScanning && (
+                                <motion.div 
+                                  initial={{ x: '-100%' }}
+                                  animate={{ x: '200%' }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }}
+                                  className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-blue-400/30 to-transparent skew-x-12 pointer-events-none"
+                                />
+                              )}
+                            </AnimatePresence>
+
+                            <div className="flex items-center gap-3 relative z-10">
                               <div className={cn(
-                                "w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-colors",
-                                isBest ? "bg-blue-600" : "bg-zinc-900"
+                                "w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-all duration-500",
+                                isBest ? "bg-blue-600 scale-110 shadow-lg" : isAccepted ? "bg-green-600/20" : "bg-zinc-900"
                               )}>
                                 {isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}
                               </div>
@@ -382,7 +422,7 @@ function SwapClient() {
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right relative z-10">
                               <p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>
                                 {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
                               </p>
@@ -474,14 +514,14 @@ function SwapClient() {
           ))}
         </div>
 
-        <div className="relative min-h-[180px] w-full">
+        <div className="relative mt-10 w-full min-h-[180px]">
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
               <motion.div 
                 initial={{ y: 40, opacity: 0 }} 
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="mt-10 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
+                className="p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
                 
@@ -493,7 +533,7 @@ function SwapClient() {
                         style={{ borderColor: `${fromChainColor}66` }}
                         className="absolute inset-0 rounded-full border-2 border-dashed"
                       />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-12 h-12 flex items-center justify-center">
                         <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={40} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                       </div>
                     </div>
@@ -546,7 +586,7 @@ function SwapClient() {
                         style={{ borderColor: `${toChainColor}66` }}
                         className="absolute inset-0 rounded-full border-2 border-dashed"
                       />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-12 h-12 flex items-center justify-center">
                         <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={40} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                       </div>
                     </div>
