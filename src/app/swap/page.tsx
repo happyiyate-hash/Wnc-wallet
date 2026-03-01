@@ -65,7 +65,7 @@ function SwapClient() {
   // CHOREOGRAPHY STATE
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [scanningIndex, setScanningIndex] = useState(-1);
-  const [fadedInfoCount, setFadedInfoCount] = useState(0);
+  const [visibleInfoCount, setVisibleInfoCount] = useState(0);
 
   // ANIMATION & LONG PRESS STATE
   const [rotation, setRotation] = useState(0);
@@ -96,13 +96,12 @@ function SwapClient() {
   // REAL QUOTE FETCH ENGINE
   useEffect(() => {
     const runSequence = async () => {
-      // GUARD: Stop if same amount or invalid
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
         setQuotePhase('IDLE');
         setSelectedQuoteId(null);
         setFetchError(null);
-        setFadedInfoCount(0);
+        setVisibleInfoCount(0);
         lastFetchedAmountRef.current = '';
         return;
       }
@@ -114,7 +113,7 @@ function SwapClient() {
       setIsQuoteLoading(true);
       setQuotePhase('FETCHING');
       setFetchError(null);
-      setFadedInfoCount(0);
+      setVisibleInfoCount(0);
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
@@ -156,28 +155,32 @@ function SwapClient() {
         
         // CHOREOGRAPHY START
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 1500)); 
+        await new Promise(r => setTimeout(r, 1200)); 
 
+        // PAUSE FOR STABILITY
         setQuotePhase('SCANNING');
+        await new Promise(r => setTimeout(r, 300));
+
         for (let i = 0; i < finalBatch.length; i++) {
           setScanningIndex(i);
-          await new Promise(r => setTimeout(r, 120));
+          await new Promise(r => setTimeout(r, 150));
         }
 
         setQuotePhase('FINAL_SELECTED');
         setSelectedQuoteId(finalBatch[0].id);
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1000));
 
         setQuotePhase('COLLAPSE');
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 600));
 
-        // SHOW ALL INFO THEN FADE OUT ONE BY ONE
+        // SHOW ALL INFO ONE BY ONE (AND STAY)
         setQuotePhase('ANIMATING_INFO');
-        await new Promise(r => setTimeout(r, 1000)); 
         for (let i = 1; i <= 4; i++) {
-          setFadedInfoCount(i);
-          await new Promise(r => setTimeout(r, 600)); 
+          setVisibleInfoCount(i);
+          await new Promise(r => setTimeout(r, 400)); 
         }
+
+        await new Promise(r => setTimeout(r, 600));
 
         // START VISUAL CARD
         setQuotePhase('ANIMATING_VISUAL');
@@ -210,7 +213,7 @@ function SwapClient() {
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
     setFetchError(null);
-    setFadedInfoCount(0);
+    setVisibleInfoCount(0);
     lastFetchedAmountRef.current = '';
   };
 
@@ -224,7 +227,7 @@ function SwapClient() {
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
     setFetchError(null);
-    setFadedInfoCount(0);
+    setVisibleInfoCount(0);
     lastFetchedAmountRef.current = '';
   };
 
@@ -406,13 +409,13 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INFO SEQUENCE AREA - SIMULTANEOUS REVEAL, STAGGERED FADE */}
-        <div className="mt-8 px-4 grid grid-cols-2 gap-4 h-24 relative">
+        {/* INFO SEQUENCE AREA - FADE IN AND STAY */}
+        <div className="mt-8 px-4 grid grid-cols-2 gap-4 h-24 relative overflow-hidden">
           {(quotePhase === 'ANIMATING_INFO' || quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div 
               key={idx}
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: fadedInfoCount > idx ? 0 : 1, y: fadedInfoCount > idx ? -10 : 0 }}
+              animate={{ opacity: visibleInfoCount > idx ? 1 : 0, y: visibleInfoCount > idx ? 0 : 10 }}
               transition={{ duration: 0.4 }}
               className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 h-fit"
             >
@@ -427,11 +430,11 @@ function SwapClient() {
           ))}
         </div>
 
-        {/* MAIN VISUAL ANIMATION CARD - KINETIC DASHED MOTION */}
+        {/* MAIN VISUAL ANIMATION CARD - LEFT-TO-RIGHT FLOW */}
         <AnimatePresence>
           {(quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') && (
             <motion.div 
-              initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
               className="mt-6 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
@@ -443,9 +446,12 @@ function SwapClient() {
                     <motion.div 
                       animate={{ rotate: 360 }}
                       transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                      className="absolute inset-0 rounded-full border-2 border-dashed border-pink-500/40"
+                      style={{ borderColor: `${fromChainColor}66` }}
+                      className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
-                    <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={44} chainId={fromToken?.chainId} />
+                    <div className="relative z-[70]">
+                      <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={44} chainId={fromToken?.chainId} />
+                    </div>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-black text-white uppercase">{fromToken?.symbol}</p>
@@ -453,14 +459,14 @@ function SwapClient() {
                   </div>
                 </div>
 
-                {/* KINETIC CONNECTOR 1 */}
+                {/* KINETIC CONNECTOR 1 (FLOW RIGHT) */}
                 <div className="flex-1 px-2 relative h-4 overflow-hidden">
                   <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
-                    <line x1="0" y1="2" x2="100%" y2="2" stroke="rgba(236, 72, 153, 0.2)" strokeWidth="2" strokeDasharray="4 4" />
+                    <line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
                     <motion.line 
                       x1="0" y1="2" x2="100%" y2="2" 
-                      stroke="rgba(236, 72, 153, 0.8)" strokeWidth="2" strokeDasharray="4 4"
-                      animate={{ strokeDashoffset: [-20, 0] }}
+                      stroke={fromChainColor} strokeWidth="2" strokeDasharray="4 4"
+                      animate={{ strokeDashoffset: [20, 0] }}
                       transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
                     />
                   </svg>
@@ -479,14 +485,14 @@ function SwapClient() {
                   <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Optimizing</span>
                 </div>
 
-                {/* KINETIC CONNECTOR 2 */}
+                {/* KINETIC CONNECTOR 2 (FLOW RIGHT) */}
                 <div className="flex-1 px-2 relative h-4 overflow-hidden">
                   <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
-                    <line x1="0" y1="2" x2="100%" y2="2" stroke="rgba(234, 179, 8, 0.2)" strokeWidth="2" strokeDasharray="4 4" />
+                    <line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
                     <motion.line 
                       x1="0" y1="2" x2="100%" y2="2" 
-                      stroke="rgba(234, 179, 8, 0.8)" strokeWidth="2" strokeDasharray="4 4"
-                      animate={{ strokeDashoffset: [-20, 0] }}
+                      stroke={toChainColor} strokeWidth="2" strokeDasharray="4 4"
+                      animate={{ strokeDashoffset: [20, 0] }}
                       transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
                     />
                   </svg>
@@ -498,9 +504,12 @@ function SwapClient() {
                     <motion.div 
                       animate={{ rotate: -360 }}
                       transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                      className="absolute inset-0 rounded-full border-2 border-dashed border-yellow-500/40"
+                      style={{ borderColor: `${toChainColor}66` }}
+                      className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
-                    <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={44} chainId={toToken?.chainId} />
+                    <div className="relative z-[70]">
+                      <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={44} chainId={toToken?.chainId} />
+                    </div>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-black text-white uppercase">{toToken?.symbol}</p>
@@ -513,7 +522,7 @@ function SwapClient() {
               <AnimatePresence mode="wait">
                 {quotePhase === 'COMPLETED' && (
                   <motion.div 
-                    initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                    initial={{ y: 15, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                     className="mt-8 grid grid-cols-2 gap-3"
                   >
                     <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
