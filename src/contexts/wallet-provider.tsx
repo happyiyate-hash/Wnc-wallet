@@ -122,7 +122,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    // Important: Use latest state if available, otherwise fallback to ref
     const currentCustom = userAddedTokens.length > 0 ? userAddedTokens : latestUserTokensRef.current;
     const custom = currentCustom.filter(t => t.chainId === chainId);
     
@@ -164,7 +163,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
         
-        // Priority key mapping for price lookup
         const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
         const priceInfo = prices[priceId];
         
@@ -401,12 +399,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const coingeckoIds = new Set<string>();
     const platformTokens: { [platform: string]: Set<string> } = {};
 
-    // 1. COLLECT ALL ACTIVE ASSETS (INITIAL + USER ADDED)
     const allKnownAssets: AssetRow[] = [];
     chainsWithLogos.forEach(chain => {
         allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
     });
-    // Use the latest state for CDN assets
     allKnownAssets.push(...userAddedTokens);
 
     allKnownAssets.forEach(a => { 
@@ -420,6 +416,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
         }
     });
+
+    if (coingeckoIds.size === 0 && Object.keys(platformTokens).length === 0) return;
 
     try {
         const fetchPromises = [];
@@ -441,9 +439,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
         });
 
-        if (Object.keys(newPrices).length > 0) setPrices(prev => ({ ...prev, ...newPrices }));
+        if (Object.keys(newPrices).length > 0) {
+            setPrices(prev => ({ ...prev, ...newPrices }));
+        } else {
+            // Aggressive retry if no prices were found but IDs exist
+            setTimeout(fetchGlobalPrices, 5000);
+        }
     } catch (e) {
-        console.warn("[PRICE_ORACLE_REFRESH_FAILED]", e);
+        console.warn("[PRICE_ORACLE_RETRY]", e);
+        setTimeout(fetchGlobalPrices, 10000);
     }
   }, [chainsWithLogos, userAddedTokens]);
 
@@ -473,9 +477,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
     try {
-        // Also fetch prices immediately to keep value nodes up to date
         await fetchGlobalPrices();
-        
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -575,7 +577,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
       return next;
     });
-  }, [activeSessionId]);
+    // Force immediate price fetch when new token added
+    fetchGlobalPrices();
+  }, [activeSessionId, fetchGlobalPrices]);
 
   const handleSetApiKey = useCallback((key: string | null) => {
     setInfuraApiKey(key);
@@ -636,7 +640,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isInitialized) {
         fetchGlobalPrices(); 
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = setInterval(fetchGlobalPrices, 15000);
+        priceIntervalRef.current = setInterval(fetchGlobalPrices, 30000);
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, fetchGlobalPrices]);

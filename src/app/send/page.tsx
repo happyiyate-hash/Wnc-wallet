@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -47,10 +48,8 @@ const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
   
-  // Internal WNC / Account ID Logic (10 digits starting with 835)
   if (/^835\d{7}$/.test(clean)) return 'account-id';
 
-  // 1. EVM Detection (Standard 0x40 hex)
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
@@ -58,17 +57,13 @@ const detectAddressType = (input: string) => {
     return 'evm';
   }
   
-  // 2. XRP Ledger Detection (Base58 starting with 'r')
   if (clean.startsWith('r')) {
     if (xrpl.isValidClassicAddress(clean)) return 'xrp';
     return 'invalid-xrp';
   }
   
-  // 3. Polkadot Ecosystem Detection (SS58 Format)
-  // Typically starts with 1 (Polkadot), 5 (Substrate), d (Kusama)
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        // We verify against common prefixes (0: Polkadot, 2: Kusama, 42: Generic)
         const [isValid] = checkAddress(clean, 42); 
         const [isValidPolkadot] = checkAddress(clean, 0);
         const [isValidKusama] = checkAddress(clean, 2);
@@ -378,7 +373,7 @@ function SendClient() {
             <TokenLogoDynamic key={`send-token-${selectedToken?.symbol}`} logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
             <div className="flex items-start leading-none">
                 <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span>
-                <span className="text-[7px] font-bold text-primary uppercase opacity-60">{activeNetwork.name}</span>
+                <span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span>
             </div>
             <ChevronDown className="w-3 h-3 text-primary" />
         </button>

@@ -1,3 +1,4 @@
+
 const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
 /**
@@ -28,20 +29,28 @@ export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
 };
 
 /**
- * A generic fetcher function for CoinGecko API.
+ * A generic fetcher function for CoinGecko API with automatic retries.
  */
-async function fetcher(url: string) {
-    try {
-        const res = await fetch(url);
-        if (!res.ok) {
-            const error = new Error(`CoinGecko Error: ${res.status}`);
-            console.warn(`[COINGECKO_FETCH_WARNING] ${url} returned ${res.status}`);
-            throw error;
+async function fetcher(url: string, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(url);
+            if (res.status === 429) {
+                // Rate limit hit, wait and retry
+                await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+                continue;
+            }
+            if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+            return await res.json();
+        } catch (e) {
+            if (i === retries) {
+                console.warn(`[COINGECKO_FAIL] Final attempt for ${url}:`, e);
+                return null;
+            }
+            await new Promise(r => setTimeout(r, 1000));
         }
-        return res.json();
-    } catch (e) {
-        return null;
     }
+    return null;
 }
 
 /**
@@ -118,7 +127,7 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
     let url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
 
-    // If ID is missing but contract details exist, attempt platform discovery
+    // If ID is missing or undefined, attempt platform discovery using contract address
     if ((!coingeckoId || coingeckoId === 'undefined') && chainId && contractAddress && contractAddress.startsWith('0x')) {
         const platform = COINGECKO_PLATFORM_MAP[chainId];
         if (platform) {
