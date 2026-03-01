@@ -1,7 +1,16 @@
 
 'use client';
 
-import { StargateClient } from "@cosmjs/stargate";
+import {
+  DirectSecp256k1HdWallet
+} from "@cosmjs/proto-signing";
+import {
+  SigningStargateClient,
+  StargateClient,
+  GasPrice,
+  calculateFee,
+} from "@cosmjs/stargate";
+import { stringToPath } from "@cosmjs/crypto";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
@@ -36,6 +45,22 @@ class CelestiaAdapter implements IWalletAdapter {
             console.warn(`[CELESTIA_ADAPTER_ERROR] ${this.rpcUrl}:`, error.message);
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         }
+    }
+
+    // HD DERIVATION ENGINE
+    async deriveFromMnemonic(mnemonic: string, index = 0) {
+        const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+            prefix: "celestia",
+            hdPaths: [stringToPath(`m/44'/118'/0'/0/${index}`)]
+        });
+
+        const [account] = await wallet.getAccounts();
+
+        return {
+            mnemonic,
+            address: account.address,
+            path: `m/44'/118'/0'/0/${index}`,
+        };
     }
 }
 

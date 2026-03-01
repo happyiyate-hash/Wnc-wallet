@@ -1,13 +1,21 @@
 
 'use client';
 
-import { StargateClient } from "@cosmjs/stargate";
+import {
+  DirectSecp256k1HdWallet,
+} from "@cosmjs/proto-signing";
+import {
+  SigningStargateClient,
+  StargateClient,
+  GasPrice,
+  calculateFee,
+} from "@cosmjs/stargate";
+import { stringToPath } from "@cosmjs/crypto";
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * Injective (INJ) Adapter
  * Real-time balance fetching via Injective Tendermint RPC.
- * Note: INJ uses 18 decimals, similar to Ethereum.
  */
 class InjectiveAdapter implements IWalletAdapter {
     private rpcUrl: string;
@@ -37,6 +45,22 @@ class InjectiveAdapter implements IWalletAdapter {
             console.warn(`[INJECTIVE_ADAPTER_ERROR] ${this.rpcUrl}:`, error.message);
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         }
+    }
+
+    // HD DERIVATION ENGINE
+    async deriveFromMnemonic(mnemonic: string, index = 0) {
+        const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+            prefix: "inj",
+            hdPaths: [stringToPath(`m/44'/60'/0'/0/${index}`)]
+        });
+
+        const [account] = await wallet.getAccounts();
+
+        return {
+            mnemonic,
+            address: account.address,
+            path: `m/44'/60'/0'/0/${index}`,
+        };
     }
 }
 

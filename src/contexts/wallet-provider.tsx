@@ -16,6 +16,7 @@ import * as ecc from "tiny-secp256k1";
 import { derivePath } from "ed25519-hd-key";
 import { Keypair as SolanaKeypair } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
+import { stringToPath } from "@cosmjs/crypto";
 import TronWeb from "tronweb";
 import algosdk from "algosdk";
 import { getInitialAssets } from '@/lib/wallets/balances';
@@ -385,11 +386,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const secretWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
         prefix: "secret",
-        hdPaths: [{ account: 0, change: 0, addressIndex: 0 } as any]
+        hdPaths: [stringToPath("m/44'/529'/0'/0/0")]
       });
       const [secretAccount] = await secretWallet.getAccounts();
 
-      const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "inj" });
+      const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { 
+        prefix: "inj",
+        hdPaths: [stringToPath("m/44'/60'/0'/0/0")]
+      });
       const [injectiveAccount] = await injectiveWallet.getAccounts();
 
       const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia" });
