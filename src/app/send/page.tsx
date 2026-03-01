@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   AlertCircle,
   ChevronDown,
-  Zap
+  Zap,
+  XCircle
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -74,7 +75,7 @@ const detectAddressType = (input: string) => {
 const getDetectedNetworkMeta = (type: string) => {
     if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
     if (type === 'polkadot' || type === 'invalid-polkadot') return { name: 'Polkadot', symbol: 'DOT' };
-    if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'EVM Network', symbol: 'ETH' };
+    if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'Ethereum', symbol: 'ETH' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -158,8 +159,9 @@ function SendClient() {
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
+    if (debouncedRecipient.length > 0 && addrType === 'invalid') return { title: "Unknown Format", message: "I could not find any account or blockchain related to this symbols" };
     return null;
-  }, [addrType, isSelfTransfer]);
+  }, [addrType, isSelfTransfer, debouncedRecipient]);
 
   const isNetworkMismatch = useMemo(() => {
     if (isSelfTransfer || selectedToken?.symbol === 'WNC') return false;
@@ -246,7 +248,7 @@ function SendClient() {
           } else {
               setResolvedAddress('');
               setRecipientProfile(null);
-              setResolutionError("Recipient account not identified.");
+              setResolutionError("I could not find any account or blockchain related to this symbols");
           }
         }
       } catch (e: any) {
@@ -426,11 +428,12 @@ function SendClient() {
                         <div className={cn(
                             "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden z-10",
                             (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : 
-                            (isNetworkMismatch || validationError || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
+                            (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
                             "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
                         )}>
-                            {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : 
-                             isSelfTransfer ? (
+                            {isResolving && !isNetworkMismatch && !validationError ? (
+                                <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" />
+                            ) : isSelfTransfer ? (
                                 <Avatar className="w-full h-full rounded-none">
                                     <AvatarImage src={profile?.photo_url} className="object-cover" alt="Self" />
                                     <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
@@ -445,6 +448,7 @@ function SendClient() {
                                     <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
+                                    {isResolving && <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-[2rem]"><Loader2 className="w-6 h-6 animate-spin text-red-500" /></div>}
                                 </div>
                              ) : resolvedAddress ? (
                                 <div className="relative animate-in zoom-in duration-300">
@@ -457,7 +461,7 @@ function SendClient() {
                              )}
                         </div>
 
-                        {resolvedAddress && !isResolving && !isSelfTransfer && (
+                        {(resolvedAddress || isNetworkMismatch || validationError) && !isResolving && !isSelfTransfer && (
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70] animate-in fade-in zoom-in duration-300">
                                 <TokenLogoDynamic 
                                     logoUrl={isNetworkMismatch || validationError ? null : (selectedToken?.iconUrl || activeNetwork.iconUrl)} 
@@ -477,6 +481,7 @@ function SendClient() {
                         {isSelfTransfer ? 'NODE REFLECTION' : 
                          recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : 
                          isNetworkMismatch ? 'ROUTE BLOCKED' : 
+                         (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' :
                          resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
                 </div>
