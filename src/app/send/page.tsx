@@ -165,8 +165,9 @@ function SendClient() {
   const isNetworkMismatch = useMemo(() => {
     if (isSelfTransfer || selectedToken?.symbol === 'WNC') return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
+    if (addrType === 'account-id') return false; // Account IDs are chain-agnostic until resolved
+    
     const activeType = activeNetwork.type || 'evm';
-    if (addrType === 'account-id') return false; // Account IDs work for on-chain resolution too
     return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
@@ -175,12 +176,14 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
-      if (!input || input.length < 3 || (isValidBase && !isInternalWnc) || isSelfTransfer) {
+      // LOGIC FIX: Always lookup if it's an account ID OR if it's a raw address we want to resolve to a name.
+      // We only exit early if it's completely empty or a self-transfer.
+      if (!input || input.length < 3 || isSelfTransfer) {
         if (currentId === resolutionCounter.current) {
-          setResolvedAddress(isValidBase ? input : '');
+          setResolvedAddress(isRawChainAddress ? input : '');
           setRecipientProfile(null);
           setIsResolving(false);
           setResolutionError(null);
@@ -188,7 +191,15 @@ function SendClient() {
         return;
       }
 
-      setResolvedAddress('');
+      // If it's a valid raw chain address and NOT sending WNC, we can use it directly,
+      // but we still want to check if it belongs to a user for the avatar.
+      if (isRawChainAddress && !isInternalWnc) {
+          // Fallback to raw address while we search for profile
+          setResolvedAddress(input);
+      } else {
+          setResolvedAddress('');
+      }
+
       setRecipientProfile(null);
       setIsResolving(true);
       setResolutionError(null);
@@ -196,7 +207,7 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
-        // Logic: Try to find by Account ID first, then by address
+        // Identity Handshake: Search by Account ID or any linked chain address
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
           .select('id, name, photo_url, account_number, evm_address, xrp_address, polkadot_address')
@@ -230,18 +241,26 @@ function SendClient() {
               setResolvedAddress(chainAddress);
               setResolutionError(null);
             } else {
+              // Recipient found but doesn't have an address for this network
               setResolvedAddress('');
               setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
             }
           }
         } else {
-          setResolvedAddress('');
-          setRecipientProfile(null);
-          setResolutionError("Recipient account ID not found.");
+          // No profile found
+          if (isRawChainAddress) {
+              setResolvedAddress(input); // Use raw address
+              setRecipientProfile(null);
+              setResolutionError(null);
+          } else {
+              setResolvedAddress('');
+              setRecipientProfile(null);
+              setResolutionError("Recipient account not identified.");
+          }
         }
       } catch (e: any) {
         if (currentId === resolutionCounter.current) {
-          setResolvedAddress('');
+          setResolvedAddress(isRawChainAddress ? input : '');
           setRecipientProfile(null);
           setResolutionError("Handshake Error: Identity lookup failed.");
         }
@@ -268,8 +287,6 @@ function SendClient() {
         const transferAmount = parseFloat(amount);
         if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
 
-        // Atomic update via Supabase (Client-side simulation of a safer RPC call)
-        // Deduct from sender
         const { error: deductError } = await supabase!
             .from('profiles')
             .update({ wnc_earnings: profile.wnc_earnings - transferAmount })
@@ -277,7 +294,6 @@ function SendClient() {
         
         if (deductError) throw deductError;
 
-        // Credit to recipient
         const { data: targetProfile } = await supabase!.from('profiles').select('wnc_earnings').eq('id', recipientProfile.id).single();
         const { error: creditError } = await supabase!
             .from('profiles')
@@ -286,7 +302,6 @@ function SendClient() {
 
         if (creditError) throw creditError;
 
-        // Log transaction
         await supabase!.from('transactions').insert({
             user_id: profile.id,
             type: 'withdrawal',
@@ -297,7 +312,7 @@ function SendClient() {
         });
 
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
-        await refreshProfile(); // Sync local earnings state
+        await refreshProfile(); 
       } 
       // 2. XRPL Logic
       else if (activeNetwork.type === 'xrp') {
