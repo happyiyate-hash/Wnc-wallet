@@ -9,7 +9,7 @@ import * as xrpl from 'xrpl';
 import * as bip39 from 'bip39';
 import { Keyring } from '@polkadot/keyring';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { KeyPair } from "near-api-js";
+import { KeyPair, utils } from "near-api-js";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -198,10 +198,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const keyring = new Keyring({ type: 'sr25519' });
       const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
       
-      // DETERMINISTIC NEAR DERIVATION
+      // DETERMINISTIC NEAR DERIVATION (FIXED)
       const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
-      const nearKeyPair = KeyPair.fromSeed(seed.slice(0, 32));
-      const nearAddress = nearKeyPair.getPublicKey().toString().replace("ed25519:", "").toLowerCase();
+      const secretKey = seed.slice(0, 32);
+      const base58Secret = utils.serialize.base_encode(secretKey);
+      // KeyPair.fromString handles the ed25519 prefix and seed expansion internally in near-api-js
+      const nearKeyPair = KeyPair.fromString(`ed25519:${base58Secret}`);
+      const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
 
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
@@ -217,9 +220,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
+    const currentWallets = providedWallets || wallets;
+    if (!activeSessionId || !supabase || !currentWallets) return;
+    
+    let targetAcc = accountNumber;
+    if (!targetAcc) {
+        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+        targetAcc = `835${randomSuffix}`;
+        setAccountNumber(targetAcc);
+        localStorage.setItem(`account_number_${activeSessionId}`, targetAcc);
+    }
+
+    try {
+      // 1. Core Identity Sync
+      await supabase
+        .from('profiles')
+        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
+        .eq('id', activeSessionId);
+
+      // 2. Unlimited Wallets Registry Sync (blockchain_id column)
+      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
+      const { error: syncError } = await supabase.rpc('sync_user_wallets', {
+          p_user_id: activeSessionId,
+          p_wallets: walletPayload
+      });
+
+      if (syncError) throw syncError;
+      
+      setIsSynced(true);
+      await refreshProfile();
+    } catch (e: any) {
+      console.error("Address Sync Failed:", e.message);
+      throw e;
+    }
+  }, [activeSessionId, wallets, accountNumber, refreshProfile]);
+
   const generateWallet = async (): Promise<string> => {
     const mnemonic = bip39.generateMnemonic();
-    await loadWalletFromMnemonic(mnemonic);
+    const derived = await loadWalletFromMnemonic(mnemonic);
     if (activeSessionId) {
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         setIsSynced(false);
@@ -227,6 +266,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${activeSessionId}`, newId);
+        if (derived) await syncAllAddresses(derived);
     }
     return mnemonic;
   };
@@ -242,40 +282,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             setAccountNumber(newId);
             localStorage.setItem(`account_number_${activeSessionId}`, newId);
         }
-    }
-  };
-
-  const syncAllAddresses = async (providedWallets?: WalletWithMetadata[]) => {
-    const currentWallets = providedWallets || wallets;
-    if (!activeSessionId || !supabase || !currentWallets) return;
-    
-    let targetAcc = accountNumber;
-    if (!targetAcc) {
-        const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-        targetAcc = `835${randomSuffix}`;
-        setAccountNumber(targetAcc);
-        localStorage.setItem(`account_number_${activeSessionId}`, targetAcc);
-    }
-
-    try {
-      await supabase
-        .from('profiles')
-        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
-        .eq('id', activeSessionId);
-
-      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
-      const { error: syncError } = await supabase.rpc('sync_user_wallets', {
-          p_user_id: activeSessionId,
-          p_wallets: walletPayload
-      });
-
-      if (syncError) throw syncError;
-      
-      setIsSynced(true);
-      await refreshProfile();
-    } catch (e: any) {
-      console.error("Address Sync Failed:", e.message);
-      throw e;
+        await syncAllAddresses(derived);
     }
   };
 
@@ -362,8 +369,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         if (res.ok) {
           const phrase = data.phrase;
-          await loadWalletFromMnemonic(phrase);
+          const derived = await loadWalletFromMnemonic(phrase);
           localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, phrase);
+          if (derived) await syncAllAddresses(derived);
         }
       }
 
@@ -586,7 +594,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem('infura_api_key');
   }, []);
 
-  // PRODUCTION HYDRATION STRATEGY: Immediate Load from Cache
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
