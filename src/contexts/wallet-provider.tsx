@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -130,10 +131,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // PRIMARY DATA ENGINE: Hydrates assets with balances and prices
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
+    
+    // Virtual WNC Token Injection
+    const wncAsset: AssetRow = {
+        chainId: viewingNetwork.chainId,
+        address: 'internal:wnc',
+        symbol: 'WNC',
+        name: 'Wevina Cloud',
+        balance: profile?.wnc_earnings?.toString() || '0',
+        isNative: false,
+        priceUsd: 0.0006, // Institutional valuation
+        fiatValueUsd: (profile?.wnc_earnings || 0) * 0.0006,
+        pctChange24h: 0,
+        decimals: 0
+    };
+
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
     const chainBalances = balances[viewingNetwork.chainId] || [];
 
-    return available
+    const onChainAssets = available
       .map((asset) => {
         const balDoc = chainBalances.find((b) => b.symbol === asset.symbol);
         const balance = balDoc?.balance || '0';
@@ -150,9 +166,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           pctChange24h,
           fiatValueUsd,
         } as AssetRow;
-      })
-      .filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain]);
+      });
+
+    // Always keep WNC at the top or visible
+    const final = [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
+    return final;
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;

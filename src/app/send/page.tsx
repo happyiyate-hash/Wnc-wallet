@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -18,7 +19,8 @@ import {
   ArrowRight,
   ShieldAlert,
   AlertCircle,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -44,6 +46,9 @@ const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
   
+  // Internal WNC / Account ID Logic (10 digits starting with 835)
+  if (/^835\d{7}$/.test(clean)) return 'account-id';
+
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
@@ -71,21 +76,22 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
     if (type === 'polkadot' || type === 'invalid-polkadot') return { name: 'Polkadot', symbol: 'DOT' };
     if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'EVM Network', symbol: 'ETH' };
+    if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
 
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
+  if (msg.includes('insufficient funds') || msg.includes('insufficient node funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer.";
   if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
   if (msg.includes('websocket') || msg.includes('disconnected')) return "Network Timeout: The blockchain node closed the connection. Please try again.";
-  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance and connection.";
+  return "Dispatch Error: The transaction was rejected by the registry or network.";
 };
 
 function SendClient() {
-  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber } = useWallet();
+  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh } = useWallet();
   const { formatFiat } = useCurrency();
-  const { profile } = useUser();
+  const { profile, refreshProfile } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -98,7 +104,7 @@ function SendClient() {
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
   const [recipientInput, setRecipientInput] = useState('');
   const [resolvedAddress, setResolvedAddress] = useState('');
-  const [recipientProfile, setRecipientProfile] = useState<{avatar: string, verified: boolean, name: string} | null>(null);
+  const [recipientProfile, setRecipientProfile] = useState<{id: string, avatar: string, verified: boolean, name: string} | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const debouncedRecipient = useDebounce(recipientInput, 300);
@@ -117,7 +123,7 @@ function SendClient() {
     if (allAssets.length === 0 || hasInitialized.current) return;
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    let target = allAssets.find(a => a.symbol === symbol && a.chainId === chainIdParam);
+    let target = allAssets.find(a => a.symbol === symbol && (a.chainId === chainIdParam || a.symbol === 'WNC'));
     if (!target) {
         target = allAssets.find(a => a.chainId === viewingNetwork.chainId && a.isNative) || 
                  allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
@@ -130,6 +136,7 @@ function SendClient() {
   }, [allAssets, searchParams, viewingNetwork.chainId]);
 
   const activeNetwork = useMemo(() => {
+    if (selectedToken?.symbol === 'WNC') return { name: 'Wevina Internal', symbol: 'WNC', type: 'internal', chainId: 0 } as any;
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
@@ -156,11 +163,12 @@ function SendClient() {
   }, [addrType, isSelfTransfer]);
 
   const isNetworkMismatch = useMemo(() => {
-    if (isSelfTransfer) return false;
+    if (isSelfTransfer || selectedToken?.symbol === 'WNC') return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     const activeType = activeNetwork.type || 'evm';
+    if (addrType === 'account-id') return false; // Account IDs work for on-chain resolution too
     return activeType !== addrType;
-  }, [addrType, activeNetwork.type, isSelfTransfer]);
+  }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
@@ -168,8 +176,9 @@ function SendClient() {
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isValidBase = addrType !== 'invalid' && !addrType.includes('invalid-');
+      const isInternalWnc = selectedToken?.symbol === 'WNC';
       
-      if (!input || input.length < 3 || isValidBase || isSelfTransfer) {
+      if (!input || input.length < 3 || (isValidBase && !isInternalWnc) || isSelfTransfer) {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress(isValidBase ? input : '');
           setRecipientProfile(null);
@@ -187,10 +196,11 @@ function SendClient() {
       try {
         if (!supabase) throw new Error("No database connection");
 
+        // Logic: Try to find by Account ID first, then by address
         const { data: userRecord, error: userError } = await supabase
           .from('profiles')
-          .select('id, name, photo_url, evm_address, xrp_address, polkadot_address')
-          .eq('account_number', input)
+          .select('id, name, photo_url, account_number, evm_address, xrp_address, polkadot_address')
+          .or(`account_number.eq.${input},evm_address.eq.${input},xrp_address.eq.${input},polkadot_address.eq.${input}`)
           .maybeSingle();
 
         if (userError) throw userError;
@@ -199,24 +209,30 @@ function SendClient() {
 
         if (userRecord) {
           setRecipientProfile({ 
+            id: userRecord.id,
             avatar: userRecord.photo_url || '', 
             verified: true, 
             name: userRecord.name || input
           });
 
-          const targetChainType = activeNetwork.type || 'evm';
-          let chainAddress = '';
-          
-          if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
-          else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
-          else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
-
-          if (chainAddress) {
-            setResolvedAddress(chainAddress);
+          if (isInternalWnc) {
+            setResolvedAddress(userRecord.account_number || '');
             setResolutionError(null);
           } else {
-            setResolvedAddress('');
-            setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
+            const targetChainType = activeNetwork.type || 'evm';
+            let chainAddress = '';
+            
+            if (targetChainType === 'evm') chainAddress = userRecord.evm_address || '';
+            else if (targetChainType === 'xrp') chainAddress = userRecord.xrp_address || '';
+            else if (targetChainType === 'polkadot') chainAddress = userRecord.polkadot_address || '';
+
+            if (chainAddress) {
+              setResolvedAddress(chainAddress);
+              setResolutionError(null);
+            } else {
+              setResolvedAddress('');
+              setResolutionError(`Recipient found, but no address linked for ${targetChainType.toUpperCase()}.`);
+            }
           }
         } else {
           setResolvedAddress('');
@@ -235,17 +251,56 @@ function SendClient() {
     }
     
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
   const handleSendRequest = async () => {
-    if (!wallets || !selectedToken || !resolvedAddress) return;
+    if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
     setIsConfirmOpen(false);
     setIsStatusVisible(true);
     setTxStatus('pending');
     setIsSubmitting(true);
 
     try {
-      if (activeNetwork.type === 'xrp') {
+      // 1. Internal WNC Transfer Logic
+      if (selectedToken.symbol === 'WNC') {
+        if (!recipientProfile) throw new Error("Internal recipient node not identified.");
+        
+        const transferAmount = parseFloat(amount);
+        if (profile.wnc_earnings < transferAmount) throw new Error("Insufficient node funds.");
+
+        // Atomic update via Supabase (Client-side simulation of a safer RPC call)
+        // Deduct from sender
+        const { error: deductError } = await supabase!
+            .from('profiles')
+            .update({ wnc_earnings: profile.wnc_earnings - transferAmount })
+            .eq('id', profile.id);
+        
+        if (deductError) throw deductError;
+
+        // Credit to recipient
+        const { data: targetProfile } = await supabase!.from('profiles').select('wnc_earnings').eq('id', recipientProfile.id).single();
+        const { error: creditError } = await supabase!
+            .from('profiles')
+            .update({ wnc_earnings: (targetProfile?.wnc_earnings || 0) + transferAmount })
+            .eq('id', recipientProfile.id);
+
+        if (creditError) throw creditError;
+
+        // Log transaction
+        await supabase!.from('transactions').insert({
+            user_id: profile.id,
+            type: 'withdrawal',
+            asset_symbol: 'WNC',
+            amount: transferAmount,
+            status: 'completed',
+            recipient_address: resolvedAddress
+        });
+
+        setTxHash(`int_${Math.random().toString(36).substring(7)}`);
+        await refreshProfile(); // Sync local earnings state
+      } 
+      // 2. XRPL Logic
+      else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
         
@@ -274,7 +329,9 @@ function SendClient() {
             await client.disconnect();
           }
         }
-      } else {
+      } 
+      // 3. EVM Logic
+      else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
@@ -352,11 +409,11 @@ function SendClient() {
                             >
                                 <div className="inline-flex flex-col items-center gap-1.5">
                                     <p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>
-                                        {isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Route'}
+                                        {isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Node'}
                                     </p>
                                     <div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}>
                                         <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
-                                            {resolvedAddress.slice(0, 10)}...{resolvedAddress.slice(-8)}
+                                            {resolvedAddress.length > 15 ? `${resolvedAddress.slice(0, 10)}...${resolvedAddress.slice(-8)}` : resolvedAddress}
                                         </p>
                                     </div>
                                 </div>
@@ -419,7 +476,7 @@ function SendClient() {
                         (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40"
                     )}>
                         {isSelfTransfer ? 'NODE REFLECTION' : 
-                         recipientProfile ? `TO ${recipientProfile.name.toUpperCase()}` : 
+                         recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : 
                          isNetworkMismatch ? 'ROUTE BLOCKED' : 
                          resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
@@ -471,9 +528,9 @@ function SendClient() {
                     <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
                     <div className="flex items-center gap-2">
                         <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>
-                          Bal: {balance.toFixed(4)} {selectedToken?.symbol}
+                          Bal: {selectedToken?.symbol === 'WNC' ? balance : balance.toFixed(4)} {selectedToken?.symbol}
                         </span>
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md" onClick={() => setAmount(balance.toString())}>MAX</Button>
+                        <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button>
                     </div>
                 </div>
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all group", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
@@ -495,8 +552,8 @@ function SendClient() {
                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-3xl rounded-full -mr-12 -mt-12" />
                 <div className="flex items-center gap-2 mb-2 relative z-10"><ShieldCheck className="w-4 h-4 text-primary" /><span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span></div>
                 <div className="space-y-3 relative z-10">
-                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Network Gas</span><div className="flex items-center gap-1.5 font-bold text-white"><Fuel className="w-3 h-3 text-primary" /><span>{gasData.priceGwei} Gwei</span></div></div>
-                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span><div className="flex items-center gap-1.5 font-bold text-white"><Timer className="w-3 h-3 text-primary" /><span>{gasData.estimatedTime}</span></div></div>
+                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Settlement Path</span><div className="flex items-center gap-1.5 font-bold text-white"><Zap className="w-3 h-3 text-primary" /><span>{selectedToken?.symbol === 'WNC' ? 'Internal Registry' : 'Blockchain Network'}</span></div></div>
+                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span><div className="flex items-center gap-1.5 font-bold text-white"><Timer className="w-3 h-3 text-primary" /><span>{selectedToken?.symbol === 'WNC' ? 'Instant' : gasData.estimatedTime}</span></div></div>
                 </div>
             </div>
           </div>
@@ -513,7 +570,7 @@ function SendClient() {
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={`${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={selectedToken?.symbol === 'WNC' ? '0.00 WNC' : `${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
     </div>
   );
 }
