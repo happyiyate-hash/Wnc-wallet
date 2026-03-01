@@ -269,5 +269,14 @@
     "coingeckoId": "injective-protocol",
     "themeColor": "#B02026",
     "type": "cosmos"
+  },
+  "118118": {
+    "name": "Celestia",
+    "symbol": "TIA",
+    "chainId": 118118,
+    "rpcUrl": "https://rpc.celestia.org:26657",
+    "coingeckoId": "celestia",
+    "themeColor": "#7B2BF9",
+    "type": "celestia"
   }
 }

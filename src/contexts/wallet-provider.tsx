@@ -34,13 +34,14 @@ import { cosmosAdapterFactory } from '@/lib/wallets/adapters/cosmos';
 import { osmosisAdapterFactory } from '@/lib/wallets/adapters/osmosis';
 import { secretAdapterFactory } from '@/lib/wallets/adapters/secret';
 import { injectiveAdapterFactory } from '@/lib/wallets/adapters/injective';
+import { celestiaAdapterFactory } from '@/lib/wallets/adapters/celestia';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -226,6 +227,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         else if (chain.name.toLowerCase().includes('secret')) adapter = secretAdapterFactory(chain);
         else adapter = cosmosAdapterFactory(chain);
     }
+    else if (chain.type === 'celestia') adapter = celestiaAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -359,6 +361,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "inj" });
       const [injectiveAccount] = await injectiveWallet.getAccounts();
 
+      const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia" });
+      const [celestiaAccount] = await celestiaWallet.getAccounts();
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -371,7 +376,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: cosmosAccount.address, type: 'cosmos' },
         { address: osmosisAccount.address, type: 'osmosis' },
         { address: secretAccount.address, type: 'secret' },
-        { address: injectiveAccount.address, type: 'injective' }
+        { address: injectiveAccount.address, type: 'injective' },
+        { address: celestiaAccount.address, type: 'celestia' }
       ];
       setWallets(derived);
       return derived;
@@ -521,7 +527,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

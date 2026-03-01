@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret and Injective formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective and Celestia formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -89,6 +89,10 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('inj1')) {
       return 'injective';
   }
+
+  if (clean.startsWith('celestia1')) {
+      return 'celestia';
+  }
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
@@ -123,6 +127,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'osmosis') return { name: 'Osmosis', symbol: 'OSMO' };
     if (type === 'secret') return { name: 'Secret Network', symbol: 'SCRT' };
     if (type === 'injective') return { name: 'Injective', symbol: 'INJ' };
+    if (type === 'celestia') return { name: 'Celestia', symbol: 'TIA' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -213,7 +218,11 @@ function SendClient() {
     if (addrType === 'account-id') return false; 
     
     const activeType = activeNetwork.type || 'evm';
-    const finalAddrType = addrType === 'injective' ? 'cosmos' : addrType;
+    const finalAddrType = (addrType === 'injective' || addrType === 'celestia') ? 'cosmos' : addrType;
+    // Special check for Celestia/Injective since they are Cosmos-family but might have distinct prefixes
+    if (activeType === 'cosmos' || activeType === 'celestia') {
+        return !['cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
+    }
     return activeType !== finalAddrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
@@ -222,7 +231,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -282,7 +291,9 @@ function SendClient() {
           if (isInternalWnc) {
             setResolvedAddress(finalProfile.account_number || '');
           } else {
-            const targetChainType = (activeNetwork.type === 'cosmos' && activeNetwork.name.toLowerCase().includes('injective')) ? 'injective' : (activeNetwork.type || 'evm');
+            const targetChainType = (activeNetwork.type === 'cosmos' && activeNetwork.name.toLowerCase().includes('injective')) ? 'injective' : 
+                                   (activeNetwork.type === 'cosmos' && activeNetwork.name.toLowerCase().includes('celestia')) ? 'celestia' :
+                                   (activeNetwork.type || 'evm');
             const { data: chainWallet } = await supabase
                 .from('wallets')
                 .select('address')
@@ -344,7 +355,7 @@ function SendClient() {
           toast({ title: `Institutional Solana`, description: "Account-based SOL signing restricted to hardware modules." });
           throw new Error("SOL Signing restricted to hardware modules.");
       }
-      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis' || activeNetwork.type === 'secret') {
+      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis' || activeNetwork.type === 'secret' || activeNetwork.type === 'celestia') {
           toast({ title: `Institutional Interchain`, description: "Cosmos-family signing restricted to hardware modules." });
           throw new Error("Interchain Signing restricted to hardware modules.");
       }
