@@ -365,13 +365,13 @@ function SwapClient() {
         {/* YOU PAY CARD */}
         <section 
           style={{ 
-            backgroundColor: `${fromChainColor}25`, 
-            borderColor: `${fromChainColor}60`,
-            boxShadow: `0 0 40px ${fromChainColor}20`
+            backgroundColor: `${fromChainColor}40`, 
+            borderColor: `${fromChainColor}cc`,
+            boxShadow: `0 0 60px ${fromChainColor}35`
           }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 min-h-[140px] flex flex-col justify-center"
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
-          <div className="flex items-center justify-between h-6">
+          <div className="flex items-center justify-between h-8 shrink-0">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
@@ -380,7 +380,7 @@ function SwapClient() {
             <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
           </div>
           
-          <div className="relative pt-1">
+          <div className="relative pt-1 flex-1 flex flex-col justify-center">
             <AnimatePresence>
               {showPrecision && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
@@ -407,28 +407,28 @@ function SwapClient() {
         {/* YOU RECEIVE CARD */}
         <section 
           style={{ 
-            backgroundColor: `${toChainColor}25`, 
-            borderColor: `${toChainColor}60`,
-            boxShadow: `0 0 40px ${toChainColor}20`
+            backgroundColor: `${toChainColor}40`, 
+            borderColor: `${toChainColor}cc`,
+            boxShadow: `0 0 60px ${toChainColor}35`
           }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 min-h-[140px] flex flex-col justify-center"
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
-          <div className="flex items-center justify-between h-6">
+          <div className="flex items-center justify-between h-8 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="flex flex-col items-end">
+            <div className="flex flex-col items-end justify-center">
               <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
               {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 mt-0.5 h-3">
+                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="absolute -bottom-4 right-0 flex items-center gap-1.5 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/40 mt-0.5 h-3 shadow-lg shadow-blue-500/10">
                   <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest leading-none">{selectedQuote.provider} LOCK</span>
                 </motion.div>
               )}
             </div>
           </div>
-          <div className="relative pt-1">
+          <div className="relative pt-1 flex-1 flex flex-col justify-center">
             <AnimatePresence>
               {showOutputPrecision && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
