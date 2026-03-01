@@ -341,5 +341,14 @@
     "coingeckoId": "aptos",
     "themeColor": "#000000",
     "type": "aptos"
+  },
+  "784": {
+    "name": "Sui",
+    "symbol": "SUI",
+    "chainId": 784,
+    "rpcUrl": "https://fullnode.mainnet.sui.io",
+    "coingeckoId": "sui",
+    "themeColor": "#6FBCF0",
+    "type": "sui"
   }
 }

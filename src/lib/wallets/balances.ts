@@ -28,6 +28,7 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
     else if (config.type === 'hedera') decimals = 8;
     else if (config.type === 'tezos') decimals = 6;
     else if (config.type === 'aptos') decimals = 8;
+    else if (config.type === 'sui') decimals = 9;
     else if (config.name.toLowerCase().includes('injective')) decimals = 18;
 
     const nativeAsset = {
