@@ -287,5 +287,14 @@
     "coingeckoId": "celestia",
     "themeColor": "#7B2BF9",
     "type": "celestia"
+  },
+  "2147483647": {
+    "name": "Cardano",
+    "symbol": "ADA",
+    "chainId": 2147483647,
+    "rpcUrl": "https://cardano-mainnet.blockfrost.io/api/v0",
+    "coingeckoId": "cardano",
+    "themeColor": "#0033AD",
+    "type": "cardano"
   }
 }

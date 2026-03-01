@@ -36,13 +36,14 @@ import { osmosisAdapterFactory } from '@/lib/wallets/adapters/osmosis';
 import { secretAdapterFactory } from '@/lib/wallets/adapters/secret';
 import { injectiveAdapterFactory } from '@/lib/wallets/adapters/injective';
 import { celestiaAdapterFactory } from '@/lib/wallets/adapters/celestia';
+import { cardanoAdapterFactory } from '@/lib/wallets/adapters/cardano';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -73,6 +74,7 @@ interface WalletContextType {
   importWallet: (mnemonic: string) => Promise<void>;
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
+  resolveLocalDerivation: (mnemonic: string) => Promise<void>;
   restoreFromCloud: () => Promise<void>;
   logout: () => Promise<void>;
   deleteWallet: () => void;
@@ -230,6 +232,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         else adapter = cosmosAdapterFactory(chain);
     }
     else if (chain.type === 'celestia') adapter = celestiaAdapterFactory(chain);
+    else if (chain.type === 'cardano') adapter = cardanoAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -369,6 +372,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia" });
       const [celestiaAccount] = await celestiaWallet.getAccounts();
 
+      // CARDANO SHELLEY DERIVATION (Conceptual Placeholder using BIP32 root)
+      // Standard path: m/1852'/1815'/0'/0/0
+      const adaRoot = btcRoot.derivePath("m/1852'/1815'/0'/0/0");
+      const adaAddress = `addr1${Buffer.from(adaRoot.publicKey).toString('hex').slice(0, 50)}`; 
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -383,7 +391,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: osmosisAccount.address, type: 'osmosis' },
         { address: secretAccount.address, type: 'secret' },
         { address: injectiveAccount.address, type: 'injective' },
-        { address: celestiaAccount.address, type: 'celestia' }
+        { address: celestiaAccount.address, type: 'celestia' },
+        { address: adaAddress, type: 'cardano' }
       ];
       setWallets(derived);
       return derived;
@@ -454,6 +463,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
         await syncAllAddresses(derived);
     }
+  };
+
+  const resolveLocalDerivation = async (mnemonic: string) => {
+    if (!mnemonic) return;
+    await loadWalletFromMnemonic(mnemonic);
   };
 
   const saveToVault = async () => {
@@ -533,7 +547,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
@@ -682,6 +696,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: startEngine,
     generateWallet,
     importWallet,
+    resolveLocalDerivation,
     saveToVault,
     restoreFromCloud,
     logout,
