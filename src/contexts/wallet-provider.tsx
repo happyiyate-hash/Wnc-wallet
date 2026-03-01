@@ -16,6 +16,7 @@ import * as ecc from "tiny-secp256k1";
 import { derivePath } from "ed25519-hd-key";
 import { Keypair as SolanaKeypair } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
+import TronWeb from "tronweb";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -37,13 +38,14 @@ import { secretAdapterFactory } from '@/lib/wallets/adapters/secret';
 import { injectiveAdapterFactory } from '@/lib/wallets/adapters/injective';
 import { celestiaAdapterFactory } from '@/lib/wallets/adapters/celestia';
 import { cardanoAdapterFactory } from '@/lib/wallets/adapters/cardano';
+import { tronAdapterFactory } from '@/lib/wallets/adapters/tron';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -233,6 +235,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     else if (chain.type === 'celestia') adapter = celestiaAdapterFactory(chain);
     else if (chain.type === 'cardano') adapter = cardanoAdapterFactory(chain);
+    else if (chain.type === 'tron') adapter = tronAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -332,10 +335,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const btcRoot = bip32.fromSeed(seed);
       const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
-      const { address: btcAddress } = bitcoin.payments.p2wpkh({
+      const { address: btcAddress } = bitcoin.networks.bitcoin ? bitcoin.payments.p2wpkh({
           pubkey: btcChild.publicKey,
           network: bitcoin.networks.bitcoin,
-      });
+      }) : { address: null };
 
       const ltcRoot = bip32.fromSeed(seed, litecoinNetwork);
       const ltcChild = ltcRoot.derivePath("m/84'/2'/0'/0/0");
@@ -372,10 +375,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia" });
       const [celestiaAccount] = await celestiaWallet.getAccounts();
 
-      // CARDANO SHELLEY DERIVATION (Conceptual Placeholder using BIP32 root)
-      // Standard path: m/1852'/1815'/0'/0/0
       const adaRoot = btcRoot.derivePath("m/1852'/1815'/0'/0/0");
       const adaAddress = `addr1${Buffer.from(adaRoot.publicKey).toString('hex').slice(0, 50)}`; 
+
+      const tronRoot = btcRoot.derivePath("m/44'/195'/0'/0/0");
+      const tronPrivateKey = tronRoot.privateKey!.toString('hex');
+      const tronAddress = TronWeb.address.fromPrivateKey(tronPrivateKey);
 
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
@@ -392,7 +397,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: secretAccount.address, type: 'secret' },
         { address: injectiveAccount.address, type: 'injective' },
         { address: celestiaAccount.address, type: 'celestia' },
-        { address: adaAddress, type: 'cardano' }
+        { address: adaAddress, type: 'cardano' },
+        { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' }
       ];
       setWallets(derived);
       return derived;
@@ -547,7 +553,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

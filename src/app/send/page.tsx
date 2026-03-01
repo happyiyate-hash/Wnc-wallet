@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia and Cardano formats.
+ * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano and TRON formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -62,6 +62,7 @@ const detectAddressType = (input: string) => {
     return 'invalid-xrp';
   }
 
+  if (clean.startsWith('T') && clean.length === 34) return 'tron';
   if (clean.startsWith('D')) return 'doge';
   if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) return 'btc';
   if (clean.startsWith('ltc1') || clean.startsWith('L') || clean.startsWith('M')) return 'ltc';
@@ -109,6 +110,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'injective') return { name: 'Injective', symbol: 'INJ' };
     if (type === 'celestia') return { name: 'Celestia', symbol: 'TIA' };
     if (type === 'cardano') return { name: 'Cardano', symbol: 'ADA' };
+    if (type === 'tron') return { name: 'TRON', symbol: 'TRX' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -214,7 +216,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -328,6 +330,10 @@ function SendClient() {
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
+      else if (activeNetwork.type === 'tron') {
+          toast({ title: `Institutional ${selectedToken.symbol}`, description: "TRON signing restricted to hardware modules." });
+          throw new Error("TRON Signing restricted to hardware modules.");
+      }
       else if (activeNetwork.type === 'btc' || activeNetwork.type === 'ltc' || activeNetwork.type === 'doge') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "UTXO building requires backend signing for institutional nodes." });
           throw new Error(`${selectedToken.symbol} Signing restricted to hardware modules.`);

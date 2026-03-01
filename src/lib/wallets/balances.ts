@@ -19,6 +19,14 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
       ]
     };
 
+    let decimals = 18;
+    if (config.type === 'btc' || config.type === 'ltc' || config.type === 'doge') decimals = 8;
+    else if (config.type === 'solana') decimals = 9;
+    else if (config.type === 'cosmos' || config.type === 'osmosis' || config.type === 'secret' || config.type === 'celestia') decimals = 6;
+    else if (config.type === 'cardano') decimals = 6;
+    else if (config.type === 'tron') decimals = 6;
+    else if (config.name.toLowerCase().includes('injective')) decimals = 18;
+
     const nativeAsset = {
         chainId: config.chainId,
         address: config.type === 'evm' ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : config.symbol,
@@ -26,7 +34,7 @@ export function getInitialAssets(chainId: number): Omit<AssetRow, 'balance' | 'p
         symbol: config.symbol,
         isNative: true,
         coingeckoId: config.coingeckoId,
-        decimals: (config.type === 'btc' || config.type === 'ltc' || config.type === 'doge') ? 8 : (config.type === 'solana' ? 9 : (config.type === 'cosmos' || config.type === 'osmosis' || config.type === 'secret' || config.type === 'celestia') ? 6 : (config.name.toLowerCase().includes('injective') ? 18 : 18))
+        decimals: decimals
     };
 
     return [nativeAsset, ...(MOCK_EXTRAS[chainId] || [])];

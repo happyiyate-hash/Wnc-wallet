@@ -296,5 +296,14 @@
     "coingeckoId": "cardano",
     "themeColor": "#0033AD",
     "type": "cardano"
+  },
+  "728126428": {
+    "name": "TRON",
+    "symbol": "TRX",
+    "chainId": 728126428,
+    "rpcUrl": "https://api.trongrid.io",
+    "coingeckoId": "tron",
+    "themeColor": "#FF0013",
+    "type": "tron"
   }
 }
