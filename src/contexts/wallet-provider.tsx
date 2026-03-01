@@ -19,6 +19,7 @@ import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { stringToPath } from "@cosmjs/crypto";
 import { TronWeb } from "tronweb";
 import * as algosdk from "algosdk";
+import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
 import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -42,13 +43,14 @@ import { celestiaAdapterFactory } from '@/lib/wallets/adapters/celestia';
 import { cardanoAdapterFactory } from '@/lib/wallets/adapters/cardano';
 import { tronAdapterFactory } from '@/lib/wallets/adapters/tron';
 import { algorandAdapterFactory } from '@/lib/wallets/adapters/algorand';
+import { hederaAdapterFactory } from '@/lib/wallets/adapters/hedera';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -257,6 +259,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
     }
     else if (chain.type === 'algorand') adapter = algorandAdapterFactory(chain);
+    else if (chain.type === 'hedera') adapter = hederaAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -418,6 +421,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const algoRoot = btcRoot.derivePath("m/44'/283'/0'/0/0");
       const algoAddress = algosdk.encodeAddress(algoRoot.privateKey!);
 
+      const hbarMnemonic = await HederaMnemonic.fromString(cleanMnemonic);
+      const hbarPrivateKey = await hbarMnemonic.toStandardEd25519PrivateKey();
+      const hbarPublicKey = hbarPrivateKey.publicKey;
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -435,7 +442,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: celestiaAccount.address, type: 'celestia' },
         { address: adaAddress, type: 'cardano' },
         { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
-        { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' }
+        { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
+        { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' }
       ];
       setWallets(derived);
       return derived;
@@ -443,7 +451,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error("Wallet Derivation Error:", e.message);
       return null; 
     }
-  }, []);
+  }, [profile?.hedera_address]);
 
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
@@ -590,7 +598,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

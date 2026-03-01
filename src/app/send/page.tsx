@@ -43,13 +43,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON and Algorand formats.
+ * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON, Algorand and Hedera formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
   
   if (/^835\d{7}$/.test(clean)) return 'account-id';
+  if (/^\d+\.\d+\.\d+$/.test(clean)) return 'hedera';
 
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
@@ -114,6 +115,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'cardano') return { name: 'Cardano', symbol: 'ADA' };
     if (type === 'tron') return { name: 'TRON', symbol: 'TRX' };
     if (type === 'algorand') return { name: 'Algorand', symbol: 'ALGO' };
+    if (type === 'hedera') return { name: 'Hedera', symbol: 'HBAR' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -224,7 +226,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -338,6 +340,10 @@ function SendClient() {
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
+      else if (activeNetwork.type === 'hedera') {
+          toast({ title: `Institutional ${selectedToken.symbol}`, description: "Hedera signing restricted to hardware modules." });
+          throw new Error("Hedera Signing restricted to hardware modules.");
+      }
       else if (activeNetwork.type === 'tron') {
           toast({ title: `Institutional ${selectedToken.symbol}`, description: "TRON signing restricted to hardware modules." });
           throw new Error("TRON Signing restricted to hardware modules.");

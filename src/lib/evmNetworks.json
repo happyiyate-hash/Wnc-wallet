@@ -314,5 +314,14 @@
     "coingeckoId": "algorand",
     "themeColor": "#000000",
     "type": "algorand"
+  },
+  "295": {
+    "name": "Hedera",
+    "symbol": "HBAR",
+    "chainId": 295,
+    "rpcUrl": "https://mainnet-public.mirrornode.hedera.com",
+    "coingeckoId": "hedera-hashgraph",
+    "themeColor": "#00AD7C",
+    "type": "hedera"
   }
 }

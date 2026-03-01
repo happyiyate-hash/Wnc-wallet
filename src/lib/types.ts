@@ -24,7 +24,7 @@ export interface WalletWithMetadata {
   avatarUrl?: string;
   privateKey?: string;
   seed?: string; // For XRP
-  type: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'injective' | 'celestia' | 'cardano' | 'tron' | 'algorand';
+  type: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'injective' | 'celestia' | 'cardano' | 'tron' | 'algorand' | 'hedera';
   isMultiSigner?: boolean;
   multiSignerThreshold?: number;
   multiSignerKeys?: number;
@@ -39,7 +39,7 @@ export interface ChainConfig {
     iconUrl?: string | null;
     coingeckoId?: string;
     themeColor?: string;
-    type?: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'celestia' | 'cardano' | 'tron' | 'algorand';
+    type?: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'celestia' | 'cardano' | 'tron' | 'algorand' | 'hedera';
 }
 
 export interface UserProfile {
@@ -75,6 +75,7 @@ export interface UserProfile {
     cardano_address?: string;
     tron_address?: string;
     algorand_address?: string;
+    hedera_address?: string;
 }
 
 export interface WalletRegistryEntry {
@@ -88,7 +89,7 @@ export interface PaymentRequest {
     id: string;
     requester_id: string;
     requester_account_number: string;
-    chain_type: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'celestia' | 'cardano' | 'tron' | 'algorand';
+    chain_type: 'evm' | 'xrp' | 'polkadot' | 'kusama' | 'near' | 'btc' | 'ltc' | 'doge' | 'solana' | 'cosmos' | 'osmosis' | 'secret' | 'celestia' | 'cardano' | 'tron' | 'algorand' | 'hedera';
     token_symbol: string;
     token_address?: string;
     amount: number;
