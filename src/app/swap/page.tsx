@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { Button } from '@/components/ui/button';
@@ -92,10 +92,16 @@ function SwapClient() {
     }
   }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
 
+  // STABILITY FIX: Use layout effect to sync the received amount display before next paint
+  useLayoutEffect(() => {
+    if (quotePhase === 'IDLE' && !amount) {
+      setSelectedQuoteId(null);
+    }
+  }, [quotePhase, amount]);
+
   // REAL QUOTE FETCH ENGINE
   useEffect(() => {
     const runSequence = async () => {
-      // GUARD: Stop fetch when input is empty or zero
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
         setQuotePhase('IDLE');
@@ -154,26 +160,26 @@ function SwapClient() {
         setSelectedQuoteId(finalBatch[0].id);
         setIsQuoteLoading(false);
         
-        // PHASE 1: MARKET REVELATION (Show All Instant)
+        // PHASE 1: MARKET REVELATION
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 800));
 
-        // PHASE 2: IDENTITY SCAN (AI Thinking)
+        // PHASE 2: IDENTITY SCAN
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatch.length; i++) {
           setActiveScanIndex(i);
-          await new Promise(r => setTimeout(r, 120)); // Rhythmic scan
+          await new Promise(r => setTimeout(r, 150));
         }
 
         // PHASE 3: DECISION MOMENT
         setQuotePhase('FINAL_SELECTED');
-        await new Promise(r => setTimeout(r, 1000)); // Hold for cinematic effect
+        await new Promise(r => setTimeout(r, 1000));
 
-        // PHASE 4: STABLE TRANSITION (Fade Out Opacity Only)
+        // PHASE 4: STABLE TRANSITION (SEQUENTIAL FADE OUT)
         setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatch.length; i++) {
           setFadedIndices(prev => new Set(prev).add(i));
-          await new Promise(r => setTimeout(r, 80));
+          await new Promise(r => setTimeout(r, 100));
         }
 
         await new Promise(r => setTimeout(r, 200));
@@ -256,6 +262,20 @@ function SwapClient() {
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
 
+  const rowVariants = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: (i: number) => ({
+      opacity: 1,
+      scale: 1,
+      transition: { delay: i * 0.15, duration: 0.4, ease: "easeOut" }
+    }),
+    scanning: { scale: 1.02, borderColor: 'rgba(59, 130, 246, 0.5)', backgroundColor: 'rgba(59, 130, 246, 0.1)' },
+    accepted: { borderColor: 'rgba(34, 197, 94, 0.3)' },
+    best: { scale: 1.02, borderColor: 'rgba(59, 130, 246, 0.8)', backgroundColor: 'rgba(59, 130, 246, 0.05)' },
+    rejected: { scale: 0.95, opacity: 0.3, filter: 'grayscale(1)' },
+    fading: { opacity: 0, transition: { duration: 0.3 } }
+  };
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
@@ -267,14 +287,17 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* QUOTE COCkPIT LAYER */}
+      {/* STABILITY FIX: Use absolute positioning for the floating cockpit to prevent layout reflows */}
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div 
-            initial={{ y: -300, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -300, opacity: 0 }}
-            className="fixed top-20 left-4 right-4 z-[40] max-w-lg mx-auto"
+            initial={{ y: -100, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: -100, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+            className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none"
           >
-            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative">
+            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-hidden relative pointer-events-auto">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 opacity-50 pointer-events-none" />
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
@@ -294,55 +317,57 @@ function SwapClient() {
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
-                    quotes.map((quote, idx) => {
-                      const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
-                      const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
-                      const isBest = quotePhase === 'FINAL_SELECTED' && quote.isBest;
-                      const isRejected = quotePhase === 'FINAL_SELECTED' && !quote.isBest;
-                      const isFading = fadedIndices.has(idx);
+                    <div className="space-y-2 min-h-[200px]">
+                      {quotes.map((quote, idx) => {
+                        const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
+                        const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
+                        const isBest = quotePhase === 'FINAL_SELECTED' && quote.isBest;
+                        const isRejected = quotePhase === 'FINAL_SELECTED' && !quote.isBest;
+                        const isFading = fadedIndices.has(idx);
 
-                      return (
-                        <motion.div
-                          key={quote.id} 
-                          initial={{ opacity: 0 }}
-                          animate={{ 
-                            opacity: isFading ? 0 : isRejected ? 0.3 : 1,
-                            scale: isBest ? 1.02 : isRejected ? 0.95 : 1,
-                            borderColor: isScanning ? 'rgba(59, 130, 246, 0.5)' : isAccepted ? 'rgba(34, 197, 94, 0.3)' : isBest ? 'rgba(59, 130, 246, 0.8)' : 'rgba(255,255,255,0.05)',
-                            backgroundColor: isScanning ? 'rgba(59, 130, 246, 0.1)' : isBest ? 'rgba(59, 130, 246, 0.05)' : 'rgba(255,255,255,0.02)'
-                          }}
-                          transition={{ duration: 0.3 }}
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 rounded-2xl border transition-colors shadow-2xl",
-                            isBest && "shadow-blue-500/20"
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-colors",
-                              isBest ? "bg-blue-600" : "bg-zinc-900"
-                            )}>
-                              {isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}
-                            </div>
-                            <div className="text-left">
-                              <p className="text-xs font-black text-white">{quote.provider}</p>
-                              <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
-                                <span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}>
-                                  <Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}
-                                </span>
-                                <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
+                        let variant: string = 'visible';
+                        if (isFading) variant = 'fading';
+                        else if (isBest) variant = 'best';
+                        else if (isRejected) variant = 'rejected';
+                        else if (isScanning) variant = 'scanning';
+                        else if (isAccepted) variant = 'accepted';
+
+                        return (
+                          <motion.div
+                            key={quote.id}
+                            custom={idx}
+                            variants={rowVariants}
+                            initial="hidden"
+                            animate={variant}
+                            className="w-full flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/[0.02] shadow-2xl"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-colors",
+                                isBest ? "bg-blue-600" : "bg-zinc-900"
+                              )}>
+                                {isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}
+                              </div>
+                              <div className="text-left">
+                                <p className="text-xs font-black text-white">{quote.provider}</p>
+                                <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
+                                  <span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}>
+                                    <Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}
+                                  </span>
+                                  <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>
-                              {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-                            </p>
-                            <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
-                          </div>
-                        </motion.div>
-                      );
-                    })
+                            <div className="text-right">
+                              <p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>
+                                {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                              </p>
+                              <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
@@ -408,8 +433,8 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INFO SEQUENCE AREA - DRAGGED DOWN SPACING */}
-        <div className="mt-8 px-4 grid grid-cols-2 gap-4 relative">
+        {/* INFO SEQUENCE AREA - STABLE GRID */}
+        <div className="mt-8 px-4 grid grid-cols-2 gap-4 relative min-h-[120px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div 
               key={idx}
@@ -429,113 +454,120 @@ function SwapClient() {
           ))}
         </div>
 
-        {/* MAIN VISUAL ANIMATION CARD - DRAGGED DOWN TO PREVENT OVERLAP */}
-        <AnimatePresence>
-          {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-            <motion.div 
-              initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              className="mt-10 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
-              
-              <div className="flex items-center justify-between gap-2 relative z-10 py-2">
-                {/* FROM ASSET NODE */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative p-2">
-                    <motion.div 
-                      animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-                      style={{ borderColor: `${fromChainColor}66` }}
-                      className="absolute inset-0 rounded-full border-2 border-dashed"
-                    />
-                    <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
-                      <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={40} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
+        {/* MAIN VISUAL ANIMATION CARD - STABLE HEIGHT */}
+        <div className="relative min-h-[180px] w-full">
+          <AnimatePresence>
+            {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
+              <motion.div 
+                initial={{ y: 40, opacity: 0 }} 
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="mt-10 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
+                
+                <div className="flex items-center justify-between gap-2 relative z-10 py-2">
+                  {/* FROM ASSET NODE */}
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative p-2">
+                      <motion.div 
+                        animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+                        style={{ borderColor: `${fromChainColor}66` }}
+                        className="absolute inset-0 rounded-full border-2 border-dashed"
+                      />
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                        <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={40} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-white uppercase">{fromToken?.symbol}</p>
+                      <p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[fromToken?.chainId || 1]?.name}</p>
                     </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] font-black text-white uppercase">{fromToken?.symbol}</p>
-                    <p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[fromToken?.chainId || 1]?.name}</p>
+
+                  {/* KINETIC CONNECTOR 1 (LEFT TO RIGHT FLOW) */}
+                  <div className="flex-1 px-2 relative h-4 overflow-hidden">
+                    <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
+                      <line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
+                      <motion.line 
+                        x1="0" y1="2" x2="100%" y2="2" 
+                        stroke={fromChainColor} strokeWidth="2" strokeDasharray="4 4"
+                        animate={{ strokeDashoffset: [20, 0] }}
+                        transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
+                      />
+                    </svg>
                   </div>
-                </div>
 
-                {/* KINETIC CONNECTOR 1 (LEFT TO RIGHT FLOW) */}
-                <div className="flex-1 px-2 relative h-4 overflow-hidden">
-                  <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
-                    <line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
-                    <motion.line 
-                      x1="0" y1="2" x2="100%" y2="2" 
-                      stroke={fromChainColor} strokeWidth="2" strokeDasharray="4 4"
-                      animate={{ strokeDashoffset: [20, 0] }}
-                      transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
-                    />
-                  </svg>
-                </div>
-
-                {/* ROBOT NODE - OPTIMIZER */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20">
-                    <Bot className="w-8 h-8 text-purple-500" />
-                    <motion.div 
-                      animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }}
-                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute inset-0 rounded-full border-2 border-dashed border-purple-500/30"
-                    />
+                  {/* ROBOT NODE - OPTIMIZER */}
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20">
+                      <Bot className="w-8 h-8 text-purple-500" />
+                      <motion.div 
+                        animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute inset-0 rounded-full border-2 border-dashed border-purple-500/30"
+                      />
+                    </div>
+                    <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
                   </div>
-                  <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
-                </div>
 
-                {/* KINETIC CONNECTOR 2 (LEFT TO RIGHT FLOW) */}
-                <div className="flex-1 px-2 relative h-4 overflow-hidden">
-                  <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
-                    <line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
-                    <motion.line 
-                      x1="0" y1="2" x2="100%" y2="2" 
-                      stroke={toChainColor} strokeWidth="2" strokeDasharray="4 4"
-                      animate={{ strokeDashoffset: [20, 0] }}
-                      transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
-                    />
-                  </svg>
-                </div>
+                  {/* KINETIC CONNECTOR 2 (LEFT TO RIGHT FLOW) */}
+                  <div className="flex-1 px-2 relative h-4 overflow-hidden">
+                    <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
+                      <line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
+                      <motion.line 
+                        x1="0" y1="2" x2="100%" y2="2" 
+                        stroke={toChainColor} strokeWidth="2" strokeDasharray="4 4"
+                        animate={{ strokeDashoffset: [20, 0] }}
+                        transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
+                      />
+                    </svg>
+                  </div>
 
-                {/* TO ASSET NODE */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative p-2">
-                    <motion.div 
-                      animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-                      style={{ borderColor: `${toChainColor}66` }}
-                      className="absolute inset-0 rounded-full border-2 border-dashed"
-                    />
-                    <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
-                      <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={40} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
+                  {/* TO ASSET NODE */}
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative p-2">
+                      <motion.div 
+                        animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                        style={{ borderColor: `${toChainColor}66` }}
+                        className="absolute inset-0 rounded-full border-2 border-dashed"
+                      />
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                        <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={40} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-white uppercase">{toToken?.symbol}</p>
+                      <p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[toToken?.chainId || 1]?.name}</p>
                     </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] font-black text-white uppercase">{toToken?.symbol}</p>
-                    <p className="text-[7px] font-bold text-muted-foreground uppercase opacity-60 truncate w-16">{allChainsMap[toToken?.chainId || 1]?.name}</p>
-                  </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* META INFO ROW */}
-        <AnimatePresence>
-          {quotePhase === 'COMPLETED' && (
-            <motion.div 
-              initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-              className="mt-4 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"
-            >
-              <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
-                <Zap className="w-3 h-3 text-primary fill-primary" />
-                <span className="text-[9px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span>
-              </div>
-              <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                <ShieldCheck className="w-3 h-3 text-white/40" />
-                <span className="text-[9px] font-black text-white/40 uppercase whitespace-nowrap">SmarterSeller Verified</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="min-h-[40px]">
+          <AnimatePresence>
+            {quotePhase === 'COMPLETED' && (
+              <motion.div 
+                initial={{ x: 20, opacity: 0 }} 
+                animate={{ x: 0, opacity: 1 }}
+                className="mt-4 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"
+              >
+                <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
+                  <Zap className="w-3 h-3 text-primary fill-primary" />
+                  <span className="text-[9px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span>
+                </div>
+                <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                  <ShieldCheck className="w-3 h-3 text-white/40" />
+                  <span className="text-[9px] font-black text-white/40 uppercase whitespace-nowrap">SmarterSeller Verified</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </main>
 
       <GlobalTokenSelector 
