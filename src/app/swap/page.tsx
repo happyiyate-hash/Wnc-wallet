@@ -42,7 +42,7 @@ interface SwapQuote {
   isBest?: boolean;
 }
 
-type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'COLLAPSE' | 'ANIMATING_INFO' | 'ANIMATING_VISUAL' | 'COMPLETED';
+type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap, prices } = useWallet();
@@ -64,8 +64,7 @@ function SwapClient() {
 
   // CHOREOGRAPHY STATE
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
-  const [scanningIndex, setScanningIndex] = useState(-1);
-  const [visibleInfoCount, setVisibleInfoCount] = useState(0);
+  const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
   // ANIMATION & LONG PRESS STATE
   const [rotation, setRotation] = useState(0);
@@ -73,7 +72,6 @@ function SwapClient() {
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef(false);
   
-  // LOCK RE-FETCHING
   const lastFetchedAmountRef = useRef<string>('');
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
@@ -101,7 +99,7 @@ function SwapClient() {
         setQuotePhase('IDLE');
         setSelectedQuoteId(null);
         setFetchError(null);
-        setVisibleInfoCount(0);
+        setFadedIndices(new Set());
         lastFetchedAmountRef.current = '';
         return;
       }
@@ -113,7 +111,7 @@ function SwapClient() {
       setIsQuoteLoading(true);
       setQuotePhase('FETCHING');
       setFetchError(null);
-      setVisibleInfoCount(0);
+      setFadedIndices(new Set());
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
@@ -133,9 +131,7 @@ function SwapClient() {
         const response = await fetch(`/api/bridge/quote?${params.toString()}`);
         const lifiQuote = await response.json();
 
-        if (lifiQuote.error || response.status >= 400) {
-          throw new Error("UNAVAILABLE");
-        }
+        if (lifiQuote.error || response.status >= 400) throw new Error("UNAVAILABLE");
 
         const realAmount = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
         const realFee = parseFloat(lifiQuote.estimate.feeCosts?.[0]?.amountUsd || '0.25');
@@ -151,39 +147,24 @@ function SwapClient() {
         const finalBatch = batch.map((q, idx) => ({ ...q, isBest: idx === 0 }));
         
         setQuotes(finalBatch);
+        setSelectedQuoteId(finalBatch[0].id);
         setIsQuoteLoading(false);
         
-        // CHOREOGRAPHY START
+        // CHOREOGRAPHY START: PHASE 1 - Show All
         setQuotePhase('SHOW_ALL');
         await new Promise(r => setTimeout(r, 1200)); 
 
-        // PAUSE FOR STABILITY
-        setQuotePhase('SCANNING');
-        await new Promise(r => setTimeout(r, 300));
-
+        // PHASE 2 - Fade Out One by One
+        setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatch.length; i++) {
-          setScanningIndex(i);
-          await new Promise(r => setTimeout(r, 150));
+          setFadedIndices(prev => new Set(prev).add(i));
+          await new Promise(r => setTimeout(r, 100));
         }
 
-        setQuotePhase('FINAL_SELECTED');
-        setSelectedQuoteId(finalBatch[0].id);
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 400));
 
-        setQuotePhase('COLLAPSE');
-        await new Promise(r => setTimeout(r, 600));
-
-        // SHOW ALL INFO ONE BY ONE (AND STAY)
-        setQuotePhase('ANIMATING_INFO');
-        for (let i = 1; i <= 4; i++) {
-          setVisibleInfoCount(i);
-          await new Promise(r => setTimeout(r, 400)); 
-        }
-
-        await new Promise(r => setTimeout(r, 600));
-
-        // START VISUAL CARD
-        setQuotePhase('ANIMATING_VISUAL');
+        // PHASE 3 - Show Visual Robot Card
+        setQuotePhase('SHOW_VISUAL');
         await new Promise(r => setTimeout(r, 4500));
 
         setQuotePhase('COMPLETED');
@@ -213,7 +194,7 @@ function SwapClient() {
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
     setFetchError(null);
-    setVisibleInfoCount(0);
+    setFadedIndices(new Set());
     lastFetchedAmountRef.current = '';
   };
 
@@ -227,7 +208,7 @@ function SwapClient() {
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
     setFetchError(null);
-    setVisibleInfoCount(0);
+    setFadedIndices(new Set());
     lastFetchedAmountRef.current = '';
   };
 
@@ -251,30 +232,6 @@ function SwapClient() {
   const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
-  const rowVariants = {
-    hidden: { x: 40, y: 40, opacity: 0, scale: 0.8 },
-    entrance: { x: 0, y: 0, opacity: 1, scale: 1 },
-    scanning: { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.5)', scale: 1.02, opacity: 1, x: 0, y: 0 },
-    accepted: { backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)', opacity: 1, x: 0, y: 0 },
-    best: { backgroundColor: 'rgba(139, 92, 246, 0.2)', borderColor: '#6366f1', scale: 1.05, opacity: 1, x: 0, y: 0 },
-    rejected: { opacity: 0.4, scale: 0.95, filter: 'grayscale(1)', x: 0, y: 0 }
-  };
-
-  const getRowState = (index: number, isBest: boolean) => {
-    if (quotePhase === 'IDLE' || quotePhase === 'FETCHING') return 'hidden';
-    if (quotePhase === 'SHOW_ALL') return 'entrance';
-    if (quotePhase === 'SCANNING') {
-      if (index === scanningIndex) return 'scanning';
-      if (index < scanningIndex) return 'accepted';
-      return 'entrance';
-    }
-    if (quotePhase === 'FINAL_SELECTED' || quotePhase === 'COLLAPSE' || quotePhase === 'ANIMATING_INFO' || quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') {
-      return isBest ? 'best' : 'rejected';
-    }
-    return 'entrance';
-  };
-
-  // INFO SEQUENCE ITEMS
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Network Gas', value: `$${selectedQuote?.fee.toFixed(2) || '0.42'}`, icon: Fuel },
@@ -293,12 +250,11 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* QUOTE Cockpit */}
+      {/* QUOTE LIST LAYER */}
       <AnimatePresence>
-        {((quotePhase !== 'IDLE' && quotePhase !== 'COLLAPSE' && quotePhase !== 'ANIMATING_INFO' && quotePhase !== 'ANIMATING_VISUAL' && quotePhase !== 'COMPLETED') || fetchError) && (
+        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div 
             initial={{ y: -300, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -300, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 150 }}
             className="fixed top-20 left-4 right-4 z-[40] max-w-lg mx-auto"
           >
             <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative">
@@ -308,7 +264,7 @@ function SwapClient() {
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <AlertCircle className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                      {fetchError ? 'Route Unreachable' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : quotePhase === 'SCANNING' ? 'Analyzing Nodes...' : 'Institutional Choice'}
+                      {fetchError ? 'Route Unreachable' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Institutional Market Options'}
                     </h3>
                   </div>
                 </div>
@@ -323,14 +279,16 @@ function SwapClient() {
                   ) : (
                     quotes.map((quote, idx) => (
                       <motion.div
-                        key={quote.id} variants={rowVariants} initial="hidden" animate={getRowState(idx, quote.isBest || false)}
-                        transition={{ type: 'spring', damping: 25, stiffness: 120, delay: quotePhase === 'SHOW_ALL' ? idx * 0.15 : 0 }}
-                        className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden bg-white/[0.02] border-white/5")}
+                        key={quote.id} 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: fadedIndices.has(idx) ? 0 : 1 }}
+                        transition={{ duration: 0.3 }}
+                        className={cn("w-full flex items-center justify-between p-4 rounded-2xl border bg-white/[0.02] border-white/5")}
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase">{quote.provider[0]}</div>
                           <div className="text-left">
-                            <p className="text-xs font-black text-white flex items-center gap-2">{quote.provider}{getRowState(idx, quote.isBest || false) === 'best' && <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1.5 h-1.5 rounded-full bg-blue-400" />}</p>
+                            <p className="text-xs font-black text-white">{quote.provider}</p>
                             <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
                               <span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span>
                               <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
@@ -338,10 +296,9 @@ function SwapClient() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className={cn("text-sm font-black tabular-nums transition-colors", getRowState(idx, quote.isBest || false) === 'best' ? "text-white" : "text-white/60")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p>
+                          <p className="text-sm font-black tabular-nums text-white">{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p>
                           <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
                         </div>
-                        {getRowState(idx, quote.isBest || false) === 'best' && <div className="absolute top-0 right-0 p-1.5"><div className="bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-lg"><span className="text-[7px] font-black text-blue-400 uppercase tracking-tighter">Best Rate</span></div></div>}
                       </motion.div>
                     ))
                   )}
@@ -390,10 +347,10 @@ function SwapClient() {
             </button>
             <div className="flex flex-col items-end gap-1">
               <span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
-              {selectedQuote && (quotePhase === 'COLLAPSE' || quotePhase === 'ANIMATING_INFO' || quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') && (
+              {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
                 <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
                   <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
-                  <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} BEST RATE</span>
+                  <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest">{selectedQuote.provider} LOCK</span>
                 </motion.div>
               )}
             </div>
@@ -409,14 +366,14 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* INFO SEQUENCE AREA - FADE IN AND STAY */}
+        {/* INFO SEQUENCE AREA */}
         <div className="mt-8 px-4 grid grid-cols-2 gap-4 h-24 relative overflow-hidden">
-          {(quotePhase === 'ANIMATING_INFO' || quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
+          {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div 
               key={idx}
               initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: visibleInfoCount > idx ? 1 : 0, y: visibleInfoCount > idx ? 0 : 10 }}
-              transition={{ duration: 0.4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: idx * 0.1 }}
               className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.02] border border-white/5 h-fit"
             >
               <div className="flex items-center gap-2">
@@ -430,27 +387,26 @@ function SwapClient() {
           ))}
         </div>
 
-        {/* MAIN VISUAL ANIMATION CARD - LEFT-TO-RIGHT FLOW */}
+        {/* MAIN VISUAL ANIMATION CARD - VISUAL ONLY */}
         <AnimatePresence>
-          {(quotePhase === 'ANIMATING_VISUAL' || quotePhase === 'COMPLETED') && (
+          {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
             <motion.div 
               initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              className="mt-6 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
+              className="mt-4 p-6 bg-white/[0.03] border border-white/5 rounded-[3rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
               
-              <div className="flex items-center justify-between gap-2 relative z-10">
+              <div className="flex items-center justify-between gap-2 relative z-10 py-2">
                 {/* FROM ASSET NODE */}
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative p-2">
                     <motion.div 
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                      animate={{ rotate: 360 }} transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
                       style={{ borderColor: `${fromChainColor}66` }}
                       className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
-                    <div className="relative z-[70]">
-                      <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={44} chainId={fromToken?.chainId} />
+                    <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                      <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={40} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                     </div>
                   </div>
                   <div className="text-center">
@@ -459,7 +415,7 @@ function SwapClient() {
                   </div>
                 </div>
 
-                {/* KINETIC CONNECTOR 1 (FLOW RIGHT) */}
+                {/* KINETIC CONNECTOR 1 (LEFT TO RIGHT FLOW) */}
                 <div className="flex-1 px-2 relative h-4 overflow-hidden">
                   <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
                     <line x1="0" y1="2" x2="100%" y2="2" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
@@ -472,9 +428,9 @@ function SwapClient() {
                   </svg>
                 </div>
 
-                {/* ROBOT NODE - CORE OPTIMIZER */}
+                {/* ROBOT NODE - OPTIMIZER */}
                 <div className="flex flex-col items-center gap-3">
-                  <div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20 group">
+                  <div className="relative p-4 rounded-full bg-purple-500/10 border border-purple-500/20">
                     <Bot className="w-8 h-8 text-purple-500" />
                     <motion.div 
                       animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }}
@@ -482,10 +438,10 @@ function SwapClient() {
                       className="absolute inset-0 rounded-full border-2 border-dashed border-purple-500/30"
                     />
                   </div>
-                  <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Optimizing</span>
+                  <span className="text-[8px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
                 </div>
 
-                {/* KINETIC CONNECTOR 2 (FLOW RIGHT) */}
+                {/* KINETIC CONNECTOR 2 (LEFT TO RIGHT FLOW) */}
                 <div className="flex-1 px-2 relative h-4 overflow-hidden">
                   <svg width="100%" height="4" className="absolute top-1/2 -translate-y-1/2">
                     <line x1="0" y1="2" x2="100%" y2="2" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="2" strokeDasharray="4 4" />
@@ -502,13 +458,12 @@ function SwapClient() {
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative p-2">
                     <motion.div 
-                      animate={{ rotate: -360 }}
-                      transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                      animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
                       style={{ borderColor: `${toChainColor}66` }}
                       className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
-                    <div className="relative z-[70]">
-                      <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={44} chainId={toToken?.chainId} />
+                    <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5">
+                      <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={40} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                     </div>
                   </div>
                   <div className="text-center">
@@ -517,43 +472,20 @@ function SwapClient() {
                   </div>
                 </div>
               </div>
-
-              {/* SECONDARY FLOAT-IN DETAILS */}
-              <AnimatePresence mode="wait">
-                {quotePhase === 'COMPLETED' && (
-                  <motion.div 
-                    initial={{ y: 15, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                    className="mt-8 grid grid-cols-2 gap-3"
-                  >
-                    <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                      <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-1">Execution ETA</p>
-                      <p className="text-xs font-bold text-white">{selectedQuote?.eta || '~30s'}</p>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                      <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-1">Estimated Gas</p>
-                      <p className="text-xs font-bold text-white">${selectedQuote?.fee.toFixed(2)}</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* SWIPEABLE META INFO ROW */}
+        {/* META INFO ROW */}
         <AnimatePresence>
           {quotePhase === 'COMPLETED' && (
             <motion.div 
               initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-              className="mt-4 flex gap-2 overflow-x-auto thin-scrollbar pb-2"
+              className="mt-4 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"
             >
               <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
                 <Zap className="w-3 h-3 text-primary fill-primary" />
                 <span className="text-[9px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span>
-              </div>
-              <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                <Workflow className="w-3 h-3 text-blue-400" />
-                <span className="text-[9px] font-black text-blue-400 uppercase whitespace-nowrap">Route: Optimized Path</span>
               </div>
               <div className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
                 <ShieldCheck className="w-3 h-3 text-white/40" />
