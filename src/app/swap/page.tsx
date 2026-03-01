@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
@@ -215,11 +216,10 @@ function SwapClient() {
 
   const fromTokenPrice = useMemo(() => {
     if (!fromToken) return 0;
-    // WNC logic: 1 WNC = 1 Naira. Convert to selected currency (usually USD base rate in prices)
     if (fromToken.symbol === 'WNC') {
         return 1 / (rates['NGN'] || 1650);
     }
-    const priceId = (fromToken.priceId || fromToken.address || fromToken.coingeckoId)?.toLowerCase();
+    const priceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
     return prices[priceId]?.price || 0;
   }, [fromToken, prices, rates]);
 
@@ -228,7 +228,7 @@ function SwapClient() {
     if (toToken.symbol === 'WNC') {
         return 1 / (rates['NGN'] || 1650);
     }
-    const priceId = (toToken.priceId || toToken.address || toToken.coingeckoId)?.toLowerCase();
+    const priceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
     return prices[priceId]?.price || 0;
   }, [toToken, prices, rates]);
 
@@ -331,7 +331,7 @@ function SwapClient() {
                   {fetchError ? (
                     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onPointerDown={handlePointerDownError} onPointerUp={handlePointerUpError} className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)] text-center space-y-4 cursor-default">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest font-black bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
                     </motion.div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
@@ -372,15 +372,15 @@ function SwapClient() {
         {/* YOU PAY CARD */}
         <section 
           style={{ 
-            backgroundColor: `${fromChainColor}20`, 
+            backgroundColor: `${fromChainColor}40`, 
             borderColor: `${fromChainColor}cc`,
-            boxShadow: `0 0 50px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}10`
+            boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
-          <div className="flex items-center justify-between h-10 shrink-0">
+          <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
+                <TokenLogoDynamic key={`pay-${fromToken?.chainId}-${fromToken?.symbol}`} logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
@@ -414,22 +414,22 @@ function SwapClient() {
         {/* YOU RECEIVE CARD */}
         <section 
           style={{ 
-            backgroundColor: `${toChainColor}20`, 
+            backgroundColor: `${toChainColor}40`, 
             borderColor: `${toChainColor}cc`,
-            boxShadow: `0 0 50px ${toChainColor}40, inset 0 0 20px ${toChainColor}10`
+            boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20`
           }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
         >
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
+                <TokenLogoDynamic key={`receive-${toToken?.chainId}-${toToken?.symbol}`} logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="flex flex-col items-end justify-center">
+            <div className="flex flex-col items-end justify-center relative">
               <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
               {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="absolute -bottom-4 right-0 flex items-center gap-1.5 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/40 mt-0.5 h-3 shadow-lg shadow-blue-500/10">
+                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="absolute -bottom-4 right-0 flex items-center gap-1.5 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/40 mt-0.5 h-3 shadow-lg shadow-blue-500/10 whitespace-nowrap">
                   <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest leading-none">{selectedQuote.provider} LOCK</span>
                 </motion.div>
               )}
@@ -479,11 +479,16 @@ function SwapClient() {
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-from-${fromToken?.chainId}`} logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
                     <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden">
+                    <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
+                      <line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
+                      <motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="6" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} />
+                    </svg>
+                  </div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20">
                       <Bot className="w-6 h-6 text-purple-500" />
@@ -491,11 +496,16 @@ function SwapClient() {
                     </div>
                     <span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
+                  <div className="flex-1 px-2 relative h-3 overflow-hidden">
+                    <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
+                      <line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
+                      <motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="6" animate={{ strokeDashoffset: [12, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} />
+                    </svg>
+                  </div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-to-${toToken?.chainId}`} logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
                     <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[toToken?.chainId || 1]?.name}</p></div>
                   </div>
