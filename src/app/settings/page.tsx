@@ -69,12 +69,14 @@ export default function SettingsPage() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     // SECURITY PROTOCOL STATE
-    const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy'>('idle');
+    const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy' | 'set-password'>('idle');
     const [passwordInput, setPasswordInput] = useState('');
+    const [confirmInput, setConfirmInput] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [isVerified, setIsVerified] = useState(false);
-    const [confirmInput, setConfirmInput] = useState('');
     const [isDestroying, setIsDestroying] = useState(false);
+
+    const isGoogleUser = user?.app_metadata?.provider === 'google';
 
     useEffect(() => {
         if (activeSessionId) {
@@ -100,6 +102,24 @@ export default function SettingsPage() {
         } catch (e: any) {
             toast({ title: "Verification Failed", description: "Incorrect password. Access denied.", variant: "destructive" });
             setPasswordInput('');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    const handleSetPassword = async () => {
+        if (!passwordInput || passwordInput !== confirmInput) {
+            toast({ title: "Validation Error", description: "Passwords must match and be strong.", variant: "destructive" });
+            return;
+        }
+        setIsVerifying(true);
+        try {
+            const { error } = await supabase!.auth.updateUser({ password: passwordInput });
+            if (error) throw error;
+            toast({ title: "Node Secured", description: "Standard password login enabled." });
+            setSecurityMode('idle');
+        } catch (e: any) {
+            toast({ title: "Security Error", description: e.message, variant: "destructive" });
         } finally {
             setIsVerifying(false);
         }
@@ -284,6 +304,26 @@ export default function SettingsPage() {
                                 href="/settings/api-keys" 
                             />
                             
+                            {isGoogleUser && (
+                                <button 
+                                    onClick={() => setSecurityMode('set-password')}
+                                    className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group"
+                                >
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-400">
+                                                <Lock className="w-5 h-5" />
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-sm font-bold text-white/90">Enable Password Login</p>
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Add fallback authentication</p>
+                                            </div>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                                    </div>
+                                </button>
+                            )}
+
                             <button 
                                 onClick={() => setSecurityMode('reveal')}
                                 className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group"
@@ -329,7 +369,7 @@ export default function SettingsPage() {
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter className="mt-6 gap-2">
-                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10">Cancel</AlertDialogCancel>
                                         <AlertDialogAction onClick={deleteWallet} className="bg-red-500 hover:bg-red-600 rounded-2xl h-14 font-black">Yes, Purge Node</AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -374,7 +414,7 @@ export default function SettingsPage() {
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter className="mt-6 gap-2">
-                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10">Cancel</AlertDialogCancel>
                                         <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600 rounded-2xl h-14 font-black">Yes, Terminate</AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -384,7 +424,7 @@ export default function SettingsPage() {
                 </div>
             </main>
 
-            {/* SECURITY PROTOCOL DIALOG (Reveal / Destroy) */}
+            {/* SECURITY PROTOCOL DIALOG (Reveal / Destroy / Set Password) */}
             <AlertDialog open={securityMode !== 'idle'} onOpenChange={(open) => !open && resetSecurityFlow()}>
                 <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px] shadow-2xl overflow-hidden relative">
                     <div className={cn(
@@ -400,17 +440,50 @@ export default function SettingsPage() {
                             {securityMode === 'destroy' ? <ShieldAlert className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                         </div>
                         <AlertDialogTitle className="text-2xl font-black text-center text-white">
-                            {securityMode === 'destroy' ? 'Vault Destruction' : 'Identity Verification'}
+                            {securityMode === 'destroy' ? 'Vault Destruction' : 
+                             securityMode === 'set-password' ? 'Secure Your Node' : 'Identity Verification'}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-center text-zinc-400 leading-relaxed font-medium">
                             {securityMode === 'destroy' 
                                 ? 'This will permanently delete your master credentials from our cloud registry. This action cannot be reversed.' 
+                                : securityMode === 'set-password' 
+                                ? 'Enable standard password login for your account. This works alongside Google Authority.'
                                 : 'Please verify your identity to reveal your master recovery phrase.'}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
 
                     <div className="mt-6 space-y-6">
-                        {!isVerified ? (
+                        {securityMode === 'set-password' ? (
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">New Node Password</p>
+                                    <Input 
+                                        type="password" 
+                                        placeholder="••••••••" 
+                                        value={passwordInput}
+                                        onChange={(e) => setPasswordInput(e.target.value)}
+                                        className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">Confirm Password</p>
+                                    <Input 
+                                        type="password" 
+                                        placeholder="••••••••" 
+                                        value={confirmInput}
+                                        onChange={(e) => setConfirmInput(e.target.value)}
+                                        className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
+                                    />
+                                </div>
+                                <Button 
+                                    className="w-full h-14 rounded-2xl font-black bg-primary hover:bg-primary/90 shadow-2xl"
+                                    onClick={handleSetPassword}
+                                    disabled={!passwordInput || passwordInput !== confirmInput || isVerifying}
+                                >
+                                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Password"}
+                                </Button>
+                            </div>
+                        ) : !isVerified ? (
                             <div className="space-y-3">
                                 <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">Account Password</p>
                                 <Input 

@@ -33,8 +33,10 @@ export default function GlobalOverlayManager() {
     }
 
     // 2. ONBOARDING SEQUENCE: Verify Email
-    // If user is logged in but email is not verified, send them to signup with verification panel active
-    if (!user.email_confirmed_at) {
+    // Only check verification for non-OAuth users (Google automatically verifies email)
+    const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
+    
+    if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
         router.replace(`/auth/signup?verify=true&email=${encodeURIComponent(user.email || '')}`);
       }

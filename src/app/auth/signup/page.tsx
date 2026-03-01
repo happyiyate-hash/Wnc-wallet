@@ -140,7 +140,7 @@ export default function SignupPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-sm space-y-10 relative z-10"
+        className="w-full max-sm space-y-10 relative z-10"
       >
         <div className="text-center space-y-3">
           <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">

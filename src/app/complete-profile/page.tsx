@@ -25,9 +25,17 @@ export default function CompleteProfilePage() {
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Populate with Google metadata if available
+    if (user?.user_metadata?.full_name && !username) {
+        setUsername(user.user_metadata.full_name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+    }
+    if (user?.user_metadata?.avatar_url && !photoUrl) {
+        setPhotoUrl(user.user_metadata.avatar_url);
+    }
+    
     if (profile?.name) setUsername(profile.name);
     if (profile?.photo_url) setPhotoUrl(profile.photo_url);
-  }, [profile]);
+  }, [profile, user]);
 
   const checkUsername = async (val: string) => {
     if (val.length < 3) {
