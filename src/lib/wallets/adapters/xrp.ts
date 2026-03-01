@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as xrpl from 'xrpl';
@@ -7,6 +6,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 /**
  * XRP Ledger Adapter
  * Handles real-time balance fetching for XRPL accounts.
+ * Hardened with connection timeouts and resilient WebSocket handling.
  */
 class XrpAdapter implements IWalletAdapter {
     private rpcUrl: string;
@@ -20,8 +20,18 @@ class XrpAdapter implements IWalletAdapter {
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
         const client = new xrpl.Client(this.rpcUrl);
+        
         try {
-            await client.connect();
+            // Add connection timeout to prevent hanging on unstable workstations
+            await Promise.race([
+                client.connect(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 8000))
+            ]);
+
+            if (!client.isConnected()) {
+                throw new Error("WS_NOT_CONNECTED");
+            }
+
             const response = await client.request({
                 command: "account_info",
                 account: ownerAddress,
@@ -38,14 +48,23 @@ class XrpAdapter implements IWalletAdapter {
                 return { ...asset, balance: '0' } as AssetRow;
             });
         } catch (error: any) {
-            // If account is not found, it likely has 0 balance or is not activated (needs 10 XRP)
-            if (error.data?.error === 'actNotFound') {
+            // Handle websocket closure or account not found
+            if (error.data?.error === 'actNotFound' || error.message?.includes('Account not found')) {
                 return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
             }
-            console.warn("XRPL Balance Fetch Error:", error.message);
+            
+            // Log warning but return zero to prevent background refresh crashes
+            console.warn(`[XRPL_ADAPTER_ERROR] ${this.rpcUrl}:`, error.message || error);
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         } finally {
-            await client.disconnect();
+            // Ensure client is disconnected even on error
+            if (client.isConnected()) {
+                try {
+                    await client.disconnect();
+                } catch (e) {
+                    // Silent fail on disconnect
+                }
+            }
         }
     }
 }

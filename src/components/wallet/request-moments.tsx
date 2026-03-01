@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -43,6 +42,7 @@ const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
   if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
   if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
+  if (msg.includes('websocket') || msg.includes('disconnected')) return "Network Timeout: The blockchain node closed the connection. Please try again.";
   return "Dispatch Error: The blockchain rejected the transaction. Please check your balance.";
 };
 
@@ -238,13 +238,32 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         const xrpWallet = wallets.find(w => w.type === 'xrp');
         const network = Object.values(allChainsMap).find(c => c.type === 'xrp');
         const client = new xrpl.Client(network?.rpcUrl || 'wss://xrplcluster.com');
-        await client.connect();
-        const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
-        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountStr), Destination: recipientAddress });
-        const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-        if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
-        else throw new Error("XRPL Fail");
-        await client.disconnect();
+        
+        try {
+          await Promise.race([
+            client.connect(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 10000))
+          ]);
+
+          const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
+          const prepared = await client.autofill({ 
+            TransactionType: "Payment", 
+            Account: wallet.address, 
+            Amount: xrpl.xrpToDrops(amountStr), 
+            Destination: recipientAddress 
+          });
+          
+          const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
+          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
+            setTxHash(result.result.hash);
+          } else { 
+            throw new Error("XRPL Fail"); 
+          }
+        } finally {
+          if (client.isConnected()) {
+            await client.disconnect();
+          }
+        }
       } else {
         const evmWallet = wallets.find(w => w.type === 'evm');
         const network = Object.values(allChainsMap).find(c => c.type === 'evm');

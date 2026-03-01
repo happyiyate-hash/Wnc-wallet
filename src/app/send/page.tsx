@@ -78,6 +78,7 @@ const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
   if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
   if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
+  if (msg.includes('websocket') || msg.includes('disconnected')) return "Network Timeout: The blockchain node closed the connection. Please try again.";
   return "Dispatch Error: The blockchain rejected the transaction. Please check your balance and connection.";
 };
 
@@ -247,14 +248,32 @@ function SendClient() {
       if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
-        await client.connect();
-        const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amount), Destination: resolvedAddress });
-        const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-        if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
-          setTxHash(result.result.hash);
-        } else { throw new Error((result.result.meta as any)?.TransactionResult || "XRPL Error"); }
-        await client.disconnect();
+        
+        try {
+          await Promise.race([
+            client.connect(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 10000))
+          ]);
+
+          const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
+          const prepared = await client.autofill({ 
+            TransactionType: "Payment", 
+            Account: wallet.address, 
+            Amount: xrpl.xrpToDrops(amount), 
+            Destination: resolvedAddress 
+          });
+          
+          const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
+          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
+            setTxHash(result.result.hash);
+          } else { 
+            throw new Error((result.result.meta as any)?.TransactionResult || "XRPL Error"); 
+          }
+        } finally {
+          if (client.isConnected()) {
+            await client.disconnect();
+          }
+        }
       } else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
