@@ -10,6 +10,7 @@ import PWARegister from '@/components/pwa-register';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { NavGradient } from '@/components/shared/nav-gradient';
 import GlobalOverlayManager from '@/components/global-overlay-manager';
+import MobileNav from '@/components/wallet/mobile-nav';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -66,6 +67,7 @@ export default function RootLayout({
                       <div className="flex-1 relative">
                         {children}
                       </div>
+                      <MobileNav />
                     </div>
                   </div>
                   {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS */}
