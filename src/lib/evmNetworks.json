@@ -233,5 +233,14 @@
     "coingeckoId": "solana",
     "themeColor": "#9945FF",
     "type": "solana"
+  },
+  "118": {
+    "name": "Cosmos Hub",
+    "symbol": "ATOM",
+    "chainId": 118,
+    "rpcUrl": "https://rpc.cosmos.network",
+    "coingeckoId": "cosmos",
+    "themeColor": "#2E3148",
+    "type": "cosmos"
   }
 }
