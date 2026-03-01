@@ -14,7 +14,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import BIP32Factory from "bip32";
 import * as ecc from "tiny-secp256k1";
 import { derivePath } from "ed25519-hd-key";
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair as SolanaKeypair } from "@solana/web3.js";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import { stringToPath } from "@cosmjs/crypto";
 import { TronWeb } from "tronweb";
@@ -593,43 +593,62 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreFromCloud = async () => {
-    if (!profile || !activeSessionId || !supabase) throw new Error("No cloud backup found.");
+    if (!activeSessionId || !supabase) throw new Error("Registry connection failed.");
+    setIsWalletLoading(true);
     try {
-      const { data: { session } } = await supabase!.auth.getSession();
-      
-      // RESTORE MASTER PHRASE
-      if (profile.vault_phrase && profile.iv) {
+      // 1. Fetch FRESH cloud profile data to ensure we have current encrypted fields
+      const { data: latestProfile, error: pError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', activeSessionId)
+        .single();
+
+      if (pError || !latestProfile) throw new Error("Could not locate cloud vault.");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      // 2. Restore Master Mnemonic
+      if (latestProfile.vault_phrase && latestProfile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ encrypted: latestProfile.vault_phrase, iv: latestProfile.iv })
         });
         const data = await res.json();
-        if (res.ok) {
-          const derived = await loadWalletFromMnemonic(data.phrase);
+        if (data.phrase) {
           localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, data.phrase);
+          const derived = await loadWalletFromMnemonic(data.phrase);
           if (derived) await syncAllAddresses(derived);
         }
       }
 
-      // RESTORE INFURA KEY
-      if (profile.vault_infura_key && profile.infura_iv) {
+      // 3. Restore Infura API Key
+      if (latestProfile.vault_infura_key && latestProfile.infura_iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ encrypted: latestProfile.vault_infura_key, iv: latestProfile.infura_iv })
         });
         const data = await res.json();
-        if (res.ok) {
+        if (data.phrase) {
           setInfuraApiKey(data.phrase);
           localStorage.setItem('infura_api_key', data.phrase);
         }
       }
 
-      if (profile.account_number) { setAccountNumber(profile.account_number); localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number); }
+      if (latestProfile.account_number) { 
+        setAccountNumber(latestProfile.account_number); 
+        localStorage.setItem(`account_number_${activeSessionId}`, latestProfile.account_number); 
+      }
+
+      await refreshProfile();
       toast({ title: "Vault Restored" });
     } catch (e: any) {
+      console.error("RESTORE_FAILURE:", e.message);
       throw e;
+    } finally {
+      setIsWalletLoading(false);
     }
   };
 
@@ -641,7 +660,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ', 'APT', 'SUI'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI')[] = ['EVM', 'XRP', 'Polkadot', 'Kusama' , 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO', 'SECRET', 'INJ', 'TIA', 'ADA', 'TRX', 'ALGO', 'HBAR', 'XTZ', 'APT', 'SUI'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
@@ -693,7 +712,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
-      if (!activeSessionId) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return; }
+      if (!activeSessionId) { 
+        setWallets(null); setBalances({}); setAccountNumber(null); 
+        setIsWalletLoading(false); 
+        return; 
+      }
+      
+      setIsWalletLoading(true);
       
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
       const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
@@ -702,24 +727,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (savedKey) setInfuraApiKey(savedKey);
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
-      if (localAcc) setAccountNumber(localAcc);
-      if (profile?.account_number) setAccountNumber(profile.account_number);
+      
+      if (profile?.account_number) {
+        setAccountNumber(profile.account_number);
+      } else if (localAcc) {
+        setAccountNumber(localAcc);
+      }
 
       if (savedMnemonic) {
-          setIsWalletLoading(true); 
           await loadWalletFromMnemonic(savedMnemonic);
-          setIsWalletLoading(false);
           if (isInitialized) fetchGlobalPrices();
-      } else {
-          setIsWalletLoading(true);
-          const failsafe = setTimeout(() => setIsWalletLoading(false), 10000);
-          try {
-            const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
-            if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
-            const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
-            if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
-          } catch (e) {} finally { clearTimeout(failsafe); setIsWalletLoading(false); }
       }
+      
+      // Load preferences
+      const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
+      if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
+      const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
+      if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
+      
+      setIsWalletLoading(false);
     };
     initLocalSession();
   }, [authLoading, activeSessionId, profile, loadWalletFromMnemonic, isInitialized, fetchGlobalPrices]);
