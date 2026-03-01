@@ -51,9 +51,23 @@ export default function MobileNav() {
     const Icon = item.icon;
     
     return (
-        <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0.5">
-            <Icon className={cn('h-6 w-6 transition-all', isActive ? 'opacity-100 scale-110' : 'opacity-40 group-hover:opacity-100')} />
-            <span className={cn("text-[9px] font-black uppercase tracking-tighter transition-colors", isActive ? "text-primary" : "text-muted-foreground")}>
+        <Link 
+          href={item.href} 
+          className="flex flex-col items-center justify-center h-full flex-1 group transition-all"
+        >
+            <div className={cn(
+              "p-1.5 rounded-xl transition-all",
+              isActive ? "bg-primary/10" : ""
+            )}>
+              <Icon className={cn(
+                'h-6 w-6 transition-all', 
+                isActive ? 'opacity-100' : 'opacity-40 group-hover:opacity-100 grayscale'
+              )} />
+            </div>
+            <span className={cn(
+              "text-[9px] font-black uppercase tracking-tighter mt-1 transition-colors", 
+              isActive ? "text-primary" : "text-muted-foreground"
+            )}>
               {item.label}
             </span>
         </Link>
@@ -61,9 +75,9 @@ export default function MobileNav() {
   };
 
   return (
-    <footer className="fixed z-50 left-4 right-4 transition-all duration-500 ease-in-out bottom-6 md:hidden">
-      <div className="p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-[length:400%_400%] animate-gradient-flow rounded-[1.5rem]">
-          <nav className="flex h-[60px] w-full items-center justify-around rounded-[1.5rem] bg-black/90 backdrop-blur-xl px-1 shadow-2xl">
+    <footer className="fixed z-50 left-0 right-0 bottom-0 md:hidden bg-black border-t border-primary/80">
+      <div className="safe-area-bottom">
+          <nav className="flex h-[72px] w-full items-center justify-around px-2">
               {navItems.map((item) => <NavLink key={item.label} item={item} />)}
           </nav>
       </div>
