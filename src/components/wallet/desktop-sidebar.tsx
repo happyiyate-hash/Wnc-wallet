@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -30,7 +29,7 @@ import GradientGlobeIcon from './GradientGlobeIcon';
 import GradientSwapIcon from './GradientSwapIcon';
 import GradientUserIcon from './GradientUserIcon';
 import GradientSettingsIcon from './GradientSettingsIcon';
-import { ShieldCheck, Cpu, LogOut, Trash2, ShieldX, Loader2 } from 'lucide-react';
+import { ShieldCheck, Cpu, LogOut, Trash2, ShieldX, Loader2, Users } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useUser } from '@/contexts/user-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +38,7 @@ const navItems = [
   { href: '/', label: 'Wallet Terminal', icon: GradientWalletIcon },
   { href: '/browse', label: 'Ecosystem Browse', icon: GradientGlobeIcon },
   { href: '/swap', label: 'Liquidity Swap', icon: GradientSwapIcon },
+  { href: '/invites', label: 'Affiliate Hub', icon: Users },
   { href: '/profile', label: 'Identity Vault', icon: GradientUserIcon },
   { href: '/settings', label: 'Node Settings', icon: GradientSettingsIcon },
 ];
@@ -93,10 +93,17 @@ export default function DesktopSidebar() {
                       isActive ? "bg-primary/10 border border-primary/20" : "hover:bg-white/5 border border-transparent"
                     )}
                   >
-                    <Icon className={cn(
-                      "w-6 h-6 transition-all",
-                      isActive ? "opacity-100 scale-110" : "opacity-40 group-hover:opacity-100"
-                    )} />
+                    {item.label === 'Affiliate Hub' ? (
+                        <Icon className={cn(
+                            "w-6 h-6 transition-all",
+                            isActive ? "text-primary scale-110" : "text-muted-foreground opacity-40 group-hover:opacity-100 group-hover:text-white"
+                        )} />
+                    ) : (
+                        <Icon className={cn(
+                            "w-6 h-6 transition-all",
+                            isActive ? "opacity-100 scale-110" : "opacity-40 group-hover:opacity-100"
+                        )} />
+                    )}
                     <span className={cn(
                       "text-xs font-black uppercase tracking-widest transition-colors",
                       isActive ? "text-white" : "text-muted-foreground group-hover:text-white"

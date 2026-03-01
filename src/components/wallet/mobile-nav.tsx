@@ -9,6 +9,7 @@ import GradientGlobeIcon from './GradientGlobeIcon';
 import GradientUserIcon from './GradientUserIcon';
 import GradientSettingsIcon from './GradientSettingsIcon';
 import GradientSwapIcon from './GradientSwapIcon';
+import { Users } from 'lucide-react';
 import React from 'react';
 
 interface NavItem {
@@ -41,7 +42,7 @@ export default function MobileNav() {
   const navItems: NavItem[] = [
     { href: '/', label: 'Wallet', icon: GradientWalletIcon },
     { href: '/browse', label: 'Browse', icon: GradientGlobeIcon },
-    { href: '/swap', label: 'Swap', icon: GradientSwapIcon },
+    { href: '/invites', label: 'Invites', icon: Users },
     { href: '/profile', label: 'Profile', icon: GradientUserIcon },
     { href: '/settings', label: 'Settings', icon: GradientSettingsIcon },
   ];
@@ -52,7 +53,11 @@ export default function MobileNav() {
 
     return (
         <Link href={item.href} className="flex flex-col items-center justify-center p-1 flex-1 group gap-0.5">
-            <Icon className={cn('h-6 w-6 transition-all', isActive ? 'opacity-100 scale-110' : 'opacity-40 group-hover:opacity-100')} />
+            {item.label === 'Invites' ? (
+                <Icon className={cn('h-6 w-6 transition-all', isActive ? 'text-primary scale-110' : 'text-muted-foreground opacity-40 group-hover:opacity-100')} />
+            ) : (
+                <Icon className={cn('h-6 w-6 transition-all', isActive ? 'opacity-100 scale-110' : 'opacity-40 group-hover:opacity-100')} />
+            )}
             <span className={cn("text-[9px] font-black uppercase tracking-tighter transition-colors", isActive ? "text-primary" : "text-muted-foreground")}>
               {item.label}
             </span>
