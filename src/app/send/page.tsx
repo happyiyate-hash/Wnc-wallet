@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, and Cosmos formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos and Osmosis formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -77,6 +77,10 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('cosmos1')) {
       return 'cosmos';
   }
+
+  if (clean.startsWith('osmo1')) {
+      return 'osmosis';
+  }
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
@@ -108,6 +112,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'doge') return { name: 'Dogecoin', symbol: 'DOGE' };
     if (type === 'solana') return { name: 'Solana', symbol: 'SOL' };
     if (type === 'cosmos') return { name: 'Cosmos Hub', symbol: 'ATOM' };
+    if (type === 'osmosis') return { name: 'Osmosis', symbol: 'OSMO' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -206,7 +211,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -328,9 +333,9 @@ function SendClient() {
           toast({ title: `Institutional Solana`, description: "Account-based SOL signing restricted to hardware modules." });
           throw new Error("SOL Signing restricted to hardware modules.");
       }
-      else if (activeNetwork.type === 'cosmos') {
-          toast({ title: `Institutional Cosmos`, description: "Cosmos signing restricted to hardware modules." });
-          throw new Error("ATOM Signing restricted to hardware modules.");
+      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis') {
+          toast({ title: `Institutional Interchain`, description: "Cosmos-family signing restricted to hardware modules." });
+          throw new Error("Interchain Signing restricted to hardware modules.");
       }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');

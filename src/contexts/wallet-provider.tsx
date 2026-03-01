@@ -31,13 +31,14 @@ import { litecoinAdapterFactory, litecoinNetwork } from '@/lib/wallets/adapters/
 import { dogecoinAdapterFactory, dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
 import { solanaAdapterFactory } from '@/lib/wallets/adapters/solana';
 import { cosmosAdapterFactory } from '@/lib/wallets/adapters/cosmos';
+import { osmosisAdapterFactory } from '@/lib/wallets/adapters/osmosis';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -218,6 +219,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'doge') adapter = dogecoinAdapterFactory(chain);
     else if (chain.type === 'solana') adapter = solanaAdapterFactory(chain);
     else if (chain.type === 'cosmos') adapter = cosmosAdapterFactory(chain);
+    else if (chain.type === 'osmosis') adapter = osmosisAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -345,6 +347,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "cosmos" });
       const [cosmosAccount] = await cosmosWallet.getAccounts();
 
+      // DETERMINISTIC OSMOSIS DERIVATION
+      const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "osmo" });
+      const [osmosisAccount] = await osmosisWallet.getAccounts();
+
       const derived: WalletWithMetadata[] = [
         { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -354,7 +360,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: ltcAddress!, privateKey: ltcChild.toWIF(), type: 'ltc' },
         { address: dogeAddress!, privateKey: dogeChild.toWIF(), type: 'doge' },
         { address: solKeypair.publicKey.toBase58(), privateKey: Buffer.from(solKeypair.secretKey).toString('hex'), type: 'solana' },
-        { address: cosmosAccount.address, type: 'cosmos' }
+        { address: cosmosAccount.address, type: 'cosmos' },
+        { address: osmosisAccount.address, type: 'osmosis' }
       ];
       setWallets(derived);
       return derived;
@@ -504,14 +511,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC', 'DOGE', 'SOL', 'Cosmos', 'OSMO'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];
-      const type = chain.toLowerCase();
+      const type = chain === 'OSMO' ? 'osmosis' : chain.toLowerCase();
       const local = wallets.find(w => w.type === type)?.address || null;
       const cloud = getCloudAddr(type);
-      setSyncDiagnostic(prev => ({ ...prev, chain, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
+      setSyncDiagnostic(prev => ({ ...prev, chain: chain as any, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
       await wait(800);
       if (local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' })); await wait(600);

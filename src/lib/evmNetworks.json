@@ -242,5 +242,14 @@
     "coingeckoId": "cosmos",
     "themeColor": "#2E3148",
     "type": "cosmos"
+  },
+  "24941": {
+    "name": "Osmosis",
+    "symbol": "OSMO",
+    "chainId": 24941,
+    "rpcUrl": "https://rpc-osmosis.blockapsis.com",
+    "coingeckoId": "osmosis",
+    "themeColor": "#750BBB",
+    "type": "osmosis"
   }
 }
