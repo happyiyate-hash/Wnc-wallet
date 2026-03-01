@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -233,17 +234,16 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       const amountStr = request.amount.toString();
       
       if (request.token_symbol === 'WNC') {
-        // ATOMIC SETTLEMENT via RPC
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
             p_recipient_id: requester.id,
             p_amount: Math.floor(request.amount)
         });
-
-        if (rpcError || !data?.success) {
-            throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
-        }
+        if (rpcError || !data?.success) throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
         setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
       } 
+      else if (chainType === 'btc' || chainType === 'ltc') {
+          throw new Error("BTC/LTC Signing restricted to hardware modules.");
+      }
       else if (chainType === 'xrp') {
         const xrpWallet = wallets.find(w => w.type === 'xrp');
         const network = Object.values(allChainsMap).find(c => c.type === 'xrp');
@@ -256,25 +256,13 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
             client.connect(),
             new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 10000))
           ]);
-
           const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
-          const prepared = await client.autofill({ 
-            TransactionType: "Payment", 
-            Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(amountStr), 
-            Destination: recipientAddress 
-          });
-          
+          const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountStr), Destination: recipientAddress });
           const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
-            setTxHash(result.result.hash);
-          } else { 
-            throw new Error("XRPL Fail"); 
-          }
+          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
+          else throw new Error("XRPL Fail");
         } finally {
-          if (client.isConnected()) {
-            await client.disconnect();
-          }
+          if (client.isConnected()) await client.disconnect();
         }
       } else {
         if (!infuraApiKey) throw new Error("Connection Error: Infura key missing.");
@@ -284,7 +272,6 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
         const recipientAddress = requester.evm_address;
         if (!recipientAddress) throw new Error("Recipient EVM node not initialized.");
-        
         const decimals = 18; 
         let tx;
         if (!request.token_address) tx = await wallet.sendTransaction({ to: recipientAddress, value: ethers.parseEther(amountStr) });
@@ -297,8 +284,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
       await supabase?.from('payment_requests').update({ status: 'paid' }).eq('id', requestId);
       setTxStatus('success');
-      await refreshProfile();
-      refresh();
+      await refreshProfile(); refresh();
     } catch (e: any) {
       setTxStatus('error');
       setReceiptError(mapTechnicalError(e));

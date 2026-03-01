@@ -24,13 +24,14 @@ import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { nearAdapterFactory } from '@/lib/wallets/adapters/near';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { bitcoinAdapterFactory } from '@/lib/wallets/adapters/bitcoin';
+import { litecoinAdapterFactory, litecoinNetwork } from '@/lib/wallets/adapters/litecoin';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 
 const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'Vault' | null;
+  chain: 'EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC' | 'Vault' | null;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
@@ -207,6 +208,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else if (chain.type === 'near') adapter = nearAdapterFactory(chain);
     else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
+    else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
     
     if (adapter) {
@@ -303,12 +305,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
 
       // DETERMINISTIC BITCOIN DERIVATION (BIP84 Native SegWit)
-      const btcSeed = bip39.mnemonicToSeedSync(cleanMnemonic);
-      const btcRoot = bip32.fromSeed(btcSeed);
+      const btcRoot = bip32.fromSeed(seed);
       const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
       const { address: btcAddress } = bitcoin.payments.p2wpkh({
           pubkey: btcChild.publicKey,
           network: bitcoin.networks.bitcoin,
+      });
+
+      // DETERMINISTIC LITECOIN DERIVATION (BIP84 Native SegWit)
+      const ltcRoot = bip32.fromSeed(seed, litecoinNetwork);
+      const ltcChild = ltcRoot.derivePath("m/84'/2'/0'/0/0");
+      const { address: ltcAddress } = bitcoin.payments.p2wpkh({
+          pubkey: ltcChild.publicKey,
+          network: litecoinNetwork,
       });
 
       const derived: WalletWithMetadata[] = [
@@ -316,7 +325,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
         { address: dotWallet.address, type: 'polkadot' },
         { address: nearAddress, type: 'near' },
-        { address: btcAddress!, type: 'btc' }
+        { address: btcAddress!, type: 'btc' },
+        { address: ltcAddress!, privateKey: ltcChild.toWIF(), type: 'ltc' }
       ];
       setWallets(derived);
       return derived;
@@ -466,7 +476,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasMismatch = wallets.some(w => w.address !== getCloudAddr(w.type)) || (!profile.vault_phrase);
     if (!hasMismatch && !isFirstSession && !options?.forceUI) { setIsSynced(true); return; }
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC'];
+    const chains: ('EVM' | 'XRP' | 'Polkadot' | 'NEAR' | 'BTC' | 'LTC')[] = ['EVM', 'XRP', 'Polkadot', 'NEAR', 'BTC', 'LTC'];
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     for (let i = 0; i < chains.length; i++) {
       const chain = chains[i];

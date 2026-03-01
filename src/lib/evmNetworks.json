@@ -206,5 +206,14 @@
     "coingeckoId": "bitcoin",
     "themeColor": "#F7931A",
     "type": "btc"
+  },
+  "2": {
+    "name": "Litecoin",
+    "symbol": "LTC",
+    "chainId": 2,
+    "rpcUrl": "https://litecoinblockexplorer.net",
+    "coingeckoId": "litecoin",
+    "themeColor": "#345D9D",
+    "type": "ltc"
   }
 }

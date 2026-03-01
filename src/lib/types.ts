@@ -24,7 +24,7 @@ export interface WalletWithMetadata {
   avatarUrl?: string;
   privateKey?: string;
   seed?: string; // For XRP
-  type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
+  type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc' | 'ltc';
 }
 
 export interface ChainConfig {
@@ -36,7 +36,7 @@ export interface ChainConfig {
     iconUrl?: string | null;
     coingeckoId?: string;
     themeColor?: string;
-    type?: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
+    type?: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc' | 'ltc';
 }
 
 export interface UserProfile {
@@ -54,8 +54,13 @@ export interface UserProfile {
     iv?: string;
     vault_infura_key?: string;
     infura_iv?: string;
-    // Legacy support for primary EVM node
+    // Multi-address registry support
     evm_address?: string;
+    xrp_address?: string;
+    polkadot_address?: string;
+    near_address?: string;
+    btc_address?: string;
+    ltc_address?: string;
 }
 
 export interface WalletRegistryEntry {
@@ -69,7 +74,7 @@ export interface PaymentRequest {
     id: string;
     requester_id: string;
     requester_account_number: string;
-    chain_type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc';
+    chain_type: 'evm' | 'xrp' | 'polkadot' | 'near' | 'btc' | 'ltc';
     token_symbol: string;
     token_address?: string;
     amount: number;
