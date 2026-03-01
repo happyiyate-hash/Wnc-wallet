@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
+import { useCurrency } from '@/contexts/currency-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -54,6 +55,7 @@ function formatCompactNumber(val: string): string {
 
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap, prices, infuraApiKey } = useWallet();
+  const { formatFiat } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -77,6 +79,7 @@ function SwapClient() {
 
   // INTERACTION STATE
   const [showPrecision, setShowPrecision] = useState(false);
+  const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -237,6 +240,18 @@ function SwapClient() {
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
+  const fromTokenPrice = useMemo(() => {
+    if (!fromToken) return 0;
+    const priceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
+    return prices[priceId]?.price || 0;
+  }, [fromToken, prices]);
+
+  const toTokenPrice = useMemo(() => {
+    if (!toToken) return 0;
+    const priceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
+    return prices[priceId]?.price || 0;
+  }, [toToken, prices]);
+
   const handleOpenSelector = (type: 'from' | 'to') => {
     setSelectionType(type);
     setIsSelectorOpen(true);
@@ -368,7 +383,7 @@ function SwapClient() {
                                 <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
                               </div>
                             </div>
-                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
                           </motion.div>
                         );
                       })}
@@ -392,7 +407,7 @@ function SwapClient() {
             <div className="text-right"><span className="text-[8px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
           </div>
           
-          <div className="relative">
+          <div className="relative pt-2">
             <AnimatePresence>
               {showPrecision && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -45, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1.5 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
@@ -414,13 +429,13 @@ function SwapClient() {
                 placeholder="0.00" 
                 value={amount} 
                 onChange={(e) => setAmount(e.target.value)} 
-                className="text-[2.8rem] font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" 
+                className="text-4xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" 
               />
-              {amount && parseFloat(amount) >= 1000 && (
-                <div className="absolute bottom-0 right-0 pointer-events-none opacity-40">
-                  <span className="text-xs font-black uppercase text-primary tracking-widest">{formatCompactNumber(amount)}</span>
-                </div>
-              )}
+              <div className="mt-1">
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                  ≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -447,14 +462,38 @@ function SwapClient() {
               )}
             </div>
           </div>
-          <div className="text-[2.8rem] font-black tracking-tighter text-white flex items-center h-[1.5em] transition-all relative z-10">
-            {isQuoteLoading && !selectedQuote ? (
-              <div className="flex gap-1">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-3 h-3 rounded-full bg-primary/20" />)}</div>
-            ) : (
-              <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
-                {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : '0.00'}
-              </motion.span>
-            )}
+          <div className="relative pt-2">
+            <AnimatePresence>
+              {showOutputPrecision && (
+                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -45, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1.5 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
+                  <p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount || '0'} {toToken?.symbol}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div 
+              className="text-5xl font-black tracking-tighter text-white flex flex-col h-[1.8em] transition-all relative z-10 cursor-pointer"
+              onPointerDown={() => setShowOutputPrecision(true)}
+              onPointerUp={() => setShowOutputPrecision(false)}
+              onPointerLeave={() => setShowOutputPrecision(false)}
+            >
+              {isQuoteLoading && !selectedQuote ? (
+                <div className="flex gap-1 h-full items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-3 h-3 rounded-full bg-primary/20" />)}</div>
+              ) : (
+                <>
+                  <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
+                    {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                  </motion.span>
+                  <div className="mt-1">
+                    <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                      ≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </section>
 
