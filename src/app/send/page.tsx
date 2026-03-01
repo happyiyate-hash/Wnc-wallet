@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos and Osmosis formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis and Secret formats.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -81,6 +81,10 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('osmo1')) {
       return 'osmosis';
   }
+
+  if (clean.startsWith('secret1')) {
+      return 'secret';
+  }
   
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
@@ -113,6 +117,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'solana') return { name: 'Solana', symbol: 'SOL' };
     if (type === 'cosmos') return { name: 'Cosmos Hub', symbol: 'ATOM' };
     if (type === 'osmosis') return { name: 'Osmosis', symbol: 'OSMO' };
+    if (type === 'secret') return { name: 'Secret Network', symbol: 'SCRT' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -211,7 +216,7 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis'].includes(addrType);
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
       if (!input || input.length < 3 || isSelfTransfer) {
@@ -333,7 +338,7 @@ function SendClient() {
           toast({ title: `Institutional Solana`, description: "Account-based SOL signing restricted to hardware modules." });
           throw new Error("SOL Signing restricted to hardware modules.");
       }
-      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis') {
+      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis' || activeNetwork.type === 'secret') {
           toast({ title: `Institutional Interchain`, description: "Cosmos-family signing restricted to hardware modules." });
           throw new Error("Interchain Signing restricted to hardware modules.");
       }
