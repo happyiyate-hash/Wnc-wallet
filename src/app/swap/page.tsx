@@ -362,7 +362,14 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10">
-        <section style={{ backgroundColor: `${fromChainColor}15`, borderColor: `${fromChainColor}30` }} className="w-full border p-4 rounded-[2rem] space-y-1 shadow-2xl relative">
+        <section 
+          style={{ 
+            backgroundColor: `${fromChainColor}20`, 
+            borderColor: `${fromChainColor}60`,
+            boxShadow: `0 0 30px ${fromChainColor}15`
+          }} 
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500"
+        >
           <div className="flex items-center justify-between">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
@@ -396,7 +403,14 @@ function SwapClient() {
           </motion.div>
         </div>
 
-        <section style={{ backgroundColor: `${toChainColor}15`, borderColor: `${toChainColor}30` }} className="w-full border p-4 rounded-[2rem] space-y-1 shadow-2xl relative overflow-hidden">
+        <section 
+          style={{ 
+            backgroundColor: `${toChainColor}20`, 
+            borderColor: `${toChainColor}60`,
+            boxShadow: `0 0 30px ${toChainColor}15`
+          }} 
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 overflow-hidden"
+        >
           <div className="flex items-center justify-between relative z-10">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} />
@@ -461,7 +475,7 @@ function SwapClient() {
                     <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
-                  <div className="flex flex-col items-center gap-2"><div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20"><Bot className="w-6 h-6 text-purple-500" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" /></div><span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span></div>
+                  <div className="flex flex-col items-center gap-2"><div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20"><bot className="w-6 h-6 text-purple-500" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" /></div><span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span></div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden"><svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2"><line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="3 3" /><motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="3 3" animate={{ strokeDashoffset: [15, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} /></svg></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
