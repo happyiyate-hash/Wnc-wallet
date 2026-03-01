@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -254,14 +255,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // 1. Update Core Identity (Profiles)
       await supabase
         .from('profiles')
         .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
         .eq('id', activeSessionId);
 
-      // 2. ATOMIC UNLIMITED SYNC (Wallets Registry)
-      // This calls the PostgreSQL RPC function that performs an atomic Upsert into 'wallets' table
       const walletPayload = wallets.map(w => ({ type: w.type, address: w.address }));
       const { error: syncError } = await supabase.rpc('sync_user_wallets', {
           p_user_id: activeSessionId,
@@ -442,7 +440,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (Object.keys(newPrices).length > 0) {
             setPrices(prev => ({ ...prev, ...newPrices }));
         } else {
-            // Heartbeat Retry: if no data found, retry faster
             setTimeout(fetchGlobalPrices, 5000);
         }
     } catch (e) {
@@ -493,7 +490,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const isFirstSession = !sessionStorage.getItem(`synced_${activeSessionId}`);
     
-    // Fetch the Unlimited Wallets Registry
     const { data: cloudWallets } = await supabase
         .from('wallets')
         .select('blockchain_id, address')
@@ -596,36 +592,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!activeSessionId) {
           setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return;
       }
-      setIsWalletLoading(true);
       
-      const failsafe = setTimeout(() => setIsWalletLoading(false), 10000);
+      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+      const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
+      const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
+      const savedKey = localStorage.getItem('infura_api_key');
 
-      try {
-        const savedKey = localStorage.getItem('infura_api_key');
-        if (savedKey) setInfuraApiKey(savedKey);
-        
-        const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
-        if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
-        
-        const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
-        if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
-        
-        const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
-        if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
-        
-        if (profile?.account_number) {
-            setAccountNumber(profile.account_number);
-            localStorage.setItem(`account_number_${activeSessionId}`, profile.account_number);
-        } else {
-            const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
-            if (localAcc) setAccountNumber(localAcc);
-        }
+      if (savedKey) setInfuraApiKey(savedKey);
+      if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
+      if (localAcc) setAccountNumber(localAcc);
+      if (profile?.account_number) setAccountNumber(profile.account_number);
 
-        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
-        if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
-      } catch (e) {} finally { 
-        clearTimeout(failsafe);
-        setIsWalletLoading(false); 
+      if (savedMnemonic) {
+          setIsWalletLoading(false); 
+          await loadWalletFromMnemonic(savedMnemonic);
+      } else {
+          setIsWalletLoading(true);
+          const failsafe = setTimeout(() => setIsWalletLoading(false), 10000);
+          try {
+            const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
+            if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
+            const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
+            if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
+          } catch (e) {} finally { 
+            clearTimeout(failsafe);
+            setIsWalletLoading(false); 
+          }
       }
     };
     initLocalSession();

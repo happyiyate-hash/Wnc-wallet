@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -18,7 +19,8 @@ function HomeContent() {
     isRequestOverlayOpen, 
     setIsRequestOverlayOpen, 
     activeFulfillmentId, 
-    setActiveFulfillmentId 
+    setActiveFulfillmentId,
+    wallets
   } = useWallet();
 
   const searchParams = useSearchParams();
@@ -59,7 +61,8 @@ function HomeContent() {
     return () => window.removeEventListener('scroll', handle);
   }, []);
 
-  const hasCachedIdentity = !!profile;
+  // PRODUCTION OPTIMIZATION: If we have cached wallets or profile, bypass splash
+  const hasCachedIdentity = !!profile || !!wallets;
   const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity && !!user;
 
   if (isAppLoading) {

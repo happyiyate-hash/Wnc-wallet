@@ -213,7 +213,7 @@
     "chainId": 397,
     "rpcUrl": "https://rpc.mainnet.near.org",
     "coingeckoId": "near",
-    "themeColor": "#000000",
+    "themeColor": "#C1FF72",
     "type": "near"
   }
 }
