@@ -42,10 +42,10 @@ interface SwapQuote {
   isBest?: boolean;
 }
 
-type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
+type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap, prices } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap, prices, infuraApiKey } = useWallet();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -64,6 +64,7 @@ function SwapClient() {
 
   // CHOREOGRAPHY STATE
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
+  const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
   const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
   // ANIMATION & LONG PRESS STATE
@@ -94,12 +95,14 @@ function SwapClient() {
   // REAL QUOTE FETCH ENGINE
   useEffect(() => {
     const runSequence = async () => {
+      // GUARD: Stop fetch when input is empty or zero
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]);
         setQuotePhase('IDLE');
         setSelectedQuoteId(null);
         setFetchError(null);
         setFadedIndices(new Set());
+        setActiveScanIndex(-1);
         lastFetchedAmountRef.current = '';
         return;
       }
@@ -112,6 +115,7 @@ function SwapClient() {
       setQuotePhase('FETCHING');
       setFetchError(null);
       setFadedIndices(new Set());
+      setActiveScanIndex(-1);
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
@@ -150,20 +154,31 @@ function SwapClient() {
         setSelectedQuoteId(finalBatch[0].id);
         setIsQuoteLoading(false);
         
-        // CHOREOGRAPHY START: PHASE 1 - Show All
+        // PHASE 1: MARKET REVELATION (Show All Instant)
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 1200)); 
+        await new Promise(r => setTimeout(r, 600));
 
-        // PHASE 2 - Fade Out One by One
+        // PHASE 2: IDENTITY SCAN (AI Thinking)
+        setQuotePhase('SCANNING');
+        for (let i = 0; i < finalBatch.length; i++) {
+          setActiveScanIndex(i);
+          await new Promise(r => setTimeout(r, 120)); // Rhythmic scan
+        }
+
+        // PHASE 3: DECISION MOMENT
+        setQuotePhase('FINAL_SELECTED');
+        await new Promise(r => setTimeout(r, 1000)); // Hold for cinematic effect
+
+        // PHASE 4: STABLE TRANSITION (Fade Out Opacity Only)
         setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatch.length; i++) {
           setFadedIndices(prev => new Set(prev).add(i));
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 80));
         }
 
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 200));
 
-        // PHASE 3 - Show Visual Robot Card
+        // PHASE 5: SHOW ROBOT VISUAL
         setQuotePhase('SHOW_VISUAL');
         await new Promise(r => setTimeout(r, 4500));
 
@@ -195,6 +210,7 @@ function SwapClient() {
     setSelectedQuoteId(null);
     setFetchError(null);
     setFadedIndices(new Set());
+    setActiveScanIndex(-1);
     lastFetchedAmountRef.current = '';
   };
 
@@ -209,6 +225,7 @@ function SwapClient() {
     setSelectedQuoteId(null);
     setFetchError(null);
     setFadedIndices(new Set());
+    setActiveScanIndex(-1);
     lastFetchedAmountRef.current = '';
   };
 
@@ -250,7 +267,7 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* QUOTE LIST LAYER */}
+      {/* QUOTE COCkPIT LAYER */}
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div 
@@ -264,7 +281,7 @@ function SwapClient() {
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <AlertCircle className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">
-                      {fetchError ? 'Route Unreachable' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Institutional Market Options'}
+                      {fetchError ? 'Route Unreachable' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Institutional Market Analysis'}
                     </h3>
                   </div>
                 </div>
@@ -272,35 +289,60 @@ function SwapClient() {
                   {fetchError ? (
                     <div className="p-6 rounded-[2rem] bg-red-500/10 border border-red-500/20 text-center space-y-3">
                         <p className="text-xs font-bold text-red-400 leading-relaxed">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-8 rounded-xl text-[9px] uppercase tracking-widest font-black bg-white/5 border border-white/10" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Retry Discovery</Button>
+                        <Button size="sm" variant="ghost" className="h-8 rounded-xl text-[9px] uppercase tracking-widest font-black bg-white/5 border border-white/10" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Retry Handshake</Button>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
-                    quotes.map((quote, idx) => (
-                      <motion.div
-                        key={quote.id} 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: fadedIndices.has(idx) ? 0 : 1 }}
-                        transition={{ duration: 0.3 }}
-                        className={cn("w-full flex items-center justify-between p-4 rounded-2xl border bg-white/[0.02] border-white/5")}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase">{quote.provider[0]}</div>
-                          <div className="text-left">
-                            <p className="text-xs font-black text-white">{quote.provider}</p>
-                            <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
-                              <span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span>
-                              <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
+                    quotes.map((quote, idx) => {
+                      const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
+                      const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
+                      const isBest = quotePhase === 'FINAL_SELECTED' && quote.isBest;
+                      const isRejected = quotePhase === 'FINAL_SELECTED' && !quote.isBest;
+                      const isFading = fadedIndices.has(idx);
+
+                      return (
+                        <motion.div
+                          key={quote.id} 
+                          initial={{ opacity: 0 }}
+                          animate={{ 
+                            opacity: isFading ? 0 : isRejected ? 0.3 : 1,
+                            scale: isBest ? 1.02 : isRejected ? 0.95 : 1,
+                            borderColor: isScanning ? 'rgba(59, 130, 246, 0.5)' : isAccepted ? 'rgba(34, 197, 94, 0.3)' : isBest ? 'rgba(59, 130, 246, 0.8)' : 'rgba(255,255,255,0.05)',
+                            backgroundColor: isScanning ? 'rgba(59, 130, 246, 0.1)' : isBest ? 'rgba(59, 130, 246, 0.05)' : 'rgba(255,255,255,0.02)'
+                          }}
+                          transition={{ duration: 0.3 }}
+                          className={cn(
+                            "w-full flex items-center justify-between p-4 rounded-2xl border transition-colors shadow-2xl",
+                            isBest && "shadow-blue-500/20"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-colors",
+                              isBest ? "bg-blue-600" : "bg-zinc-900"
+                            )}>
+                              {isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}
+                            </div>
+                            <div className="text-left">
+                              <p className="text-xs font-black text-white">{quote.provider}</p>
+                              <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5">
+                                <span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}>
+                                  <Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}
+                                </span>
+                                <span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black tabular-nums text-white">{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p>
-                          <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
-                        </div>
-                      </motion.div>
-                    ))
+                          <div className="text-right">
+                            <p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>
+                              {quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                            </p>
+                            <p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p>
+                          </div>
+                        </motion.div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -401,7 +443,7 @@ function SwapClient() {
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative p-2">
                     <motion.div 
-                      animate={{ rotate: 360 }} transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                      animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
                       style={{ borderColor: `${fromChainColor}66` }}
                       className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
@@ -458,7 +500,7 @@ function SwapClient() {
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative p-2">
                     <motion.div 
-                      animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                      animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
                       style={{ borderColor: `${toChainColor}66` }}
                       className="absolute inset-0 rounded-full border-2 border-dashed"
                     />
