@@ -319,7 +319,10 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
           <div className="flex flex-col items-center text-center space-y-8 mb-10">
             <div className="flex items-center justify-between w-full px-4">
               <div className="flex flex-col items-center gap-2">
-                <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar>
+                <div className="relative">
+                  <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar>
+                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
+                </div>
                 <span className="text-[8px] font-black text-white/40 uppercase">From You</span>
               </div>
               <div className="flex-1 px-6 relative">
@@ -328,7 +331,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
               <div className="flex flex-col items-center gap-2">
                 <div className="relative">
                   <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={requester.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{requester.name?.[0]}</AvatarFallback></Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-10"><TokenLogoDynamic logoUrl={null} alt="T" size={24} symbol={request.token_symbol} name={request.token_symbol} /></div>
+                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
                 </div>
                 <span className="text-[8px] font-black text-white/40 uppercase">To @{requester.name}</span>
               </div>
@@ -374,7 +377,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         </motion.div>
       </motion.div>
 
-      <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={currentUserProfile?.photo_url} recipientName={requester.name} recipientAvatar={requester.photo_url} token={{ symbol: request.token_symbol, chainId: 1 }} />
+      <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={currentUserProfile?.photo_url} recipientName={requester.name} recipientAvatar={requester.photo_url} token={{ symbol: request.token_symbol, iconUrl: activeToken?.iconUrl, chainId: activeToken?.chainId || 1, name: activeToken?.name }} />
       <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} txHash={txHash} errorReason={receiptError} fee="Standard" networkName={request.chain_type.toUpperCase()} />
     </>
   );

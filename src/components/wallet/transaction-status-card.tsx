@@ -67,6 +67,16 @@ export default function TransactionStatusCard({
                       {senderName[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
+                  <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-0.5 border border-white/10 shadow-xl z-20">
+                    <TokenLogoDynamic 
+                      logoUrl={token?.iconUrl} 
+                      size={14} 
+                      chainId={token?.chainId} 
+                      symbol={token?.symbol} 
+                      name={token?.name}
+                      alt="token badge"
+                    />
+                  </div>
                 </div>
                 <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-16 text-center">
                   {senderName}
@@ -137,6 +147,18 @@ export default function TransactionStatusCard({
                     )}
                   </motion.div>
 
+                  {/* Token Badge for Recipient */}
+                  <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-0.5 border border-white/10 shadow-xl z-20">
+                    <TokenLogoDynamic 
+                      logoUrl={token?.iconUrl} 
+                      size={14} 
+                      chainId={token?.chainId} 
+                      symbol={token?.symbol} 
+                      name={token?.name}
+                      alt="token badge"
+                    />
+                  </div>
+
                   {/* Status Badge */}
                   <AnimatePresence>
                     {status !== 'pending' && (
@@ -144,7 +166,7 @@ export default function TransactionStatusCard({
                         initial={{ scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         className={cn(
-                          "absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a0a0c] text-white shadow-xl",
+                          "absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a0a0c] text-white shadow-xl z-[30]",
                           status === 'success' ? "bg-green-500" : "bg-red-500"
                         )}
                       >

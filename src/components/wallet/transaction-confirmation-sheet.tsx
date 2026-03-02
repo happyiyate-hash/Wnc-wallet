@@ -12,7 +12,7 @@ import { useUser } from '@/contexts/user-provider';
 
 interface TransactionConfirmationSheetProps {
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
+  onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   isSubmitting: boolean;
   amount: string;
@@ -55,8 +55,8 @@ export default function TransactionConfirmationSheet({
                     <AvatarImage src={profile?.photo_url} />
                     <AvatarFallback className="bg-primary/20 text-primary font-black">{profile?.name?.[0]}</AvatarFallback>
                 </Avatar>
-                <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={20} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
+                <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={24} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                 </div>
             </div>
             <span className="text-[8px] font-black text-white/40 uppercase">You</span>
@@ -76,12 +76,12 @@ export default function TransactionConfirmationSheet({
                         <AvatarFallback className="bg-primary/20 text-primary font-black">{recipientName[0]?.toUpperCase()}</AvatarFallback>
                     </Avatar>
                 ) : (
-                    <div className="w-16 h-16 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center overflow-hidden">
                         <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={32} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                     </div>
                 )}
-                <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl">
-                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={20} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
+                <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20">
+                    <TokenLogoDynamic logoUrl={token?.iconUrl} alt={token?.symbol || 'T'} size={24} chainId={token?.chainId} symbol={token?.symbol} name={token?.name} />
                 </div>
             </div>
             <span className="text-[8px] font-black text-white/40 uppercase truncate w-16 text-center">{recipientName}</span>
