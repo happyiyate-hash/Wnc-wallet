@@ -19,12 +19,13 @@ import {
   ArrowRight,
   ShieldAlert,
   AlertCircle,
-  ChevronDown,
   Zap,
   QrCode,
   X,
   Image as ImageIcon,
-  Camera
+  CheckCircle2,
+  Copy,
+  ChevronDown
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -224,22 +225,49 @@ function SendClient() {
     return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
 
+  // SMART RESOLVER: Manage isResolving state instantly
+  const handleRecipientInputChange = (val: string) => {
+    setRecipientInput(val);
+    const type = detectAddressType(val);
+    // Instant stop for raw addresses or clear mismatches
+    if (type === 'account-id') {
+        setIsResolving(true);
+    } else {
+        setIsResolving(false);
+    }
+  };
+
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
+      
       if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
-        if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
+        if (currentId === resolutionCounter.current) { 
+          setResolvedAddress(''); 
+          setRecipientProfile(null); 
+          setIsResolving(false); 
+          setResolutionError(null); 
+        }
         return;
       }
+
       if (isRawChainAddress) {
-        if (currentId === resolutionCounter.current) { setResolvedAddress(input); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
+        if (currentId === resolutionCounter.current) { 
+          setResolvedAddress(input); 
+          setRecipientProfile(null); 
+          setIsResolving(false); 
+          setResolutionError(null); 
+        }
         return;
       }
+
       if (addrType === 'account-id') {
-        setRecipientProfile(null); setIsResolving(true); setResolutionError(null);
+        setRecipientProfile(null); 
+        setIsResolving(true); 
+        setResolutionError(null);
         try {
           if (!supabase) throw new Error("No connection");
           const { data: userRecord } = await supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
@@ -258,7 +286,13 @@ function SendClient() {
         finally { if (currentId === resolutionCounter.current) setIsResolving(false); }
         return;
       }
-      if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError("I could not find any account or blockchain related to this symbol."); }
+
+      if (currentId === resolutionCounter.current) { 
+        setResolvedAddress(''); 
+        setRecipientProfile(null); 
+        setIsResolving(false); 
+        setResolutionError("I could not find any account or blockchain related to this symbol."); 
+      }
     }
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
@@ -302,7 +336,7 @@ function SendClient() {
         const account = url.searchParams.get('account');
         const symbol = url.searchParams.get('symbol');
         if (account) {
-          setRecipientInput(account);
+          handleRecipientInputChange(account);
           if (symbol) {
             const token = allAssets.find(a => a.symbol === symbol);
             if (token) setSelectedToken(token);
@@ -317,7 +351,7 @@ function SendClient() {
         const parts = decodedText.split(':');
         if (parts[1]) cleanAddress = parts[1].split(/[?#]/)[0];
     }
-    setRecipientInput(cleanAddress);
+    handleRecipientInputChange(cleanAddress);
     toast({ title: "Handshake Authorized" });
   };
 
@@ -336,7 +370,7 @@ function SendClient() {
     } catch (err) {
       toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in this image." });
       // Restart camera so the user can try scanning normally
-      if (isScannerOpen) startCamera(scannerRef.current);
+      if (isScannerOpen && scannerRef.current) startCamera(scannerRef.current);
     }
   };
 
@@ -345,6 +379,7 @@ function SendClient() {
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
+        // FIX: Strict integer casting to resolve registry ambiguity
         const transferAmount = Math.floor(parseFloat(amount));
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: transferAmount });
         if (rpcError) throw new Error(rpcError.message);
@@ -432,9 +467,9 @@ function SendClient() {
             </section>
 
             <section className="space-y-3">
-                <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
+                <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => handleRecipientInputChange(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
                 <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}>
-                    <div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div>
+                    <div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => handleRecipientInputChange(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div>
                 </div>
                 {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || validationError?.message}</p></div>}
                 {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}

@@ -52,9 +52,6 @@ const mapTechnicalError = (err: any): string => {
   if (msg.includes('user rejected')) {
     return "Transaction Cancelled: You rejected the request in your terminal.";
   }
-  if (msg.includes('websocket') || msg.includes('disconnected')) {
-    return "Network Timeout: The blockchain node closed the connection. Please try again.";
-  }
   
   if (err.message) return `System Advisory: ${err.message}`;
   return "Dispatch Error: The transaction was rejected by the network protocol.";
@@ -62,7 +59,6 @@ const mapTechnicalError = (err: any): string => {
 
 /**
  * INSTITUTIONAL REQUEST CREATION CARD
- * A cinematic overlay node for generating P2P requests.
  */
 export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
   const { allAssets, viewingNetwork, accountNumber } = useWallet();
@@ -82,15 +78,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   useEffect(() => { if (!selectedToken && allAssets.length > 0) setSelectedToken(allAssets[0]); }, [allAssets, selectedToken]);
 
   const handleGenerate = async () => {
-    if (!user || !selectedToken || !accountNumber || !supabase) {
-        toast({
-            variant: "destructive",
-            title: "Identity Required",
-            description: "Please ensure your node identity is fully synchronized before requesting."
-        });
-        return;
-    }
-
+    if (!user || !selectedToken || !accountNumber || !supabase) return;
     setIsCreating(true);
     try {
       const { data, error } = await supabase.from('payment_requests').insert({
@@ -107,14 +95,9 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
       
       setRequestId(data.id);
       setStep('ready');
-      toast({ title: "Request Node Active", description: "P2P handshake generated successfully." });
+      toast({ title: "Request Node Active" });
     } catch (e: any) { 
-      console.error("[REQUEST_GEN_FAIL]", e);
-      toast({
-          variant: "destructive",
-          title: "Protocol Error",
-          description: e.message || "Failed to generate payment request. Please check your connection."
-      });
+      toast({ variant: "destructive", title: "Protocol Error", description: e.message });
     } finally { 
       setIsCreating(false); 
     }
@@ -122,101 +105,44 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
   const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
 
-  const cardVariants = {
-    initial: { y: "100%", opacity: 0 },
-    animate: { y: 0, opacity: 1 },
-    exit: { y: "100%", opacity: 0 }
-  };
-
   if (!isOpen) return null;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4 md:items-center"
-    >
-      <motion.div 
-        variants={cardVariants} initial="initial" animate="animate" exit="exit" transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl relative"
-      >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4 md:items-center">
+      <motion.div initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }} className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] p-6 shadow-2xl relative">
         <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
-        
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                <HandCoins className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Request Node</h3>
-                <p className="text-[8px] font-black uppercase text-primary opacity-60">P2P Handshake Protocol</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
-          </div>
-
-          <AnimatePresence mode="wait">
-            {step === 'edit' ? (
-              <motion.div key="edit" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
-                <section className="space-y-3">
-                  <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Target Asset</Label>
-                  <button onClick={() => setIsSelectorOpen(true)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all">
-                    <div className="flex items-center gap-3">
-                      <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={32} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                      <div className="text-left"><p className="font-bold text-sm text-white">{selectedToken?.symbol}</p><p className="text-[9px] text-muted-foreground uppercase">{viewingNetwork.name}</p></div>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </section>
-
-                <section className="space-y-3">
-                  <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Request Amount</Label>
-                  <div className="p-6 rounded-[2rem] bg-secondary/20 border border-white/5 text-center">
-                    <div className="flex items-baseline justify-center gap-2">
-                      <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-4xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter text-white" />
-                      <span className="text-sm font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
-                    </div>
-                    <p className="mt-2 text-[10px] font-bold text-primary">≈ {formatFiat((parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0))}</p>
-                  </div>
-                </section>
-
-                <Textarea placeholder="What's this for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="rounded-2xl bg-white/5 border-white/5 p-4 min-h-[100px] text-sm" />
-
-                <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20" disabled={!amount || parseFloat(amount) <= 0 || isCreating} onClick={handleGenerate}>
-                  {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Request Node"}
-                </Button>
-              </motion.div>
-            ) : (
-              <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-8 py-4">
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mx-auto mb-4 border border-green-500/20"><CheckCircle2 className="w-8 h-8" /></div>
-                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Ready</h3>
-                  <p className="text-xs text-muted-foreground">Share this node to receive payment</p>
-                </div>
-
-                <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative group">
-                  <QRCode value={shareUrl} size={180} level="H" />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
-                      <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={32} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full space-y-3">
-                  <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
-                      <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
-                  </button>
-                  <Button onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} className="w-full h-14 rounded-2xl gap-3 font-black text-sm uppercase bg-primary"><Share2 className="w-4 h-4" /> Share Node</Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"><HandCoins className="w-5 h-5" /></div><div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Request Node</h3><p className="text-[8px] font-black uppercase text-primary opacity-60">P2P Handshake</p></div></div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5"><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
+
+        <AnimatePresence mode="wait">
+          {step === 'edit' ? (
+            <motion.div key="edit" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
+              <button onClick={() => setIsSelectorOpen(true)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                <div className="flex items-center gap-3"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={32} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /><div className="text-left"><p className="font-bold text-sm text-white">{selectedToken?.symbol}</p><p className="text-[9px] text-muted-foreground uppercase">{viewingNetwork.name}</p></div></div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </button>
+              <div className="p-6 rounded-[2rem] bg-secondary/20 border border-white/5 text-center">
+                <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-4xl font-black bg-transparent border-none text-center focus-visible:ring-0 text-white" />
+                <p className="mt-2 text-[10px] font-bold text-primary uppercase">≈ {formatFiat((parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0))}</p>
+              </div>
+              <Textarea placeholder="Note (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="rounded-2xl bg-white/5 border-white/5 p-4 text-sm" />
+              <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase bg-primary" disabled={!amount || isCreating} onClick={handleGenerate}>{isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Request Node"}</Button>
+            </motion.div>
+          ) : (
+            <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-8 py-4">
+              <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative"><QRCode value={shareUrl} size={180} /><div className="absolute inset-0 flex items-center justify-center"><div className="p-2 bg-white rounded-xl border"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="T" size={32} symbol={selectedToken?.symbol} name={selectedToken?.name} /></div></div></div>
+              <div className="w-full space-y-3">
+                <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className="w-full p-4 rounded-2xl border flex items-center justify-between bg-white/5 border-white/10">
+                  <div className="flex items-center gap-3 overflow-hidden"><div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div><p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p></div>
+                  <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
+                </button>
+                <Button onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} className="w-full h-14 rounded-2xl font-black uppercase bg-primary">Share Node</Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
     </motion.div>
@@ -225,7 +151,6 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
 /**
  * INSTITUTIONAL REQUEST REVIEW CARD
- * Cinematic deep-link fulfillment overlay.
  */
 export function RequestReviewMoment({ requestId, onClose }: { requestId: string, onClose: () => void }) {
   const { wallets, infuraApiKey, allChainsMap, allAssets, refresh } = useWallet();
@@ -260,16 +185,14 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
   const handlePay = async () => {
     if (!wallets || !request || !requester) return;
-    setIsStatusVisible(true);
-    setTxStatus('pending');
-    setIsSubmitting(true);
+    setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
 
     try {
       const chainType = request.chain_type;
       const amountStr = request.amount.toString();
       
       if (request.token_symbol === 'WNC') {
-        // FIX: Integer casting for WNC settlement to resolve ambiguity
+        // FIX: Strict integer casting to resolve registry ambiguity
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
             p_recipient_id: requester.id,
             p_amount: Math.floor(request.amount)
@@ -277,45 +200,23 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
-      } 
-      else if (chainType === 'btc' || chainType === 'ltc') {
-          throw new Error("BTC/LTC Signing restricted to hardware modules.");
-      }
-      else if (chainType === 'xrp') {
+      } else if (chainType === 'xrp') {
         const xrpWallet = wallets.find(w => w.type === 'xrp');
         const network = Object.values(allChainsMap).find(c => c.type === 'xrp');
         const client = new xrpl.Client(network?.rpcUrl || 'wss://xrplcluster.com');
-        const recipientAddress = requester.xrp_address;
-        if (!recipientAddress) throw new Error("Recipient XRP node not initialized.");
-        
-        try {
-          await Promise.race([
-            client.connect(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('XRPL_CONNECTION_TIMEOUT')), 10000))
-          ]);
-          const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
-          const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountStr), Destination: recipientAddress });
-          const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
-          else throw new Error("XRPL Fail");
-        } finally {
-          if (client.isConnected()) await client.disconnect();
-        }
+        await client.connect();
+        const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
+        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountStr), Destination: requester.xrp_address! });
+        const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
+        await client.disconnect();
+        if ((result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
+        else throw new Error("XRPL Fail");
       } else {
-        if (!infuraApiKey) throw new Error("Connection Error: Infura key missing.");
         const evmWallet = wallets.find(w => w.type === 'evm');
         const network = Object.values(allChainsMap).find(c => c.type === 'evm');
-        const provider = new ethers.JsonRpcProvider(network!.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+        const provider = new ethers.JsonRpcProvider(network!.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
-        const recipientAddress = requester.evm_address;
-        if (!recipientAddress) throw new Error("Recipient EVM node not initialized.");
-        const decimals = 18; 
-        let tx;
-        if (!request.token_address) tx = await wallet.sendTransaction({ to: recipientAddress, value: ethers.parseEther(amountStr) });
-        else {
-          const contract = new ethers.Contract(request.token_address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-          tx = await contract.transfer(recipientAddress, ethers.parseUnits(amountStr, decimals));
-        }
+        let tx = !request.token_address ? await wallet.sendTransaction({ to: requester.evm_address!, value: ethers.parseEther(amountStr) }) : await (new ethers.Contract(request.token_address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(requester.evm_address!, ethers.parseUnits(amountStr, 18));
         setTxHash(tx.hash);
       }
 
@@ -331,10 +232,8 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
     }
   };
 
-  if (loading) return null;
-  if (!request || !requester) return null;
+  if (loading || !request || !requester) return null;
 
-  const isAlreadyPaid = request.status === 'paid';
   const activeToken = allAssets.find(a => a.symbol === request.token_symbol);
   const userBalance = parseFloat(activeToken?.balance || '0');
   const hasInsufficientFunds = request.amount > userBalance;
@@ -342,80 +241,28 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <motion.div initial={{ y: 100, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 100, opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25 }} className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 blur-[100px] -mr-24 -mt-24 rounded-full" />
-          
+        <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] p-8 shadow-2xl relative overflow-hidden">
           <div className="flex items-center justify-between mb-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/20"><Zap className="w-5 h-5" /></div>
-              <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Payment Request</h3><p className="text-[8px] font-black uppercase text-primary opacity-60">Verified Identity Node</p></div>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
+            <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"><Zap className="w-5 h-5" /></div><div><h3 className="text-xs font-black uppercase text-white">Payment Request</h3><p className="text-[8px] font-black uppercase text-primary opacity-60">Verified Node</p></div></div>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5"><X className="w-5 h-5 text-muted-foreground" /></button>
           </div>
 
           <div className="flex flex-col items-center text-center space-y-8 mb-10">
             <div className="flex items-center justify-between w-full px-4">
-              <div className="flex flex-col items-center gap-2">
-                <div className="relative">
-                  <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
-                </div>
-                <span className="text-[8px] font-black text-white/40 uppercase">From You</span>
-              </div>
-              <div className="flex-1 px-6 relative">
-                <div className="w-full h-[1px] bg-primary/20 relative"><motion.div animate={{ x: [-20, 20], opacity: [0, 1, 0] }} transition={{ duration: 2, repeat: Infinity }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-primary"><ArrowRight className="w-4 h-4" /></motion.div></div>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="relative">
-                  <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={requester.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{requester.name?.[0]}</AvatarFallback></Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
-                </div>
-                <span className="text-[8px] font-black text-white/40 uppercase">To @{requester.name}</span>
-              </div>
+              <div className="flex flex-col items-center gap-2"><div className="relative"><Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar><div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} size={24} symbol={activeToken?.symbol} /></div></div><span className="text-[8px] font-black text-white/40 uppercase">You</span></div>
+              <div className="flex-1 px-6"><div className="w-full h-[1px] bg-primary/20 relative"><ArrowRight className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-primary" /></div></div>
+              <div className="flex flex-col items-center gap-2"><div className="relative"><Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20"><AvatarImage src={requester.photo_url} /><AvatarFallback className="bg-zinc-900">{requester.name?.[0]}</AvatarFallback></Avatar><div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} size={24} symbol={activeToken?.symbol} /></div></div><span className="text-[8px] font-black text-white/40 uppercase">To @{requester.name}</span></div>
             </div>
-
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
-              <h2 className={cn("text-5xl font-black tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")}>
-                {request.amount} {request.token_symbol}
-              </h2>
-              <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * (activeToken?.priceUsd || 0))}</p>
-              
-              {hasInsufficientFunds && (
-                <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 animate-pulse">
-                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
-                    Insufficient Balance ({userBalance.toFixed(4)})
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {request.note && <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-muted-foreground italic w-full">"{request.note}"</div>}
+            <div className="space-y-1"><p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount</p><h2 className={cn("text-5xl font-black", hasInsufficientFunds ? "text-red-400" : "text-white")}>{request.amount} {request.token_symbol}</h2><p className="text-xs font-bold text-primary uppercase">≈ {formatFiat(request.amount * (activeToken?.priceUsd || 0))}</p></div>
           </div>
 
-          <div className="space-y-3">
-            {!isAlreadyPaid ? (
-              <Button 
-                onClick={handlePay} 
-                disabled={isSubmitting || hasInsufficientFunds} 
-                className={cn(
-                  "w-full h-16 rounded-[2rem] font-black text-lg shadow-2xl transition-all duration-300",
-                  hasInsufficientFunds ? "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed" : "bg-primary hover:bg-primary/90 shadow-primary/20"
-                )}
-              >
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize & Send"}
-              </Button>
-            ) : (
-              <div className="p-5 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-4"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /><div className="text-left"><p className="text-xs font-black text-green-500 uppercase">Paid & Locked</p><p className="text-[10px] text-green-400 opacity-80 leading-relaxed">This request has already been fulfilled.</p></div></div>
-            )}
-            <Button variant="ghost" className="w-full h-12 rounded-2xl font-bold text-muted-foreground" onClick={onClose}>Dismiss</Button>
-          </div>
+          <Button onClick={handlePay} disabled={isSubmitting || hasInsufficientFunds || request.status === 'paid'} className="w-full h-16 rounded-[2rem] font-black text-lg bg-primary hover:bg-primary/90">{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : request.status === 'paid' ? "Paid" : "Authorize & Send"}</Button>
+          <Button variant="ghost" className="w-full h-12 mt-2 rounded-2xl font-bold text-muted-foreground" onClick={onClose}>Dismiss</Button>
         </motion.div>
       </motion.div>
 
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={currentUserProfile?.photo_url} recipientName={requester.name} recipientAvatar={requester.photo_url} token={{ symbol: request.token_symbol, iconUrl: activeToken?.iconUrl, chainId: activeToken?.chainId || 1, name: activeToken?.name }} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} txHash={txHash} errorReason={receiptError} fee="Standard" networkName={request.chain_type.toUpperCase()} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : requester.xrp_address!} txHash={txHash} errorReason={receiptError} fee="Standard" networkName={request.chain_type.toUpperCase()} />
     </>
   );
 }
