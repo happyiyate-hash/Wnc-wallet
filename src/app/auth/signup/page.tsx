@@ -1,18 +1,22 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, Mail, Lock, UserPlus, Zap, X, CheckCircle2 } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Lock, UserPlus, Zap, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
-export default function SignupPage() {
+/**
+ * SIGNUP INTERACTION NODE
+ * Extracted into a sub-component to safely use useSearchParams() within a Suspense boundary.
+ */
+function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -140,7 +144,7 @@ export default function SignupPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-sm space-y-10 relative z-10"
+        className="w-full max-w-sm space-y-10 relative z-10"
       >
         <div className="text-center space-y-3">
           <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
@@ -312,5 +316,17 @@ export default function SignupPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   );
 }

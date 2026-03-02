@@ -114,11 +114,12 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { chainsWithLogos, areLogosLoading } = useNetworkLogos();
+  const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
   const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId, refreshProfile } = useUser();
   const { rates } = useCurrency();
   const { toast } = useToast();
   
+  // 1. STATE & REFS
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
@@ -148,17 +149,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  useEffect(() => {
-    latestUserTokensRef.current = userAddedTokens;
-  }, [userAddedTokens]);
-
-  const allChainsMap = useMemo(() => {
-    return chainsWithLogos.reduce((acc, c) => ({ ...acc, [c.chainId]: c }), {} as { [key: string]: ChainConfig });
-  }, [chainsWithLogos]);
+  // 2. PRIMARY ACTIONS (Top of Hierarchy)
+  const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
+    return getAddressForChainUtil(chain, wallets);
+  }, []);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const currentCustom = userAddedTokens.length > 0 ? userAddedTokens : latestUserTokensRef.current;
+    const currentCustom = latestUserTokensRef.current;
     const custom = currentCustom.filter(t => t.chainId === chainId);
     
     const combined = [...base, ...custom].reduce((acc, curr) => {
@@ -169,7 +167,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return acc;
     }, [] as AssetRow[]);
     return combined;
-  }, [userAddedTokens]);
+  }, []);
 
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
     setHiddenTokenKeys(prev => {
@@ -177,7 +175,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const key = `${chainId}:${symbol}`;
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      localStorage.setItem(`hidden_tokens_${activeSessionId}`, JSON.stringify(Array.from(next)));
+      if (activeSessionId) localStorage.setItem(`hidden_tokens_${activeSessionId}`, JSON.stringify(Array.from(next)));
       return next;
     });
   }, [activeSessionId]);
@@ -185,63 +183,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const addUserToken = useCallback((token: AssetRow) => {
     setUserAddedTokens(prev => {
       const next = [...prev, token];
-      localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
+      if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
       return next;
     });
   }, [activeSessionId]);
 
-  const fetchGlobalPrices = useCallback(async () => {
-    const coingeckoIds = new Set<string>();
-    const platformTokens: { [platform: string]: Set<string> } = {};
-
-    const allKnownAssets: AssetRow[] = [];
-    chainsWithLogos.forEach(chain => {
-        allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
-    });
-    allKnownAssets.push(...latestUserTokensRef.current);
-
-    allKnownAssets.forEach(a => { 
-        if (a.coingeckoId) {
-            coingeckoIds.add(a.coingeckoId.toLowerCase());
-        } else if (!a.isNative && a.address?.startsWith('0x')) {
-            const platform = COINGECKO_PLATFORM_MAP[a.chainId];
-            if (platform) {
-                if (!platformTokens[platform]) platformTokens[platform] = new Set();
-                platformTokens[platform].add(a.address.toLowerCase());
-            }
-        }
-    });
-
-    if (coingeckoIds.size === 0 && Object.keys(platformTokens).length === 0) return;
-
-    try {
-        const fetchPromises = [];
-        if (coingeckoIds.size > 0) fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
-        Object.entries(platformTokens).forEach(([platform, addresses]) => {
-            fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
-        });
-
-        const results = await Promise.allSettled(fetchPromises);
-        const newPrices: { [id: string]: PriceInfo } = {};
-
-        results.forEach(res => {
-            if (res.status === 'fulfilled' && res.value) {
-                Object.entries(res.value).forEach(([key, data]: [string, any]) => {
-                    const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
-                    const change = data.usd_24h_change || 0;
-                    if (price > 0) newPrices[key.toLowerCase()] = { price, change };
-                });
-            }
-        });
-
-        if (Object.keys(newPrices).length > 0) {
-            setPrices(prev => ({ ...prev, ...newPrices }));
-        }
-    } catch (e) {
-        console.warn("[PRICE_ORACLE_RETRY]", e);
-    }
-  }, [chainsWithLogos]);
-
+  // 3. SYNC PROTOCOLS
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -322,6 +269,60 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
   }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
 
+  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
+    if (!wallets || !profile || !activeSessionId || !supabase) return;
+    if (wallets.length === 0) return;
+
+    if (!options?.forceUI) {
+        sessionStorage.setItem(`identity_audit_${activeSessionId}`, 'verified');
+    }
+
+    const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('id', activeSessionId);
+    const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
+    
+    const chains: { label: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI'; type: string }[] = [
+      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
+    ];
+
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
+
+    for (let i = 0; i < chains.length; i++) {
+      const chainInfo = chains[i];
+      const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
+      const cloud = getCloudAddr(chainInfo.type);
+      
+      setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
+      await wait(1000);
+
+      if (local && local !== cloud) {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
+        await wait(800);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+        await syncAllAddresses(wallets);
+        await wait(1200);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await wait(800);
+      } else {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
+        await wait(600);
+      }
+    }
+
+    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
+    await wait(1200);
+    if (!profile.vault_phrase) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+      await saveToVault();
+      await wait(1500);
+    }
+
+    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    setIsSynced(true);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
+  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault, refreshProfile]);
+
+  // 4. WALLET DERIVATION
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
     try {
@@ -440,59 +441,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.hedera_address]);
 
-  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
-    if (!wallets || !profile || !activeSessionId || !supabase) return;
-    if (wallets.length === 0) return;
-
-    if (!options?.forceUI) {
-        sessionStorage.setItem(`identity_audit_${activeSessionId}`, 'verified');
-    }
-
-    const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', activeSessionId);
-    const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
-    
-    const chains: { label: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI'; type: string }[] = [
-      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
-    ];
-
-    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-
-    for (let i = 0; i < chains.length; i++) {
-      const chainInfo = chains[i];
-      const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
-      const cloud = getCloudAddr(chainInfo.type);
-      
-      setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(1000);
-
-      if (local && local !== cloud) {
-        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(800);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-        await syncAllAddresses(wallets);
-        await wait(1200);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(800);
-      } else {
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(600);
-      }
-    }
-
-    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
-    await wait(1200);
-    if (!profile.vault_phrase) {
-      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-      await saveToVault();
-      await wait(1500);
-    }
-
-    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
-    setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
-  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault]);
-
   const generateWallet = async (): Promise<string> => {
     const mnemonic = bip39.generateMnemonic();
     const derived = await loadWalletFromMnemonic(mnemonic);
@@ -591,6 +539,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // 5. DATA FETCHING
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
@@ -631,6 +580,58 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return combinedAssetsList;
   }, [wallets, infuraApiKey, getAvailableAssetsForChain]);
 
+  const fetchGlobalPrices = useCallback(async () => {
+    const coingeckoIds = new Set<string>();
+    const platformTokens: { [platform: string]: Set<string> } = {};
+
+    const allKnownAssets: AssetRow[] = [];
+    chainsWithLogos.forEach(chain => {
+        allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
+    });
+    allKnownAssets.push(...latestUserTokensRef.current);
+
+    allKnownAssets.forEach(a => { 
+        if (a.coingeckoId) {
+            coingeckoIds.add(a.coingeckoId.toLowerCase());
+        } else if (!a.isNative && a.address?.startsWith('0x')) {
+            const platform = COINGECKO_PLATFORM_MAP[a.chainId];
+            if (platform) {
+                if (!platformTokens[platform]) platformTokens[platform] = new Set();
+                platformTokens[platform].add(a.address.toLowerCase());
+            }
+        }
+    });
+
+    if (coingeckoIds.size === 0 && Object.keys(platformTokens).length === 0) return;
+
+    try {
+        const fetchPromises = [];
+        if (coingeckoIds.size > 0) fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
+        Object.entries(platformTokens).forEach(([platform, addresses]) => {
+            fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
+        });
+
+        const results = await Promise.allSettled(fetchPromises);
+        const newPrices: { [id: string]: PriceInfo } = {};
+
+        results.forEach(res => {
+            if (res.status === 'fulfilled' && res.value) {
+                Object.entries(res.value).forEach(([key, data]: [string, any]) => {
+                    const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
+                    const change = data.usd_24h_change || 0;
+                    if (price > 0) newPrices[key.toLowerCase()] = { price, change };
+                });
+            }
+        });
+
+        if (Object.keys(newPrices).length > 0) {
+            setPrices(prev => ({ ...prev, ...newPrices }));
+        }
+    } catch (e) {
+        console.warn("[PRICE_ORACLE_RETRY]", e);
+    }
+  }, [chainsWithLogos]);
+
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !viewingNetwork || !activeSessionId) return;
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -647,6 +648,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
+  // 6. ASSET MEMO & EXPORTS
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
@@ -686,6 +688,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
+  // 7. LIFECYCLE LISTENERS
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -776,7 +779,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     logout,
     deleteWallet: () => {},
     fetchError,
-    getAddressForChain: (chain, w) => getAddressForChainUtil(chain, w),
+    getAddressForChain,
     infuraApiKey,
     setInfuraApiKey: (k) => { setInfuraApiKey(k); if (k) localStorage.setItem('infura_api_key', k); else localStorage.removeItem('infura_api_key'); },
     hiddenTokenKeys,
