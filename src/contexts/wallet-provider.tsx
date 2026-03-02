@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -422,6 +423,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
         const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, prices);
         setPrices(newPrices);
+        // Persist prices to cache
+        localStorage.setItem(`market_prices_${user.id}`, JSON.stringify(newPrices));
         
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
@@ -442,6 +445,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (prevUserId) {
         localStorage.removeItem(`wallet_mnemonic_${prevUserId}`);
         localStorage.removeItem(`wallet_balances_${prevUserId}`);
+        localStorage.removeItem(`market_prices_${prevUserId}`);
         localStorage.removeItem(`hidden_tokens_${prevUserId}`);
         localStorage.removeItem(`custom_tokens_${prevUserId}`);
         localStorage.removeItem(`account_number_${prevUserId}`);
@@ -454,6 +458,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     localStorage.removeItem(`wallet_mnemonic_${user.id}`);
     localStorage.removeItem(`wallet_balances_${user.id}`);
+    localStorage.removeItem(`market_prices_${user.id}`);
     localStorage.removeItem(`custom_tokens_${user.id}`);
     localStorage.removeItem(`hidden_tokens_${user.id}`);
     localStorage.removeItem(`account_number_${user.id}`);
@@ -502,10 +507,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsWalletLoading(true);
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
+      const cachedPrices = localStorage.getItem(`market_prices_${user.id}`);
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       const savedKey = localStorage.getItem('infura_api_key');
+      
       if (savedKey) setInfuraApiKey(savedKey);
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
+      if (cachedPrices) try { setPrices(JSON.parse(cachedPrices)); } catch (e) {}
+      
       if (profile?.account_number) setAccountNumber(profile.account_number);
       else if (localAcc) setAccountNumber(localAcc);
       if (savedMnemonic) {
