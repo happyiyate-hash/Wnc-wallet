@@ -38,7 +38,7 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // 1. Check persistent cache first
+      // 1. SMART CACHE: Check persistent cache first
       const cacheKey = `logo_url_${name?.replace(/\s+/g, '_')}_${symbol}`;
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
@@ -53,7 +53,7 @@ export default function TokenLogoDynamic({
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
-            localStorage.setItem(cacheKey, direct); // Save to cache
+            localStorage.setItem(cacheKey, direct); // Save to cache for next render
             setIsLoading(false);
             return;
           }

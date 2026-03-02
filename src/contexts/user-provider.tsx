@@ -41,7 +41,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!error && data) {
         setProfile(data as UserProfile);
-        // Cache profile for offline/instant use
+        // SMART CACHE: Store profile for instant loading on next visit
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(data));
         return data as UserProfile;
       }
@@ -61,7 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     if (savedActiveId) {
         setActiveSessionId(savedActiveId);
-        // Load stale profile from cache immediately
+        // INSTANT LOAD: Use stale cache while revalidation happens in background
         const cacheKey = `profile_cache_${savedActiveId}`;
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
@@ -175,7 +175,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setActiveSessionId(null);
         localStorage.removeItem('wevina_active_session_id');
-        // We don't remove sessions here so they stay in switcher
     }
   };
 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -34,6 +35,31 @@ import QuickSwapPanel from './wallet/quick-swap-panel';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import SyncAlertCard from './wallet/sync-alert-card';
+import { motion, useSpring, useTransform, animate } from 'framer-motion';
+
+const AnimatedNumber = ({ value }: { value: number }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const { currentSymbol } = useCurrency();
+
+  useEffect(() => {
+    const controls = animate(displayValue, value, {
+      duration: 1.2,
+      ease: [0.16, 1, 0.3, 1], // Custom professional cubic-bezier
+      onUpdate: (latest) => setDisplayValue(latest),
+    });
+    return () => controls.stop();
+  }, [value, displayValue]);
+
+  return (
+    <span>
+      {currentSymbol}
+      {displayValue.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}
+    </span>
+  );
+};
 
 const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
   const router = useRouter();
@@ -161,8 +187,7 @@ export default function WalletTab() {
   }, [allAssets, totalFiatValue]);
 
   const getBalanceFontSize = (balance: number) => {
-    const val = Number.isFinite(balance) ? balance : 0;
-    const s = val.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const s = balance.toLocaleString('en-US', { minimumFractionDigits: 2 });
     if (s.length > 16) return 'text-xl';
     if (s.length > 12) return 'text-2xl';
     if (s.length > 9) return 'text-3xl';
@@ -209,7 +234,7 @@ export default function WalletTab() {
                   getBalanceFontSize(Number(totalFiatValue ?? 0)),
                   isRefreshing && "opacity-80"
                 )}>
-                  {formatFiat(totalFiatValue || 0)}
+                  <AnimatedNumber value={totalFiatValue || 0} />
                 </h2>
                 
                 <div className="flex items-center gap-3 mt-1.5">
