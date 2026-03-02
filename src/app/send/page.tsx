@@ -46,7 +46,6 @@ import { Html5Qrcode } from 'html5-qrcode';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS SNIFFER
- * Sniffs for EVM, XRP, Polkadot, NEAR, BTC, SOL, Cosmos, etc.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -131,17 +130,9 @@ const getDetectedNetworkMeta = (type: string) => {
 
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  
-  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
-    return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
-  }
-  if (msg.includes('candidate function') || msg.includes('ambiguous')) {
-    return "Registry Ambiguity: Multiple transfer protocols detected. Please use the whole-number (integer) unit standard.";
-  }
-  if (msg.includes('user rejected')) {
-    return "Transaction Cancelled: You rejected the request in your terminal.";
-  }
-  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
+  if (msg.includes('candidate function') || msg.includes('ambiguous')) return "Registry Ambiguity: Multiple transfer protocols detected. Please use the whole-number (integer) unit standard.";
+  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your terminal.";
   if (err.message) return `System Advisory: ${err.message}`;
   return "Dispatch Error: The transaction was rejected by the network protocol.";
 };
@@ -192,10 +183,7 @@ function SendClient() {
                  allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
                  allAssets[0];
     }
-    if (target) {
-        setSelectedToken({ ...target });
-        hasInitialized.current = true;
-    }
+    if (target) { setSelectedToken({ ...target }); hasInitialized.current = true; }
   }, [allAssets, searchParams, viewingNetwork.chainId]);
 
   const activeNetwork = useMemo(() => {
@@ -228,59 +216,34 @@ function SendClient() {
     if (isSelfTransfer || selectedToken?.symbol === 'WNC' || !debouncedRecipient) return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     if (addrType === 'account-id') return false; 
-    
     const activeType = activeNetwork.type || 'evm';
     if (activeType === 'aptos' || activeType === 'sui') return addrType !== 'move-chain';
-    
     const cosmosVariants = ['cosmos', 'osmosis', 'secret', 'injective', 'celestia'];
     if (cosmosVariants.includes(activeType)) return !cosmosVariants.includes(addrType);
     if (activeType === 'polkadot' || activeType === 'kusama') return !['polkadot', 'kusama'].includes(addrType);
-    
     return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
 
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
-    
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
-      
-      // INSTANT STOP: If mismatch or error, stop spinner immediately
       if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
-        if (currentId === resolutionCounter.current) {
-          setResolvedAddress('');
-          setRecipientProfile(null);
-          setIsResolving(false);
-          setResolutionError(null);
-        }
+        if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
         return;
       }
-
-      // LOCAL RESOLUTION: No database call for raw addresses
       if (isRawChainAddress) {
-        if (currentId === resolutionCounter.current) {
-          setResolvedAddress(input);
-          setRecipientProfile(null);
-          setIsResolving(false);
-          setResolutionError(null);
-        }
+        if (currentId === resolutionCounter.current) { setResolvedAddress(input); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
         return;
       }
-
-      // REGISTRY LOOKUP: Only for Account IDs
       if (addrType === 'account-id') {
-        setRecipientProfile(null);
-        setIsResolving(true);
-        setResolutionError(null);
-        
+        setRecipientProfile(null); setIsResolving(true); setResolutionError(null);
         try {
           if (!supabase) throw new Error("No connection");
           const { data: userRecord } = await supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
-
           if (currentId !== resolutionCounter.current) return;
-
           if (userRecord) {
             setRecipientProfile({ id: userRecord.id, avatar: userRecord.photo_url || '', verified: true, name: userRecord.name || input });
             if (isInternalWnc) setResolvedAddress(userRecord.account_number || '');
@@ -291,60 +254,48 @@ function SendClient() {
               else { setResolvedAddress(''); setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); }
             }
           } else { setResolvedAddress(''); setResolutionError("Identity Node not found in registry."); }
-        } catch (e: any) {
-          if (currentId === resolutionCounter.current) { setResolvedAddress(''); setResolutionError("Handshake failed."); }
-        } finally {
-          if (currentId === resolutionCounter.current) setIsResolving(false);
-        }
+        } catch (e: any) { if (currentId === resolutionCounter.current) { setResolvedAddress(''); setResolutionError("Handshake failed."); } }
+        finally { if (currentId === resolutionCounter.current) setIsResolving(false); }
         return;
       }
-
-      if (currentId === resolutionCounter.current) {
-        setResolvedAddress('');
-        setRecipientProfile(null);
-        setIsResolving(false);
-        setResolutionError("I could not find any account or blockchain related to this symbol.");
-      }
+      if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError("I could not find any account or blockchain related to this symbol."); }
     }
-    
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
 
-  // SCANNER ENGINE
-  useEffect(() => {
-    if (isScannerOpen) {
-      const html5QrCode = new Html5Qrcode("reader");
-      scannerRef.current = html5QrCode;
-
-      html5QrCode.start(
+  // QR ENGINE NODES
+  const startCamera = async (scanner: Html5Qrcode) => {
+    try {
+      await scanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => handleScanSuccess(decodedText),
         () => {}
-      ).catch(e => console.warn("Camera init error", e));
+      );
+    } catch (e) { console.warn("Camera Init Fail:", e); }
+  };
 
-      return () => {
-        if (html5QrCode.isScanning) {
-          html5QrCode.stop().catch(e => console.warn("Scanner stop error", e));
-        }
-      };
+  useEffect(() => {
+    if (isScannerOpen) {
+      const html5QrCode = new Html5Qrcode("reader");
+      scannerRef.current = html5QrCode;
+      startCamera(html5QrCode);
+      return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(e => console.warn("Stop Fail:", e)); };
     }
   }, [isScannerOpen]);
 
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
-
     if (decodedText.includes('/request/')) {
       const parts = decodedText.split('/request/');
-      const id = parts[parts.length - 1].split('?')[0]; 
-      if (id && id.length > 20) {
+      const id = parts[parts.length - 1].split(/[?#]/)[0]; 
+      if (id && id.length > 10) {
         setActiveFulfillmentId(id);
         router.push('/');
         toast({ title: "Request Detected", description: "Entering fulfillment handshake..." });
         return;
       }
     }
-
     if (decodedText.startsWith('wnc://')) {
       try {
         const url = new URL(decodedText);
@@ -361,23 +312,31 @@ function SendClient() {
       } catch (e) { toast({ variant: "destructive", title: "Invalid QR Protocol" }); }
       return;
     }
-
     let cleanAddress = decodedText;
-    if (decodedText.includes(':')) cleanAddress = decodedText.split(':')[1].split('?')[0]; 
+    if (decodedText.includes(':')) {
+        const parts = decodedText.split(':');
+        if (parts[1]) cleanAddress = parts[1].split(/[?#]/)[0];
+    }
     setRecipientInput(cleanAddress);
-    toast({ title: "Address Parsed" });
+    toast({ title: "Handshake Authorized" });
   };
-
-  const handleGalleryClick = () => fileInputRef.current?.click();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !scannerRef.current) return;
+    
+    // Stop camera first to prevent resource collision on mobile
+    if (scannerRef.current.isScanning) {
+        await scannerRef.current.stop().catch(() => {});
+    }
+
     try {
-      const decodedText = await scannerRef.current.scanFile(file, true);
+      const decodedText = await scannerRef.current.scanFile(file, false);
       handleScanSuccess(decodedText);
     } catch (err) {
       toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in this image." });
+      // Restart camera so the user can try scanning normally
+      if (isScannerOpen) startCamera(scannerRef.current);
     }
   };
 
@@ -386,12 +345,8 @@ function SendClient() {
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
-        const transferAmount = parseFloat(amount);
-        // FIX: Ensure Integer casting for p_amount to avoid function ambiguity
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { 
-            p_recipient_id: recipientProfile!.id, 
-            p_amount: Math.floor(transferAmount) 
-        });
+        const transferAmount = Math.floor(parseFloat(amount));
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: transferAmount });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
@@ -448,14 +403,7 @@ function SendClient() {
                             <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
                         <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20">
-                            <TokenLogoDynamic 
-                                logoUrl={selectedToken?.iconUrl} 
-                                alt={selectedToken?.symbol || ''} 
-                                size={24} 
-                                chainId={selectedToken?.chainId} 
-                                symbol={selectedToken?.symbol} 
-                                name={selectedToken?.name} 
-                            />
+                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" />
                         </div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">FROM YOU</span>
@@ -475,14 +423,7 @@ function SendClient() {
                         </div>
                         {resolvedAddress && !isResolving && (
                             <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20">
-                                <TokenLogoDynamic 
-                                    logoUrl={selectedToken?.iconUrl} 
-                                    alt={selectedToken?.symbol || ''} 
-                                    size={24} 
-                                    chainId={selectedToken?.chainId} 
-                                    symbol={selectedToken?.symbol} 
-                                    name={selectedToken?.name} 
-                                />
+                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" />
                             </div>
                         )}
                     </div>
@@ -516,7 +457,7 @@ function SendClient() {
               <div className="flex items-center justify-between"><div className="space-y-1"><h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3><p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p></div><Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button></div>
               <div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-2xl bg-zinc-900"><div id="reader" className="w-full h-full" /><motion.div animate={{ y: [0, 250, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10" /></div>
               <div className="space-y-4 px-4">
-                <Button onClick={handleGalleryClick} variant="outline" className="w-full h-14 rounded-2xl bg-white/5 border-white/10 gap-3 font-bold uppercase tracking-widest text-[10px] text-white hover:bg-white/10"><ImageIcon className="w-4 h-4 text-primary" /> Get from Gallery</Button>
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full h-14 rounded-2xl bg-white/5 border-white/10 gap-3 font-bold uppercase tracking-widest text-[10px] text-white hover:bg-white/10"><ImageIcon className="w-4 h-4 text-primary" /> Get from Gallery</Button>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
                 <div className="flex items-center justify-center gap-2 opacity-40"><ShieldCheck className="w-3.5 h-3.5 text-white" /><span className="text-[8px] font-black uppercase text-white">Registry Protocol v3.1</span></div>
               </div>
