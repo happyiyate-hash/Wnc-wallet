@@ -52,6 +52,7 @@ function SwapClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ATOMIC SWAP STATE
   const [fromToken, setFromToken] = useState<AssetRow | null>(null);
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
@@ -60,6 +61,7 @@ function SwapClient() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
 
+  // QUOTE STATE ENGINE
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -69,92 +71,59 @@ function SwapClient() {
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
   const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
+  // UI STATE
   const [showPrecision, setShowPrecision] = useState(false);
   const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isLongPressRef = useRef(false);
   
   const lastFetchedAmountRef = useRef<string>('');
+  const hasInitializedRef = useRef(false);
   const errorDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
   /**
-   * INSTITUTIONAL STATE GUARD
-   * Resets tokens when network changes to prevent cross-chain state mismatch.
+   * INITIAL HANDSHAKE PROTOCOL
+   * Isolated from global state after first load to prevent reset trap.
    */
   useEffect(() => {
-    if (allAssets.length === 0) return;
+    if (allAssets.length === 0 || hasInitializedRef.current) return;
 
     const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
 
-    // Reset logic: If tokens are from a different network than current viewing network, re-initialize
-    const needsReset = (fromToken && fromToken.chainId !== viewingNetwork.chainId) || 
-                       (toToken && toToken.chainId !== viewingNetwork.chainId);
-
-    if (!fromToken || needsReset) {
-      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
-                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
-                    allAssets[0];
-      if (found) setFromToken({ ...found });
-    }
-
-    if (!toToken || needsReset) {
-      const found = allAssets.find(a => a.symbol !== fromToken?.symbol && a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+    const initialFrom = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
+                      allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+                      allAssets[0];
+    
+    const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                     allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                     allAssets[allAssets.length - 1];
-      if (found) setToToken({ ...found });
-    }
-  }, [allAssets, viewingNetwork.chainId]);
 
-  useLayoutEffect(() => {
-    if (quotePhase === 'IDLE' && !amount) {
-      setSelectedQuoteId(null);
-    }
-  }, [quotePhase, amount]);
-
-  useEffect(() => {
-    if (fetchError) {
-      startErrorTimer();
-    }
-    return () => stopErrorTimer();
-  }, [fetchError]);
-
-  const startErrorTimer = () => {
-    stopErrorTimer();
-    errorDismissTimerRef.current = setTimeout(() => {
-      setFetchError(null);
-    }, 5000);
-  };
-
-  const stopErrorTimer = () => {
-    if (errorDismissTimerRef.current) {
-      clearTimeout(errorDismissTimerRef.current);
-      errorDismissTimerRef.current = null;
-    }
-  };
+    if (initialFrom) setFromToken({ ...initialFrom });
+    if (initialTo) setToToken({ ...initialTo });
+    
+    hasInitializedRef.current = true;
+  }, [allAssets, viewingNetwork.chainId, searchParams]);
 
   const fromTokenPrice = useMemo(() => {
     if (!fromToken) return 0;
-    if (fromToken.symbol === 'WNC') return 1 / (rates['NGN'] || 1650);
     const priceId = (fromToken.priceId || fromToken.coingeckoId || fromToken.address)?.toLowerCase();
     return prices[priceId]?.price || 0;
-  }, [fromToken, prices, rates]);
+  }, [fromToken, prices]);
 
   const toTokenPrice = useMemo(() => {
     if (!toToken) return 0;
-    if (toToken.symbol === 'WNC') return 1 / (rates['NGN'] || 1650);
     const priceId = (toToken.priceId || toToken.coingeckoId || toToken.address)?.toLowerCase();
     return prices[priceId]?.price || 0;
-  }, [toToken, prices, rates]);
+  }, [toToken, prices]);
 
-  const handlePointerDownError = () => stopErrorTimer();
-  const handlePointerUpError = () => startErrorTimer();
-
+  /**
+   * ATOMIC QUOTE ENGINE
+   * Strictly uses local atomic state for all calculations.
+   */
   useEffect(() => {
     const runSequence = async () => {
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
@@ -168,24 +137,30 @@ function SwapClient() {
         return;
       }
 
-      if (debouncedAmount === lastFetchedAmountRef.current) return;
       if (!fromToken || !toToken) return;
+      
+      // Ensure we don't re-fetch for the same data
+      const currentSignature = `${fromToken.chainId}:${fromToken.address}:${toToken.chainId}:${toToken.address}:${debouncedAmount}`;
+      if (currentSignature === lastFetchedAmountRef.current) return;
 
-      lastFetchedAmountRef.current = debouncedAmount;
+      lastFetchedAmountRef.current = currentSignature;
       setIsQuoteLoading(true);
       setQuotePhase('FETCHING');
       setFetchError(null);
       setFadedIndices(new Set());
       setActiveScanIndex(-1);
+      setSelectedQuoteId(null); // Clear old quote ID immediately to prevent wrong USD flash
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const sourceWallets = wallets?.filter(w => w.type === (sourceChainConfig?.type || 'evm')) || [];
         const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
 
-        const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         let batch: SwapQuote[] = [];
 
+        // Logic Check: LI.FI for compatible EVM chains
+        const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
+        
         if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
                 const params = new URLSearchParams({
@@ -212,7 +187,7 @@ function SwapClient() {
                       { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: realAmount * 0.9992, fee: realFee * 0.9, eta: '~20s' },
                     ];
                 } else {
-                    throw new Error("API_FAIL");
+                    throw new Error("LIFI_FAIL");
                 }
             } catch (e) {
                 const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
@@ -222,6 +197,7 @@ function SwapClient() {
                 ];
             }
         } else {
+            // Internal Logic for Non-EVM or Offline mode
             const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
             batch = [
                 { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: estAmt * 0.997, fee: 0.05, eta: '~5s', isBest: true },
@@ -234,7 +210,7 @@ function SwapClient() {
         setQuotes(finalBatchSorted);
         setIsQuoteLoading(false);
         setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 800));
         setQuotePhase('SCANNING');
         for (let i = 0; i < finalBatchSorted.length; i++) {
           setActiveScanIndex(i);
@@ -243,18 +219,17 @@ function SwapClient() {
         setQuotePhase('FINAL_SELECTED');
         const best = finalBatchSorted.find(q => q.isBest);
         setSelectedQuoteId(best?.id || null);
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1200));
         setQuotePhase('FADING_OUT');
         for (let i = 0; i < finalBatchSorted.length; i++) {
           setFadedIndices(prev => new Set(prev).add(i));
           await new Promise(r => setTimeout(r, 100));
         }
-        await new Promise(r => setTimeout(r, 200));
         setQuotePhase('SHOW_VISUAL');
-        await new Promise(r => setTimeout(r, 4500));
+        await new Promise(r => setTimeout(r, 3500));
         setQuotePhase('COMPLETED');
       } catch (e: any) {
-        setFetchError("Market Synchronization Interrupted. Re-initializing institutional route discovery...");
+        setFetchError("Market Sync Interrupted. Re-initializing institutional routes...");
         setQuotePhase('IDLE');
       } finally {
         setIsQuoteLoading(false);
@@ -265,14 +240,21 @@ function SwapClient() {
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
+  /**
+   * ATOMIC STATE HANDLERS
+   */
   const handleOpenSelector = (type: 'from' | 'to') => {
     setSelectionType(type);
     setIsSelectorOpen(true);
   };
 
   const handleTokenSelect = (token: AssetRow) => {
-    if (selectionType === 'from') setFromToken(token);
-    else setToToken(token);
+    if (selectionType === 'from') {
+        setFromToken({ ...token });
+    } else {
+        setToToken({ ...token });
+    }
+    // Atomic Reset
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
@@ -284,10 +266,14 @@ function SwapClient() {
 
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
-    const tempFrom = { ...fromToken };
-    const tempTo = { ...toToken };
-    setFromToken(tempTo);
-    setToToken(tempFrom);
+    const oldFrom = { ...fromToken };
+    const oldTo = { ...toToken };
+    
+    setRotation(prev => prev + 180);
+    setFromToken(oldTo);
+    setToToken(oldFrom);
+    
+    // Atomic Reset
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
@@ -295,21 +281,6 @@ function SwapClient() {
     setFadedIndices(new Set());
     setActiveScanIndex(-1);
     lastFetchedAmountRef.current = '';
-  };
-
-  const startVoltageHold = () => {
-    isLongPressRef.current = false;
-    setIsHolding(true);
-    holdTimerRef.current = setTimeout(() => { isLongPressRef.current = true; }, 400);
-  };
-
-  const endVoltageHold = () => {
-    setIsHolding(false);
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    if (!isLongPressRef.current) {
-      setRotation(prev => prev + 360);
-      handleSwapTokens();
-    }
   };
 
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
@@ -344,41 +315,13 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* INSTITUTIONAL OVERLAY ACTION NODE */}
+      {/* INSTITUTIONAL ACTION NODE */}
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !fetchError && (
-          <motion.div 
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-            className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none"
-          >
-            <motion.button 
-              whileTap={{ scale: 0.98 }}
-              animate={{ 
-                boxShadow: [
-                  "0 0 15px rgba(139, 92, 246, 0.3)", 
-                  "0 0 45px rgba(139, 92, 246, 0.7)", 
-                  "0 0 15px rgba(139, 92, 246, 0.3)"
-                ] 
-              }}
-              transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
-              className={cn(
-                "w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl transition-all duration-500",
-                "bg-primary text-white border border-primary/50 pointer-events-auto"
-              )}
-            >
-              <motion.div 
-                animate={{ x: ['-150%', '300%'] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 pointer-events-none"
-              />
-              
-              <div className="flex items-center justify-center gap-3 relative z-10">
-                <Zap className="w-4 h-4 fill-current text-white animate-pulse" />
-                Execute Swap
-              </div>
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none">
+            <motion.button animate={{ boxShadow: ["0 0 15px rgba(139, 92, 246, 0.3)", "0 0 45px rgba(139, 92, 246, 0.7)", "0 0 15px rgba(139, 92, 246, 0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto">
+              <motion.div animate={{ x: ['-150%', '300%'] }} transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12" />
+              <div className="flex items-center justify-center gap-3 relative z-10"><Zap className="w-4 h-4 fill-current animate-pulse" /> Execute Swap</div>
             </motion.button>
           </motion.div>
         )}
@@ -386,28 +329,24 @@ function SwapClient() {
 
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
-          <motion.div 
-            initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-            className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none"
-          >
-            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-hidden relative pointer-events-auto">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 opacity-50 pointer-events-none" />
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none">
+            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 opacity-50" />
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <AlertCircle className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{fetchError ? 'Sync Failure' : quotePhase === 'FETCHING' ? 'Discovering liquidity...' : 'Market Analysis'}</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{fetchError ? 'Sync Failure' : 'Market Analysis'}</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
-                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onPointerDown={handlePointerDownError} onPointerUp={handlePointerUpError} className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.1)] text-center space-y-4 cursor-default">
+                    <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
-                    </motion.div>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
+                    </div>
                   ) : isQuoteLoading ? (
-                    <div className="space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
+                    <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
                     <div className="space-y-2 min-h-[200px]">
                       {quotes.map((quote, idx) => {
@@ -420,12 +359,11 @@ function SwapClient() {
                         let variant = isFading ? 'fading' : isBest ? 'best' : isRejected ? 'rejected' : isScanning ? 'scanning' : isAccepted ? 'accepted' : isPending ? 'pending' : 'visible';
                         return (
                           <motion.div key={quote.id} variants={rowVariants} initial="hidden" animate={variant} className="w-full flex items-center justify-between p-4 rounded-2xl border relative overflow-hidden">
-                            <AnimatePresence>{isScanning && <motion.div initial={{ x: '-100%' }} animate={{ x: '200%' }} exit={{ opacity: 0 }} transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }} className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-blue-400/30 to-transparent skew-x-12 pointer-events-none" />}</AnimatePresence>
                             <div className="flex items-center gap-3 relative z-10">
-                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase transition-all duration-500", isBest ? "bg-blue-600 scale-110 shadow-lg" : isAccepted ? "bg-green-600/20" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
+                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-blue-600 scale-110 shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
                               <div className="text-left">
-                                <div className="flex items-center gap-2"><p className="text-xs font-black text-white">{quote.provider}</p>{isBest && <span className="text-[7px] font-black text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded-full uppercase tracking-widest border border-blue-400/20">Best Rate</span>}</div>
-                                <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
+                                <p className="text-xs font-black text-white">{quote.provider}</p>
+                                <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
                               </div>
                             </div>
                             <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
@@ -443,35 +381,19 @@ function SwapClient() {
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10 overflow-y-auto thin-scrollbar">
         {/* YOU PAY CARD */}
-        <section 
-          style={{ 
-            backgroundColor: `${fromChainColor}40`, 
-            borderColor: `${fromChainColor}cc`,
-            boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20`
-          }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
-        >
+        <section style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic key={`pay-${fromToken?.chainId}-${fromToken?.symbol}`} logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
+                <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId || 1]?.name || 'Ethereum'}</span></div>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId || 1]?.name}</span>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>
-              {showPrecision && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
-                  <p className="text-[10px] font-mono text-primary font-black uppercase tracking-widest flex items-center gap-2">
-                    <Zap className="w-3 h-3" /> Exact: {amount || '0'} {fromToken?.symbol}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            
-            <div onPointerDown={() => setShowPrecision(true)} onPointerUp={() => setShowPrecision(false)} onPointerLeave={() => setShowPrecision(false)} className="cursor-help">
+            <AnimatePresence>{showPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-primary font-black uppercase tracking-widest flex items-center gap-2"><Zap className="w-3 h-3" /> Exact: {amount || '0'} {fromToken?.symbol}</p></motion.div>)}</AnimatePresence>
+            <div onPointerDown={() => setShowPrecision(true)} onPointerUp={() => setShowPrecision(false)} onPointerLeave={() => setShowPrecision(false)}>
               <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
               <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
             </div>
@@ -479,49 +401,26 @@ function SwapClient() {
         </section>
 
         <div className="relative h-6 flex items-center justify-center z-20">
-          <motion.div animate={{ rotate: isHolding ? [rotation, rotation + 360] : rotation }} transition={{ rotate: { duration: 0.3, repeat: isHolding ? Infinity : 0, ease: "linear" } }} onPointerDown={startVoltageHold} onPointerUp={endVoltageHold} onPointerLeave={() => { setIsHolding(false); if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl shadow-primary/20 cursor-pointer active:scale-90 transition-transform relative">
+          <motion.button animate={{ rotate: rotation }} transition={{ type: 'spring', damping: 15 }} onClick={handleSwapTokens} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl active:scale-90 transition-transform relative">
             <div className="absolute inset-0 rounded-full bg-primary/5 animate-pulse" /><Zap className="w-5 h-5 fill-current relative z-10" />
-          </motion.div>
+          </motion.button>
         </div>
 
         {/* YOU RECEIVE CARD */}
-        <section 
-          style={{ 
-            backgroundColor: `${toChainColor}40`, 
-            borderColor: `${toChainColor}cc`,
-            boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20`
-          }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
-        >
+        <section style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
-                <TokenLogoDynamic key={`receive-${toToken?.chainId}-${toToken?.symbol}`} logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
+                <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="flex flex-col items-end justify-center relative">
-              <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId || 1]?.name || 'Ethereum'}</span>
-              {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
-                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="absolute -bottom-4 right-0 flex items-center gap-1.5 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/40 mt-0.5 h-3 shadow-lg shadow-blue-500/10 whitespace-nowrap">
-                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest leading-none">{selectedQuote.provider} LOCK</span>
-                </motion.div>
-              )}
-            </div>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId || 1]?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>
-              {showOutputPrecision && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
-                  <p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2">
-                    <CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount || '0'} {toToken?.symbol}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="text-2xl font-black tracking-tighter text-white flex flex-col transition-all relative z-10 cursor-pointer" onPointerDown={() => setShowOutputPrecision(true)} onPointerUp={() => setShowOutputPrecision(false)} onPointerLeave={() => setShowOutputPrecision(false)}>
+            <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount || '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
+            <div className="text-2xl font-black tracking-tighter text-white flex flex-col transition-all relative z-10" onPointerDown={() => setShowOutputPrecision(true)} onPointerUp={() => setShowOutputPrecision(false)} onPointerLeave={() => setShowOutputPrecision(false)}>
               {isQuoteLoading && !selectedQuote ? (
-                <div className="flex gap-1 h-8 items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-2 cache-pulse" />)}</div>
+                <div className="flex gap-1 h-8 items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-2 h-6 bg-white/10 rounded-full" />)}</div>
               ) : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
@@ -552,9 +451,9 @@ function SwapClient() {
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-from-${fromToken?.chainId}-${fromToken?.symbol}`} logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId || 1]?.name || 'Ethereum'}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId || 1]?.name}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -578,18 +477,14 @@ function SwapClient() {
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-to-${toToken?.chainId}-${toToken?.symbol}`} logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId || 1]?.name || 'Ethereum'}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId || 1]?.name}</p></div>
                   </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        <div className="min-h-[30px]">
-          <AnimatePresence>{quotePhase === 'COMPLETED' && <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="mt-2 flex gap-2 overflow-x-auto thin-scrollbar pb-2 px-2"><div className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20"><Zap className="w-2.5 h-2.5 text-primary fill-primary" /><span className="text-[8px] font-black text-primary uppercase whitespace-nowrap">Institutional Signer: Wevina</span></div><div className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10"><ShieldCheck className="w-2.5 h-2.5 text-white/40" /><span className="text-[8px] font-black text-white/40 uppercase whitespace-nowrap">SmarterSeller Verified</span></div></motion.div>}</AnimatePresence>
         </div>
       </main>
 
@@ -600,11 +495,7 @@ function SwapClient() {
 
 export default function SwapPage() {
   return (
-    <Suspense fallback={
-      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    }>
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-[#050505]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
       <SwapClient />
     </Suspense>
   );
