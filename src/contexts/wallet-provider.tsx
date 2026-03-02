@@ -2,42 +2,28 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile, WalletRegistryEntry, LocalSession } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile, LocalSession } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
-import { ethers } from 'ethers';
-import * as xrpl from 'xrpl';
-import * as bip39 from 'bip39';
-import { Keyring } from '@polkadot/keyring';
-import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { KeyPair, utils } from "near-api-js";
-import * as bitcoin from "bitcoinjs-lib";
-import BIP32Factory from "bip32";
-import * as ecc from "tiny-secp256k1";
-import { derivePath } from "ed25519-hd-key";
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair as SolanaKeypair } from "@solana/web3.js";
-import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-import { stringToPath } from "@cosmjs/crypto";
-import { TronWeb } from "tronweb";
-import * as algosdk from "algosdk";
-import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
-import { InMemorySigner } from "@taquito/signer";
-import { b58cencode, prefix } from "@taquito/utils";
-import { AptosAccount } from "aptos";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { getInitialAssets } from '@/lib/wallets/balances';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
 import { useToast } from '@/hooks/use-toast';
-import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
 import { supabase } from '@/lib/supabase/client';
+import { getInitialAssets } from '@/lib/wallets/balances';
+import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
+
+// SERVICE NODES
+import { deriveAllWallets } from '@/lib/wallets/derive';
+import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-service';
+
+// ADAPTERS
 import { xrpAdapterFactory } from '@/lib/wallets/adapters/xrp';
 import { polkadotAdapterFactory } from '@/lib/wallets/adapters/polkadot';
 import { kusamaAdapterFactory } from '@/lib/wallets/adapters/kusama';
 import { nearAdapterFactory } from '@/lib/wallets/adapters/near';
 import { evmAdapterFactory } from '@/lib/wallets/adapters/evm';
 import { bitcoinAdapterFactory } from '@/lib/wallets/adapters/bitcoin';
-import { litecoinAdapterFactory, litecoinNetwork } from '@/lib/wallets/adapters/litecoin';
-import { dogecoinAdapterFactory, dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
+import { litecoinAdapterFactory } from '@/lib/wallets/adapters/litecoin';
+import { dogecoinAdapterFactory } from '@/lib/wallets/adapters/dogecoin';
 import { solanaAdapterFactory } from '@/lib/wallets/adapters/solana';
 import { cosmosAdapterFactory } from '@/lib/wallets/adapters/cosmos';
 import { osmosisAdapterFactory } from '@/lib/wallets/adapters/osmosis';
@@ -51,9 +37,6 @@ import { hederaAdapterFactory } from '@/lib/wallets/adapters/hedera';
 import { tezosAdapterFactory } from '@/lib/wallets/adapters/tezos';
 import { aptosAdapterFactory } from '@/lib/wallets/adapters/aptos';
 import { suiAdapterFactory } from '@/lib/wallets/adapters/sui';
-import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
-
-const bip32 = BIP32Factory(ecc);
 
 export type SyncDiagnosticState = {
   status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
@@ -82,7 +65,7 @@ interface WalletContextType {
   isTokenLoading: (chainId: number, symbol: string) => boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
-  prices: { [key: string]: PriceInfo };
+  prices: PriceResult;
   accountNumber: string | null;
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
@@ -122,7 +105,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
-  const [prices, setPrices] = useState<{ [key: string]: PriceInfo }>({});
+  const [prices, setPrices] = useState<PriceResult>({});
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -148,7 +131,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 1. CORE LOGIC NODES (Actions)
+  // 1. CORE ACTIONS (Top-Level)
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -158,14 +141,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const currentCustom = latestUserTokensRef.current;
     const custom = currentCustom.filter(t => t.chainId === chainId);
     
-    const combined = [...base, ...custom].reduce((acc, curr) => {
+    return [...base, ...custom].reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
         if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === identifier)) {
             acc.push(curr);
         }
         return acc;
     }, [] as AssetRow[]);
-    return combined;
   }, []);
 
   const addUserToken = useCallback((token: AssetRow) => {
@@ -252,13 +234,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
       }
 
-      if (!accountNumber) {
-          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-          updates.account_number = `835${randomSuffix}`;
-          setAccountNumber(updates.account_number);
-          localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
-      }
-
       const { error } = await supabase!.from('profiles').update(updates).eq('id', activeSessionId);
       if (error) throw error;
       
@@ -268,118 +243,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) { 
       console.error("Vault Backup Failed:", e.message); 
     }
-  }, [activeSessionId, wallets, accountNumber, syncAllAddresses, refreshProfile]);
+  }, [activeSessionId, wallets, syncAllAddresses, refreshProfile]);
 
-  // 2. WALLET DERIVATION NODE
-  const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
-    if (!mnemonic) return null;
-    try {
-      const cleanMnemonic = mnemonic.trim();
-      if (!cleanMnemonic || cleanMnemonic.split(' ').length < 12) return null;
-      if (!bip39.validateMnemonic(cleanMnemonic)) throw new Error("Invalid BIP39 Mnemonic");
-      
-      const evmWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
-      const xrpWallet = xrpl.Wallet.fromMnemonic(cleanMnemonic);
-      
-      await cryptoWaitReady();
-      const keyring = new Keyring({ type: 'sr25519' });
-      const dotWallet = keyring.addFromMnemonic(cleanMnemonic);
-      const ksmKeyring = new Keyring({ type: 'sr25519', ss58Format: 2 });
-      const ksmWallet = ksmKeyring.addFromMnemonic(cleanMnemonic);
-
-      const seed = bip39.mnemonicToSeedSync(cleanMnemonic);
-      const nearSecretKey = seed.slice(0, 32);
-      const nearBase58Secret = utils.serialize.base_encode(nearSecretKey);
-      const nearKeyPair = KeyPair.fromString(`ed25519:${nearBase58Secret}`);
-      const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
-
-      const btcRoot = bip32.fromSeed(seed);
-      const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
-      const { address: btcAddress } = bitcoin.payments.p2wpkh({ pubkey: btcChild.publicKey, network: bitcoin.networks.bitcoin });
-
-      const ltcRoot = bip32.fromSeed(seed, litecoinNetwork);
-      const ltcChild = ltcRoot.derivePath("m/84'/2'/0'/0/0");
-      const { address: ltcAddress } = bitcoin.payments.p2wpkh({ pubkey: ltcChild.publicKey, network: litecoinNetwork });
-
-      const dogeRoot = bip32.fromSeed(seed, dogecoinNetwork);
-      const dogeChild = dogeRoot.derivePath("m/44'/3'/0'/0/0");
-      const { address: dogeAddress } = bitcoin.payments.p2pkh({ pubkey: dogeChild.publicKey, network: dogecoinNetwork });
-
-      const solRoot = derivePath("m/44'/501'/0'/0'", seed.toString('hex'));
-      const solKeypair = SolanaKeypair.fromSeed(solRoot.key);
-
-      const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "cosmos", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
-      const [cosmosAccount] = await cosmosWallet.getAccounts();
-
-      const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "osmo", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
-      const [osmosisAccount] = await osmosisWallet.getAccounts();
-
-      const secretWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "secret", hdPaths: [stringToPath("m/44'/529'/0'/0/0")] });
-      const [secretAccount] = await secretWallet.getAccounts();
-
-      const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "inj", hdPaths: [stringToPath("m/44'/60'/0'/0/0")] });
-      const [injectiveAccount] = await injectiveWallet.getAccounts();
-
-      const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(cleanMnemonic, { prefix: "celestia", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
-      const [celestiaAccount] = await celestiaWallet.getAccounts();
-
-      const adaRoot = btcRoot.derivePath("m/1852'/1815'/0'/0/0");
-      const adaAddress = `addr1${Buffer.from(adaRoot.publicKey).toString('hex').slice(0, 50)}`; 
-
-      const tronRoot = btcRoot.derivePath("m/44'/195'/0'/0/0");
-      const tronPrivateKey = tronRoot.privateKey!.toString('hex');
-      const tronAddress = TronWeb.address.fromPrivateKey(tronPrivateKey);
-
-      const algoRoot = btcRoot.derivePath("m/44'/283'/0'/0/0");
-      const algoAddress = algosdk.encodeAddress(algoRoot.privateKey!);
-
-      const hbarMnemonic = await HederaMnemonic.fromString(cleanMnemonic);
-      const hbarPrivateKey = await hbarMnemonic.toStandardEd25519PrivateKey();
-      
-      const xtzDerivationPath = "m/44'/1729'/0'/0'";
-      const xtzSeed = derivePath(xtzDerivationPath, seed.toString('hex'));
-      const xtzSecretKey = b58cencode(xtzSeed.key, prefix.edsk2); 
-      const xtzSigner = await InMemorySigner.fromSecretKey(xtzSecretKey);
-      const xtzAddress = await xtzSigner.publicKeyHash();
-
-      const aptosSeed = derivePath("m/44'/637'/0'/0'/0'", seed.toString('hex'));
-      const aptosAccount = new AptosAccount(aptosSeed.key);
-
-      const suiKeypair = Ed25519Keypair.deriveKeypair(cleanMnemonic);
-      const suiAddress = suiKeypair.getPublicKey().toSuiAddress();
-
-      const derived: WalletWithMetadata[] = [
-        { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
-        { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
-        { address: dotWallet.address, type: 'polkadot' },
-        { address: ksmWallet.address, type: 'kusama' },
-        { address: nearAddress, type: 'near' },
-        { address: btcAddress!, type: 'btc' },
-        { address: ltcAddress!, privateKey: ltcChild.toWIF(), type: 'ltc' },
-        { address: dogeAddress!, privateKey: dogeChild.toWIF(), type: 'doge' },
-        { address: solKeypair.publicKey.toBase58(), privateKey: Buffer.from(solKeypair.secretKey).toString('hex'), type: 'solana' },
-        { address: cosmosAccount.address, type: 'cosmos' },
-        { address: osmosisAccount.address, type: 'osmosis' },
-        { address: secretAccount.address, type: 'secret' },
-        { address: injectiveAccount.address, type: 'injective' },
-        { address: celestiaAccount.address, type: 'celestia' },
-        { address: adaAddress, type: 'cardano' },
-        { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
-        { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
-        { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
-        { address: xtzAddress, type: 'tezos' },
-        { address: aptosAccount.address().toString(), privateKey: Buffer.from(aptosAccount.signingKey.secretKey).toString('hex'), type: 'aptos' },
-        { address: suiAddress, type: 'sui' }
-      ];
-      setWallets(derived);
-      return derived;
-    } catch (e: any) { 
-      console.error("Wallet Derivation Error:", e.message);
-      return null; 
-    }
-  }, [profile?.hedera_address]);
-
-  // 3. DIAGNOSTIC NODE
+  // 2. DIAGNOSTIC NODE
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !activeSessionId || !supabase) return;
     if (wallets.length === 0) return;
@@ -432,13 +298,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
     setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
-  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault, refreshProfile]);
+  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault]);
 
-  // 4. PROTOCOL INTERFACES
+  // 3. PROTOCOL INTERFACES
   const generateWallet = async (): Promise<string> => {
-    const mnemonic = bip39.generateMnemonic();
-    const derived = await loadWalletFromMnemonic(mnemonic);
+    const mnemonic = (await import('bip39')).generateMnemonic();
+    const derived = await deriveAllWallets(mnemonic, profile);
     if (activeSessionId) {
+        setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         setIsSynced(false);
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
@@ -452,8 +319,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const importWallet = async (mnemonic: string) => {
-    const derived = await loadWalletFromMnemonic(mnemonic);
+    const derived = await deriveAllWallets(mnemonic, profile);
     if (derived && activeSessionId) {
+        setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonic);
         setIsSynced(false);
         if (!accountNumber) {
@@ -498,8 +366,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (mnemonicVal) {
         onStatusUpdate?.('Establishing Identity...');
-        const derived = await loadWalletFromMnemonic(mnemonicVal);
-        if (derived) { onStatusUpdate?.('Synchronizing Registry...'); await syncAllAddresses(derived); }
+        const derived = await deriveAllWallets(mnemonicVal, latestProfile);
+        if (derived) { 
+          setWallets(derived);
+          onStatusUpdate?.('Synchronizing Registry...'); 
+          await syncAllAddresses(derived); 
+        }
       }
 
       if (latestProfile.account_number) { setAccountNumber(latestProfile.account_number); localStorage.setItem(`account_number_${activeSessionId}`, latestProfile.account_number); }
@@ -543,38 +415,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return combinedAssetsList;
   }, [wallets, infuraApiKey, getAvailableAssetsForChain]);
 
-  const fetchGlobalPrices = useCallback(async () => {
-    const coingeckoIds = new Set<string>();
-    const platformTokens: { [platform: string]: Set<string> } = {};
-    const allKnownAssets: AssetRow[] = [];
-    chainsWithLogos.forEach(chain => { allKnownAssets.push(...getInitialAssets(chain.chainId).map(a => ({ ...a, chainId: chain.chainId }) as AssetRow)); });
-    allKnownAssets.push(...latestUserTokensRef.current);
-    allKnownAssets.forEach(a => { 
-        if (a.coingeckoId) coingeckoIds.add(a.coingeckoId.toLowerCase());
-        else if (!a.isNative && a.address?.startsWith('0x')) {
-            const platform = COINGECKO_PLATFORM_MAP[a.chainId];
-            if (platform) { if (!platformTokens[platform]) platformTokens[platform] = new Set(); platformTokens[platform].add(a.address.toLowerCase()); }
-        }
-    });
-    if (coingeckoIds.size === 0 && Object.keys(platformTokens).length === 0) return;
-    try {
-        const fetchPromises = [];
-        if (coingeckoIds.size > 0) fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
-        Object.entries(platformTokens).forEach(([platform, addresses]) => { fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses))); });
-        const results = await Promise.allSettled(fetchPromises);
-        const newPrices: { [id: string]: PriceInfo } = {};
-        results.forEach(res => { if (res.status === 'fulfilled' && res.value) { Object.entries(res.value).forEach(([key, data]: [string, any]) => { const price = typeof data === 'number' ? data : (data.usd || data.price || 0); const change = data.usd_24h_change || 0; if (price > 0) newPrices[key.toLowerCase()] = { price, change }; }); } });
-        if (Object.keys(newPrices).length > 0) setPrices(prev => ({ ...prev, ...newPrices }));
-    } catch (e) {}
-  }, [chainsWithLogos]);
-
   const startEngine = useCallback(async () => {
     if (!isInitialized || !wallets || !viewingNetwork || !activeSessionId) return;
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
     try {
-        await fetchGlobalPrices();
+        const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, prices);
+        setPrices(newPrices);
+        
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
         setBalances(prev => {
             const next = { ...prev, [viewingNetwork.chainId]: priorityBalances };
@@ -582,7 +431,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return next;
         });
     } catch (e) {} finally { setIsRefreshing(false); }
-  }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
+  }, [isInitialized, wallets, viewingNetwork, activeSessionId, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
 
   const logout = useCallback(async () => {
     setIsWalletLoading(true);
@@ -604,12 +453,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
+    
+    const wncPriceInfo = prices['internal:wnc'];
     const wncAsset: AssetRow = {
-        chainId: viewingNetwork.chainId, address: 'internal:wnc', symbol: 'WNC', name: 'Wevinacoin', 
-        balance: profile?.wnc_earnings?.toString() || '0', isNative: false, priceUsd: wncPriceUsd,
-        fiatValueUsd: (profile?.wnc_earnings || 0) * wncPriceUsd, pctChange24h: 0, decimals: 0, iconUrl: null 
+        chainId: viewingNetwork.chainId, 
+        address: 'internal:wnc', 
+        symbol: 'WNC', 
+        name: 'Wevinacoin', 
+        balance: profile?.wnc_earnings?.toString() || '0', 
+        isNative: false, 
+        priceUsd: wncPriceInfo?.price || 0.0006,
+        fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
+        pctChange24h: wncPriceInfo?.change || 0, 
+        decimals: 0, 
+        iconUrl: null 
     };
+
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
     const chainBalances = balances[viewingNetwork.chainId] || [];
     const onChainAssets = available.map((asset) => {
@@ -622,7 +481,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { ...asset, balance, priceUsd, pctChange24h, fiatValueUsd: parseFloat(balance) * priceUsd } as AssetRow;
     });
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates]);
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
   useEffect(() => {
     const initLocalSession = async () => {
@@ -637,7 +496,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
       if (profile?.account_number) setAccountNumber(profile.account_number);
       else if (localAcc) setAccountNumber(localAcc);
-      if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
+      if (savedMnemonic) {
+        const derived = await deriveAllWallets(savedMnemonic, profile);
+        setWallets(derived);
+      }
       const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
@@ -645,7 +507,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsWalletLoading(false);
     };
     initLocalSession();
-  }, [authLoading, activeSessionId, profile, loadWalletFromMnemonic]);
+  }, [authLoading, activeSessionId, profile]);
 
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
@@ -659,17 +521,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isInitialized && wallets && !initialFetchTriggeredRef.current) {
       initialFetchTriggeredRef.current = true;
-      fetchGlobalPrices(); startEngine();
+      startEngine();
     }
-  }, [isInitialized, wallets, fetchGlobalPrices, startEngine]);
+  }, [isInitialized, wallets, startEngine]);
 
   useEffect(() => {
     if (isInitialized) {
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = setInterval(() => { fetchGlobalPrices(); startEngine(); }, 30000);
+        priceIntervalRef.current = setInterval(startEngine, 30000);
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
-  }, [isInitialized, fetchGlobalPrices, startEngine]);
+  }, [isInitialized, startEngine]);
 
   useEffect(() => {
     if (!profile || !activeSessionId || !wallets || !isInitialized || isWalletLoading) return;
@@ -703,7 +565,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: startEngine,
     generateWallet,
     importWallet,
-    resolveLocalDerivation: (m) => loadWalletFromMnemonic(m).then(() => {}),
+    resolveLocalDerivation: (m) => deriveAllWallets(m, profile).then(d => { setWallets(derived); }),
     saveToVault,
     restoreFromCloud,
     logout,
