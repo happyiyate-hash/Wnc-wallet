@@ -1,4 +1,3 @@
-
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -6,6 +5,7 @@ import { NextResponse } from 'next/server';
 /**
  * AUTH CALLBACK NODE
  * Exchanges the Google OAuth code for a valid institutional session.
+ * Once authenticated, it performs a single redirect to '/' to let the sentinel take over.
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -34,6 +34,8 @@ export async function GET(request: Request) {
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Redirect to the home page. The GlobalOverlayManager sentinel 
+      // will then decide where the user belongs (e.g. /complete-profile).
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -114,12 +113,13 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  // 1. INITIALIZE EXTERNAL HOOKS FIRST
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
   const { user, loading: authLoading, signOut: authSignOut, profile, activeSessionId, refreshProfile } = useUser();
   const { rates } = useCurrency();
   const { toast } = useToast();
   
-  // 1. STATE & REFS
+  // 2. STATE DEFINITIONS
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
@@ -149,7 +149,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 2. CORE UTILITIES
+  // 3. CORE PROTOCOL PRIMITIVES (Actions)
+  
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -188,7 +189,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [activeSessionId]);
 
-  // 3. SYNCHRONIZATION PRIMITIVES
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -501,7 +501,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       
       setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(600); // OPTIMIZED SNAPPY PACE
+      await wait(600); // INSTITUTIONAL SNAPPY PACE
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
@@ -643,6 +643,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setIsWalletLoading(true);
     const prevSessionId = activeSessionId;
+    
+    // Kill refresh cycles
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
+    
     await authSignOut();
     localStorage.removeItem('infura_api_key');
     if (prevSessionId) {
@@ -653,9 +658,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`account_number_${prevSessionId}`);
         sessionStorage.removeItem(`identity_audit_${prevSessionId}`);
     }
-    setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
+    
+    setWallets(null); 
+    setBalances({}); 
+    setAccountNumber(null); 
+    setIsSynced(true); 
+    setIsWalletLoading(false);
   }, [authSignOut, activeSessionId]);
 
+  // 8. DERIVED STATE (Assets)
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
@@ -679,7 +690,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates]);
 
-  // 8. LIFECYCLE
+  // 9. LIFECYCLE & ENGINE BOOT
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
