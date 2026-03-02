@@ -21,10 +21,10 @@ import {
   AlertCircle,
   ChevronDown,
   Zap,
-  XCircle,
-  Lock,
   QrCode,
-  X
+  X,
+  Image as ImageIcon,
+  Camera
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -42,11 +42,11 @@ import TransactionStatusCard from '@/components/wallet/transaction-status-card';
 import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, Kusama, NEAR, BTC, LTC, DOGE, SOL, Cosmos, Osmosis, Secret, Injective, Celestia, Cardano, TRON, Algorand, Hedera, Tezos, Aptos and SUI formats.
+ * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, SOL, Cosmos, etc.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -61,8 +61,10 @@ const detectAddressType = (input: string) => {
     const moveChainRegex = /^0x[a-fA-F0-9]{64}$/;
     if (moveChainRegex.test(clean)) return 'move-chain'; 
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
-    if (!ethers.isAddress(clean)) return 'invalid-evm-checksum';
-    return 'evm';
+    try {
+        if (ethers.isAddress(clean)) return 'evm';
+        return 'invalid-evm-checksum';
+    } catch(e) { return 'invalid-evm-format'; }
   }
   
   if (clean.startsWith('r')) {
@@ -72,7 +74,7 @@ const detectAddressType = (input: string) => {
 
   if (clean.length === 58 && /^[A-Z2-7]{58}$/.test(clean)) return 'algorand';
   if (clean.startsWith('T') && clean.length === 34) return 'tron';
-  if (clean.startsWith('D')) return 'doge';
+  if (clean.startsWith('D') && clean.length === 34) return 'doge';
   if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) return 'btc';
   if (clean.startsWith('ltc1') || clean.startsWith('L') || clean.startsWith('M')) return 'ltc';
   if (clean.startsWith('cosmos1')) return 'cosmos';
@@ -87,8 +89,7 @@ const detectAddressType = (input: string) => {
         if (clean.startsWith('K')) return 'kusama';
         const [isValid] = checkAddress(clean, 42); 
         const [isValidPolkadot] = checkAddress(clean, 0);
-        const [isValidKusama] = checkAddress(clean, 2);
-        if (isValid || isValidPolkadot || isValidKusama) return 'polkadot';
+        if (isValid || isValidPolkadot) return 'polkadot';
     } catch (e) {}
   }
 
@@ -123,7 +124,7 @@ const getDetectedNetworkMeta = (type: string) => {
     if (type === 'algorand') return { name: 'Algorand', symbol: 'ALGO' };
     if (type === 'hedera') return { name: 'Hedera', symbol: 'HBAR' };
     if (type === 'tezos') return { name: 'Tezos', symbol: 'XTZ' };
-    if (type === 'move-chain') return { name: 'Aptos / Sui', symbol: 'MOVE' };
+    if (type === 'move-chain') return { name: 'Move Chain', symbol: 'MOVE' };
     if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
     return null;
 };
@@ -165,7 +166,9 @@ function SendClient() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const hasInitialized = useRef(false);
   const resolutionCounter = useRef(0);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
@@ -190,11 +193,6 @@ function SendClient() {
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
-
-  const currentWallet = useMemo(() => {
-    if (!wallets) return null;
-    return wallets.find(w => w.type === activeNetwork.type);
-  }, [wallets, activeNetwork.type]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -224,15 +222,9 @@ function SendClient() {
     const activeType = activeNetwork.type || 'evm';
     if (activeType === 'aptos' || activeType === 'sui') return addrType !== 'move-chain';
     
-    // Group cosmos variants
     const cosmosVariants = ['cosmos', 'osmosis', 'secret', 'injective', 'celestia'];
-    if (cosmosVariants.includes(activeType)) {
-        return !cosmosVariants.includes(addrType);
-    }
-    
-    if (activeType === 'polkadot' || activeType === 'kusama') {
-        return !['polkadot', 'kusama'].includes(addrType);
-    }
+    if (cosmosVariants.includes(activeType)) return !cosmosVariants.includes(addrType);
+    if (activeType === 'polkadot' || activeType === 'kusama') return !['polkadot', 'kusama'].includes(addrType);
     
     return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
@@ -242,11 +234,11 @@ function SendClient() {
     
     async function resolve() {
       const input = debouncedRecipient.trim();
-      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
+      const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
       
-      // 1. CLEAR STATE FOR EMPTY OR SHORT INPUT
-      if (!input || input.length < 3) {
+      // INSTANT STOP: If mismatch or error, stop spinner immediately
+      if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress('');
           setRecipientProfile(null);
@@ -256,18 +248,7 @@ function SendClient() {
         return;
       }
 
-      // 2. STOP IMMEDIATELY FOR ERRORS (NO DATABASE CALL)
-      if (isSelfTransfer || isNetworkMismatch || validationError) {
-        if (currentId === resolutionCounter.current) {
-          setResolvedAddress('');
-          setRecipientProfile(null);
-          setIsResolving(false);
-          setResolutionError(null);
-        }
-        return;
-      }
-
-      // 3. RAW BLOCKCHAIN ADDRESS -> DIRECT RESOLUTION (NO DATABASE CALL)
+      // LOCAL RESOLUTION: No database call for raw addresses
       if (isRawChainAddress) {
         if (currentId === resolutionCounter.current) {
           setResolvedAddress(input);
@@ -278,66 +259,36 @@ function SendClient() {
         return;
       }
 
-      // 4. ACCOUNT ID -> TRIGGER REGISTRY LOOKUP (CONTACT DATABASE)
+      // REGISTRY LOOKUP: Only for Account IDs
       if (addrType === 'account-id') {
         setRecipientProfile(null);
         setIsResolving(true);
         setResolutionError(null);
         
         try {
-          if (!supabase) throw new Error("No database connection");
-
-          // Identity Lookup Protocol
-          const { data: userRecord } = await supabase
-            .from('profiles')
-            .select('id, name, photo_url, account_number')
-            .eq('account_number', input)
-            .maybeSingle();
+          if (!supabase) throw new Error("No connection");
+          const { data: userRecord } = await supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
 
           if (currentId !== resolutionCounter.current) return;
 
           if (userRecord) {
-            setRecipientProfile({ 
-              id: userRecord.id,
-              avatar: userRecord.photo_url || '', 
-              verified: true, 
-              name: userRecord.name || input
-            });
-
-            if (isInternalWnc) {
-              setResolvedAddress(userRecord.account_number || '');
-            } else {
+            setRecipientProfile({ id: userRecord.id, avatar: userRecord.photo_url || '', verified: true, name: userRecord.name || input });
+            if (isInternalWnc) setResolvedAddress(userRecord.account_number || '');
+            else {
               const targetChainType = activeNetwork.type || 'evm';
-              const { data: chainWallet } = await supabase
-                  .from('wallets')
-                  .select('address')
-                  .eq('user_id', userRecord.id)
-                  .eq('blockchain_id', targetChainType) 
-                  .maybeSingle();
-
-              if (chainWallet?.address) {
-                setResolvedAddress(chainWallet.address);
-              } else {
-                setResolvedAddress('');
-                setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`);
-              }
+              const { data: chainWallet } = await supabase.from('wallets').select('address').eq('user_id', userRecord.id).eq('blockchain_id', targetChainType).maybeSingle();
+              if (chainWallet?.address) setResolvedAddress(chainWallet.address);
+              else { setResolvedAddress(''); setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); }
             }
-          } else {
-            setResolvedAddress('');
-            setResolutionError("Identity Node not found in registry.");
-          }
+          } else { setResolvedAddress(''); setResolutionError("Identity Node not found in registry."); }
         } catch (e: any) {
-          if (currentId === resolutionCounter.current) {
-            setResolvedAddress('');
-            setResolutionError("Handshake Error: Identity lookup failed.");
-          }
+          if (currentId === resolutionCounter.current) { setResolvedAddress(''); setResolutionError("Handshake failed."); }
         } finally {
           if (currentId === resolutionCounter.current) setIsResolving(false);
         }
         return;
       }
 
-      // 5. UNKNOWN FORMAT -> STOP (NO DATABASE CALL)
       if (currentId === resolutionCounter.current) {
         setResolvedAddress('');
         setRecipientProfile(null);
@@ -349,89 +300,85 @@ function SendClient() {
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
 
+  // SCANNER ENGINE
+  useEffect(() => {
+    if (isScannerOpen) {
+      const html5QrCode = new Html5Qrcode("reader");
+      scannerRef.current = html5QrCode;
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => handleScanSuccess(decodedText),
+        () => {}
+      ).catch(e => console.warn("Camera init error", e));
+
+      return () => {
+        if (html5QrCode.isScanning) {
+          html5QrCode.stop().catch(e => console.warn("Scanner stop error", e));
+        }
+      };
+    }
+  }, [isScannerOpen]);
+
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
-    
     if (decodedText.startsWith('wnc://')) {
       try {
         const url = new URL(decodedText);
         const account = url.searchParams.get('account');
         const symbol = url.searchParams.get('symbol');
-        
         if (account) {
           setRecipientInput(account);
           if (symbol) {
             const token = allAssets.find(a => a.symbol === symbol);
             if (token) setSelectedToken(token);
           }
-          toast({ title: "Internal Node Resolved", description: "Identity registry synchronized." });
+          toast({ title: "Node Resolved" });
         }
-      } catch (e) {
-        toast({ variant: "destructive", title: "Scan Error", description: "Invalid institutional QR format." });
-      }
+      } catch (e) { toast({ variant: "destructive", title: "Invalid QR Protocol" }); }
       return;
     }
-
     let cleanAddress = decodedText;
-    if (decodedText.includes(':')) {
-      const parts = decodedText.split(':');
-      cleanAddress = parts[1].split('?')[0]; 
-    }
-    
+    if (decodedText.includes(':')) cleanAddress = decodedText.split(':')[1].split('?')[0]; 
     setRecipientInput(cleanAddress);
-    toast({ title: "Node Address Parsed", description: "Standard blockchain registry updated." });
+    toast({ title: "Address Parsed" });
   };
 
-  useEffect(() => {
-    if (isScannerOpen) {
-      setTimeout(() => {
-        scannerRef.current = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
-        scannerRef.current.render(handleScanSuccess, () => {});
-      }, 300);
-    } else {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(e => console.warn("Scanner cleanup failed", e));
-        scannerRef.current = null;
-      }
+  const handleGalleryClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !scannerRef.current) return;
+    try {
+      const decodedText = await scannerRef.current.scanFile(file, true);
+      handleScanSuccess(decodedText);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in this image." });
     }
-    return () => { if (scannerRef.current) scannerRef.current.clear().catch(() => {}); };
-  }, [isScannerOpen]);
+  };
 
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
-    setIsConfirmOpen(false);
-    setIsStatusVisible(true);
-    setTxStatus('pending');
-    setIsSubmitting(true);
-
+    setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
         const transferAmount = parseFloat(amount);
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
-            p_recipient_id: recipientProfile!.id,
-            p_amount: Math.floor(transferAmount)
-        });
-        if (rpcError || !data?.success) throw new Error(rpcError?.message || "Atomic settlement failed.");
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: Math.floor(transferAmount) });
+        if (rpcError || !data?.success) throw new Error(rpcError?.message || "Settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
-      } 
-      else if (activeNetwork.type === 'xrp') {
+      } else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
         await client.connect();
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-        const prepared = await client.autofill({ 
-          TransactionType: "Payment", 
-          Account: wallet.address, 
-          Amount: xrpl.xrpToDrops(amount), 
-          Destination: resolvedAddress 
-        });
+        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amount), Destination: resolvedAddress });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         await client.disconnect();
         if ((result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
         else throw new Error("XRPL Error");
-      } 
-      else {
+      } else {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
@@ -442,19 +389,12 @@ function SendClient() {
         setTxHash(tx.hash);
       }
       setTxStatus('success');
-    } catch (e: any) {
-      setTxStatus('error');
-      setReceiptError(mapTechnicalError(e));
-    } finally {
-      setIsSubmitting(false);
-      setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
-    }
+    } catch (e: any) { setTxStatus('error'); setReceiptError(mapTechnicalError(e)); }
+    finally { setIsSubmitting(false); setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000); }
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
-  const amountUsdValue = amountNum * (selectedToken?.priceUsd || 0);
-  
   const hasInsufficientFunds = amountNum > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
@@ -462,255 +402,70 @@ function SendClient() {
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
-        
-        <button 
-            onClick={() => setIsSelectorOpen(true)}
-            className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
-        >
-            <TokenLogoDynamic key={`send-token-${selectedToken?.symbol}`} logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || 'token'} size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-            <div className="flex items-start leading-none">
-                <span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span>
-                <span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span>
-            </div>
+        <button onClick={() => setIsSelectorOpen(true)} className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all">
+            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+            <div className="flex items-start leading-none"><span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span><span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span></div>
             <ChevronDown className="w-3 h-3 text-primary" />
         </button>
-
-        <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(true)} className="rounded-xl">
-          <QrCode className="w-5 h-5 text-primary" />
-        </Button>
+        <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(true)} className="rounded-xl"><QrCode className="w-5 h-5 text-primary" /></Button>
       </header>
 
-      <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
+      <main className="flex-1 p-6 max-w-lg mx-auto w-full pb-48">
           <div className="space-y-10 pt-2 px-1">
             <section className="flex items-center justify-between px-2">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black overflow-hidden relative z-10">
-                            <AvatarImage src={profile?.photo_url} className="object-cover" alt="Sender" />
-                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
-                        </Avatar>
-                        <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70]">
-                            <TokenLogoDynamic logoUrl={activeNetwork?.iconUrl} alt={activeNetwork?.name || ''} size={20} chainId={activeNetwork?.chainId} symbol={activeNetwork?.symbol} name={activeNetwork?.name} />
-                        </div>
-                    </div>
-                    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest truncate w-20 text-center">FROM YOU</span>
+                    <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black relative z-10"><AvatarImage src={profile?.photo_url} /><AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback></Avatar>
+                    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">FROM YOU</span>
                 </div>
-
                 <div className="flex-1 px-4 relative flex flex-col items-center justify-center min-h-[100px]">
-                    <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full z-10">
-                            <ArrowRight className="w-4 h-4 text-primary animate-pulse" />
-                        </div>
-                    </div>
-                    
-                    <AnimatePresence>
-                        {resolvedAddress && !isResolving && (
-                            <motion.div 
-                                initial={{ y: 20, opacity: 0, scale: 0.9 }}
-                                animate={{ y: 30, opacity: 1, scale: 1 }}
-                                exit={{ y: 15, opacity: 0, scale: 0.9 }}
-                                className="absolute left-0 right-0 text-center z-20"
-                            >
-                                <div className="inline-flex flex-col items-center gap-1.5">
-                                    <p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>
-                                        {isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Node'}
-                                    </p>
-                                    <div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}>
-                                        <p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">
-                                            {resolvedAddress.length > 15 ? `${resolvedAddress.slice(0, 10)}...${resolvedAddress.slice(-8)}` : resolvedAddress}
-                                        </p>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full z-10"><ArrowRight className="w-4 h-4 text-primary animate-pulse" /></div></div>
+                    <AnimatePresence>{resolvedAddress && !isResolving && (
+                        <motion.div initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 30, opacity: 1, scale: 1 }} exit={{ y: 15, opacity: 0 }} className="absolute left-0 right-0 text-center z-20">
+                            <div className="inline-flex flex-col items-center gap-1.5"><p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>{isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Node'}</p><div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}><p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">{resolvedAddress.length > 15 ? `${resolvedAddress.slice(0, 10)}...${resolvedAddress.slice(-8)}` : resolvedAddress}</p></div></div>
+                        </motion.div>
+                    )}</AnimatePresence>
                 </div>
-
                 <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
-                        <div className={cn(
-                            "w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 relative bg-black overflow-hidden z-10",
-                            (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : 
-                            (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
-                            "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
-                        )}>
-                            {isResolving ? (
-                                <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" />
-                            ) : isSelfTransfer ? (
-                                <Avatar className="w-full h-full rounded-none">
-                                    <AvatarImage src={profile?.photo_url} className="object-cover" alt="Self" />
-                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback>
-                                </Avatar>
-                             ) : recipientProfile ? (
-                                <Avatar className="w-full h-full rounded-none">
-                                    <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient" />
-                                    <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                             ) : (isNetworkMismatch || validationError) ? (
-                                <div className="relative animate-in zoom-in duration-300">
-                                    <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                                        <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
-                                    </div>
-                                </div>
-                             ) : resolvedAddress ? (
-                                <div className="relative animate-in zoom-in duration-300">
-                                    <div className="w-16 h-16 rounded-[2rem] bg-primary/10 flex items-center justify-center border border-primary/20">
-                                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                                    </div>
-                                </div>
-                             ) : (
-                                <Search className="w-8 h-8 text-white/10" />
-                             )}
-                        </div>
-
-                        {(resolvedAddress || isNetworkMismatch || validationError) && !isResolving && !isSelfTransfer && (
-                            <div className="absolute -bottom-1 -right-1 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-[70] animate-in fade-in zoom-in duration-300">
-                                <TokenLogoDynamic 
-                                    logoUrl={isNetworkMismatch || validationError ? null : (selectedToken?.iconUrl || activeNetwork.iconUrl)} 
-                                    alt="Network Node" 
-                                    size={20} 
-                                    chainId={isNetworkMismatch || validationError ? undefined : activeNetwork.chainId} 
-                                    symbol={isNetworkMismatch || validationError ? detectedMeta?.symbol : activeNetwork.symbol} 
-                                    name={isNetworkMismatch || validationError ? detectedMeta?.name : activeNetwork.name} 
-                                />
-                            </div>
-                        )}
+                    <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>
+                        {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}
                     </div>
-                    <span className={cn(
-                        "text-[8px] font-black uppercase tracking-widest truncate w-20 text-center",
-                        (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40"
-                    )}>
-                        {isSelfTransfer ? 'NODE REFLECTION' : 
-                         recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : 
-                         isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : 
-                         (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' :
-                         resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
-                    </span>
+                    <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'NODE REFLECTION' : recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
                 </div>
             </section>
 
             <section className="space-y-3">
-                <div className="flex justify-between items-center px-2">
-                    <Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label>
-                    <button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button>
+                <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => setRecipientInput(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
+                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}>
+                    <div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div>
                 </div>
-                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5 ring-4 ring-red-500/10")}>
-                    <div className="flex items-center gap-2 px-2">
-                        <Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 placeholder:text-zinc-700 text-white flex-1" />
-                        {isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-                    </div>
-                </div>
-
-                {isSelfTransfer && (
-                    <div className="p-5 rounded-[2rem] bg-primary/10 border border-primary/20 flex gap-4 animate-in slide-in-from-top-2">
-                        <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0"><ShieldCheck className="w-6 h-6 text-primary" /></div>
-                        <div className="space-y-1.5 text-left">
-                            <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Self-Transfer Advisory</p>
-                            <p className="text-xs font-bold text-white/80 leading-relaxed">You can't send money to yourself. Your balance is already here 😄</p>
-                        </div>
-                    </div>
-                )}
-
-                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && (
-                    <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
-                        <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
-                        <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">{resolutionError || validationError?.message}</p>
-                    </div>
-                )}
-
-                {isNetworkMismatch && !isSelfTransfer && (
-                    <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-[0_0_40px_rgba(239,68,68,0.1)]">
-                        <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div>
-                        <div className="space-y-1.5">
-                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p>
-                            <p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p>
-                        </div>
-                    </div>
-                )}
+                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || validationError?.message}</p></div>}
+                {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}
             </section>
 
             <div className="space-y-3">
-                <div className="flex justify-between items-center px-2">
-                    <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
-                    <div className="flex items-center gap-2">
-                        <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>
-                          Bal: {selectedToken?.symbol === 'WNC' ? balance : balance.toFixed(4)} {selectedToken?.symbol}
-                        </span>
-                        <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 hover:bg-primary/20 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button>
-                    </div>
-                </div>
-                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all group", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
-                  <div className="flex items-baseline justify-between gap-4">
-                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
-                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
-                  </div>
-                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
-                    {hasInsufficientFunds ? (
-                      <span className="text-red-400/60 not-italic uppercase tracking-widest font-black text-[9px]">Insufficient Node Funds</span>
-                    ) : (
-                      <>≈ {formatFiat(amountUsdValue)} <span className="opacity-50">Estimated Value</span></>
-                    )}
-                  </div>
-                </div>
-            </div>
-
-            <div className="p-6 rounded-[2rem] bg-[#0a0a0c] border border-primary/20 space-y-4 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 blur-3xl rounded-full -mr-12 -mt-12" />
-                <div className="flex items-center gap-2 mb-2 relative z-10"><ShieldCheck className="w-4 h-4 text-primary" /><span className="text-[10px] font-black uppercase tracking-widest text-white/80">Institutional Summary</span></div>
-                <div className="space-y-3 relative z-10">
-                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Settlement Path</span><div className="flex items-center gap-1.5 font-bold text-white"><Zap className="w-3 h-3 text-primary" /><span>{selectedToken?.symbol === 'WNC' ? 'Internal Registry' : 'Blockchain Network'}</span></div></div>
-                    <div className="flex justify-between items-center text-[11px]"><span className="text-white/40 font-bold uppercase tracking-tighter">Estimated Arrival</span><div className="flex items-center gap-1.5 font-bold text-white"><Timer className="w-3 h-3 text-primary" /><span>{selectedToken?.symbol === 'WNC' ? 'Instant' : gasData.estimatedTime}</span></div></div>
-                </div>
+                <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label><div className="flex items-center gap-2"><span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span><button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button></div></div>
+                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}><div className="flex items-baseline justify-between gap-4"><Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} /><span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span></div><div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Funds</span> : <>≈ {formatFiat(amountNum * (selectedToken?.priceUsd || 0))} <span className="opacity-50">Estimated Value</span></>}</div></div>
             </div>
           </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
-          <div className="max-md mx-auto">
-            <Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all duration-300 border-b-4", canSend ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed text-zinc-600 shadow-none")} disabled={!canSend} onClick={() => setIsConfirmOpen(true)}>
-              {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
-            </Button>
-          </div>
+          <div className="max-md mx-auto"><Button className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all border-b-4", canSend ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed")} disabled={!canSend} onClick={() => setIsConfirmOpen(true)}>{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}</Button></div>
         </div>
       </main>
 
-      {/* SCANNER OVERLAY */}
-      <AnimatePresence>
-        {isScannerOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6"
-          >
+      <AnimatePresence>{isScannerOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-sm space-y-8">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3>
-                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p>
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button>
-              </div>
-              
-              <div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-[0_0_50px_rgba(139,92,246,0.3)] bg-zinc-900">
-                <div id="reader" className="w-full h-full" />
-                <motion.div 
-                  animate={{ y: [0, 250, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10"
-                />
-              </div>
-
-              <div className="text-center space-y-4 px-8">
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Position any <span className="text-white font-bold">WNC Account QR</span> or <span className="text-white font-bold">Standard Crypto Address</span> within the frame to autofill details.
-                </p>
-                <div className="flex items-center justify-center gap-2 opacity-40">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white">Registry Protocol v3.1</span>
-                </div>
+              <div className="flex items-center justify-between"><div className="space-y-1"><h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3><p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p></div><Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button></div>
+              <div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-2xl bg-zinc-900"><div id="reader" className="w-full h-full" /><motion.div animate={{ y: [0, 250, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10" /></div>
+              <div className="space-y-4 px-4">
+                <Button onClick={handleGalleryClick} variant="outline" className="w-full h-14 rounded-2xl bg-white/5 border-white/10 gap-3 font-bold uppercase tracking-widest text-[10px] text-white hover:bg-white/10"><ImageIcon className="w-4 h-4 text-primary" /> Get from Gallery</Button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                <div className="flex items-center justify-center gap-2 opacity-40"><ShieldCheck className="w-3.5 h-3.5 text-white" /><span className="text-[8px] font-black uppercase text-white">Registry Protocol v3.1</span></div>
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+      )}</AnimatePresence>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
