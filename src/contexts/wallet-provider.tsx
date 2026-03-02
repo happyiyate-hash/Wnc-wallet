@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -149,7 +148,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 2. PRIMARY ACTIONS (Top of Hierarchy)
+  // 2. PRIMARY HANDLERS (Defined first to allow references in analytical nodes)
+  
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -188,7 +188,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [activeSessionId]);
 
-  // 3. SYNC PROTOCOLS
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -293,7 +292,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cloud = getCloudAddr(chainInfo.type);
       
       setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(1000);
+      await wait(1000); // INSTITUTIONAL PACE
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
@@ -322,7 +321,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
   }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault, refreshProfile]);
 
-  // 4. WALLET DERIVATION
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
     try {
@@ -485,33 +483,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const token = session?.access_token;
 
       onStatusUpdate?.('Decrypting Nodes...');
-      const tasks: Promise<any>[] = [];
-      if (latestProfile.vault_phrase && latestProfile.iv) {
-        tasks.push(fetch('/api/wallet/decrypt-phrase', {
+      const results = await Promise.all([
+        latestProfile.vault_phrase ? fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ encrypted: latestProfile.vault_phrase, iv: latestProfile.iv })
-        }).then(r => r.json()).then(d => ({ type: 'mnemonic', val: d.phrase })));
-      }
-      if (latestProfile.vault_infura_key && latestProfile.infura_iv) {
-        tasks.push(fetch('/api/wallet/decrypt-phrase', {
+        }).then(r => r.json()).then(d => d.phrase) : Promise.resolve(null),
+        latestProfile.vault_infura_key ? fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ encrypted: latestProfile.vault_infura_key, iv: latestProfile.infura_iv })
-        }).then(r => r.json()).then(d => ({ type: 'infura', val: d.phrase })));
-      }
+        }).then(r => r.json()).then(d => d.phrase) : Promise.resolve(null)
+      ]);
 
-      const results = await Promise.all(tasks);
-      let mnemonicVal = null;
-      results.forEach(res => {
-        if (res.type === 'mnemonic' && res.val) {
-          mnemonicVal = res.val;
-          localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, res.val);
-        } else if (res.type === 'infura' && res.val) {
-          setInfuraApiKey(res.val);
-          localStorage.setItem('infura_api_key', res.val);
-        }
-      });
+      const [mnemonicVal, infuraVal] = results;
+      if (mnemonicVal) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonicVal);
+      if (infuraVal) { setInfuraApiKey(infuraVal); localStorage.setItem('infura_api_key', infuraVal); }
 
       if (mnemonicVal) {
         onStatusUpdate?.('Establishing Identity...');
@@ -539,7 +526,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 5. DATA FETCHING
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
@@ -648,7 +634,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {} finally { setIsRefreshing(false); }
   }, [isInitialized, wallets, viewingNetwork, fetchBalancesForChain, activeSessionId, fetchGlobalPrices]);
 
-  // 6. ASSET MEMO & EXPORTS
+  const logout = useCallback(async () => {
+    setIsWalletLoading(true);
+    const prevSessionId = activeSessionId;
+    await authSignOut();
+    localStorage.removeItem('infura_api_key');
+    if (prevSessionId) {
+        localStorage.removeItem(`wallet_mnemonic_${prevSessionId}`);
+        localStorage.removeItem(`wallet_balances_${prevSessionId}`);
+        localStorage.removeItem(`hidden_tokens_${prevSessionId}`);
+        localStorage.removeItem(`custom_tokens_${prevSessionId}`);
+        localStorage.removeItem(`account_number_${prevSessionId}`);
+        sessionStorage.removeItem(`identity_audit_${prevSessionId}`);
+    }
+    setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
+  }, [authSignOut, activeSessionId]);
+
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     const wncPriceUsd = 1 / (rates['NGN'] || 1650); 
@@ -672,23 +673,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates]);
 
-  const logout = useCallback(async () => {
-    setIsWalletLoading(true);
-    const prevSessionId = activeSessionId;
-    await authSignOut();
-    localStorage.removeItem('infura_api_key');
-    if (prevSessionId) {
-        localStorage.removeItem(`wallet_mnemonic_${prevSessionId}`);
-        localStorage.removeItem(`wallet_balances_${prevSessionId}`);
-        localStorage.removeItem(`hidden_tokens_${prevSessionId}`);
-        localStorage.removeItem(`custom_tokens_${prevSessionId}`);
-        localStorage.removeItem(`account_number_${prevSessionId}`);
-        sessionStorage.removeItem(`identity_audit_${prevSessionId}`);
-    }
-    setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
-  }, [authSignOut, activeSessionId]);
-
-  // 7. LIFECYCLE LISTENERS
+  // 8. LIFECYCLE
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -8,10 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, Mail, Lock, LogIn } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Loader2, ShieldCheck, Mail, Lock, LogIn, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
+/**
+ * TERMINAL LOGIN NODE
+ * Handles institutional entry and detects unverified identities.
+ */
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -20,6 +23,12 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // Verification State (For "Email not confirmed" fallback)
+  const [showVerifyPanel, setShowVerifyPanel] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
@@ -27,6 +36,14 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      // DETECT UNVERIFIED IDENTITY
+      if (error?.message === 'Email not confirmed') {
+        // Trigger the slide-up verification protocol
+        setShowVerifyPanel(true);
+        return;
+      }
+
       if (error) throw error;
       
       toast({ title: "Welcome back!", description: "Identity node verified." });
@@ -39,6 +56,51 @@ export default function LoginPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || verificationCode.length !== 6) return;
+
+    setIsVerifying(true);
+    try {
+      const { error } = await supabase!.auth.verifyOtp({
+        email,
+        token: verificationCode,
+        type: 'signup'
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Identity Verified!", description: "Initializing profile node..." });
+      setShowVerifyPanel(false);
+      router.replace('/complete-profile');
+    } catch (error: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Verification Failed", 
+        description: error.message 
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) return;
+    setIsResending(true);
+    try {
+      const { error } = await supabase!.auth.resend({
+        type: 'signup',
+        email,
+      });
+      if (error) throw error;
+      toast({ title: "Code Resent", description: "Check your inbox again." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -61,7 +123,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 text-foreground relative overflow-hidden">
-      {/* Background Ambience */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 
@@ -113,7 +174,7 @@ export default function LoginPage() {
           <Button 
             type="submit"
             className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-            disabled={isLoading}
+            disabled={isLoading || showVerifyPanel}
           >
             {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <><LogIn className="w-4 h-4 mr-2" /> Verify Identity</>}
           </Button>
@@ -130,7 +191,7 @@ export default function LoginPage() {
           variant="outline" 
           className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-white/5 border-white/10 hover:bg-white/10"
           onClick={handleGoogleLogin}
-          disabled={isGoogleLoading}
+          disabled={isGoogleLoading || showVerifyPanel}
         >
           {isGoogleLoading ? <Loader2 className="animate-spin w-5 h-5" /> : (
             <div className="flex items-center gap-3">
@@ -151,14 +212,77 @@ export default function LoginPage() {
             <Link href="/auth/signup" className="text-primary font-black uppercase hover:underline">Create Node</Link>
           </p>
         </div>
-
-        <div className="pt-4 flex flex-col items-center gap-3 opacity-20">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-3.5 h-3.5 text-white" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-white">Institutional Protocol v3.1</span>
-          </div>
-        </div>
       </motion.div>
+
+      {/* VERIFICATION PANEL (Slide-Up Fallback) */}
+      <AnimatePresence>
+        {showVerifyPanel && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setShowVerifyPanel(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 inset-x-0 bg-[#0a0a0c] border-t border-white/10 rounded-t-[3rem] z-[101] p-8 pb-12 shadow-2xl"
+            >
+              <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
+              <div className="max-w-sm mx-auto space-y-8">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+                    <Mail className="w-8 h-8" />
+                  </div>
+                  <h2 className="text-2xl font-black text-white uppercase tracking-tight">Verify Identity</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Check your email for the code sent to <br/>
+                    <span className="text-white font-bold">{email}</span>
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerify} className="space-y-6">
+                  <div className="space-y-4">
+                    <Input 
+                      type="text" 
+                      placeholder="000000"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white"
+                      required
+                    />
+                    <div className="flex justify-center">
+                      <Button 
+                        type="button" 
+                        variant="link" 
+                        onClick={handleResend}
+                        disabled={isResending}
+                        className="text-primary font-bold text-xs uppercase tracking-widest"
+                      >
+                        {isResending ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
+                        Resend Code
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="submit"
+                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
+                    disabled={isVerifying || verificationCode.length !== 6}
+                  >
+                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Authority"}
+                  </Button>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
