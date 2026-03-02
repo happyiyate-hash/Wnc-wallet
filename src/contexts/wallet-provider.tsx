@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -149,8 +150,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 3. CORE PROTOCOL PRIMITIVES (Defined early to avoid ReferenceErrors)
-  
+  // 3. CORE PROTOCOL PRIMITIVES
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -189,6 +189,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [activeSessionId]);
 
+  // SYNC ENGINE: Writes multi-chain addresses to the global registry
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -202,11 +203,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // 1. Update Profile Primary Identity
       await supabase
         .from('profiles')
-        .update({ account_number: targetAcc, updated_at: new Date().toISOString() })
+        .update({ 
+          account_number: targetAcc, 
+          updated_at: new Date().toISOString(),
+          // Mirror native addresses for faster lookups
+          evm_address: currentWallets.find(w => w.type === 'evm')?.address,
+          xrp_address: currentWallets.find(w => w.type === 'xrp')?.address,
+          polkadot_address: currentWallets.find(w => w.type === 'polkadot')?.address
+        })
         .eq('id', activeSessionId);
 
+      // 2. Update Relational Wallet Registry
       const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
       const { error: syncError } = await supabase.rpc('sync_user_wallets', {
           p_user_id: activeSessionId,
@@ -222,13 +232,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [activeSessionId, wallets, accountNumber, refreshProfile]);
 
+  // VAULT ENGINE: Encrypts and backs up the Master Phrase and Infrastructure Keys
   const saveToVault = useCallback(async () => {
-    if (!activeSessionId || !supabase || !wallets) return;
+    if (!activeSessionId || !supabase) return;
     try {
       const { data: { session } } = await supabase!.auth.getSession();
       const updates: any = {};
       const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+      const localInfuraKey = localStorage.getItem('infura_api_key');
 
+      // Sync Mnemonic Node
       if (mnemonic) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
@@ -242,14 +255,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (res.ok) { updates.vault_phrase = data.encrypted; updates.iv = data.iv; }
       }
 
-      if (infuraApiKey) {
+      // Sync Infrastructure Node (Infura)
+      if (localInfuraKey) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`
           },
-          body: JSON.stringify({ phrase: infuraApiKey })
+          body: JSON.stringify({ phrase: localInfuraKey })
         });
         const data = await res.json();
         if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
@@ -260,14 +274,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           updates.account_number = `835${randomSuffix}`;
           setAccountNumber(updates.account_number);
           localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
-      } else { updates.account_number = accountNumber; }
+      }
 
       const { error } = await supabase!.from('profiles').update(updates).eq('id', activeSessionId);
       if (error) throw error;
-      await syncAllAddresses();
+      
+      // Perform final address sync to ensure everything is matched
+      if (wallets) await syncAllAddresses();
+      
       await refreshProfile();
-    } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
-  }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
+      setIsSynced(true);
+    } catch (e: any) { 
+      console.error("Vault Backup Failed:", e.message); 
+    }
+  }, [activeSessionId, wallets, accountNumber, syncAllAddresses, refreshProfile]);
 
   // 4. WALLET ADAPTERS & FETCHERS
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
@@ -399,7 +419,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${activeSessionId}`, newId);
+        
+        // Atomic Save Handshake
         if (derived) await syncAllAddresses(derived);
+        await saveToVault();
     }
     return mnemonic;
   };
@@ -415,7 +438,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             setAccountNumber(newId);
             localStorage.setItem(`account_number_${activeSessionId}`, newId);
         }
+        
+        // Atomic Save Handshake
         await syncAllAddresses(derived);
+        await saveToVault();
     }
   };
 
@@ -446,7 +472,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const [mnemonicVal, infuraVal] = results;
       if (mnemonicVal) localStorage.setItem(`wallet_mnemonic_${activeSessionId}`, mnemonicVal);
-      if (infuraVal) { setInfuraApiKey(infuraVal); localStorage.setItem('infura_api_key', infuraVal); }
+      if (infuraVal) { 
+        setInfuraApiKey(infuraVal); 
+        localStorage.setItem('infura_api_key', infuraVal); 
+      }
 
       if (mnemonicVal) {
         onStatusUpdate?.('Establishing Identity...');
@@ -498,7 +527,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       
       setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(600); // INSTITUTIONAL SNAPPY PACE
+      await wait(600); // 600ms Pace
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
@@ -506,7 +535,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         await syncAllAddresses(wallets);
         await wait(600);
-        cloud = local; // Atomic state update
+        cloud = local; 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: cloud }));
         await wait(400);
       } else {
@@ -641,7 +670,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsWalletLoading(true);
     const prevSessionId = activeSessionId;
     
-    // Kill refresh cycles
     if (abortControllerRef.current) abortControllerRef.current.abort();
     if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
     
@@ -701,11 +729,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cachedBalances = localStorage.getItem(`wallet_balances_${activeSessionId}`);
       const localAcc = localStorage.getItem(`account_number_${activeSessionId}`);
       const savedKey = localStorage.getItem('infura_api_key');
+      
       if (savedKey) setInfuraApiKey(savedKey);
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
       if (profile?.account_number) setAccountNumber(profile.account_number);
       else if (localAcc) setAccountNumber(localAcc);
       if (savedMnemonic) await loadWalletFromMnemonic(savedMnemonic);
+      
       const savedHidden = localStorage.getItem(`hidden_tokens_${activeSessionId}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${activeSessionId}`);
@@ -780,7 +810,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     fetchError,
     getAddressForChain,
     infuraApiKey,
-    setInfuraApiKey: (k) => { setInfuraApiKey(k); if (k) localStorage.setItem('infura_api_key', k); else localStorage.removeItem('infura_api_key'); },
+    setInfuraApiKey: (k) => { 
+      setInfuraApiKey(k); 
+      if (k) localStorage.setItem('infura_api_key', k); 
+      else localStorage.removeItem('infura_api_key');
+      // Atomic Config Persistence
+      if (activeSessionId) saveToVault(); 
+    },
     hiddenTokenKeys,
     toggleTokenVisibility,
     userAddedTokens,
