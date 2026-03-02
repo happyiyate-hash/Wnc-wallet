@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -13,15 +13,22 @@ import { Loader2, UserCircle, ShieldCheck, Camera, CheckCircle2 } from 'lucide-r
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 
+/**
+ * IDENTITY NODE PROVISIONING
+ * Handles final profile setup including unique username selection and 
+ * institutional image uplink (replaces manual URL input).
+ */
 export default function CompleteProfilePage() {
   const { user, profile, refreshProfile } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [username, setUsername] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -56,6 +63,45 @@ export default function CompleteProfilePage() {
       console.error(e);
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  const handleImageSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !supabase) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Upload to 'avatars' bucket (Public Access assumed)
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      setPhotoUrl(publicUrl);
+      toast({ title: "Visual Node Linked", description: "Institutional avatar updated in the cloud." });
+    } catch (error: any) {
+      console.error('UPLOAD_ERROR:', error);
+      toast({ 
+        variant: "destructive", 
+        title: "Uplink Failed", 
+        description: error.message || "Failed to upload image. Ensure the 'avatars' bucket is configured." 
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -101,19 +147,35 @@ export default function CompleteProfilePage() {
         <div className="flex flex-col items-center gap-6">
           <div className="relative group">
             <div className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
-            <Avatar className="w-32 h-32 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10">
+            <Avatar className="w-32 h-32 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10 overflow-hidden">
+              {isUploading ? (
+                <div className="absolute inset-0 bg-black/60 z-20 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : null}
               <AvatarImage src={photoUrl} className="object-cover" />
               <AvatarFallback className="bg-zinc-900 text-primary font-black text-4xl">
                 <UserCircle className="w-16 h-16" />
               </AvatarFallback>
             </Avatar>
-            <button className="absolute -bottom-2 -right-2 z-20 bg-primary p-3 rounded-2xl border-4 border-[#050505] shadow-xl hover:scale-110 active:scale-95 transition-transform">
+            <button 
+              type="button"
+              onClick={handleImageSelect}
+              className="absolute -bottom-2 -right-2 z-20 bg-primary p-3 rounded-2xl border-4 border-[#050505] shadow-xl hover:scale-110 active:scale-95 transition-transform"
+            >
               <Camera className="w-5 h-5 text-white" />
             </button>
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
           </div>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-6">
+        <form onSubmit={handleSave} className="space-y-10">
           <div className="space-y-2">
             <div className="flex justify-between items-center px-2">
               <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Global Username</Label>
@@ -138,20 +200,10 @@ export default function CompleteProfilePage() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Avatar URL (Optional)</Label>
-            <Input 
-              placeholder="https://..."
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              className="h-14 bg-white/5 border-white/10 rounded-2xl text-white placeholder:text-zinc-700 focus-visible:ring-primary"
-            />
-          </div>
-
           <Button 
             type="submit"
             className="w-full h-16 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-            disabled={isSubmitting || !isAvailable || username.length < 3}
+            disabled={isSubmitting || isUploading || !isAvailable || username.length < 3}
           >
             {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Profile"}
           </Button>
