@@ -35,6 +35,7 @@ import TransactionStatusCard from './transaction-status-card';
 import TransactionReceiptSheet from './transaction-receipt-sheet';
 import { ethers } from 'ethers';
 import * as xrpl from 'xrpl';
+import { useToast } from '@/hooks/use-toast';
 
 /**
  * TECHNICAL ERROR MAPPER
@@ -55,6 +56,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   const { allAssets, viewingNetwork, accountNumber } = useWallet();
   const { user } = useUser();
   const { formatFiat } = useCurrency();
+  const { toast } = useToast();
   
   const [step, setStep] = useState<'edit' | 'ready'>('edit');
   const [selectedToken, setSelectedToken] = useState<AssetRow | null>(null);
@@ -68,7 +70,15 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   useEffect(() => { if (!selectedToken && allAssets.length > 0) setSelectedToken(allAssets[0]); }, [allAssets, selectedToken]);
 
   const handleGenerate = async () => {
-    if (!user || !selectedToken || !accountNumber || !supabase) return;
+    if (!user || !selectedToken || !accountNumber || !supabase) {
+        toast({
+            variant: "destructive",
+            title: "Identity Required",
+            description: "Please ensure your node identity is fully synchronized before requesting."
+        });
+        return;
+    }
+
     setIsCreating(true);
     try {
       const { data, error } = await supabase.from('payment_requests').insert({
@@ -80,10 +90,22 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
         amount: parseFloat(amount),
         note: note.trim() || null
       }).select().single();
+
       if (error) throw error;
+      
       setRequestId(data.id);
       setStep('ready');
-    } catch (e) { console.error(e); } finally { setIsCreating(false); }
+      toast({ title: "Request Node Active", description: "P2P handshake generated successfully." });
+    } catch (e: any) { 
+      console.error("[REQUEST_GEN_FAIL]", e);
+      toast({
+          variant: "destructive",
+          title: "Protocol Error",
+          description: e.message || "Failed to generate payment request. Please check your connection."
+      });
+    } finally { 
+      setIsCreating(false); 
+    }
   };
 
   const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
@@ -148,7 +170,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
                 <Textarea placeholder="What's this for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="rounded-2xl bg-white/5 border-white/5 p-4 min-h-[100px] text-sm" />
 
-                <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90" disabled={!amount || parseFloat(amount) <= 0 || isCreating} onClick={handleGenerate}>
+                <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20" disabled={!amount || parseFloat(amount) <= 0 || isCreating} onClick={handleGenerate}>
                   {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Request Node"}
                 </Button>
               </motion.div>
@@ -197,6 +219,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const { wallets, infuraApiKey, allChainsMap, allAssets, refresh } = useWallet();
   const { profile: currentUserProfile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
+  const { toast } = useToast();
 
   const [request, setRequest] = useState<PaymentRequest | null>(null);
   const [requester, setRequester] = useState<UserProfile | null>(null);

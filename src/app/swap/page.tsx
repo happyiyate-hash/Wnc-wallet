@@ -5,6 +5,7 @@ import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCurrency } from '@/contexts/currency-provider';
+import { useGasPrice } from '@/hooks/useGasPrice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -46,7 +47,7 @@ interface SwapQuote {
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, rates } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, rates, infuraApiKey } = useWallet();
   const { formatFiat } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -80,19 +81,35 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
+  /**
+   * INSTITUTIONAL STATE GUARD
+   * Resets tokens when network changes to prevent cross-chain state mismatch.
+   */
   useEffect(() => {
-    if (!fromToken && allAssets.length > 0) {
-      const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
-      const chainIdParam = parseInt(searchParams.get('chainId') || '');
-      const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
-      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
+    if (allAssets.length === 0) return;
+
+    const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
+    const chainIdParam = parseInt(searchParams.get('chainId') || '');
+    const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
+
+    // Reset logic: If tokens are from a different network than current viewing network, re-initialize
+    const needsReset = (fromToken && fromToken.chainId !== viewingNetwork.chainId) || 
+                       (toToken && toToken.chainId !== viewingNetwork.chainId);
+
+    if (!fromToken || needsReset) {
+      const found = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
+                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+                    allAssets[0];
       if (found) setFromToken({ ...found });
     }
-    if (!toToken && allAssets.length > 0 && fromToken) {
-      const found = allAssets.find(a => a.symbol !== fromToken?.symbol && a.symbol !== 'WNC') || allAssets.find(a => a.symbol !== 'WNC') || allAssets[allAssets.length - 1];
+
+    if (!toToken || needsReset) {
+      const found = allAssets.find(a => a.symbol !== fromToken?.symbol && a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+                    allAssets[allAssets.length - 1];
       if (found) setToToken({ ...found });
     }
-  }, [allAssets, searchParams, fromToken, viewingNetwork.chainId]);
+  }, [allAssets, viewingNetwork.chainId]);
 
   useLayoutEffect(() => {
     if (quotePhase === 'IDLE' && !amount) {
@@ -169,7 +186,7 @@ function SwapClient() {
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         let batch: SwapQuote[] = [];
 
-        if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC') {
+        if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
                 const params = new URLSearchParams({
                   fromChain: fromToken.chainId.toString(),
@@ -244,7 +261,7 @@ function SwapClient() {
       }
     };
     runSequence();
-  }, [debouncedAmount, fromToken, toToken, wallets, allChainsMap, prices, fromTokenPrice, toTokenPrice]);
+  }, [debouncedAmount, fromToken, toToken, wallets, allChainsMap, prices, fromTokenPrice, toTokenPrice, infuraApiKey]);
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
@@ -352,7 +369,6 @@ function SwapClient() {
                 "bg-primary text-white border border-primary/50 pointer-events-auto"
               )}
             >
-              {/* Mirror Reflect Shine Effect */}
               <motion.div 
                 animate={{ x: ['-150%', '300%'] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }}
@@ -412,7 +428,7 @@ function SwapClient() {
                                 <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className={cn("flex items-center gap-1", isScanning && "text-blue-400")}><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
                               </div>
                             </div>
-                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
                           </motion.div>
                         );
                       })}
@@ -509,7 +525,7 @@ function SwapClient() {
               ) : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
-                    {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                    {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : '0.00'}
                   </motion.span>
                   <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}</span></div>
                 </>
