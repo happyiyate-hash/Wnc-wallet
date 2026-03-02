@@ -251,29 +251,48 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    if (!options?.forceUI) {
-        sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
+    // RULE: Animation only triggers on FIRST session login OR manual click OR snag detection.
+    const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
+    let isUIMode = options?.forceUI || !hasAuditedInThisTabSession;
+
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    const chains: { label: string; type: string }[] = [
+      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, 
+      { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, 
+      { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, 
+      { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, 
+      { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, 
+      { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, 
+      { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
+    ];
+
+    if (isUIMode) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
     }
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
-    
-    const chains: { label: string; type: string }[] = [
-      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
-    ];
-
-    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
     for (let i = 0; i < chains.length; i++) {
       const chainInfo = chains[i];
       const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
       let cloud = getCloudAddr(chainInfo.type);
-      
-      setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(600); 
+      const progress = (i / chains.length) * 100;
+
+      if (isUIMode) {
+        setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress }));
+        await wait(600); 
+      }
 
       if (local && local !== cloud) {
+        // SNAG DETECTED: Enable UI mode instantly to show the fix
+        if (!isUIMode) {
+          isUIMode = true;
+          setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress }));
+          await wait(600);
+        }
+        
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
         await wait(400);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
@@ -282,23 +301,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloud = local; 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: cloud }));
         await wait(400);
-      } else {
+      } else if (isUIMode) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
         await wait(300);
       }
     }
 
-    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
-    await wait(800);
+    // Final Vault Verification
+    if (isUIMode) {
+      setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
+      await wait(800);
+    }
+
     if (!profile.vault_phrase) {
+      // SNAG DETECTED: Missing Cloud Backup
+      if (!isUIMode) {
+        isUIMode = true;
+        setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: 'Missing', progress: 95 }));
+        await wait(800);
+      }
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
       await wait(1000);
     }
 
-    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    if (isUIMode) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+      sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
+      setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+    } else {
+      // Background scan complete without needing UI interruption
+      sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
+    }
+    
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
   }, [wallets, profile, user, syncAllAddresses, saveToVault]);
 
   // 3. PROTOCOL INTERFACES
@@ -424,7 +460,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
         const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, prices);
         setPrices(newPrices);
-        // Persist prices to cache
         localStorage.setItem(`market_prices_${user.id}`, JSON.stringify(newPrices));
         
         const priorityBalances = await fetchBalancesForChain(viewingNetwork);
@@ -457,68 +492,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const deleteWallet = useCallback(() => {
     if (!user) return;
-    // Remove mnemonic, balances, and keys from the local device
     localStorage.removeItem(`wallet_mnemonic_${user.id}`);
     localStorage.removeItem(`wallet_balances_${user.id}`);
     localStorage.removeItem(`market_prices_${user.id}`);
     localStorage.removeItem(`custom_tokens_${user.id}`);
     localStorage.removeItem(`hidden_tokens_${user.id}`);
     localStorage.removeItem(`account_number_${user.id}`);
-    
-    // Reset internal state
-    setWallets(null);
-    setBalances({});
-    setAccountNumber(null);
-    
-    toast({ title: "Local Cache Purged", description: "Node keys have been removed from this device. Cloud backup remains safe." });
+    setWallets(null); setBalances({}); setAccountNumber(null);
+    toast({ title: "Local Cache Purged" });
   }, [user, toast]);
 
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
     try {
-      // 1. Tell Supabase to wipe the encrypted columns in the 'profiles' table
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          vault_phrase: null,
-          iv: null,
-          vault_infura_key: null,
-          infura_iv: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw new Error("Failed to clear cloud vault: " + error.message);
-
-      // 2. ONLY after the cloud is wiped, clear the local device storage
+      const { error } = await supabase.from('profiles').update({ 
+          vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, updated_at: new Date().toISOString()
+      }).eq('id', user.id);
+      if (error) throw error;
       deleteWallet();
       await refreshProfile();
-      toast({ title: "Vault Destroyed", description: "Identity nodes have been permanently erased from the registry." });
-    } catch (e: any) {
-      console.error("Permanent Wipe Failure:", e.message);
-      toast({ variant: "destructive", title: "Destruction Error", description: e.message });
-      throw e;
-    }
+      toast({ title: "Vault Destroyed" });
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
   }, [user, deleteWallet, refreshProfile, toast]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    
     const wncPriceInfo = prices['internal:wnc'];
     const wncAsset: AssetRow = {
-        chainId: viewingNetwork.chainId, 
-        address: 'internal:wnc', 
-        symbol: 'WNC', 
-        name: 'Wevinacoin', 
-        balance: profile?.wnc_earnings?.toString() || '0', 
-        isNative: false, 
-        priceUsd: wncPriceInfo?.price || 0.0006,
-        fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
-        pctChange24h: wncPriceInfo?.change || 0, 
-        decimals: 0, 
-        iconUrl: null 
+        chainId: viewingNetwork.chainId, address: 'internal:wnc', symbol: 'WNC', name: 'Wevinacoin', 
+        balance: profile?.wnc_earnings?.toString() || '0', isNative: false, 
+        priceUsd: wncPriceInfo?.price || 0.0006, fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
+        pctChange24h: wncPriceInfo?.change || 0, decimals: 0, iconUrl: null 
     };
-
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
     const chainBalances = balances[viewingNetwork.chainId] || [];
     const onChainAssets = available.map((asset) => {
@@ -543,17 +548,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const cachedPrices = localStorage.getItem(`market_prices_${user.id}`);
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       const savedKey = localStorage.getItem('infura_api_key');
-      
       if (savedKey) setInfuraApiKey(savedKey);
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
       if (cachedPrices) try { setPrices(JSON.parse(cachedPrices)); } catch (e) {}
-      
       if (profile?.account_number) setAccountNumber(profile.account_number);
       else if (localAcc) setAccountNumber(localAcc);
-      if (savedMnemonic) {
-        const derived = await deriveAllWallets(savedMnemonic, profile);
-        setWallets(derived);
-      }
+      if (savedMnemonic) { const derived = await deriveAllWallets(savedMnemonic, profile); setWallets(derived); }
       const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
@@ -573,10 +573,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [areLogosLoading, chainsWithLogos, isInitialized]);
 
   useEffect(() => {
-    if (isInitialized && wallets && !initialFetchTriggeredRef.current) {
-      initialFetchTriggeredRef.current = true;
-      startEngine();
-    }
+    if (isInitialized && wallets && !initialFetchTriggeredRef.current) { initialFetchTriggeredRef.current = true; startEngine(); }
   }, [isInitialized, wallets, startEngine]);
 
   useEffect(() => {
@@ -589,9 +586,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
-    const hasAudited = sessionStorage.getItem(`identity_audit_${user.id}`);
-    if (justLoggedInRef.current) { justLoggedInRef.current = false; runCloudDiagnostic(); return; }
-    if (!hasAudited) runCloudDiagnostic();
+    // Perform audit handshake - function handles session logic internally
+    runCloudDiagnostic();
   }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic]);
 
   useEffect(() => {
