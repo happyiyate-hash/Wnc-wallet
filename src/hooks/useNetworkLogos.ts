@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { ChainConfig } from '@/lib/types';
 import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import evmNetworks from '@/lib/evmNetworks.json';
@@ -8,7 +8,7 @@ import evmNetworks from '@/lib/evmNetworks.json';
 const ALL_CHAINS_LIST: Omit<ChainConfig, 'iconUrl'>[] = Object.values(evmNetworks).map(n => ({ ...n, currencySymbol: n.symbol }));
 
 /**
- * Hook to resolve network logos using public CDNs.
+ * Hook to resolve network logos and provide a high-performance indexed registry.
  */
 export function useNetworkLogos() {
     const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
@@ -27,5 +27,13 @@ export function useNetworkLogos() {
         setAreLogosLoading(false);
     }, []);
 
-    return { chainsWithLogos, areLogosLoading };
+    // Create a high-performance ID-to-Chain mapping
+    const allChainsMap = useMemo(() => {
+        return chainsWithLogos.reduce((acc, chain) => {
+            acc[chain.chainId] = chain;
+            return acc;
+        }, {} as { [key: number]: ChainConfig });
+    }, [chainsWithLogos]);
+
+    return { chainsWithLogos, areLogosLoading, allChainsMap };
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
@@ -46,7 +45,7 @@ interface SwapQuote {
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap, prices, rates } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, rates } = useWallet();
   const { formatFiat } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -295,8 +294,8 @@ function SwapClient() {
     }
   };
 
-  const fromChainColor = fromToken ? (allChainsMap[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
-  const toChainColor = toToken ? (allChainsMap[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
+  const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
+  const toChainColor = toToken ? (allChainsMap?.[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
 
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
@@ -441,7 +440,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap[fromToken?.chainId || 1]?.name}</span></div>
+            <div className="text-right"><span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId || 1]?.name || 'Ethereum'}</span></div>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
@@ -484,7 +483,7 @@ function SwapClient() {
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
             <div className="flex flex-col items-end justify-center relative">
-              <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap[toToken?.chainId || 1]?.name}</span>
+              <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId || 1]?.name || 'Ethereum'}</span>
               {selectedQuote && (quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
                 <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="absolute -bottom-4 right-0 flex items-center gap-1.5 bg-blue-500/20 px-2 py-0.5 rounded-full border border-blue-500/40 mt-0.5 h-3 shadow-lg shadow-blue-500/10 whitespace-nowrap">
                   <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" /><span className="text-[6px] font-black text-blue-400 uppercase tracking-widest leading-none">{selectedQuote.provider} LOCK</span>
@@ -538,7 +537,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-from-${fromToken?.chainId}-${fromToken?.symbol}`} logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[fromToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId || 1]?.name || 'Ethereum'}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -564,7 +563,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic key={`path-to-${toToken?.chainId}-${toToken?.symbol}`} logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap[toToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId || 1]?.name || 'Ethereum'}</p></div>
                   </div>
                 </div>
               </motion.div>
