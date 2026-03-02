@@ -212,7 +212,7 @@ function SendClient() {
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
-    if (debouncedRecipient.length > 0 && addrType === 'invalid') return { title: "Unknown Format", message: "I could not find any account or blockchain related to this symbols" };
+    if (debouncedRecipient.length > 0 && addrType === 'invalid') return { title: "Unknown Format", message: "I could not find any account or blockchain related to this symbol." };
     return null;
   }, [addrType, isSelfTransfer, debouncedRecipient]);
 
@@ -224,14 +224,17 @@ function SendClient() {
     const activeType = activeNetwork.type || 'evm';
     if (activeType === 'aptos' || activeType === 'sui') return addrType !== 'move-chain';
     
-    const finalAddrType = (addrType === 'injective' || addrType === 'celestia') ? 'cosmos' : addrType;
-    if (activeType === 'cosmos' || activeType === 'celestia') {
-        return !['cosmos', 'osmosis', 'secret', 'injective', 'celestia'].includes(addrType);
+    // Group cosmos variants
+    const cosmosVariants = ['cosmos', 'osmosis', 'secret', 'injective', 'celestia'];
+    if (cosmosVariants.includes(activeType)) {
+        return !cosmosVariants.includes(addrType);
     }
+    
     if (activeType === 'polkadot' || activeType === 'kusama') {
         return !['polkadot', 'kusama'].includes(addrType);
     }
-    return activeType !== finalAddrType;
+    
+    return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
 
   useEffect(() => {
@@ -319,7 +322,7 @@ function SendClient() {
               setResolvedAddress(input);
           } else {
               setResolvedAddress('');
-              setResolutionError("I could not find any account or blockchain related to this symbols");
+              setResolutionError("I could not find any account or blockchain related to this symbol.");
           }
         }
       } catch (e: any) {
@@ -338,7 +341,6 @@ function SendClient() {
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
     
-    // 1. Detect Internal Structured QR: wnc://pay?account=ID&symbol=WNC
     if (decodedText.startsWith('wnc://')) {
       try {
         const url = new URL(decodedText);
@@ -359,7 +361,6 @@ function SendClient() {
       return;
     }
 
-    // 2. Standard Blockchain URI: ethereum:0x... or bitcoin:1...
     let cleanAddress = decodedText;
     if (decodedText.includes(':')) {
       const parts = decodedText.split(':');
@@ -403,33 +404,6 @@ function SendClient() {
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } 
-      else if (activeNetwork.type === 'hedera') {
-          throw new Error("Hedera Signing restricted to hardware modules.");
-      }
-      else if (activeNetwork.type === 'aptos' || activeNetwork.type === 'sui') {
-          throw new Error(`${activeNetwork.type.toUpperCase()} Signing restricted to hardware modules.`);
-      }
-      else if (activeNetwork.type === 'tezos') {
-          throw new Error("Tezos Signing restricted to hardware modules.");
-      }
-      else if (activeNetwork.type === 'tron') {
-          throw new Error("TRON Signing restricted to hardware modules.");
-      }
-      else if (activeNetwork.type === 'btc' || activeNetwork.type === 'ltc' || activeNetwork.type === 'doge') {
-          throw new Error(`${selectedToken.symbol} Signing restricted to hardware modules.`);
-      }
-      else if (activeNetwork.type === 'solana' || activeNetwork.type === 'cardano') {
-          throw new Error(`${selectedToken.symbol} Signing restricted to hardware modules.`);
-      }
-      else if (activeNetwork.type === 'cosmos' || activeNetwork.type === 'osmosis' || activeNetwork.type === 'secret' || activeNetwork.type === 'celestia') {
-          throw new Error("Interchain Signing restricted to hardware modules.");
-      }
-      else if (activeNetwork.type === 'polkadot' || activeNetwork.type === 'kusama') {
-          throw new Error("Substrate Signing restricted to hardware modules.");
-      }
-      else if (activeNetwork.type === 'algorand') {
-          throw new Error("Algorand Signing restricted to hardware modules.");
-      }
       else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
@@ -471,8 +445,7 @@ function SendClient() {
   const amountUsdValue = amountNum * (selectedToken?.priceUsd || 0);
   
   const hasInsufficientFunds = amountNum > balance;
-  const isBlockedByMultiSigner = currentWallet?.isMultiSigner && activeNetwork.type === 'tron';
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isBlockedByMultiSigner;
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -599,7 +572,7 @@ function SendClient() {
                     )}>
                         {isSelfTransfer ? 'NODE REFLECTION' : 
                          recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : 
-                         isNetworkMismatch ? 'ROUTE BLOCKED' : 
+                         isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : 
                          (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' :
                          resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}
                     </span>
@@ -618,18 +591,6 @@ function SendClient() {
                     </div>
                 </div>
 
-                {isBlockedByMultiSigner && (
-                    <div className="p-5 rounded-[2rem] bg-orange-500/10 border border-orange-500/20 flex gap-4 animate-in slide-in-from-top-2">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center shrink-0"><Lock className="w-6 h-6 text-orange-500" /></div>
-                        <div className="space-y-1.5 text-left">
-                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em]">Security Alert: Multi-Signer Active</p>
-                            <p className="text-xs font-bold text-white/80 leading-relaxed">
-                                This TRON node has <span className="text-orange-400">{currentWallet?.multiSignerKeys} signers</span> configured on-chain. Standard signing is restricted to prevent unauthorized partial authorizations.
-                            </p>
-                        </div>
-                    </div>
-                )}
-
                 {isSelfTransfer && (
                     <div className="p-5 rounded-[2rem] bg-primary/10 border border-primary/20 flex gap-4 animate-in slide-in-from-top-2">
                         <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0"><ShieldCheck className="w-6 h-6 text-primary" /></div>
@@ -640,7 +601,7 @@ function SendClient() {
                     </div>
                 )}
 
-                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && (
+                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && (
                     <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                         <AlertCircle className="w-4 h-4 text-red-500 opacity-60" />
                         <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest leading-relaxed">{resolutionError || validationError?.message}</p>
@@ -648,11 +609,11 @@ function SendClient() {
                 )}
 
                 {isNetworkMismatch && !isSelfTransfer && (
-                    <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2">
+                    <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4 animate-in slide-in-from-top-2 shadow-[0_0_40px_rgba(239,68,68,0.1)]">
                         <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div>
                         <div className="space-y-1.5">
-                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert</p>
-                            <p className="text-xs font-bold text-red-400 leading-relaxed">This address belongs to <span className="text-white font-black underline">{detectedMeta?.name}</span>, but you're currently sending from <span className="text-white font-black">{activeNetwork.name}</span>.</p>
+                            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p>
+                            <p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p>
                         </div>
                     </div>
                 )}
@@ -671,7 +632,7 @@ function SendClient() {
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all group", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4">
                     <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
-                    <span className="textxl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                   </div>
                   <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
                     {hasInsufficientFunds ? (
