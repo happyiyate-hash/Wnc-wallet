@@ -232,7 +232,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [activeSessionId, wallets, accountNumber, refreshProfile]);
 
-  // VAULT ENGINE: Encrypts and backs up the Master Phrase and Infrastructure Keys
+  // VAULT ENGINE: Encilled and backs up the Master Phrase and Infrastructure Keys
+  // STRICT ALIGNMENT: Uses AES-256-CBC via /api/wallet/encrypt-phrase as per Institutional Guide
   const saveToVault = useCallback(async () => {
     if (!activeSessionId || !supabase) return;
     try {
@@ -241,7 +242,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const mnemonic = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
       const localInfuraKey = localStorage.getItem('infura_api_key');
 
-      // Sync Mnemonic Node
+      // 1. Encrypt & Sync Mnemonic Node
       if (mnemonic) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
@@ -252,10 +253,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ phrase: mnemonic })
         });
         const data = await res.json();
-        if (res.ok) { updates.vault_phrase = data.encrypted; updates.iv = data.iv; }
+        if (res.ok) { 
+            updates.vault_phrase = data.encrypted; 
+            updates.iv = data.iv; 
+        }
       }
 
-      // Sync Infrastructure Node (Infura)
+      // 2. Encrypt & Sync Infrastructure Node (Infura)
       if (localInfuraKey) {
         const res = await fetch('/api/wallet/encrypt-phrase', {
           method: 'POST',
@@ -266,9 +270,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ phrase: localInfuraKey })
         });
         const data = await res.json();
-        if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
+        if (res.ok) { 
+            updates.vault_infura_key = data.encrypted; 
+            updates.infura_iv = data.iv; 
+        }
       }
 
+      // 3. Ensure Account ID is established
       if (!accountNumber) {
           const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
           updates.account_number = `835${randomSuffix}`;
@@ -276,10 +284,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(`account_number_${activeSessionId}`, updates.account_number);
       }
 
+      // 4. Atomic profiles update
       const { error } = await supabase!.from('profiles').update(updates).eq('id', activeSessionId);
       if (error) throw error;
       
-      // Perform final address sync to ensure everything is matched
+      // 5. Final Registry Handshake
       if (wallets) await syncAllAddresses();
       
       await refreshProfile();

@@ -6,7 +6,8 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE ENCRYPTION ENDPOINT
- * Encrypts a provided payload string.
+ * Encrypts a provided payload string using the Institutional AES-256-CBC Protocol.
+ * Standardized for both Mnemonics and API Keys.
  */
 
 export async function POST(req: NextRequest) {
@@ -35,13 +36,16 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
         }
 
-        const { phrase } = await req.json();
-        if (!phrase) {
+        const body = await req.json();
+        // Support both 'phrase' and 'text' keys for ecosystem interop
+        const payload = body.phrase || body.text;
+
+        if (!payload) {
             return NextResponse.json({ message: 'Plaintext data required.' }, { status: 400 });
         }
 
         // Canonical encryption for any sensitive string
-        const { encrypted, iv } = encryptPhrase(phrase);
+        const { encrypted, iv } = encryptPhrase(payload);
 
         return NextResponse.json({ encrypted, iv });
 

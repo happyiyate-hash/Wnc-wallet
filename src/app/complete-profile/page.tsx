@@ -16,7 +16,7 @@ import { motion } from 'framer-motion';
 /**
  * IDENTITY NODE PROVISIONING
  * Handles final profile setup including unique username selection and 
- * institutional image uplink (replaces manual URL input).
+ * institutional image uplink via the canonical 'photos' bucket registry.
  */
 export default function CompleteProfilePage() {
   const { user, profile, refreshProfile } = useUser();
@@ -76,19 +76,20 @@ export default function CompleteProfilePage() {
 
     setIsUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      // PATH STRUCTURE: profiles/{user_id}/{timestamp}-{filename}
+      const timestamp = Date.now();
+      const fileName = `${timestamp}-${file.name.replace(/\s+/g, '_')}`;
+      const filePath = `profiles/${user.id}/${fileName}`;
 
-      // Upload to 'avatars' bucket (Public Access assumed)
+      // Upload to 'photos' bucket as per Institutional Guide
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from('photos')
         .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
+        .from('photos')
         .getPublicUrl(filePath);
 
       setPhotoUrl(publicUrl);
@@ -98,7 +99,7 @@ export default function CompleteProfilePage() {
       toast({ 
         variant: "destructive", 
         title: "Uplink Failed", 
-        description: error.message || "Failed to upload image. Ensure the 'avatars' bucket is configured." 
+        description: error.message || "Failed to upload image. Ensure the 'photos' bucket is configured." 
       });
     } finally {
       setIsUploading(false);
