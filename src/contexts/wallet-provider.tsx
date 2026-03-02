@@ -128,7 +128,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const latestUserTokensRef = useRef(userAddedTokens);
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
@@ -139,8 +138,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    const currentCustom = latestUserTokensRef.current;
-    const custom = currentCustom.filter(t => t.chainId === chainId);
+    // ATOMIC FIX: Use the live state instead of refs to ensure instant reactivity in selectors
+    const custom = userAddedTokens.filter(t => t.chainId === chainId);
     
     return [...base, ...custom].reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
@@ -149,7 +148,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
         return acc;
     }, [] as AssetRow[]);
-  }, []);
+  }, [userAddedTokens]);
 
   const addUserToken = useCallback((token: AssetRow) => {
     setUserAddedTokens(prev => {
@@ -251,7 +250,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    // RULE: Animation only triggers on FIRST session login OR manual click OR snag detection.
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     let isUIMode = options?.forceUI || !hasAuditedInThisTabSession;
 
@@ -286,7 +284,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       if (local && local !== cloud) {
-        // SNAG DETECTED: Enable UI mode instantly to show the fix
         if (!isUIMode) {
           isUIMode = true;
           setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress }));
@@ -307,14 +304,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Final Vault Verification
     if (isUIMode) {
       setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
       await wait(800);
     }
 
     if (!profile.vault_phrase) {
-      // SNAG DETECTED: Missing Cloud Backup
       if (!isUIMode) {
         isUIMode = true;
         setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: 'Missing', progress: 95 }));
@@ -330,7 +325,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
       setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
     } else {
-      // Background scan complete without needing UI interruption
       sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     }
     
@@ -535,8 +529,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const pctChange24h = priceInfo?.change || 0;
         return { ...asset, balance, priceUsd, pctChange24h, fiatValueUsd: parseFloat(balance) * priceUsd } as AssetRow;
     });
+    // ATOMIC FIX: Ensure the hiddenTokenKeys state change triggers a recalculation
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, userAddedTokens]);
 
   useEffect(() => {
     const initLocalSession = async () => {
@@ -586,7 +581,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
-    // Perform audit handshake - function handles session logic internally
     runCloudDiagnostic();
   }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic]);
 

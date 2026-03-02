@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -18,7 +19,7 @@ interface TokenManagerProps {
 }
 
 export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps) {
-  const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens } = useWallet();
+  const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens, refresh } = useWallet();
   const [searchTerm, setSearchTerm] = useState('');
   const [dbTokens, setDbTokens] = useState<AssetRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,7 +88,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     (t.address && t.address.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const handleToggle = (token: AssetRow, checked: boolean) => {
+  const handleToggle = async (token: AssetRow, checked: boolean) => {
     const key = `${viewingNetwork.chainId}:${token.symbol}`;
     const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
 
@@ -99,6 +100,8 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
         if (hiddenTokenKeys.has(key)) {
             toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
         }
+        // Trigger a background refresh to fetch the balance for the newly visible token
+        refresh();
     } else {
         // DEACTIVATE: Move to hidden state
         if (!hiddenTokenKeys.has(key)) {
@@ -150,8 +153,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                         const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
                         const isHidden = hiddenTokenKeys.has(key);
                         
-                        // LOGIC FIX: Token is ONLY 'On' if it's Native or explicitly Added AND not hidden.
-                        // This prevents discovered DB tokens from appearing 'On' before activation.
+                        // LOGIC FIX: Token is 'On' if it's Native or explicitly Added AND not hidden.
                         const isOn = (token.isNative || isAdded) && !isHidden;
 
                         return (
