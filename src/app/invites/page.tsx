@@ -13,24 +13,33 @@ import {
   Share2, 
   Clock, 
   Fingerprint,
-  Cpu
+  Cpu,
+  Loader2,
+  User as UserIcon,
+  ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase/client';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
  * INSTITUTIONAL GROWTH NODE (AFFILIATE)
- * A cinematic card experience visualizing the 400 WNC Referral Protocol.
+ * Visualizes the 400 WNC Referral Protocol with real-time registry tracking.
  */
 export default function InvitesPage() {
     const router = useRouter();
-    const { profile } = useUser();
+    const { user } = useUser();
     const { accountNumber } = useWallet();
     const [isCopied, copy] = useCopyToClipboard();
     const [currentStep, setCurrentStep] = useState(0);
+
+    // Referral Registry State
+    const [referrals, setReferrals] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const referralCode = useMemo(() => {
         if (!accountNumber) return null;
@@ -39,8 +48,47 @@ export default function InvitesPage() {
 
     const shareUrl = useMemo(() => {
         if (typeof window === 'undefined' || !referralCode) return '';
-        return `${window.location.origin}/signup?ref=${referralCode}`;
+        return `${window.location.origin}/auth/signup?ref=${referralCode}`;
     }, [referralCode]);
+
+    // Fetch Referrals Protocol
+    useEffect(() => {
+        if (!user?.id || !supabase) return;
+
+        async function fetchReferrals() {
+            setIsLoading(true);
+            try {
+                const { data, error } = await supabase!
+                    .from('referrals')
+                    .select(`
+                        *,
+                        profile:referred_id (
+                            name,
+                            photo_url,
+                            account_number
+                        )
+                    `)
+                    .eq('referrer_id', user!.id)
+                    .order('created_at', { ascending: false });
+
+                if (!error && data) {
+                    setReferrals(data);
+                }
+            } catch (e) {
+                console.error("Referral fetch error:", e);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        fetchReferrals();
+    }, [user?.id]);
+
+    // Derived Statistics
+    const activeNodesCount = referrals.filter(r => r.status === 'pending').length;
+    const totalRewards = referrals
+        .filter(r => r.status === 'completed')
+        .reduce((sum, r) => sum + (r.reward_amount || 0), 0);
 
     // CINEMATIC AUTOMATION: Rotate through scenes
     useEffect(() => {
@@ -101,12 +149,11 @@ export default function InvitesPage() {
                 <div className="w-10" />
             </header>
 
-            <main className="flex-1 p-6 flex flex-col gap-8 max-w-lg mx-auto w-full pb-32">
+            <main className="flex-1 p-6 flex flex-col gap-8 max-w-lg mx-auto w-full pb-32 overflow-y-auto thin-scrollbar">
                 {/* CINEMATIC MOVIE CARD */}
-                <section className="relative h-[320px] w-full rounded-[3rem] bg-[#0a0a0c] border border-white/10 overflow-hidden shadow-2xl">
+                <section className="relative h-[280px] w-full shrink-0 rounded-[3rem] bg-[#0a0a0c] border border-white/10 overflow-hidden shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black/80 z-0" />
                     
-                    {/* Animated Scene Content */}
                     <div className="relative z-10 h-full flex flex-col items-center justify-center p-8 text-center">
                         <AnimatePresence mode="wait">
                             <motion.div 
@@ -135,7 +182,6 @@ export default function InvitesPage() {
                             </motion.div>
                         </AnimatePresence>
 
-                        {/* Progress Pips */}
                         <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2">
                             {scenes.map((_, i) => (
                                 <div 
@@ -148,27 +194,23 @@ export default function InvitesPage() {
                             ))}
                         </div>
                     </div>
-
-                    {/* Background Animation Nodes */}
-                    <div className="absolute inset-0 pointer-events-none opacity-30">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/20 blur-[100px] rounded-full animate-pulse" />
-                    </div>
                 </section>
 
                 {/* EARNINGS SUMMARY */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 shrink-0">
                     <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1">
                         <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Active Nodes</p>
-                        <p className="text-2xl font-black text-white">0</p>
+                        <p className="text-2xl font-black text-white">{activeNodesCount}</p>
                     </div>
-                    <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1">
+                    <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 blur-2xl -mr-8 -mt-8" />
                         <p className="text-[9px] font-black text-primary uppercase tracking-widest">WNC Rewards</p>
-                        <p className="text-2xl font-black text-white">0.00</p>
+                        <p className="text-2xl font-black text-white tabular-nums">{totalRewards.toLocaleString()}</p>
                     </div>
                 </div>
 
                 {/* SHARE CONTROL NODE */}
-                <section className="space-y-4">
+                <section className="space-y-4 shrink-0">
                     <div className="flex justify-between items-center px-2">
                         <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Node ID & Invitation</p>
                         <div className="flex items-center gap-1.5 text-[8px] font-black text-green-500 uppercase">
@@ -195,19 +237,89 @@ export default function InvitesPage() {
                             </div>
                         </div>
 
-                        <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-3">
-                            <Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
-                                Invite members to the <span className="text-white font-bold">Wevina Terminal</span>. For every member active for 48 cycles, you receive a settlement of <span className="text-primary font-bold">400 WNC</span>.
-                            </p>
-                        </div>
-
                         <Button 
                             onClick={() => navigator.share({ title: 'Join Wevina Registry', url: shareUrl })}
                             className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
                         >
                             Broadcast Invitation
                         </Button>
+                    </div>
+                </section>
+
+                {/* REFERRAL REGISTRY LIST */}
+                <section className="space-y-4">
+                    <div className="flex justify-between items-center px-2">
+                        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p>
+                        <span className="text-[8px] font-black text-white/20 uppercase">Registry v3.1</span>
+                    </div>
+
+                    <div className="space-y-2">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center py-10 gap-3 opacity-20">
+                                <Loader2 className="w-6 h-6 animate-spin" />
+                                <p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Nodes...</p>
+                            </div>
+                        ) : referrals.length > 0 ? (
+                            referrals.map((ref, i) => (
+                                <motion.div 
+                                    key={ref.id}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                    className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="relative">
+                                            <Avatar className="w-12 h-12 rounded-2xl border border-white/10">
+                                                <AvatarImage src={ref.profile?.photo_url} />
+                                                <AvatarFallback className="bg-zinc-900 text-primary">
+                                                    <UserIcon className="w-5 h-5" />
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            {ref.status === 'completed' && (
+                                                <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5 border-2 border-[#050505] shadow-lg">
+                                                    <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="font-black text-sm text-white tracking-tight">@{ref.profile?.name || 'Anonymous Node'}</p>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="text-[8px] font-mono text-muted-foreground uppercase opacity-60">ID: {ref.profile?.account_number?.slice(-6) || '---'}</span>
+                                                <div className="w-1 h-1 rounded-full bg-white/10" />
+                                                <span className="text-[8px] font-black uppercase text-white/30">
+                                                    {new Date(ref.created_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col items-end gap-1">
+                                        <div className={cn(
+                                            "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
+                                            ref.status === 'completed' ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500"
+                                        )}>
+                                            {ref.status}
+                                        </div>
+                                        <p className="text-[10px] font-black text-white tabular-nums">
+                                            {ref.status === 'completed' ? `+${ref.reward_amount} WNC` : 'Pending'}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            ))
+                        ) : (
+                            <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
+                                <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center">
+                                    <Users className="w-8 h-8 text-white" />
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs font-black uppercase tracking-widest">No nodes detected</p>
+                                    <p className="text-[9px] font-medium leading-relaxed max-w-[180px]">
+                                        Broadcast your invitation to expand your institutional registry.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </section>
 
