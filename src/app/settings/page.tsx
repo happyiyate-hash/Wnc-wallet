@@ -32,19 +32,13 @@ import {
   KeyRound, 
   LogOut, 
   Globe, 
-  UserCircle,
   ChevronRight,
   ShieldCheck,
   Settings2,
-  Eye,
   Lock,
   User,
-  Search,
-  Check,
   Loader2,
   ShieldX,
-  AlertTriangle,
-  Fingerprint,
   Camera,
   CheckCircle2
 } from "lucide-react";
@@ -55,12 +49,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import AccountSwitcherSheet from "@/components/wallet/account-switcher-sheet";
-import { motion } from 'framer-motion';
 
 export default function SettingsPage() {
     const { deleteWallet, logout } = useWallet();
-    const { user, profile, activeSessionId, refreshProfile } = useUser();
+    const { user, profile, refreshProfile } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
     const router = useRouter();
@@ -78,7 +70,6 @@ export default function SettingsPage() {
     const [showPhrase, setShowPhrase] = useState(false);
     const [mnemonic, setMnemonic] = useState<string | null>(null);
     const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState(false);
-    const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
     const [currencySearch, setCurrencySearch] = useState('');
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy' | 'set-password'>('idle');
@@ -98,11 +89,11 @@ export default function SettingsPage() {
     }, [profile]);
 
     useEffect(() => {
-        if (activeSessionId) {
-            const saved = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
+        if (user) {
+            const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
             setMnemonic(saved);
         }
-    }, [activeSessionId]);
+    }, [user]);
 
     const checkUsername = async (val: string) => {
         if (!val || val === profile?.name) {
@@ -129,10 +120,6 @@ export default function SettingsPage() {
         }
     };
 
-    /**
-     * STEP 1: UPLOAD TO STORAGE
-     * Adheres to SmarterSeller canonical bucket and path structure.
-     */
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !user || !supabase) return;
@@ -165,15 +152,10 @@ export default function SettingsPage() {
         }
     };
 
-    /**
-     * STEP 2 & 3: AUTHORIZE IDENTITY
-     * Implements Auth Metadata sync and Public Table upsert for ecosystem-wide recognition.
-     */
     const handleSaveProfile = async () => {
         if (!user || !isAvailable || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // STEP 2: UPDATE AUTH METADATA (For instant UI updates in all linked apps)
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -182,7 +164,6 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
-            // STEP 3: UPSERT TO PUBLIC TABLE (Permanent ecosystem persistence)
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -242,12 +223,12 @@ export default function SettingsPage() {
     };
 
     const handlePermanentDestroy = async () => {
-        if (confirmInput !== 'DELETE' || !activeSessionId || !supabase) return;
+        if (confirmInput !== 'DELETE' || !user || !supabase) return;
         setIsDestroying(true);
         try {
             await supabase.from('profiles').update({
                 vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, updated_at: new Date().toISOString()
-            }).eq('id', activeSessionId);
+            }).eq('id', user.id);
             deleteWallet();
             await refreshProfile();
             toast({ title: "Vault Destroyed" });
@@ -315,7 +296,6 @@ export default function SettingsPage() {
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
-                    {/* IDENTITY NODE CONFIGURATION */}
                     <section className="space-y-4">
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Identity Node configuration</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-6 space-y-8 shadow-2xl">
@@ -383,7 +363,6 @@ export default function SettingsPage() {
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Regional & Ecosystem</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
                             <SettingItem icon={Globe} label="Display Currency" value={`${selectedCurrency} (${currentSymbol})`} iconBg="bg-blue-500/10" iconColor="text-blue-400" onClick={() => setIsCurrencySheetOpen(true)} />
-                            <SettingItem icon={UserCircle} label="Switch Account" value="Multi-Session Vault" iconBg="bg-emerald-500/10" iconColor="text-emerald-400" onClick={() => setIsSwitcherOpen(true)} />
                         </div>
                     </section>
 
@@ -490,8 +469,6 @@ export default function SettingsPage() {
                     </ScrollArea>
                 </SheetContent>
             </Sheet>
-
-            <AccountSwitcherSheet isOpen={isSwitcherOpen} onOpenChange={setIsSwitcherOpen} />
         </div>
     );
 }

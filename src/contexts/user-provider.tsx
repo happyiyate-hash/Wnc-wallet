@@ -4,17 +4,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
-import type { UserProfile, LocalSession } from '@/lib/types';
+import type { UserProfile } from '@/lib/types';
 
 interface UserContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  sessions: LocalSession[];
-  activeSessionId: string | null;
-  switchSession: (sessionId: string) => Promise<void>;
-  addSession: (session: LocalSession) => void;
-  removeSession: (sessionId: string) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -25,9 +20,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  const [sessions, setSessions] = useState<LocalSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
     if (!supabase) return null;
@@ -79,25 +71,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    const savedSessions = localStorage.getItem('wevina_sessions');
-    const savedActiveId = localStorage.getItem('wevina_active_session_id');
-    
-    if (savedSessions) {
-        try { setSessions(JSON.parse(savedSessions)); } catch (e) {}
-    }
-    
-    if (savedActiveId) {
-        setActiveSessionId(savedActiveId);
-        // INSTANT LOAD: Use stale cache while revalidation happens in background
-        const cacheKey = `profile_cache_${savedActiveId}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try { setProfile(JSON.parse(cached)); } catch (e) {}
-        }
-    }
-  }, []);
-
-  useEffect(() => {
     if (!supabase) {
       setLoading(false);
       return;
@@ -109,9 +82,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         if (currentUser) {
+            // INSTANT LOAD: Use stale cache while revalidation happens in background
+            const cacheKey = `profile_cache_${currentUser.id}`;
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try { setProfile(JSON.parse(cached)); } catch (e) {}
+            }
             await fetchProfile(currentUser.id);
-            setActiveSessionId(currentUser.id);
-            localStorage.setItem('wevina_active_session_id', currentUser.id);
         }
       } catch (e) {
       } finally {
@@ -125,27 +102,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
-        const p = await fetchProfile(currentUser.id);
-        if (p) {
-            setSessions(prev => {
-                const existing = prev.find(s => s.id === currentUser.id);
-                if (existing) return prev;
-                const newSessions = [...prev, {
-                    id: currentUser.id,
-                    profile: p,
-                    encryptedMnemonic: null,
-                    encryptedApiKey: null,
-                    lastActive: Date.now()
-                }];
-                localStorage.setItem('wevina_sessions', JSON.stringify(newSessions));
-                return newSessions;
-            });
-        }
-        setActiveSessionId(currentUser.id);
-        localStorage.setItem('wevina_active_session_id', currentUser.id);
+        await fetchProfile(currentUser.id);
       } else if (event === 'SIGNED_OUT') {
         setProfile(null);
-        setActiveSessionId(null);
         setUser(null);
       }
       setLoading(false);
@@ -156,52 +115,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const addSession = useCallback((session: LocalSession) => {
-    setSessions(prev => {
-        const filtered = prev.filter(s => s.id !== session.id);
-        const next = [...filtered, session];
-        localStorage.setItem('wevina_sessions', JSON.stringify(next));
-        return next;
-    });
-  }, []);
-
-  const removeSession = useCallback((sessionId: string) => {
-    setSessions(prev => {
-        const next = prev.filter(s => s.id !== sessionId);
-        localStorage.setItem('wevina_sessions', JSON.stringify(next));
-        return next;
-    });
-    if (activeSessionId === sessionId) {
-        setActiveSessionId(null);
-        localStorage.removeItem('wevina_active_session_id');
-        localStorage.removeItem(`profile_cache_${sessionId}`);
-    }
-  }, [activeSessionId]);
-
-  const switchSession = async (sessionId: string) => {
-    const target = sessions.find(s => s.id === sessionId);
-    if (!target) return;
-
-    setLoading(true);
-    try {
-        setActiveSessionId(sessionId);
-        localStorage.setItem('wevina_active_session_id', sessionId);
-        // Load target cache instantly
-        const cached = localStorage.getItem(`profile_cache_${sessionId}`);
-        if (cached) setProfile(JSON.parse(cached));
-        await fetchProfile(sessionId);
-    } finally {
-        setLoading(false);
-    }
-  };
-
   const signOut = async () => {
     if (supabase) {
         await supabase.auth.signOut();
         setUser(null);
         setProfile(null);
-        setActiveSessionId(null);
-        localStorage.removeItem('wevina_active_session_id');
     }
   };
 
@@ -214,11 +132,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         user, 
         profile, 
         loading, 
-        sessions, 
-        activeSessionId, 
-        switchSession, 
-        addSession, 
-        removeSession, 
         signOut, 
         refreshProfile 
     }}>
