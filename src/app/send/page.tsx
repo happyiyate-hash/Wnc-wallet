@@ -217,7 +217,7 @@ function SendClient() {
   }, [addrType, isSelfTransfer, debouncedRecipient]);
 
   const isNetworkMismatch = useMemo(() => {
-    if (isSelfTransfer || selectedToken?.symbol === 'WNC') return false;
+    if (isSelfTransfer || selectedToken?.symbol === 'WNC' || !debouncedRecipient) return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     if (addrType === 'account-id') return false; 
     
@@ -235,7 +235,7 @@ function SendClient() {
     }
     
     return activeType !== addrType;
-  }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
+  }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
 
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
@@ -245,23 +245,25 @@ function SendClient() {
       const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
-      if (!input || input.length < 3 || isSelfTransfer) {
+      // INSTANT STOP: If format is known-wrong or network is mismatched, clear resolving immediately
+      if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
         if (currentId === resolutionCounter.current) {
-          setResolvedAddress(isRawChainAddress ? input : '');
+          setResolvedAddress((!isNetworkMismatch && !validationError && isRawChainAddress) ? input : '');
           setRecipientProfile(null);
-          setIsResolving(false);
+          setIsResolving(false); // STOP SPINNER
           setResolutionError(null);
         }
         return;
       }
 
       setRecipientProfile(null);
-      setIsResolving(true);
+      setIsResolving(true); // START SPINNER
       setResolutionError(null);
       
       try {
         if (!supabase) throw new Error("No database connection");
 
+        // Identity Lookup Protocol
         const { data: userRecord } = await supabase
           .from('profiles')
           .select('id, name, photo_url, account_number')
@@ -273,6 +275,7 @@ function SendClient() {
         let finalProfile = userRecord;
         let targetAddr = isRawChainAddress ? input : '';
 
+        // Address to Profile Mapping
         if (!finalProfile && isRawChainAddress) {
             const { data: walletMatch } = await supabase
                 .from('wallets')
@@ -331,12 +334,12 @@ function SendClient() {
           setResolutionError("Handshake Error: Identity lookup failed.");
         }
       } finally {
-        if (currentId === resolutionCounter.current) setIsResolving(false);
+        if (currentId === resolutionCounter.current) setIsResolving(false); // ENSURE SPINNER STOPS
       }
     }
     
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError]);
 
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
@@ -523,7 +526,7 @@ function SendClient() {
                             (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed shadow-[0_0_30px_rgba(239,68,68,0.15)]" : 
                             "border-primary/50 bg-primary/5 shadow-[0_0_30px_rgba(139,92,246,0.15)]"
                         )}>
-                            {isResolving && !isNetworkMismatch && !validationError ? (
+                            {isResolving ? (
                                 <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" />
                             ) : isSelfTransfer ? (
                                 <Avatar className="w-full h-full rounded-none">
@@ -535,12 +538,11 @@ function SendClient() {
                                     <AvatarImage src={recipientProfile.avatar} className="object-cover" alt="Recipient" />
                                     <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback>
                                 </Avatar>
-                             ) : (isNetworkMismatch || (resolvedAddress && validationError)) ? (
+                             ) : (isNetworkMismatch || validationError) ? (
                                 <div className="relative animate-in zoom-in duration-300">
                                     <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 flex items-center justify-center border border-red-500/20">
                                         <TokenLogoDynamic logoUrl={null} alt={detectedMeta?.name || ''} size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} />
                                     </div>
-                                    {isResolving && <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-[2rem]"><Loader2 className="w-6 h-6 animate-spin text-red-500" /></div>}
                                 </div>
                              ) : resolvedAddress ? (
                                 <div className="relative animate-in zoom-in duration-300">
