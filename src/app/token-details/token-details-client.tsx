@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from "react";
@@ -49,7 +50,7 @@ const ActionButton = ({
 );
 
 const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => void, onInfo: () => void, token: AssetRow, network: any }) => (
-    <div className="flex items-center justify-between p-4 border-b border-white/5 bg-background/80 backdrop-blur-xl">
+    <div className="flex items-center justify-between p-4 border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
         <Button onClick={onBack} variant="ghost" size="icon" className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
         </Button>
@@ -63,12 +64,12 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
                     name={token.name}
                     symbol={token.symbol}
                 />
-                <span className="font-semibold">{token.symbol}</span>
+                <span className="font-semibold text-white">{token.symbol}</span>
             </div>
             <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">{token.symbol === 'WNC' ? 'Internal Cloud Node' : network?.name}</span>
         </div>
         <Button onClick={onInfo} variant="ghost" size="icon" className="rounded-xl">
-            <Info className="w-5 h-5" />
+            <Info className="w-5 h-5 text-muted-foreground" />
         </Button>
     </div>
 );
@@ -94,7 +95,7 @@ export default function TokenDetailsClientPage() {
 
   if (!token) {
      return (
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col h-screen bg-transparent">
             <div className="p-4"><Skeleton className="w-8 h-8 rounded-full" /></div>
             <div className="flex-1 flex items-center justify-center">
                 <p>Token not found.</p>
@@ -114,7 +115,7 @@ export default function TokenDetailsClientPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-transparent">
       <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={viewingNetwork} />
       <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-8 pb-4">
@@ -163,7 +164,7 @@ export default function TokenDetailsClientPage() {
         </div>
         
         <div className="px-6 pb-12 space-y-8">
-            <div className="flex items-center justify-between w-full p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 relative overflow-hidden group">
+            <div className="flex items-center justify-between w-full p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 relative overflow-hidden group shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-center gap-4 relative z-10">
                     <TokenLogoDynamic 

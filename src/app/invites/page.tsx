@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -134,10 +135,10 @@ export default function InvitesPage() {
     ];
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#050505] text-foreground overflow-hidden">
-            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="flex flex-col min-h-screen bg-transparent text-foreground overflow-hidden">
+            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
-                    <ArrowLeft className="w-5 h-5" />
+                    <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                 </Button>
                 <div className="flex flex-col items-center text-center">
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Affiliate Hub</h1>
@@ -151,7 +152,7 @@ export default function InvitesPage() {
 
             <main className="flex-1 p-6 flex flex-col gap-8 max-w-lg mx-auto w-full pb-32 overflow-y-auto thin-scrollbar">
                 {/* CINEMATIC MOVIE CARD */}
-                <section className="relative h-[280px] w-full shrink-0 rounded-[3rem] bg-[#0a0a0c] border border-white/10 overflow-hidden shadow-2xl">
+                <section className="relative h-[280px] w-full shrink-0 rounded-[3rem] bg-black/40 backdrop-blur-xl border border-white/10 overflow-hidden shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black/80 z-0" />
                     
                     <div className="relative z-10 h-full flex flex-col items-center justify-center p-8 text-center">
@@ -198,11 +199,11 @@ export default function InvitesPage() {
 
                 {/* EARNINGS SUMMARY */}
                 <div className="grid grid-cols-2 gap-3 shrink-0">
-                    <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1">
+                    <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1 shadow-2xl">
                         <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Active Nodes</p>
                         <p className="text-2xl font-black text-white">{activeNodesCount}</p>
                     </div>
-                    <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden">
+                    <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 blur-2xl -mr-8 -mt-8" />
                         <p className="text-[9px] font-black text-primary uppercase tracking-widest">WNC Rewards</p>
                         <p className="text-2xl font-black text-white tabular-nums">{totalRewards.toLocaleString()}</p>
@@ -218,7 +219,7 @@ export default function InvitesPage() {
                         </div>
                     </div>
 
-                    <div className="p-6 rounded-[2.5rem] bg-zinc-950 border border-white/10 space-y-6 shadow-2xl relative overflow-hidden">
+                    <div className="p-6 rounded-[2.5rem] bg-black/40 backdrop-blur-xl border border-white/10 space-y-6 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl -mr-16 -mt-16" />
                         
                         <div className="space-y-2">
@@ -266,7 +267,7 @@ export default function InvitesPage() {
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.05 }}
-                                    className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all"
+                                    className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all shadow-2xl"
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="relative">
@@ -313,7 +314,7 @@ export default function InvitesPage() {
                                     <Users className="w-8 h-8 text-white" />
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-xs font-black uppercase tracking-widest">No nodes detected</p>
+                                    <p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p>
                                     <p className="text-[9px] font-medium leading-relaxed max-w-[180px]">
                                         Broadcast your invitation to expand your institutional registry.
                                     </p>

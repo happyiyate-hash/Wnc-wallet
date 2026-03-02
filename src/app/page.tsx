@@ -67,7 +67,7 @@ function HomeContent() {
 
   if (isAppLoading) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#050505] text-white">
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-transparent text-white">
         <div className="relative">
           <div className="h-24 w-24 rounded-[2rem] border-t-2 border-primary animate-spin" />
           <div className="absolute inset-0 flex items-center justify-center">
@@ -92,7 +92,7 @@ function HomeContent() {
   }
 
   return (
-    <div className="flex-1 bg-background pb-32 relative">
+    <div className="flex-1 bg-transparent pb-32 relative">
       <WalletHeader isCollapsed={isHeaderCollapsed} />
       <main className={cn(
         "flex flex-col items-center transition-all duration-700 ease-out",
@@ -113,7 +113,7 @@ function HomeContent() {
 export default function Home() {
   return (
     <Suspense fallback={
-      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+      <div className="flex h-screen w-full items-center justify-center bg-transparent">
         <div className="h-12 w-12 rounded-2xl border-t-2 border-primary animate-spin" />
       </div>
     }>

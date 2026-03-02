@@ -16,7 +16,7 @@ import Link from 'next/link';
 /**
  * TERMINAL LOGIN NODE
  * Strictly handles institutional entry. 
- * Only shows verification if explicitly requested for unconfirmed accounts.
+ * Updated to bg-transparent to reveal institutional watermark.
  */
 export default function LoginPage() {
   const router = useRouter();
@@ -80,7 +80,7 @@ export default function LoginPage() {
 
       toast({ title: "Identity Verified!", description: "Initializing profile node..." });
       setShowVerifyPanel(false);
-      router.replace('/complete-profile');
+      router.replace('/');
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -127,7 +127,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 text-foreground relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-transparent p-6 text-foreground relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 
@@ -136,7 +136,7 @@ export default function LoginPage() {
         className="w-full max-w-sm space-y-8 relative z-10"
       >
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary shadow-2xl">
             <ShieldCheck className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight uppercase">Terminal Login</h1>
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
         {unconfirmedError && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-            <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 rounded-2xl">
+            <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 rounded-2xl shadow-2xl">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle className="font-black uppercase tracking-widest text-[10px]">Verification Required</AlertTitle>
               <AlertDescription className="text-xs font-medium mt-1">
@@ -173,7 +173,7 @@ export default function LoginPage() {
                   placeholder="name@institution.com" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
+                  className="h-14 bg-black/40 backdrop-blur-xl border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
                   required
                 />
               </div>
@@ -188,7 +188,7 @@ export default function LoginPage() {
                   placeholder="••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
+                  className="h-14 bg-black/40 backdrop-blur-xl border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
                   required
                 />
               </div>
@@ -207,13 +207,13 @@ export default function LoginPage() {
         <div className="relative py-4">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-            <span className="bg-[#050505] px-4 text-zinc-600">OR AUTHORITY</span>
+            <span className="bg-transparent px-4 text-zinc-600">OR AUTHORITY</span>
           </div>
         </div>
 
         <Button 
           variant="outline" 
-          className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-white/5 border-white/10 hover:bg-white/10"
+          className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-black/40 border-white/10 hover:bg-black/60 shadow-2xl"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading}
         >
@@ -259,7 +259,7 @@ export default function LoginPage() {
               <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
               <div className="max-w-sm mx-auto space-y-8">
                 <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary shadow-2xl">
                     <Mail className="w-8 h-8" />
                   </div>
                   <h2 className="text-2xl font-black text-white uppercase tracking-tight">Verify Identity</h2>
@@ -277,7 +277,7 @@ export default function LoginPage() {
                       maxLength={6}
                       value={verificationCode}
                       onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white"
+                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white shadow-2xl"
                       required
                     />
                     <div className="flex justify-center">

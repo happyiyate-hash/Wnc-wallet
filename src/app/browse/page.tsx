@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -36,10 +37,10 @@ export default function BrowsePage() {
     ];
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#050505] text-foreground overflow-hidden">
-            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="flex flex-col min-h-screen bg-transparent text-foreground overflow-hidden">
+            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
-                    <ArrowLeft className="w-5 h-5" />
+                    <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                 </Button>
                 <div className="flex flex-col items-center text-center">
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Ecosystem Browser</h1>
@@ -51,11 +52,11 @@ export default function BrowsePage() {
                 <div className="w-10" />
             </header>
 
-            <main className="flex-1 p-6 space-y-8 max-w-lg mx-auto w-full pb-32">
+            <main className="flex-1 p-6 space-y-8 max-w-lg mx-auto w-full pb-32 overflow-y-auto thin-scrollbar">
                 {/* SEARCH NODE */}
                 <div className="relative group">
                     <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-purple-500/20 rounded-[2rem] blur opacity-25 group-focus-within:opacity-100 transition-opacity" />
-                    <div className="relative bg-zinc-950 border border-white/10 rounded-[2rem] p-2">
+                    <div className="relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2rem] p-2">
                         <div className="flex items-center gap-3 px-4">
                             <Search className="w-5 h-5 text-zinc-600" />
                             <Input 
@@ -71,7 +72,7 @@ export default function BrowsePage() {
                 {/* FEATURED DISCOVERY */}
                 <section className="space-y-4">
                     <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] px-2">Institutional Spotlight</p>
-                    <div className="relative h-48 rounded-[2.5rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-primary/20 overflow-hidden group">
+                    <div className="relative h-48 rounded-[2.5rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-primary/20 overflow-hidden group shadow-2xl">
                         <div className="absolute inset-0 bg-[url('https://picsum.photos/seed/browse/800/400')] bg-cover bg-center opacity-20 grayscale group-hover:grayscale-0 transition-all duration-700 scale-110 group-hover:scale-100" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
                         
@@ -93,7 +94,7 @@ export default function BrowsePage() {
                         {categories.map((cat, i) => (
                             <button 
                                 key={i}
-                                className="p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-all group text-left space-y-3"
+                                className="p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-all group text-left space-y-3 shadow-2xl"
                             >
                                 <div className={cn("w-10 h-10 rounded-xl bg-black/40 border border-white/5 flex items-center justify-center group-hover:scale-110 transition-transform", cat.color)}>
                                     <cat.icon className="w-5 h-5" />
@@ -113,7 +114,7 @@ export default function BrowsePage() {
                     
                     <div className="space-y-2">
                         {[1, 2, 3].map((_, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 group opacity-40 grayscale">
+                            <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 group opacity-40 grayscale shadow-2xl">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/5" />
                                     <div className="space-y-1">

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -66,33 +67,33 @@ export default function BuyPage() {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-[#050505] text-foreground">
-            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="flex flex-col h-screen bg-transparent text-foreground">
+            <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50 px-6">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
-                    <ArrowLeft className="w-5 h-5" />
+                    <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                 </Button>
                 <div className="flex flex-col items-center text-center">
-                    <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">Buy Crypto</h1>
+                    <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white">Buy Crypto</h1>
                     <div className="flex items-center gap-1.5 mt-1.5">
                         <ShieldCheck className="w-2.5 h-2.5 text-primary" />
-                        <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Secure Fiat-to-Vault On-Ramp</span>
+                        <span className="text-[8px] text-primary font-black uppercase tracking-tighter">Secure On-Ramp</span>
                     </div>
                 </div>
-                <Button variant="ghost" size="icon"><Info className="w-5 h-5 text-muted-foreground" /></Button>
+                <Button variant="ghost" size="icon" className="rounded-xl"><Info className="w-5 h-5 text-muted-foreground" /></Button>
             </header>
 
             <main className="flex-1 p-6 space-y-8 max-w-lg mx-auto w-full overflow-y-auto thin-scrollbar pb-32">
                 {/* AMOUNT INPUT */}
                 <section className="space-y-4">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2">Purchase Amount</p>
-                    <div className="p-8 rounded-[2.5rem] bg-secondary/20 border border-white/5 space-y-4 text-center">
+                    <div className="p-8 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-4 text-center shadow-2xl">
                         <div className="flex items-baseline justify-center gap-2">
                             <span className="text-2xl font-bold text-muted-foreground/50">$</span>
                             <Input 
                                 type="number" 
                                 value={amount} 
                                 onChange={(e) => setAmount(e.target.value)}
-                                className="text-5xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter w-full max-w-[200px]"
+                                className="text-5xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter w-full max-w-[200px] text-white"
                             />
                             <span className="text-sm font-black text-muted-foreground uppercase tracking-widest">USD</span>
                         </div>
@@ -108,7 +109,7 @@ export default function BuyPage() {
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2">Receive Asset</p>
                     <button 
                         onClick={() => setIsNetworkSheetOpen(true)}
-                        className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
+                        className="w-full flex items-center justify-between p-5 rounded-[2rem] bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-all group shadow-2xl"
                     >
                         <div className="flex items-center gap-4">
                             <TokenLogoDynamic 
@@ -135,8 +136,8 @@ export default function BuyPage() {
                         <button 
                             onClick={() => setPaymentMethod('card')}
                             className={cn(
-                                "p-5 rounded-[2rem] border flex flex-col items-center gap-3 transition-all",
-                                paymentMethod === 'card' ? "bg-primary/10 border-primary/50 text-primary" : "bg-white/5 border-white/5 text-muted-foreground hover:bg-white/10"
+                                "p-5 rounded-[2rem] border flex flex-col items-center gap-3 transition-all shadow-2xl",
+                                paymentMethod === 'card' ? "bg-primary/10 border-primary/50 text-primary" : "bg-white/[0.03] border-white/5 text-muted-foreground hover:bg-white/[0.06]"
                             )}
                         >
                             <CreditCard className="w-6 h-6" />
@@ -145,8 +146,8 @@ export default function BuyPage() {
                         <button 
                             onClick={() => setPaymentMethod('bank')}
                             className={cn(
-                                "p-5 rounded-[2rem] border flex flex-col items-center gap-3 transition-all",
-                                paymentMethod === 'bank' ? "bg-primary/10 border-primary/50 text-primary" : "bg-white/5 border-white/5 text-muted-foreground hover:bg-white/10"
+                                "p-5 rounded-[2rem] border flex flex-col items-center gap-3 transition-all shadow-2xl",
+                                paymentMethod === 'bank' ? "bg-primary/10 border-primary/50 text-primary" : "bg-white/[0.03] border-white/5 text-muted-foreground hover:bg-white/[0.06]"
                             )}
                         >
                             <Building2 className="w-6 h-6" />

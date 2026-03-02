@@ -148,7 +148,7 @@ export default function WalletSessionPage() {
   const hasCloudBackup = !!(profile?.vault_phrase);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 text-foreground relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-transparent p-6 text-foreground relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 
@@ -186,7 +186,7 @@ export default function WalletSessionPage() {
               <button 
                 onClick={handleCreate}
                 disabled={isProcessing}
-                className="w-full flex items-center justify-between p-6 rounded-[2rem] bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all group active:scale-[0.98]"
+                className="w-full flex items-center justify-between p-6 rounded-[2rem] bg-black/40 backdrop-blur-xl border border-primary/20 hover:bg-primary/20 transition-all group active:scale-[0.98] shadow-2xl"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
@@ -203,7 +203,7 @@ export default function WalletSessionPage() {
               <button 
                 onClick={() => setStep('import')}
                 disabled={isProcessing}
-                className="w-full flex items-center justify-between p-6 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-white/10 transition-all group active:scale-[0.98]"
+                className="w-full flex items-center justify-between p-6 rounded-[2rem] bg-black/40 backdrop-blur-xl border border-white/5 hover:bg-white/10 transition-all group active:scale-[0.98] shadow-2xl"
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-muted-foreground group-hover:scale-110 transition-transform">
@@ -221,7 +221,7 @@ export default function WalletSessionPage() {
                 onClick={handleRestore}
                 disabled={isProcessing || !hasCloudBackup}
                 className={cn(
-                  "w-full flex items-center justify-between p-6 rounded-[2rem] bg-gradient-to-br from-emerald-500/20 to-transparent border border-emerald-500/20 hover:border-emerald-500/40 transition-all group active:scale-[0.98]",
+                  "w-full flex items-center justify-between p-6 rounded-[2rem] bg-gradient-to-br from-emerald-500/20 to-transparent backdrop-blur-xl border border-emerald-500/20 hover:border-emerald-500/40 transition-all group active:scale-[0.98] shadow-2xl",
                   !hasCloudBackup && "opacity-40 grayscale pointer-events-none"
                 )}
               >
@@ -245,7 +245,7 @@ export default function WalletSessionPage() {
                   placeholder="Enter your 12 or 24 word mnemonic phrase here..."
                   value={importInput}
                   onChange={(e) => setImportInput(e.target.value)}
-                  className="min-h-[120px] bg-white/5 border-white/10 rounded-[2rem] p-5 text-sm leading-relaxed focus-visible:ring-primary text-white"
+                  className="min-h-[120px] bg-black/40 backdrop-blur-xl border-white/10 rounded-[2rem] p-5 text-sm leading-relaxed focus-visible:ring-primary text-white"
                 />
               </div>
               <div className="flex gap-3">

@@ -74,7 +74,7 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   return (
     <div
       onClick={handleRowClick}
-      className="flex cursor-pointer items-center justify-between py-4 active:bg-white/5 transition-all w-full px-6"
+      className="flex cursor-pointer items-center justify-between py-4 active:bg-white/5 transition-all w-full px-6 group"
       role="button"
     >
       <div className="flex items-center gap-3">
@@ -225,8 +225,8 @@ export default function WalletTab() {
   );
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="bg-background pt-8">
+    <div className="flex flex-col h-full bg-transparent">
+      <div className="pt-8">
         <div className="flex items-center justify-between px-6">
             <div className="relative group">
                 <h2 className={cn(

@@ -14,7 +14,7 @@ import Link from 'next/link';
 
 /**
  * SIGNUP INTERACTION NODE
- * Extracted into a sub-component to safely use useSearchParams() within a Suspense boundary.
+ * Updated to bg-transparent to reveal institutional watermark.
  */
 function SignupContent() {
   const router = useRouter();
@@ -91,7 +91,7 @@ function SignupContent() {
 
       toast({ title: "Identity Verified!", description: "Initializing profile node..." });
       setShowVerifyPanel(false);
-      router.replace('/complete-profile');
+      router.replace('/');
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -138,7 +138,7 @@ function SignupContent() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 text-foreground relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-transparent p-6 text-foreground relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 
@@ -147,7 +147,7 @@ function SignupContent() {
         className="w-full max-w-sm space-y-10 relative z-10"
       >
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary shadow-2xl">
             <UserPlus className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight uppercase">Provision Node</h1>
@@ -155,7 +155,7 @@ function SignupContent() {
         </div>
 
         {referralCode && (
-          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex items-center gap-3 animate-in slide-in-from-top-2">
+          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex items-center gap-3 animate-in slide-in-from-top-2 shadow-2xl">
             <Zap className="w-5 h-5 text-primary fill-current" />
             <div>
               <p className="text-[10px] font-black text-primary uppercase tracking-widest leading-none">Bonus Protocol Active</p>
@@ -175,7 +175,7 @@ function SignupContent() {
                   placeholder="name@institution.com" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white"
+                  className="h-14 bg-black/40 backdrop-blur-xl border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white shadow-2xl"
                   required
                 />
               </div>
@@ -190,7 +190,7 @@ function SignupContent() {
                   placeholder="••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white"
+                  className="h-14 bg-black/40 backdrop-blur-xl border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white shadow-2xl"
                   required
                 />
               </div>
@@ -209,13 +209,13 @@ function SignupContent() {
         <div className="relative py-4">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-            <span className="bg-[#050505] px-4 text-zinc-600">OR CONTINUE WITH</span>
+            <span className="bg-transparent px-4 text-zinc-600">OR CONTINUE WITH</span>
           </div>
         </div>
 
         <Button 
           variant="outline" 
-          className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-white/5 border-white/10 hover:bg-white/10"
+          className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-black/40 border-white/10 hover:bg-black/60 shadow-2xl"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading || showVerifyPanel}
         >
@@ -262,7 +262,7 @@ function SignupContent() {
               
               <div className="max-w-sm mx-auto space-y-8">
                 <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+                  <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary shadow-2xl">
                     <Mail className="w-8 h-8" />
                   </div>
                   <h2 className="text-2xl font-black text-white uppercase tracking-tight">Verify Your Email</h2>
@@ -280,7 +280,7 @@ function SignupContent() {
                       maxLength={6}
                       value={verificationCode}
                       onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white"
+                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white shadow-2xl"
                       required
                     />
                     <div className="flex justify-center">
@@ -322,7 +322,7 @@ function SignupContent() {
 export default function SignupPage() {
   return (
     <Suspense fallback={
-      <div className="flex h-screen w-full items-center justify-center bg-[#050505]">
+      <div className="flex h-screen w-full items-center justify-center bg-transparent">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     }>
