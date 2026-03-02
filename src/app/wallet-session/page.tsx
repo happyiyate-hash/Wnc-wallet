@@ -59,11 +59,17 @@ export default function WalletSessionPage() {
   }, []);
 
   const finishOnboarding = async () => {
-    if (!user) return;
+    if (!user || !supabase) {
+        router.push('/');
+        return;
+    }
+    
+    setIsProcessing(true);
+    setStatus('Finalizing Node...');
+    
     try {
-      // Use UPSERT pattern to handle column updates resiliently
-      // If onboarding_completed column is missing, this will fail silently but allow entry
-      const { error: dbError } = await supabase!
+      // Atomic Upsert to mark completion
+      const { error: dbError } = await supabase
         .from('profiles')
         .upsert({ 
           id: user.id,
@@ -72,7 +78,7 @@ export default function WalletSessionPage() {
         }, { onConflict: 'id' });
         
       if (dbError) {
-          console.warn("Could not save onboarding flag. Ensure 'onboarding_completed' column is added to your Supabase profiles table.", dbError.message);
+          console.warn("Onboarding flag advisory:", dbError.message);
       }
 
       await refreshProfile();
@@ -80,6 +86,8 @@ export default function WalletSessionPage() {
     } catch (e) {
       console.error("ONBOARDING_FINISH_ERROR:", e);
       router.push('/');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -93,6 +101,7 @@ export default function WalletSessionPage() {
       setStatus('Complete!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
+      console.error("GEN_ERROR:", e);
       setError(e.message || "Generation failed.");
       setIsProcessing(false);
       stopTimer();
@@ -100,6 +109,7 @@ export default function WalletSessionPage() {
   };
 
   const handleImport = async () => {
+    if (!importInput.trim()) return;
     setIsProcessing(true);
     setError(null);
     setStatus('Syncing Mnemonic...');
@@ -109,6 +119,7 @@ export default function WalletSessionPage() {
       setStatus('Complete!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
+      console.error("IMPORT_ERROR:", e);
       setStatus('Invalid Node');
       setError("Please verify your 12 or 24 word recovery phrase.");
       setIsProcessing(false);
@@ -126,6 +137,7 @@ export default function WalletSessionPage() {
       setStatus('Access Restored!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
+      console.error("RESTORE_ERROR:", e);
       setStatus('No Backup Found');
       setError(e.message || "Failed to locate cloud credentials.");
       setIsProcessing(false);
@@ -137,7 +149,6 @@ export default function WalletSessionPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#050505] p-6 text-foreground relative overflow-hidden">
-      {/* Background Ambience */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 

@@ -17,7 +17,7 @@ import { motion } from 'framer-motion';
  * IDENTITY NODE PROVISIONING
  * Handles final profile setup including unique username selection and 
  * institutional image uplink via the canonical 'photos' bucket registry.
- * Aligned with SmarterSeller Upsert & Auth Metadata standards.
+ * Hardened with atomic state management to prevent infinite loading.
  */
 export default function CompleteProfilePage() {
   const { user, profile, refreshProfile } = useUser();
@@ -61,7 +61,7 @@ export default function CompleteProfilePage() {
       if (error) throw error;
       setIsAvailable(!data || data.name === profile?.name);
     } catch (e) {
-      console.error(e);
+      console.error("USERNAME_CHECK_ERROR:", e);
     } finally {
       setIsValidating(false);
     }
@@ -82,13 +82,14 @@ export default function CompleteProfilePage() {
       const fileName = `${timestamp}-${file.name.replace(/\s+/g, '_')}`;
       const filePath = `profiles/${user.id}/${fileName}`;
 
-      // Upload to 'photos' bucket as per Institutional Guide
+      // 1. UPLINK: Upload to 'photos' bucket
       const { error: uploadError } = await supabase.storage
         .from('photos')
         .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
 
+      // 2. RESOLVE: Get absolute public URL
       const { data: { publicUrl } } = supabase.storage
         .from('photos')
         .getPublicUrl(filePath);
@@ -103,24 +104,24 @@ export default function CompleteProfilePage() {
         description: error.message || "Failed to upload image. Ensure the 'photos' bucket is configured." 
       });
     } finally {
+      // ALWAYS stop loading state
       setIsUploading(false);
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isAvailable) return;
+    if (!user || !isAvailable || !supabase) return;
 
     setIsSubmitting(true);
     try {
       // 1. SYNC AUTH METADATA (SmarterSeller Standard for instant name recognition)
-      await supabase!.auth.updateUser({
+      await supabase.auth.updateUser({
         data: { name: username }
       });
 
-      // 2. ATOMIC UPSERT TO PROFILES (Ensures compatibility and prevents schema cache issues)
-      // NOTE: We remove onboarding_completed here to prevent "loading forever" if the column hasn't been added yet.
-      const { error } = await supabase!
+      // 2. ATOMIC UPSERT TO PROFILES (Resilient to missing onboarding columns)
+      const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
@@ -132,9 +133,9 @@ export default function CompleteProfilePage() {
       if (error) throw error;
 
       await refreshProfile();
-      toast({ title: "Profile Secured!", description: "Now let's initialize your vault." });
+      toast({ title: "Profile Secured!", description: "Identity node synchronized." });
       
-      // Navigate to wallet session instantly
+      // Navigate to wallet session
       router.push('/wallet-session');
     } catch (error: any) {
       console.error("SAVE_PROFILE_ERROR:", error);
@@ -143,7 +144,9 @@ export default function CompleteProfilePage() {
         title: "Authorization Failed", 
         description: error.message || "Could not synchronize identity node." 
       });
-      setIsSubmitting(false); // Only clear if we stay on page
+    } finally {
+      // ALWAYS stop loading state to prevent infinite spinners
+      setIsSubmitting(false);
     }
   };
 
@@ -152,7 +155,7 @@ export default function CompleteProfilePage() {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-sm space-y-10"
+        className="w-full max-sm space-y-10"
       >
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-black text-white tracking-tight uppercase">Identity Node</h1>
