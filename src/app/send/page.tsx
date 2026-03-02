@@ -22,7 +22,9 @@ import {
   ChevronDown,
   Zap,
   XCircle,
-  Lock
+  Lock,
+  QrCode,
+  X
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -40,6 +42,7 @@ import TransactionStatusCard from '@/components/wallet/transaction-status-card';
 import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-sheet';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
@@ -56,7 +59,7 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('0x')) {
     const formatRegex = /^0x[a-fA-F0-9]{40}$/;
     const moveChainRegex = /^0x[a-fA-F0-9]{64}$/;
-    if (moveChainRegex.test(clean)) return 'move-chain'; // Aptos or Sui
+    if (moveChainRegex.test(clean)) return 'move-chain'; 
     if (!formatRegex.test(clean)) return 'invalid-evm-format';
     if (!ethers.isAddress(clean)) return 'invalid-evm-checksum';
     return 'evm';
@@ -138,6 +141,7 @@ function SendClient() {
   const { profile, refreshProfile } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isStatusVisible, setIsStatusVisible] = useState(false);
@@ -158,8 +162,10 @@ function SendClient() {
   const [txHash, setTxHash] = useState('');
   
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const hasInitialized = useRef(false);
   const resolutionCounter = useRef(0);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   const gasData = useGasPrice(selectedToken?.chainId);
 
@@ -327,7 +333,57 @@ function SendClient() {
     }
     
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, activeNetwork.name]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken]);
+
+  const handleScanSuccess = (decodedText: string) => {
+    setIsScannerOpen(false);
+    
+    // 1. Detect Internal Structured QR: wnc://pay?account=ID&symbol=WNC
+    if (decodedText.startsWith('wnc://')) {
+      try {
+        const url = new URL(decodedText);
+        const account = url.searchParams.get('account');
+        const symbol = url.searchParams.get('symbol');
+        
+        if (account) {
+          setRecipientInput(account);
+          if (symbol) {
+            const token = allAssets.find(a => a.symbol === symbol);
+            if (token) setSelectedToken(token);
+          }
+          toast({ title: "Internal Node Resolved", description: "Identity registry synchronized." });
+        }
+      } catch (e) {
+        toast({ variant: "destructive", title: "Scan Error", description: "Invalid institutional QR format." });
+      }
+      return;
+    }
+
+    // 2. Standard Blockchain URI: ethereum:0x... or bitcoin:1...
+    let cleanAddress = decodedText;
+    if (decodedText.includes(':')) {
+      const parts = decodedText.split(':');
+      cleanAddress = parts[1].split('?')[0]; 
+    }
+    
+    setRecipientInput(cleanAddress);
+    toast({ title: "Node Address Parsed", description: "Standard blockchain registry updated." });
+  };
+
+  useEffect(() => {
+    if (isScannerOpen) {
+      setTimeout(() => {
+        scannerRef.current = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+        scannerRef.current.render(handleScanSuccess, () => {});
+      }, 300);
+    } else {
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(e => console.warn("Scanner cleanup failed", e));
+        scannerRef.current = null;
+      }
+    }
+    return () => { if (scannerRef.current) scannerRef.current.clear().catch(() => {}); };
+  }, [isScannerOpen]);
 
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
@@ -422,6 +478,7 @@ function SendClient() {
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
+        
         <button 
             onClick={() => setIsSelectorOpen(true)}
             className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all"
@@ -433,7 +490,10 @@ function SendClient() {
             </div>
             <ChevronDown className="w-3 h-3 text-primary" />
         </button>
-        <div className="w-10" />
+
+        <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(true)} className="rounded-xl">
+          <QrCode className="w-5 h-5 text-primary" />
+        </Button>
       </header>
 
       <main className="flex-1 p-6 max-w-lg mx-auto w-full relative z-10 pb-48">
@@ -641,6 +701,45 @@ function SendClient() {
           </div>
         </div>
       </main>
+
+      {/* SCANNER OVERLAY */}
+      <AnimatePresence>
+        {isScannerOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6"
+          >
+            <div className="w-full max-w-sm space-y-8">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3>
+                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button>
+              </div>
+              
+              <div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-[0_0_50px_rgba(139,92,246,0.3)] bg-zinc-900">
+                <div id="reader" className="w-full h-full" />
+                <motion.div 
+                  animate={{ y: [0, 250, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10"
+                />
+              </div>
+
+              <div className="text-center space-y-4 px-8">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Position any <span className="text-white font-bold">WNC Account QR</span> or <span className="text-white font-bold">Standard Crypto Address</span> within the frame to autofill details.
+                </p>
+                <div className="flex items-center justify-center gap-2 opacity-40">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white">Registry Protocol v3.1</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />

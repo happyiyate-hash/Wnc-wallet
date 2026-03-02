@@ -4,8 +4,9 @@
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
+import { useUser } from '@/contexts/user-provider';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Copy, Info, CheckCircle2, Loader2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Copy, Info, CheckCircle2, Loader2, ChevronRight, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Card } from '@/components/ui/card';
 import type { AssetRow } from '@/lib/types';
@@ -14,9 +15,11 @@ import { cn } from '@/lib/utils';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import QRCode from "react-qr-code";
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 function ReceiveClient() {
-  const { wallets, viewingNetwork, allChains, allAssets } = useWallet();
+  const { wallets, viewingNetwork, allChains, allAssets, accountNumber } = useWallet();
+  const { profile } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isCopied, copy] = useCopyToClipboard();
@@ -39,7 +42,20 @@ function ReceiveClient() {
 
   const chain = useMemo(() => allChains.find(c => c.chainId === selectedToken?.chainId) || viewingNetwork, [allChains, selectedToken, viewingNetwork]);
   const address = useMemo(() => wallets ? getAddressForChain(chain, wallets) : null, [chain, wallets]);
-  const qrValue = useMemo(() => address ? `ethereum:${address}` : "", [address]);
+  
+  const isWnc = selectedToken?.symbol === 'WNC';
+
+  const qrValue = useMemo(() => {
+    if (isWnc && accountNumber) {
+      return `wnc://pay?account=${accountNumber}&symbol=WNC`;
+    }
+    return address ? `${chain.type || 'ethereum'}:${address}` : "";
+  }, [address, isWnc, accountNumber, chain.type]);
+
+  const handleCopy = () => {
+    const text = isWnc ? accountNumber : address;
+    if (text) copy(text);
+  };
 
   return (
     <div className="flex flex-col h-screen bg-transparent">
@@ -53,15 +69,88 @@ function ReceiveClient() {
                 <h1 className="text-lg font-black uppercase tracking-tight text-white">Receive {selectedToken?.symbol}</h1>
                 <ChevronRight className="w-3 h-3 text-primary rotate-90" />
             </div>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-black">{chain.name}</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-black">{isWnc ? 'SmarterSeller Registry' : chain.name}</span>
         </button>
         <Button variant="ghost" size="icon" className="rounded-xl"><Info className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
       
-      <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto thin-scrollbar">
-        <div className="text-center space-y-2 px-4"><p className="text-sm text-muted-foreground leading-relaxed">Send only <span className="text-foreground font-black">{selectedToken?.name || selectedToken?.symbol}</span> to this address via the <span className="text-primary font-black">{chain.name}</span> network.</p></div>
-        <div className="relative group"><div className="absolute -inset-6 bg-primary/20 rounded-[4rem] blur-2xl opacity-50 transition-opacity duration-1000" /><Card className="p-10 bg-white rounded-[3.5rem] shadow-2xl relative z-10 flex flex-col items-center gap-6"><div className="bg-white p-4 rounded-[2.5rem] relative w-[240px] h-[240px] flex items-center justify-center">{address ? (<div className="animate-in fade-in zoom-in duration-500"><QRCode value={qrValue} size={200} style={{ height: "auto", maxWidth: "100%", width: "100%" }} fgColor="#000000" bgColor="#FFFFFF" level="H" /></div>) : (<div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse"><span className="text-xs text-muted-foreground font-mono">Synchronizing...</span></div>)}{address && (<div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100 animate-in fade-in zoom-in delay-300 duration-500"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || ''} size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name}/></div></div>)}</div></Card></div>
-        <div className="w-full space-y-4"><div onClick={() => address && copy(address)} className={cn("w-full p-6 rounded-[2rem] border flex items-center justify-between cursor-pointer transition-all duration-300 relative overflow-hidden shadow-2xl", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/[0.03] border-white/5 hover:border-primary/30")}><div className="flex-1 min-w-0 pr-4 relative z-10"><p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2 flex items-center gap-2">Your Vault Address{isCopied && <span className="text-green-500 text-[9px] font-bold">COPIED!</span>}</p><p className={cn("text-sm font-mono break-all leading-relaxed tracking-tight", isCopied ? "text-green-400" : "text-foreground/90")}>{address || 'Initializing secure node...'}</p></div><div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 shrink-0 shadow-lg", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>{isCopied ? <CheckCircle2 className="w-6 h-6" /> : <Copy className="w-6 h-6" />}</div></div></div>
+      <main className="flex-1 p-6 flex flex-col items-center gap-8 overflow-y-auto thin-scrollbar pb-32">
+        <div className="text-center space-y-2 px-4">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {isWnc ? (
+              <>Share your <span className="text-primary font-black uppercase">Identity Node</span> to receive internal WNC settlements.</>
+            ) : (
+              <>Send only <span className="text-foreground font-black">{selectedToken?.name || selectedToken?.symbol}</span> to this address via the <span className="text-primary font-black">{chain.name}</span> network.</>
+            )}
+          </p>
+        </div>
+
+        <div className="relative group">
+          <div className="absolute -inset-6 bg-primary/20 rounded-[4rem] blur-2xl opacity-50 transition-opacity duration-1000" />
+          <Card className="p-10 bg-white rounded-[3.5rem] shadow-2xl relative z-10 flex flex-col items-center gap-6">
+            <div className="bg-white p-4 rounded-[2.5rem] relative w-[240px] h-[240px] flex items-center justify-center">
+              {accountNumber || address ? (
+                <div className="animate-in fade-in zoom-in duration-500">
+                  <QRCode value={qrValue} size={200} style={{ height: "auto", maxWidth: "100%", width: "100%" }} fgColor="#000000" bgColor="#FFFFFF" level="H" />
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-zinc-100 rounded-3xl animate-pulse">
+                  <span className="text-xs text-muted-foreground font-mono">Synchronizing...</span>
+                </div>
+              )}
+              
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100 animate-in fade-in zoom-in delay-300 duration-500">
+                  {isWnc ? (
+                    <Avatar className="w-10 h-10 rounded-lg">
+                      <AvatarImage src={profile?.photo_url} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-black"><UserIcon className="w-5 h-5"/></AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || ''} size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name}/>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {isWnc && profile && (
+          <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-black text-white uppercase tracking-tight">@{profile.name}</h2>
+              <ShieldCheck className="w-5 h-5 text-primary" />
+            </div>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Verified Registry Profile</p>
+          </div>
+        )}
+
+        <div className="w-full space-y-4">
+          <div 
+            onClick={handleCopy} 
+            className={cn(
+              "w-full p-6 rounded-[2rem] border flex items-center justify-between cursor-pointer transition-all duration-300 relative overflow-hidden shadow-2xl", 
+              isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/[0.03] border-white/5 hover:border-primary/30"
+            )}
+          >
+            <div className="flex-1 min-w-0 pr-4 relative z-10">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2 flex items-center gap-2">
+                {isWnc ? "Identity Node ID" : "Your Vault Address"}
+                {isCopied && <span className="text-green-500 text-[9px] font-bold">COPIED!</span>}
+              </p>
+              <p className={cn(
+                "text-sm font-mono break-all leading-relaxed tracking-tight", 
+                isCopied ? "text-green-400" : "text-foreground/90",
+                isWnc && "text-xl font-black tracking-[0.1em]"
+              )}>
+                {isWnc ? accountNumber : (address || 'Initializing secure node...')}
+              </p>
+            </div>
+            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 shrink-0 shadow-lg", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>
+              {isCopied ? <CheckCircle2 className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
+            </div>
+          </div>
+        </div>
       </main>
 
       <GlobalTokenSelector 
