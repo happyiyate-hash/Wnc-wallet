@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -451,6 +450,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, user?.id]);
 
+  const deleteWallet = useCallback(() => {
+    if (!user) return;
+    localStorage.removeItem(`wallet_mnemonic_${user.id}`);
+    localStorage.removeItem(`wallet_balances_${user.id}`);
+    localStorage.removeItem(`custom_tokens_${user.id}`);
+    localStorage.removeItem(`hidden_tokens_${user.id}`);
+    localStorage.removeItem(`account_number_${user.id}`);
+    setWallets(null);
+    setBalances({});
+    setAccountNumber(null);
+    toast({ title: "Local Cache Purged", description: "Node keys have been removed from this device." });
+  }, [user, toast]);
+
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
     
@@ -570,7 +582,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     saveToVault,
     restoreFromCloud,
     logout,
-    deleteWallet: () => {},
+    deleteWallet,
     fetchError,
     getAddressForChain,
     infuraApiKey,
