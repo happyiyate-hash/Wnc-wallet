@@ -23,12 +23,16 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
       setLoading(true);
       try {
         // Institutional Ledger Discovery
-        // For WNC, we fetch from internal transactions. For others, we might look at blockchain indexers or our sync table.
-        const table = isWnc ? 'transactions' : 'transactions'; 
-        
+        // Attempt to fetch detailed peer info for transfers
         const { data, error } = await supabase
-          .from(table)
-          .select('*')
+          .from('transactions')
+          .select(`
+            *,
+            peer:peer_id (
+              name,
+              photo_url
+            )
+          `)
           .eq('user_id', user.id)
           .order('timestamp', { ascending: false })
           .limit(15);
@@ -76,6 +80,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
       {transactions.map((tx, i) => {
         const isOut = tx.type === 'withdrawal' || tx.type === 'transfer_out';
         const isIn = tx.type === 'deposit' || tx.type === 'transfer_in' || tx.type === 'referral_reward';
+        const peerName = tx.peer?.name || 'External Node';
         
         return (
           <div key={tx.id} className="flex items-center justify-between p-4 rounded-3xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group">
@@ -93,7 +98,10 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
               <div className="text-left">
                 <div className="flex items-center gap-2">
                     <p className="font-black text-sm text-white uppercase tracking-tight">
-                        {tx.type === 'referral_reward' ? 'Growth Reward' : tx.type.replace('_', ' ')}
+                        {tx.type === 'referral_reward' ? 'Growth Reward' : 
+                         isOut ? `To @${peerName}` : 
+                         isIn ? `From @${peerName}` : 
+                         tx.type.replace('_', ' ')}
                     </p>
                     <ShieldCheck className="w-3 h-3 text-primary opacity-40" />
                 </div>

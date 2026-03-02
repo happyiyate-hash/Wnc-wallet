@@ -101,14 +101,15 @@ function ReceiveClient() {
               
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100 animate-in fade-in zoom-in delay-300 duration-500">
-                  {isWnc ? (
-                    <Avatar className="w-10 h-10 rounded-lg">
-                      <AvatarImage src={profile?.photo_url} />
-                      <AvatarFallback className="bg-primary/10 text-primary font-black"><UserIcon className="w-5 h-5"/></AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt={selectedToken?.symbol || ''} size={44} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name}/>
-                  )}
+                  {/* FIX: Display token logo (WNC) instead of user avatar in QR center */}
+                  <TokenLogoDynamic 
+                    logoUrl={selectedToken?.iconUrl} 
+                    alt={selectedToken?.symbol || ''} 
+                    size={44} 
+                    chainId={selectedToken?.chainId} 
+                    symbol={selectedToken?.symbol} 
+                    name={selectedToken?.name}
+                  />
                 </div>
               </div>
             </div>
