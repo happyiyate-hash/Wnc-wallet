@@ -17,6 +17,7 @@ import { motion } from 'framer-motion';
  * IDENTITY NODE PROVISIONING
  * Handles final profile setup including unique username selection and 
  * institutional image uplink via the canonical 'photos' bucket registry.
+ * Aligned with SmarterSeller Upsert & Auth Metadata standards.
  */
 export default function CompleteProfilePage() {
   const { user, profile, refreshProfile } = useUser();
@@ -112,14 +113,21 @@ export default function CompleteProfilePage() {
 
     setIsSubmitting(true);
     try {
+      // 1. SYNC AUTH METADATA (SmarterSeller Standard for instant name recognition)
+      await supabase!.auth.updateUser({
+        data: { name: username }
+      });
+
+      // 2. ATOMIC UPSERT TO PROFILES (Ensures compatibility and prevents schema cache issues)
       const { error } = await supabase!
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
           name: username,
           photo_url: photoUrl,
+          updated_at: new Date().toISOString(),
           onboarding_completed: false // Will be true after wallet setup
-        })
-        .eq('id', user.id);
+        }, { onConflict: 'id' });
 
       if (error) throw error;
 

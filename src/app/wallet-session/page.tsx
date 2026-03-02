@@ -61,10 +61,15 @@ export default function WalletSessionPage() {
   const finishOnboarding = async () => {
     if (!user) return;
     try {
+      // Use UPSERT pattern to handle column updates resiliently
       await supabase!
         .from('profiles')
-        .update({ onboarding_completed: true })
-        .eq('id', user.id);
+        .upsert({ 
+          id: user.id,
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+        
       await refreshProfile();
       router.push('/');
     } catch (e) {
