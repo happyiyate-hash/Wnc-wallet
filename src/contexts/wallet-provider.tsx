@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -148,8 +149,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 2. PRIMARY HANDLERS (Defined first to allow references in analytical nodes)
-  
+  // 2. CORE UTILITIES
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -188,6 +188,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [activeSessionId]);
 
+  // 3. SYNCHRONIZATION PRIMITIVES
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!activeSessionId || !supabase || !currentWallets) return;
@@ -268,59 +269,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e: any) { console.error("Vault Backup Failed:", e.message); }
   }, [activeSessionId, wallets, infuraApiKey, accountNumber, syncAllAddresses, refreshProfile]);
 
-  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
-    if (!wallets || !profile || !activeSessionId || !supabase) return;
-    if (wallets.length === 0) return;
-
-    if (!options?.forceUI) {
-        sessionStorage.setItem(`identity_audit_${activeSessionId}`, 'verified');
-    }
-
-    const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('id', activeSessionId);
-    const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
-    
-    const chains: { label: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI'; type: string }[] = [
-      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
-    ];
-
-    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-
-    for (let i = 0; i < chains.length; i++) {
-      const chainInfo = chains[i];
-      const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
-      const cloud = getCloudAddr(chainInfo.type);
-      
-      setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
-      await wait(1000); // INSTITUTIONAL PACE
-
-      if (local && local !== cloud) {
-        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(800);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-        await syncAllAddresses(wallets);
-        await wait(1200);
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(800);
-      } else {
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(600);
-      }
-    }
-
-    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
-    await wait(1200);
-    if (!profile.vault_phrase) {
-      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
-      await saveToVault();
-      await wait(1500);
-    }
-
-    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
-    setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
-  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault, refreshProfile]);
-
+  // 4. WALLET ADAPTERS & FETCHERS
   const loadWalletFromMnemonic = useCallback(async (mnemonic: string) => {
     if (!mnemonic) return null;
     try {
@@ -439,6 +388,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.hedera_address]);
 
+  // 5. RESTORATION & GENERATION NODES
   const generateWallet = async (): Promise<string> => {
     const mnemonic = bip39.generateMnemonic();
     const derived = await loadWalletFromMnemonic(mnemonic);
@@ -526,6 +476,62 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // 6. THE DIAGNOSTIC ENGINE (Hardware Handshake)
+  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
+    if (!wallets || !profile || !activeSessionId || !supabase) return;
+    if (wallets.length === 0) return;
+
+    if (!options?.forceUI) {
+        sessionStorage.setItem(`identity_audit_${activeSessionId}`, 'verified');
+    }
+
+    const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', activeSessionId);
+    const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
+    
+    const chains: { label: 'EVM' | 'XRP' | 'Polkadot' | 'Kusama' | 'NEAR' | 'BTC' | 'LTC' | 'DOGE' | 'SOL' | 'Cosmos' | 'OSMO' | 'SECRET' | 'INJ' | 'TIA' | 'ADA' | 'TRX' | 'ALGO' | 'HBAR' | 'XTZ' | 'APT' | 'SUI'; type: string }[] = [
+      { label: 'EVM', type: 'evm' }, { label: 'XRP', type: 'xrp' }, { label: 'Polkadot', type: 'polkadot' }, { label: 'Kusama', type: 'kusama' }, { label: 'NEAR', type: 'near' }, { label: 'BTC', type: 'btc' }, { label: 'LTC', type: 'ltc' }, { label: 'DOGE', type: 'doge' }, { label: 'SOL', type: 'solana' }, { label: 'Cosmos', type: 'cosmos' }, { label: 'OSMO', type: 'osmosis' }, { label: 'SECRET', type: 'secret' }, { label: 'INJ', type: 'injective' }, { label: 'TIA', type: 'celestia' }, { label: 'ADA', type: 'cardano' }, { label: 'TRX', type: 'tron' }, { label: 'ALGO', type: 'algorand' }, { label: 'HBAR', type: 'hedera' }, { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
+    ];
+
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
+
+    for (let i = 0; i < chains.length; i++) {
+      const chainInfo = chains[i];
+      const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
+      let cloud = getCloudAddr(chainInfo.type);
+      
+      setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress: (i / chains.length) * 100 }));
+      await wait(600); // OPTIMIZED SNAPPY PACE
+
+      if (local && local !== cloud) {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
+        await wait(400);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+        await syncAllAddresses(wallets);
+        await wait(600);
+        cloud = local; // Atomic state update
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: cloud }));
+        await wait(400);
+      } else {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
+        await wait(300);
+      }
+    }
+
+    setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', progress: 95 }));
+    await wait(800);
+    if (!profile.vault_phrase) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
+      await saveToVault();
+      await wait(1000);
+    }
+
+    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    setIsSynced(true);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+  }, [wallets, profile, activeSessionId, syncAllAddresses, saveToVault, refreshProfile]);
+
+  // 7. FETCHING ENGINE
   const fetchBalancesForChain = useCallback(async (chain: ChainConfig) => {
     if (!wallets || (!infuraApiKey && chain.type === 'evm')) return [];
     const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
