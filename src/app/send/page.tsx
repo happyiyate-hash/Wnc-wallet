@@ -45,8 +45,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
 
 /**
- * INSTITUTIONAL MULTI-CHAIN ADDRESS DETECTOR
- * Hardened logic for EVM, XRP, Polkadot, NEAR, BTC, SOL, Cosmos, etc.
+ * INSTITUTIONAL MULTI-CHAIN ADDRESS SNIFFER
+ * Sniffs for EVM, XRP, Polkadot, NEAR, BTC, SOL, Cosmos, etc.
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -142,11 +142,7 @@ const mapTechnicalError = (err: any): string => {
     return "Transaction Cancelled: You rejected the request in your terminal.";
   }
   
-  // Surface specific database or protocol error messages directly
-  if (err.message) {
-    return `System Advisory: ${err.message}`;
-  }
-  
+  if (err.message) return `System Advisory: ${err.message}`;
   return "Dispatch Error: The transaction was rejected by the network protocol.";
 };
 
@@ -338,11 +334,10 @@ function SendClient() {
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
 
-    // 1. PAYMENT REQUEST URL DETECTION (P2P Handshake)
     if (decodedText.includes('/request/')) {
       const parts = decodedText.split('/request/');
-      const id = parts[parts.length - 1].split('?')[0]; // Extract ID, ignore query params
-      if (id && id.length > 20) { // Simple UUID check
+      const id = parts[parts.length - 1].split('?')[0]; 
+      if (id && id.length > 20) {
         setActiveFulfillmentId(id);
         router.push('/');
         toast({ title: "Request Detected", description: "Entering fulfillment handshake..." });
@@ -350,7 +345,6 @@ function SendClient() {
       }
     }
 
-    // 2. WNC INTERNAL DEEP LINK
     if (decodedText.startsWith('wnc://')) {
       try {
         const url = new URL(decodedText);
@@ -368,7 +362,6 @@ function SendClient() {
       return;
     }
 
-    // 3. RAW BLOCKCHAIN ADDRESSES
     let cleanAddress = decodedText;
     if (decodedText.includes(':')) cleanAddress = decodedText.split(':')[1].split('?')[0]; 
     setRecipientInput(cleanAddress);
@@ -394,7 +387,11 @@ function SendClient() {
     try {
       if (selectedToken.symbol === 'WNC') {
         const transferAmount = parseFloat(amount);
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: Math.floor(transferAmount) });
+        // FIX: Ensure Integer casting for p_amount to avoid function ambiguity
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { 
+            p_recipient_id: recipientProfile!.id, 
+            p_amount: Math.floor(transferAmount) 
+        });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);

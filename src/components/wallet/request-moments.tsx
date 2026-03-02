@@ -56,11 +56,7 @@ const mapTechnicalError = (err: any): string => {
     return "Network Timeout: The blockchain node closed the connection. Please try again.";
   }
   
-  // Surface specific database or protocol error messages directly
-  if (err.message) {
-    return `System Advisory: ${err.message}`;
-  }
-  
+  if (err.message) return `System Advisory: ${err.message}`;
   return "Dispatch Error: The transaction was rejected by the network protocol.";
 };
 
@@ -273,6 +269,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       const amountStr = request.amount.toString();
       
       if (request.token_symbol === 'WNC') {
+        // FIX: Integer casting for WNC settlement to resolve ambiguity
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
             p_recipient_id: requester.id,
             p_amount: Math.floor(request.amount)
