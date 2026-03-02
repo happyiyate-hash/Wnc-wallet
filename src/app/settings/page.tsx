@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -50,7 +51,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function SettingsPage() {
-    const { deleteWallet, logout } = useWallet();
+    const { deleteWallet, deleteWalletPermanently, logout } = useWallet();
     const { user, profile, refreshProfile } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
@@ -222,19 +223,15 @@ export default function SettingsPage() {
     };
 
     const handlePermanentDestroy = async () => {
-        if (confirmInput !== 'DELETE' || !user || !supabase) return;
+        if (confirmInput !== 'DELETE' || !user) return;
         setIsDestroying(true);
         try {
-            await supabase.from('profiles').update({
-                vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, updated_at: new Date().toISOString()
-            }).eq('id', user.id);
-            deleteWallet();
-            await refreshProfile();
-            toast({ title: "Vault Destroyed" });
+            await deleteWalletPermanently();
+            toast({ title: "Vault Destroyed", description: "Node keys erased from registry and device." });
             setSecurityMode('idle');
             router.push('/');
         } catch (e: any) {
-            toast({ title: "Destruction Error", variant: "destructive" });
+            toast({ title: "Destruction Error", variant: "destructive", description: e.message });
         } finally {
             setIsDestroying(false);
         }
@@ -405,7 +402,7 @@ export default function SettingsPage() {
                                     </button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent className="bg-black border-red-500/20 rounded-[2.5rem] shadow-2xl">
-                                    <AlertDialogHeader><AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle><AlertDialogDescription className="text-zinc-400">This will permanently remove the secret phrase from this device.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle><AlertDialogDescription className="text-zinc-400">This will permanently remove the secret phrase from this device. Access can only be restored via Cloud Vault.</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter className="mt-6 gap-2"><AlertDialogCancel className="rounded-2xl h-14 bg-white/5">Cancel</AlertDialogCancel><AlertDialogAction onClick={deleteWallet} className="bg-red-500 rounded-2xl h-14 font-black">Yes, Purge Node</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>

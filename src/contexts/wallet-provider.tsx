@@ -71,6 +71,7 @@ interface WalletContextType {
   restoreFromCloud: (onStatusUpdate?: (status: string) => void) => Promise<void>;
   logout: () => Promise<void>;
   deleteWallet: () => void;
+  deleteWalletPermanently: () => Promise<void>;
   fetchError: string | null;
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
   infuraApiKey: string | null;
@@ -456,17 +457,49 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const deleteWallet = useCallback(() => {
     if (!user) return;
+    // Remove mnemonic, balances, and keys from the local device
     localStorage.removeItem(`wallet_mnemonic_${user.id}`);
     localStorage.removeItem(`wallet_balances_${user.id}`);
     localStorage.removeItem(`market_prices_${user.id}`);
     localStorage.removeItem(`custom_tokens_${user.id}`);
     localStorage.removeItem(`hidden_tokens_${user.id}`);
     localStorage.removeItem(`account_number_${user.id}`);
+    
+    // Reset internal state
     setWallets(null);
     setBalances({});
     setAccountNumber(null);
-    toast({ title: "Local Cache Purged", description: "Node keys have been removed from this device." });
+    
+    toast({ title: "Local Cache Purged", description: "Node keys have been removed from this device. Cloud backup remains safe." });
   }, [user, toast]);
+
+  const deleteWalletPermanently = useCallback(async () => {
+    if (!user || !supabase) return;
+    try {
+      // 1. Tell Supabase to wipe the encrypted columns in the 'profiles' table
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          vault_phrase: null,
+          iv: null,
+          vault_infura_key: null,
+          infura_iv: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw new Error("Failed to clear cloud vault: " + error.message);
+
+      // 2. ONLY after the cloud is wiped, clear the local device storage
+      deleteWallet();
+      await refreshProfile();
+      toast({ title: "Vault Destroyed", description: "Identity nodes have been permanently erased from the registry." });
+    } catch (e: any) {
+      console.error("Permanent Wipe Failure:", e.message);
+      toast({ variant: "destructive", title: "Destruction Error", description: e.message });
+      throw e;
+    }
+  }, [user, deleteWallet, refreshProfile, toast]);
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
@@ -592,6 +625,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     restoreFromCloud,
     logout,
     deleteWallet,
+    deleteWalletPermanently,
     fetchError,
     getAddressForChain,
     infuraApiKey,
