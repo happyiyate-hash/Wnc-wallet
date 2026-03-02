@@ -190,12 +190,7 @@ export default function NetworkSelector({ className }: NetworkSelectorProps) {
                         <p className="text-[8px] font-black uppercase text-primary opacity-60">Identity Synchronization</p>
                     </div>
                 </div>
-                <button 
-                    onClick={() => setIsOpen(false)}
-                    className="p-2 rounded-full hover:bg-white/5 transition-colors text-white/40"
-                >
-                    <X className="w-5 h-5" />
-                </button>
+                {/* Manual close button removed to avoid duplication with Dialog builtin 'X' */}
             </div>
 
             <div className="relative">
