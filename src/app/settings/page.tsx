@@ -222,6 +222,18 @@ export default function SettingsPage() {
         }
     };
 
+    const handlePermanentDestroy = async () => {
+        if (confirmInput !== 'DELETE') return;
+        setIsDestroying(true);
+        try {
+            await deleteWalletPermanently();
+            resetSecurityFlow();
+            router.push('/');
+        } finally {
+            setIsDestroying(false);
+        }
+    };
+
     const resetSecurityFlow = () => {
         setSecurityMode('idle'); setPasswordInput(''); setIsVerified(false); setConfirmInput(''); setShowPhrase(false);
     };

@@ -46,6 +46,9 @@ const mapTechnicalError = (err: any): string => {
   if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
     return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
   }
+  if (msg.includes('candidate function') || msg.includes('ambiguous')) {
+    return "Registry Ambiguity: Multiple transfer protocols detected. Please use the whole-number (integer) unit standard.";
+  }
   if (msg.includes('user rejected')) {
     return "Transaction Cancelled: You rejected the request in your terminal.";
   }
