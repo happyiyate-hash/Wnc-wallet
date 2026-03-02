@@ -7,13 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, Mail, Lock, LogIn, CheckCircle2 } from 'lucide-react';
+import { Loader2, ShieldCheck, Mail, Lock, LogIn, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
 
 /**
  * TERMINAL LOGIN NODE
- * Handles institutional entry and detects unverified identities.
+ * Strictly handles institutional entry. 
+ * Only shows verification if explicitly requested for unconfirmed accounts.
  */
 export default function LoginPage() {
   const router = useRouter();
@@ -23,8 +25,9 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Verification State (For "Email not confirmed" fallback)
+  // Verification State (Only as a manual fallback)
   const [showVerifyPanel, setShowVerifyPanel] = useState(false);
+  const [unconfirmedError, setUnconfirmedError] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -34,13 +37,14 @@ export default function LoginPage() {
     if (!supabase) return;
     
     setIsLoading(true);
+    setUnconfirmedError(false);
+    
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
-      // DETECT UNVERIFIED IDENTITY
+      // DETECT UNVERIFIED IDENTITY - Show alert, NOT the panel automatically
       if (error?.message === 'Email not confirmed') {
-        // Trigger the slide-up verification protocol
-        setShowVerifyPanel(true);
+        setUnconfirmedError(true);
         return;
       }
 
@@ -128,7 +132,7 @@ export default function LoginPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-sm space-y-10 relative z-10"
+        className="w-full max-w-sm space-y-8 relative z-10"
       >
         <div className="text-center space-y-3">
           <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
@@ -137,6 +141,25 @@ export default function LoginPage() {
           <h1 className="text-3xl font-black text-white tracking-tight uppercase">Terminal Login</h1>
           <p className="text-sm text-muted-foreground uppercase font-bold tracking-widest opacity-60">Authorize your institutional node</p>
         </div>
+
+        {unconfirmedError && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 rounded-2xl">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle className="font-black uppercase tracking-widest text-[10px]">Verification Required</AlertTitle>
+              <AlertDescription className="text-xs font-medium mt-1">
+                Your account identity has not been confirmed. 
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-white underline ml-1 font-black uppercase text-[10px]"
+                  onClick={() => setShowVerifyPanel(true)}
+                >
+                  Verify Now <ArrowRight className="w-3 h-3 ml-1" />
+                </Button>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-4">
@@ -149,7 +172,7 @@ export default function LoginPage() {
                   placeholder="name@institution.com" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white"
+                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
                   required
                 />
               </div>
@@ -164,7 +187,7 @@ export default function LoginPage() {
                   placeholder="••••••••" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white"
+                  className="h-14 bg-white/5 border-white/10 pl-12 rounded-2xl focus-visible:ring-primary text-white font-bold"
                   required
                 />
               </div>
@@ -174,16 +197,16 @@ export default function LoginPage() {
           <Button 
             type="submit"
             className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-            disabled={isLoading || showVerifyPanel}
+            disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <><LogIn className="w-4 h-4 mr-2" /> Verify Identity</>}
+            {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <><LogIn className="w-4 h-4 mr-2" /> Open Vault</>}
           </Button>
         </form>
 
         <div className="relative py-4">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest">
-            <span className="bg-[#050505] px-4 text-zinc-600">OR CONTINUE WITH</span>
+            <span className="bg-[#050505] px-4 text-zinc-600">OR AUTHORITY</span>
           </div>
         </div>
 
@@ -191,7 +214,7 @@ export default function LoginPage() {
           variant="outline" 
           className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-white/5 border-white/10 hover:bg-white/10"
           onClick={handleGoogleLogin}
-          disabled={isGoogleLoading || showVerifyPanel}
+          disabled={isGoogleLoading}
         >
           {isGoogleLoading ? <Loader2 className="animate-spin w-5 h-5" /> : (
             <div className="flex items-center gap-3">
@@ -206,15 +229,15 @@ export default function LoginPage() {
           )}
         </Button>
 
-        <div className="text-center">
+        <div className="text-center pt-4">
           <p className="text-xs text-muted-foreground font-medium">
-            New to the registry?{' '}
-            <Link href="/auth/signup" className="text-primary font-black uppercase hover:underline">Create Node</Link>
+            New node required?{' '}
+            <Link href="/auth/signup" className="text-primary font-black uppercase hover:underline">Provision Identity</Link>
           </p>
         </div>
       </motion.div>
 
-      {/* VERIFICATION PANEL (Slide-Up Fallback) */}
+      {/* VERIFICATION PANEL (Slide-Up Fallback Only) */}
       <AnimatePresence>
         {showVerifyPanel && (
           <>
@@ -240,7 +263,7 @@ export default function LoginPage() {
                   </div>
                   <h2 className="text-2xl font-black text-white uppercase tracking-tight">Verify Identity</h2>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Check your email for the code sent to <br/>
+                    Enter the code sent to <br/>
                     <span className="text-white font-bold">{email}</span>
                   </p>
                 </div>

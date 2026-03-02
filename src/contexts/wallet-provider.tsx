@@ -149,7 +149,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 3. CORE PROTOCOL PRIMITIVES (Actions)
+  // 3. CORE PROTOCOL PRIMITIVES (Defined early to avoid ReferenceErrors)
   
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
@@ -170,6 +170,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return combined;
   }, []);
 
+  const addUserToken = useCallback((token: AssetRow) => {
+    setUserAddedTokens(prev => {
+      const next = [...prev, token];
+      if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
+      return next;
+    });
+  }, [activeSessionId]);
+
   const toggleTokenVisibility = useCallback((chainId: number, symbol: string) => {
     setHiddenTokenKeys(prev => {
       const next = new Set(prev);
@@ -177,14 +185,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (next.has(key)) next.delete(key);
       else next.add(key);
       if (activeSessionId) localStorage.setItem(`hidden_tokens_${activeSessionId}`, JSON.stringify(Array.from(next)));
-      return next;
-    });
-  }, [activeSessionId]);
-
-  const addUserToken = useCallback((token: AssetRow) => {
-    setUserAddedTokens(prev => {
-      const next = [...prev, token];
-      if (activeSessionId) localStorage.setItem(`custom_tokens_${activeSessionId}`, JSON.stringify(next));
       return next;
     });
   }, [activeSessionId]);
@@ -400,7 +400,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${activeSessionId}`, newId);
         if (derived) await syncAllAddresses(derived);
-        runCloudDiagnostic();
     }
     return mnemonic;
   };
@@ -417,7 +416,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(`account_number_${activeSessionId}`, newId);
         }
         await syncAllAddresses(derived);
-        runCloudDiagnostic();
     }
   };
 
@@ -467,7 +465,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await refreshProfile();
       onStatusUpdate?.('Restoration Complete');
       toast({ title: "Vault Restored" });
-      runCloudDiagnostic();
     } catch (e: any) {
       console.error("RESTORE_FAILURE:", e.message);
       throw e;
@@ -688,7 +685,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { ...asset, balance, priceUsd, pctChange24h, fiatValueUsd: parseFloat(balance) * priceUsd } as AssetRow;
     });
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates]);
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, rates, allChainsMap]);
 
   // 9. LIFECYCLE & ENGINE BOOT
   useEffect(() => {
