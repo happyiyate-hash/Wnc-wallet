@@ -62,7 +62,8 @@ export default function WalletSessionPage() {
     if (!user) return;
     try {
       // Use UPSERT pattern to handle column updates resiliently
-      await supabase!
+      // If onboarding_completed column is missing, this will fail silently but allow entry
+      const { error: dbError } = await supabase!
         .from('profiles')
         .upsert({ 
           id: user.id,
@@ -70,10 +71,14 @@ export default function WalletSessionPage() {
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
         
+      if (dbError) {
+          console.warn("Could not save onboarding flag. Ensure 'onboarding_completed' column is added to your Supabase profiles table.", dbError.message);
+      }
+
       await refreshProfile();
       router.push('/');
     } catch (e) {
-      console.error(e);
+      console.error("ONBOARDING_FINISH_ERROR:", e);
       router.push('/');
     }
   };
@@ -89,11 +94,8 @@ export default function WalletSessionPage() {
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
       setError(e.message || "Generation failed.");
-    } finally {
-      setTimeout(() => {
-        setIsProcessing(false);
-        stopTimer();
-      }, 1000);
+      setIsProcessing(false);
+      stopTimer();
     }
   };
 
@@ -109,11 +111,8 @@ export default function WalletSessionPage() {
     } catch (e: any) {
       setStatus('Invalid Node');
       setError("Please verify your 12 or 24 word recovery phrase.");
-    } finally {
-      setTimeout(() => {
-        setIsProcessing(false);
-        stopTimer();
-      }, 1000);
+      setIsProcessing(false);
+      stopTimer();
     }
   };
 
@@ -129,7 +128,6 @@ export default function WalletSessionPage() {
     } catch (e: any) {
       setStatus('No Backup Found');
       setError(e.message || "Failed to locate cloud credentials.");
-    } finally {
       setIsProcessing(false);
       stopTimer();
     }
@@ -240,7 +238,7 @@ export default function WalletSessionPage() {
                 />
               </div>
               <div className="flex gap-3">
-                <Button variant="ghost" className="flex-1 h-14 rounded-2xl font-bold uppercase tracking-widest text-xs" onClick={() => setStep('options')}>Back</Button>
+                <Button variant="ghost" className="flex-1 h-14 rounded-2xl font-bold uppercase tracking-widest text-xs" onClick={() => { setStep('options'); setError(null); }}>Back</Button>
                 <Button 
                   className="flex-[2] h-14 rounded-2xl font-black uppercase tracking-widest text-xs bg-primary"
                   onClick={handleImport}

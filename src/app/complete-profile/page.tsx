@@ -119,25 +119,31 @@ export default function CompleteProfilePage() {
       });
 
       // 2. ATOMIC UPSERT TO PROFILES (Ensures compatibility and prevents schema cache issues)
+      // NOTE: We remove onboarding_completed here to prevent "loading forever" if the column hasn't been added yet.
       const { error } = await supabase!
         .from('profiles')
         .upsert({
           id: user.id,
           name: username,
           photo_url: photoUrl,
-          updated_at: new Date().toISOString(),
-          onboarding_completed: false // Will be true after wallet setup
+          updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
 
       if (error) throw error;
 
       await refreshProfile();
       toast({ title: "Profile Secured!", description: "Now let's initialize your vault." });
+      
+      // Navigate to wallet session instantly
       router.push('/wallet-session');
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
-    } finally {
-      setIsSubmitting(false);
+      console.error("SAVE_PROFILE_ERROR:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Authorization Failed", 
+        description: error.message || "Could not synchronize identity node." 
+      });
+      setIsSubmitting(false); // Only clear if we stay on page
     }
   };
 
