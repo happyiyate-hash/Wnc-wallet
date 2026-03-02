@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -18,7 +19,7 @@ export default function WalletHeader({
   const router = useRouter();
   const [isCopied, copy] = useCopyToClipboard();
 
-  const { viewingNetwork, wallets, hasNewNotifications, getAddressForChain } = useWallet();
+  const { viewingNetwork, wallets, hasNewNotifications, getAddressForChain, setIsNotificationsOpen } = useWallet();
   const { profile } = useUser();
 
   // Resolve the native address for the current viewing network (XRP, DOT, EVM, etc.)
@@ -83,7 +84,12 @@ export default function WalletHeader({
               <Copy className="h-4 w-4" />
               <span className="sr-only">Copy Address</span>
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 relative">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 text-gray-400 relative"
+              onClick={() => setIsNotificationsOpen(true)}
+            >
               <Bell className="h-4 w-4" />
               {hasNewNotifications && <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-primary animate-pulse"/>}
               <span className="sr-only">Notifications</span>

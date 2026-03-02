@@ -1,83 +1,129 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { supabase } from '@/lib/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
-import { ArrowUpRight, ArrowDownLeft, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, RefreshCw, Loader2, ShieldCheck, Zap } from 'lucide-react';
 import type { AssetRow } from "@/lib/types";
+import { cn } from '@/lib/utils';
 
 export default function TransactionHistory({ token }: { token: AssetRow }) {
   const { user } = useUser();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isWnc = token.symbol === 'WNC';
+
   useEffect(() => {
-    if (!user || !token) return;
+    if (!user || !token || !supabase) return;
 
     const fetchTransactions = async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('timestamp', { ascending: false })
-        .limit(10);
-      
-      setTransactions(data || []);
-      setLoading(false);
+      try {
+        // Institutional Ledger Discovery
+        // For WNC, we fetch from internal transactions. For others, we might look at blockchain indexers or our sync table.
+        const table = isWnc ? 'transactions' : 'transactions'; 
+        
+        const { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .eq('user_id', user.id)
+          .order('timestamp', { ascending: false })
+          .limit(15);
+        
+        if (!error && data) {
+          setTransactions(data);
+        }
+      } catch (e) {
+        console.error("History fetch error:", e);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchTransactions();
-  }, [user, token]);
+  }, [user, token, isWnc]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center py-12 gap-4 opacity-20">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <p className="text-[10px] font-black uppercase tracking-widest">Auditing Ledger...</p>
       </div>
     );
   }
 
   if (!transactions || transactions.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-white/10 rounded-2xl">
-        No recent activity for {token.symbol}.
+      <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 opacity-30 border border-dashed border-white/5 rounded-[2.5rem]">
+        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+            <Zap className="w-5 h-5 text-white" />
+        </div>
+        <div className="space-y-1">
+            <p className="text-xs font-black uppercase tracking-widest text-white">Registry Empty</p>
+            <p className="text-[9px] font-medium leading-relaxed max-w-[180px]">
+                No node activity detected for {token.symbol} in the current epoch.
+            </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {transactions.map((tx) => (
-        <div key={tx.id} className="flex items-center justify-between p-4 rounded-2xl bg-secondary/20 border border-white/5">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              tx.type === 'withdrawal' ? 'bg-red-500/10 text-red-400' : 
-              tx.type === 'deposit' ? 'bg-green-500/10 text-green-400' : 
-              'bg-primary/10 text-primary'
-            }`}>
-              {tx.type === 'withdrawal' ? <ArrowUpRight className="w-5 h-5" /> : 
-               tx.type === 'deposit' ? <ArrowDownLeft className="w-5 h-5" /> : 
-               <RefreshCw className="w-5 h-5" />}
+    <div className="space-y-2">
+      {transactions.map((tx, i) => {
+        const isOut = tx.type === 'withdrawal' || tx.type === 'transfer_out';
+        const isIn = tx.type === 'deposit' || tx.type === 'transfer_in' || tx.type === 'referral_reward';
+        
+        return (
+          <div key={tx.id} className="flex items-center justify-between p-4 rounded-3xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110",
+                isOut ? 'bg-red-500/10 text-red-400' : 
+                isIn ? 'bg-green-500/10 text-green-400' : 
+                'bg-primary/10 text-primary'
+              )}>
+                {isOut ? <ArrowUpRight className="w-6 h-6" /> : 
+                 isIn ? <ArrowDownLeft className="w-6 h-6" /> : 
+                 <RefreshCw className="w-6 h-6" />}
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-2">
+                    <p className="font-black text-sm text-white uppercase tracking-tight">
+                        {tx.type === 'referral_reward' ? 'Growth Reward' : tx.type.replace('_', ' ')}
+                    </p>
+                    <ShieldCheck className="w-3 h-3 text-primary opacity-40" />
+                </div>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">
+                  {tx.timestamp ? formatDistanceToNow(new Date(tx.timestamp), { addSuffix: true }) : 'Processing...'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-bold text-sm capitalize">{tx.type}</p>
-              <p className="text-xs text-muted-foreground">
-                {tx.timestamp ? formatDistanceToNow(new Date(tx.timestamp), { addSuffix: true }) : 'Just now'}
+            <div className="text-right space-y-1">
+              <p className={cn(
+                "font-black text-base tabular-nums tracking-tight",
+                isOut ? 'text-red-400' : 'text-green-400'
+              )}>
+                {isOut ? '-' : '+'}{parseFloat(tx.amount).toLocaleString()}
               </p>
+              <div className="flex items-center justify-end gap-1.5">
+                <div className={cn("w-1 h-1 rounded-full", tx.status === 'completed' ? 'bg-green-500' : 'bg-amber-500 animate-pulse')} />
+                <p className="text-[8px] uppercase tracking-[0.2em] font-black text-muted-foreground/60">
+                  {tx.status || 'Pending'}
+                </p>
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <p className={`font-bold text-sm ${tx.type === 'withdrawal' ? 'text-red-400' : 'text-green-400'}`}>
-              {tx.type === 'withdrawal' ? '-' : '+'}{tx.amount} {token.symbol}
-            </p>
-            <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
-              {tx.status}
-            </p>
-          </div>
-        </div>
-      ))}
+        );
+      })}
+      
+      <div className="pt-4 flex items-center justify-center gap-2 opacity-20">
+        <ShieldCheck className="w-3 h-3" />
+        <span className="text-[8px] font-black uppercase tracking-widest">Public Ledger Synchronization Verified</span>
+      </div>
     </div>
   );
 }

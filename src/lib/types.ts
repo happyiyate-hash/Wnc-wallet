@@ -117,3 +117,14 @@ export interface IWalletAdapter {
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]>;
 }
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  link_to?: string;
+  read: boolean;
+  created_at: string;
+}

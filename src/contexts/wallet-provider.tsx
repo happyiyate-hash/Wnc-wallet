@@ -56,6 +56,7 @@ interface WalletContextType {
   isAssetsLoading: boolean;
   isWalletLoading: boolean;
   hasNewNotifications: boolean;
+  setHasNewNotifications: (val: boolean) => void;
   viewingNetwork: ChainConfig;
   setNetwork: (network: ChainConfig) => void;
   allAssets: AssetRow[];
@@ -90,6 +91,8 @@ interface WalletContextType {
   runCloudDiagnostic: (options?: { forceUI?: boolean }) => Promise<void>;
   isRequestOverlayOpen: boolean;
   setIsRequestOverlayOpen: (open: boolean) => void;
+  isNotificationsOpen: boolean;
+  setIsNotificationsOpen: (open: boolean) => void;
   activeFulfillmentId: string | null;
   setActiveFulfillmentId: (id: string | null) => void;
 }
@@ -116,6 +119,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hiddenTokenKeys, setHiddenTokenKeys] = useState<Set<string>>(new Set());
   const [userAddedTokens, setUserAddedTokens] = useState<AssetRow[]>([]);
   const [isRequestOverlayOpen, setIsRequestOverlayOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnosticState>({
     status: 'idle',
@@ -131,7 +136,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 1. CORE ACTIONS (Top-Level)
+  // 1. CORE ACTIONS (Top-Level Declaration)
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -550,7 +555,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized: isInitialized && !authLoading,
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
-    hasNewNotifications: false,
+    hasNewNotifications,
+    setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
     setNetwork: (net) => { setViewingNetwork(net); setFetchError(null); localStorage.setItem('last_viewed_chain_id', net.chainId.toString()); },
     allAssets: assetsForCurrentNetwork,
@@ -590,6 +596,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     runCloudDiagnostic,
     isRequestOverlayOpen,
     setIsRequestOverlayOpen,
+    isNotificationsOpen,
+    setIsNotificationsOpen,
     activeFulfillmentId,
     setActiveFulfillmentId
   };

@@ -13,6 +13,8 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { NavGradient } from '@/components/shared/nav-gradient';
 import GlobalOverlayManager from '@/components/global-overlay-manager';
 import MobileNav from '@/components/wallet/mobile-nav';
+import NotificationCenter from '@/components/notifications/notification-center';
+import RealtimeNotificationListener from '@/components/notifications/realtime-listener';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -72,9 +74,12 @@ export default function RootLayout({
                       <MobileNav />
                     </div>
                   </div>
-                  {/* CENTRAL SENTINEL FOR GLOBAL MOMENTS - WRAPPED IN SUSPENSE FOR BUILD STABILITY */}
+                  
+                  {/* CENTRAL SENTINELS & OVERLAYS */}
                   <Suspense fallback={null}>
                     <GlobalOverlayManager />
+                    <NotificationCenter />
+                    <RealtimeNotificationListener />
                   </Suspense>
                 </SidebarProvider>
               </WalletProvider>
