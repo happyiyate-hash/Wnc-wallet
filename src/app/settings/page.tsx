@@ -129,6 +129,10 @@ export default function SettingsPage() {
         }
     };
 
+    /**
+     * STEP 1: UPLOAD TO STORAGE
+     * Adheres to SmarterSeller canonical bucket and path structure.
+     */
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !user || !supabase) return;
@@ -136,60 +140,67 @@ export default function SettingsPage() {
         setIsUploading(true);
         try {
             const timestamp = Date.now();
-            const fileName = `${timestamp}-${file.name.replace(/\s+/g, '_')}`;
-            const filePath = `profiles/${user.id}/${fileName}`;
+            const fileName = `profiles/${user.id}/${timestamp}-${file.name.replace(/\s+/g, '_')}`;
 
-            const { error: uploadError } = await supabase.storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('photos')
-                .upload(filePath, file, { cacheControl: '3600', upsert: true });
+                .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
                 .from('photos')
-                .getPublicUrl(filePath);
+                .getPublicUrl(uploadData.path);
 
             setPhotoUrl(publicUrl);
-            toast({ title: "Avatar Uplinked", description: "Identity node visual updated." });
+            toast({ title: "Avatar Uplinked", description: "Visual node ready for authorization." });
         } catch (error: any) {
             toast({ 
                 variant: "destructive", 
                 title: "Upload Failed", 
-                description: error.message || "Failed to upload image." 
+                description: error.message || "Institutional storage rejected the asset." 
             });
         } finally {
             setIsUploading(false);
         }
     };
 
+    /**
+     * STEP 2 & 3: AUTHORIZE IDENTITY
+     * Implements Auth Metadata sync and Public Table upsert for ecosystem-wide recognition.
+     */
     const handleSaveProfile = async () => {
         if (!user || !isAvailable || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // 1. SYNC AUTH METADATA
-            await supabase.auth.updateUser({
-                data: { name: username }
+            // STEP 2: UPDATE AUTH METADATA (For instant UI updates in all linked apps)
+            const { error: authError } = await supabase.auth.updateUser({
+                data: { 
+                    name: username,
+                    photo_url: photoUrl || undefined
+                }
             });
+            if (authError) throw authError;
 
-            // 2. ATOMIC UPSERT
-            const { error } = await supabase
+            // STEP 3: UPSERT TO PUBLIC TABLE (Permanent ecosystem persistence)
+            const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
                     id: user.id,
                     name: username,
-                    photo_url: photoUrl,
+                    photo_url: photoUrl || undefined,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'id' });
 
-            if (error) throw error;
+            if (dbError) throw dbError;
 
             await refreshProfile();
-            toast({ title: "Profile Secured", description: "Identity node synchronized." });
+            toast({ title: "Profile Secured", description: "Identity node fully synchronized with ecosystem." });
         } catch (error: any) {
             toast({ 
                 variant: "destructive", 
                 title: "Sync Failed", 
-                description: error.message || "Could not synchronize identity node." 
+                description: error.message || "Institutional handshake interrupted." 
             });
         } finally {
             setIsSavingProfile(false);
@@ -304,7 +315,7 @@ export default function SettingsPage() {
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
-                    {/* IDENTITY NODE CONFIGURATION (FORMERLY COMPLETE PROFILE) */}
+                    {/* IDENTITY NODE CONFIGURATION */}
                     <section className="space-y-4">
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Identity Node configuration</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-6 space-y-8 shadow-2xl">
@@ -359,10 +370,10 @@ export default function SettingsPage() {
 
                                 <Button 
                                     className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-                                    disabled={isSavingProfile || isUploading || isAvailable === false || username.length < 3 || username === profile?.name && photoUrl === profile?.photo_url}
+                                    disabled={isSavingProfile || isUploading || isAvailable === false || username.length < 3 || (username === profile?.name && photoUrl === profile?.photo_url)}
                                     onClick={handleSaveProfile}
                                 >
-                                    {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sync Identity"}
+                                    {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Profile"}
                                 </Button>
                             </div>
                         </div>
@@ -441,7 +452,6 @@ export default function SettingsPage() {
                 </div>
             </main>
 
-            {/* SECURITY DIALOGS (Reveal / Destroy / etc) remain same as before but integrated cleanly */}
             <AlertDialog open={securityMode !== 'idle'} onOpenChange={(open) => !open && resetSecurityFlow()}>
                 <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px]">
                     <AlertDialogHeader className="space-y-4">

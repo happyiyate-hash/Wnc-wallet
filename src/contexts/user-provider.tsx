@@ -51,6 +51,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
+  /**
+   * ECOSYSTEM REAL-TIME SYNC
+   * Subscribes to changes in the profiles table to reflect SmarterSeller updates instantly.
+   */
+  useEffect(() => {
+    if (!supabase || !user) return;
+
+    const channel = supabase
+      .channel(`profile-sync-${user.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user.id}`
+      }, (payload) => {
+        // Atomic UI Update
+        const updatedProfile = payload.new as UserProfile;
+        setProfile(updatedProfile);
+        localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(updatedProfile));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   useEffect(() => {
     const savedSessions = localStorage.getItem('wevina_sessions');
     const savedActiveId = localStorage.getItem('wevina_active_session_id');
