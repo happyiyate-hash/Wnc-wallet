@@ -137,7 +137,7 @@ const mapTechnicalError = (err: any): string => {
 };
 
 function SendClient() {
-  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh } = useWallet();
+  const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh, setActiveFulfillmentId } = useWallet();
   const { formatFiat } = useCurrency();
   const { profile, refreshProfile } = useUser();
   const router = useRouter();
@@ -323,6 +323,20 @@ function SendClient() {
 
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
+
+    // 1. PAYMENT REQUEST URL DETECTION (P2P Handshake)
+    if (decodedText.includes('/request/')) {
+      const parts = decodedText.split('/request/');
+      const id = parts[parts.length - 1].split('?')[0]; // Extract ID, ignore query params
+      if (id && id.length > 20) { // Simple UUID check
+        setActiveFulfillmentId(id);
+        router.push('/');
+        toast({ title: "Request Detected", description: "Entering fulfillment handshake..." });
+        return;
+      }
+    }
+
+    // 2. WNC INTERNAL DEEP LINK
     if (decodedText.startsWith('wnc://')) {
       try {
         const url = new URL(decodedText);
@@ -339,6 +353,8 @@ function SendClient() {
       } catch (e) { toast({ variant: "destructive", title: "Invalid QR Protocol" }); }
       return;
     }
+
+    // 3. RAW BLOCKCHAIN ADDRESSES
     let cleanAddress = decodedText;
     if (decodedText.includes(':')) cleanAddress = decodedText.split(':')[1].split('?')[0]; 
     setRecipientInput(cleanAddress);
