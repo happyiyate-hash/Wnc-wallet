@@ -245,101 +245,109 @@ function SendClient() {
       const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       
-      // INSTANT STOP: If format is known-wrong or network is mismatched, clear resolving immediately
-      if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
+      // 1. CLEAR STATE FOR EMPTY OR SHORT INPUT
+      if (!input || input.length < 3) {
         if (currentId === resolutionCounter.current) {
-          setResolvedAddress((!isNetworkMismatch && !validationError && isRawChainAddress) ? input : '');
+          setResolvedAddress('');
           setRecipientProfile(null);
-          setIsResolving(false); // STOP SPINNER
+          setIsResolving(false);
           setResolutionError(null);
         }
         return;
       }
 
-      setRecipientProfile(null);
-      setIsResolving(true); // START SPINNER
-      setResolutionError(null);
-      
-      try {
-        if (!supabase) throw new Error("No database connection");
-
-        // Identity Lookup Protocol
-        const { data: userRecord } = await supabase
-          .from('profiles')
-          .select('id, name, photo_url, account_number')
-          .eq('account_number', input)
-          .maybeSingle();
-
-        if (currentId !== resolutionCounter.current) return;
-
-        let finalProfile = userRecord;
-        let targetAddr = isRawChainAddress ? input : '';
-
-        // Address to Profile Mapping
-        if (!finalProfile && isRawChainAddress) {
-            const { data: walletMatch } = await supabase
-                .from('wallets')
-                .select('user_id, address')
-                .eq('address', input)
-                .maybeSingle();
-            
-            if (walletMatch) {
-                const { data: linkedProfile } = await supabase
-                    .from('profiles')
-                    .select('id, name, photo_url, account_number')
-                    .eq('id', walletMatch.user_id)
-                    .single();
-                finalProfile = linkedProfile;
-                targetAddr = input;
-            }
-        }
-
-        if (finalProfile) {
-          setRecipientProfile({ 
-            id: finalProfile.id,
-            avatar: finalProfile.photo_url || '', 
-            verified: true, 
-            name: finalProfile.name || input
-          });
-
-          if (isInternalWnc) {
-            setResolvedAddress(finalProfile.account_number || '');
-          } else {
-            const targetChainType = activeNetwork.type || 'evm';
-            const { data: chainWallet } = await supabase
-                .from('wallets')
-                .select('address')
-                .eq('user_id', finalProfile.id)
-                .eq('blockchain_id', targetChainType) 
-                .maybeSingle();
-
-            if (chainWallet?.address) {
-              setResolvedAddress(chainWallet.address);
-            } else {
-              setResolvedAddress('');
-              setResolutionError(`Recipient found, but no node configured for ${targetChainType.toUpperCase()}.`);
-            }
-          }
-        } else {
-          if (isRawChainAddress) {
-              setResolvedAddress(input);
-          } else {
-              setResolvedAddress('');
-              setResolutionError("I could not find any account or blockchain related to this symbol.");
-          }
-        }
-      } catch (e: any) {
+      // 2. STOP IMMEDIATELY FOR ERRORS (NO DATABASE CALL)
+      if (isSelfTransfer || isNetworkMismatch || validationError) {
         if (currentId === resolutionCounter.current) {
-          setResolvedAddress(isRawChainAddress ? input : '');
-          setResolutionError("Handshake Error: Identity lookup failed.");
+          setResolvedAddress('');
+          setRecipientProfile(null);
+          setIsResolving(false);
+          setResolutionError(null);
         }
-      } finally {
-        if (currentId === resolutionCounter.current) setIsResolving(false); // ENSURE SPINNER STOPS
+        return;
+      }
+
+      // 3. RAW BLOCKCHAIN ADDRESS -> DIRECT RESOLUTION (NO DATABASE CALL)
+      if (isRawChainAddress) {
+        if (currentId === resolutionCounter.current) {
+          setResolvedAddress(input);
+          setRecipientProfile(null);
+          setIsResolving(false);
+          setResolutionError(null);
+        }
+        return;
+      }
+
+      // 4. ACCOUNT ID -> TRIGGER REGISTRY LOOKUP (CONTACT DATABASE)
+      if (addrType === 'account-id') {
+        setRecipientProfile(null);
+        setIsResolving(true);
+        setResolutionError(null);
+        
+        try {
+          if (!supabase) throw new Error("No database connection");
+
+          // Identity Lookup Protocol
+          const { data: userRecord } = await supabase
+            .from('profiles')
+            .select('id, name, photo_url, account_number')
+            .eq('account_number', input)
+            .maybeSingle();
+
+          if (currentId !== resolutionCounter.current) return;
+
+          if (userRecord) {
+            setRecipientProfile({ 
+              id: userRecord.id,
+              avatar: userRecord.photo_url || '', 
+              verified: true, 
+              name: userRecord.name || input
+            });
+
+            if (isInternalWnc) {
+              setResolvedAddress(userRecord.account_number || '');
+            } else {
+              const targetChainType = activeNetwork.type || 'evm';
+              const { data: chainWallet } = await supabase
+                  .from('wallets')
+                  .select('address')
+                  .eq('user_id', userRecord.id)
+                  .eq('blockchain_id', targetChainType) 
+                  .maybeSingle();
+
+              if (chainWallet?.address) {
+                setResolvedAddress(chainWallet.address);
+              } else {
+                setResolvedAddress('');
+                setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`);
+              }
+            }
+          } else {
+            setResolvedAddress('');
+            setResolutionError("Identity Node not found in registry.");
+          }
+        } catch (e: any) {
+          if (currentId === resolutionCounter.current) {
+            setResolvedAddress('');
+            setResolutionError("Handshake Error: Identity lookup failed.");
+          }
+        } finally {
+          if (currentId === resolutionCounter.current) setIsResolving(false);
+        }
+        return;
+      }
+
+      // 5. UNKNOWN FORMAT -> STOP (NO DATABASE CALL)
+      if (currentId === resolutionCounter.current) {
+        setResolvedAddress('');
+        setRecipientProfile(null);
+        setIsResolving(false);
+        setResolutionError("I could not find any account or blockchain related to this symbol.");
       }
     }
     
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError]);
+  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
 
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
