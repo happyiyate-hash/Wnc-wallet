@@ -11,6 +11,7 @@ import { usePathname, useRouter } from 'next/navigation';
  * GLOBAL IDENTITY SENTINEL (The Brain)
  * This component is the sole authority for routing authenticated and unauthenticated nodes.
  * It lives in the root layout and ensures users are always where they belong.
+ * UPDATED: Removed the mandatory Complete Profile gate to allow immediate terminal access.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -20,7 +21,7 @@ export default function GlobalOverlayManager() {
 
   // Route Categories
   const isAuthRoute = pathname.startsWith('/auth');
-  const isOnboardingRoute = ['/complete-profile', '/wallet-session'].includes(pathname);
+  const isWalletSessionRoute = pathname === '/wallet-session';
   
   useEffect(() => {
     // Wait for auth and wallet initialization
@@ -47,33 +48,28 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // B. Profile Identity Check
-    // If the user is logged in but has no profile name, they must complete their identity.
-    if (!profile?.name) {
-      if (pathname !== '/complete-profile') {
-        router.replace('/complete-profile');
-      }
-      return;
-    }
+    // B. Profile Identity Check (OPTIONAL GATE REMOVED)
+    // Users are no longer blocked if they haven't set a username/photo.
+    // They can do this later in Settings.
 
-    // C. Wallet Registry Check
-    // If identity exists but no wallet is derived locally or onboarding isn't marked as complete.
+    // C. Wallet Registry Check (MANDATORY GATE)
+    // The app requires a wallet node to function.
     const hasLocalWallet = wallets && wallets.length > 0;
-    if (profile?.name && !profile?.onboarding_completed && !hasLocalWallet) {
-      if (pathname !== '/wallet-session') {
+    if (!profile?.onboarding_completed && !hasLocalWallet) {
+      if (!isWalletSessionRoute) {
         router.replace('/wallet-session');
       }
       return;
     }
 
     // 3. AUTOMATIC REDIRECT TO DASHBOARD
-    // If the user is on an auth or onboarding route but their status is 100% complete.
-    const isSetupComplete = profile?.name && profile?.onboarding_completed && hasLocalWallet;
-    if ((isAuthRoute || isOnboardingRoute) && isSetupComplete) {
+    // If the user is on an auth or onboarding route but their wallet is ready.
+    const isSetupComplete = hasLocalWallet;
+    if ((isAuthRoute || isWalletSessionRoute) && isSetupComplete) {
       router.replace('/');
     }
 
-  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isOnboardingRoute]);
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute]);
 
   return (
     <>

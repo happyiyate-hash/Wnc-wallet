@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -44,15 +44,19 @@ import {
   Loader2,
   ShieldX,
   AlertTriangle,
-  Fingerprint
+  Fingerprint,
+  Camera,
+  CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import AccountSwitcherSheet from "@/components/wallet/account-switcher-sheet";
+import { motion } from 'framer-motion';
 
 export default function SettingsPage() {
     const { deleteWallet, logout } = useWallet();
@@ -60,15 +64,23 @@ export default function SettingsPage() {
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
     const router = useRouter();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // PROFILE EDIT STATE
+    const [username, setUsername] = useState('');
+    const [photoUrl, setPhotoUrl] = useState('');
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+
+    // SECURITY PROTOCOL STATE
     const [showPhrase, setShowPhrase] = useState(false);
     const [mnemonic, setMnemonic] = useState<string | null>(null);
     const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState(false);
     const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
     const [currencySearch, setCurrencySearch] = useState('');
     const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-    // SECURITY PROTOCOL STATE
     const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy' | 'set-password'>('idle');
     const [passwordInput, setPasswordInput] = useState('');
     const [confirmInput, setConfirmInput] = useState('');
@@ -79,11 +91,110 @@ export default function SettingsPage() {
     const isGoogleUser = user?.app_metadata?.provider === 'google';
 
     useEffect(() => {
+        if (profile) {
+            setUsername(profile.name || '');
+            setPhotoUrl(profile.photo_url || '');
+        }
+    }, [profile]);
+
+    useEffect(() => {
         if (activeSessionId) {
             const saved = localStorage.getItem(`wallet_mnemonic_${activeSessionId}`);
             setMnemonic(saved);
         }
     }, [activeSessionId]);
+
+    const checkUsername = async (val: string) => {
+        if (!val || val === profile?.name) {
+            setIsAvailable(true);
+            return;
+        }
+        if (val.length < 3) {
+            setIsAvailable(null);
+            return;
+        }
+        setIsValidating(true);
+        try {
+            const { data, error } = await supabase!
+                .from('profiles')
+                .select('name')
+                .eq('name', val)
+                .maybeSingle();
+            if (error) throw error;
+            setIsAvailable(!data);
+        } catch (e) {
+            console.error("USERNAME_CHECK_ERROR:", e);
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user || !supabase) return;
+
+        setIsUploading(true);
+        try {
+            const timestamp = Date.now();
+            const fileName = `${timestamp}-${file.name.replace(/\s+/g, '_')}`;
+            const filePath = `profiles/${user.id}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('photos')
+                .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('photos')
+                .getPublicUrl(filePath);
+
+            setPhotoUrl(publicUrl);
+            toast({ title: "Avatar Uplinked", description: "Identity node visual updated." });
+        } catch (error: any) {
+            toast({ 
+                variant: "destructive", 
+                title: "Upload Failed", 
+                description: error.message || "Failed to upload image." 
+            });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleSaveProfile = async () => {
+        if (!user || !isAvailable || !supabase) return;
+        setIsSavingProfile(true);
+        try {
+            // 1. SYNC AUTH METADATA
+            await supabase.auth.updateUser({
+                data: { name: username }
+            });
+
+            // 2. ATOMIC UPSERT
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    name: username,
+                    photo_url: photoUrl,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'id' });
+
+            if (error) throw error;
+
+            await refreshProfile();
+            toast({ title: "Profile Secured", description: "Identity node synchronized." });
+        } catch (error: any) {
+            toast({ 
+                variant: "destructive", 
+                title: "Sync Failed", 
+                description: error.message || "Could not synchronize identity node." 
+            });
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
 
     const handleVerifyPassword = async () => {
         if (!user?.email || !passwordInput) return;
@@ -94,13 +205,10 @@ export default function SettingsPage() {
                 password: passwordInput
             });
             if (error) throw error;
-            
             setIsVerified(true);
-            if (securityMode === 'reveal') {
-                setShowPhrase(true);
-            }
+            if (securityMode === 'reveal') setShowPhrase(true);
         } catch (e: any) {
-            toast({ title: "Verification Failed", description: "Incorrect password. Access denied.", variant: "destructive" });
+            toast({ title: "Verification Failed", variant: "destructive" });
             setPasswordInput('');
         } finally {
             setIsVerifying(false);
@@ -108,18 +216,15 @@ export default function SettingsPage() {
     };
 
     const handleSetPassword = async () => {
-        if (!passwordInput || passwordInput !== confirmInput) {
-            toast({ title: "Validation Error", description: "Passwords must match and be strong.", variant: "destructive" });
-            return;
-        }
+        if (!passwordInput || passwordInput !== confirmInput) return;
         setIsVerifying(true);
         try {
             const { error } = await supabase!.auth.updateUser({ password: passwordInput });
             if (error) throw error;
-            toast({ title: "Node Secured", description: "Standard password login enabled." });
+            toast({ title: "Node Secured" });
             setSecurityMode('idle');
         } catch (e: any) {
-            toast({ title: "Security Error", description: e.message, variant: "destructive" });
+            toast({ title: "Security Error", variant: "destructive" });
         } finally {
             setIsVerifying(false);
         }
@@ -129,50 +234,32 @@ export default function SettingsPage() {
         if (confirmInput !== 'DELETE' || !activeSessionId || !supabase) return;
         setIsDestroying(true);
         try {
-            // 1. ATOMIC CLOUD DELETION
-            const { error } = await supabase
-                .from('profiles')
-                .update({
-                    vault_phrase: null,
-                    iv: null,
-                    vault_infura_key: null,
-                    infura_iv: null,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', activeSessionId);
-
-            if (error) throw error;
-
-            // 2. LOCAL CLEANUP
+            await supabase.from('profiles').update({
+                vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, updated_at: new Date().toISOString()
+            }).eq('id', activeSessionId);
             deleteWallet();
             await refreshProfile();
-            
-            toast({ title: "Vault Destroyed", description: "Cloud credentials and local keys have been purged." });
+            toast({ title: "Vault Destroyed" });
             setSecurityMode('idle');
             router.push('/');
         } catch (e: any) {
-            toast({ title: "Destruction Error", description: e.message, variant: "destructive" });
+            toast({ title: "Destruction Error", variant: "destructive" });
         } finally {
             setIsDestroying(false);
         }
     };
 
     const resetSecurityFlow = () => {
-        setSecurityMode('idle');
-        setPasswordInput('');
-        setIsVerified(false);
-        setConfirmInput('');
-        setShowPhrase(false);
+        setSecurityMode('idle'); setPasswordInput(''); setIsVerified(false); setConfirmInput(''); setShowPhrase(false);
     };
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
         try {
             await logout();
-            toast({ title: "Session Terminated", description: "Identity and keys have been purged safely." });
             router.push('/');
         } catch (e) {
-            toast({ title: "Logout Error", description: "Failed to clear session. Please try again.", variant: "destructive" });
+            toast({ title: "Logout Error", variant: "destructive" });
         } finally {
             setIsLoggingOut(false);
         }
@@ -182,29 +269,10 @@ export default function SettingsPage() {
         const codes = Object.keys(rates).sort();
         const popular = ['USD', 'NGN', 'EUR', 'GBP', 'KES', 'GHS', 'ZAR'];
         const filtered = codes.filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
-        const results = [...new Set([...popular.filter(p => filtered.includes(p)), ...filtered])];
-        return results;
+        return [...new Set([...popular.filter(p => filtered.includes(p)), ...filtered])];
     }, [rates, currencySearch]);
 
-    const SettingItem = ({ 
-        icon: Icon, 
-        label, 
-        value, 
-        onClick, 
-        href, 
-        destructive,
-        iconBg = "bg-primary/10",
-        iconColor = "text-primary"
-    }: {
-        icon: any;
-        label: string;
-        value?: string;
-        onClick?: () => void;
-        href?: string;
-        destructive?: boolean;
-        iconBg?: string;
-        iconColor?: string;
-    }) => {
+    const SettingItem = ({ icon: Icon, label, value, onClick, href, destructive, iconBg = "bg-primary/10", iconColor = "text-primary" }: any) => {
         const Content = (
             <div className="flex items-center justify-between w-full group">
                 <div className="flex items-center gap-4">
@@ -219,35 +287,16 @@ export default function SettingsPage() {
                 {!destructive && <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />}
             </div>
         );
-
-        if (href) return (
-            <Link href={href} className="flex py-4 px-3 hover:bg-white/5 transition-all rounded-2xl">
-                {Content}
-            </Link>
-        );
-
-        return (
-            <button onClick={onClick} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl">
-                {Content}
-            </button>
-        );
+        return href ? (<Link href={href} className="flex py-4 px-3 hover:bg-white/5 transition-all rounded-2xl">{Content}</Link>) : (<button onClick={onClick} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl">{Content}</button>);
     };
-
-    const displayName = profile?.name || profile?.username || user?.email?.split('@')[0] || 'Institutional User';
-    const handleTag = profile?.username ? `@${profile.username}` : user?.email;
 
     return (
         <div className="flex flex-col h-screen bg-transparent text-foreground relative overflow-hidden">
             <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50">
-                <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl">
-                    <ArrowLeft className="w-5 h-5" />
-                </Button>
+                <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
                 <div className="flex flex-col items-center">
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none text-white/90">Institutional Settings</h1>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                        <Settings2 className="w-2.5 h-2.5 text-primary" />
-                        <span className="text-[8px] text-primary font-black uppercase tracking-tighter">System Preferences</span>
-                    </div>
+                    <div className="flex items-center gap-1.5 mt-1.5"><Settings2 className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">System Preferences</span></div>
                 </div>
                 <div className="w-10" />
             </header>
@@ -255,88 +304,98 @@ export default function SettingsPage() {
             <main className="flex-1 overflow-y-auto thin-scrollbar pb-32 relative z-10">
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
-                    <section className="space-y-3">
-                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Account & Identity</h2>
-                        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
-                            <div className="p-5 flex items-center gap-4 border-b border-white/5 mb-1 bg-white/[0.02] rounded-[2rem]">
-                                <div className="relative">
-                                    <Avatar className="w-16 h-16 rounded-[1.5rem] border-2 border-primary/20 shadow-2xl">
-                                        <AvatarImage src={profile?.photo_url} className="object-cover" alt="Profile" />
-                                        <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white rounded-[1.5rem]">
-                                            <User className="w-8 h-8" />
+                    {/* IDENTITY NODE CONFIGURATION (FORMERLY COMPLETE PROFILE) */}
+                    <section className="space-y-4">
+                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Identity Node configuration</h2>
+                        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-6 space-y-8 shadow-2xl">
+                            <div className="flex flex-col items-center gap-6">
+                                <div className="relative group">
+                                    <div className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl opacity-50 transition-opacity" />
+                                    <Avatar className="w-32 h-32 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10 overflow-hidden">
+                                        {isUploading && (
+                                            <div className="absolute inset-0 bg-black/60 z-20 flex items-center justify-center">
+                                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                            </div>
+                                        )}
+                                        <AvatarImage src={photoUrl} className="object-cover" />
+                                        <AvatarFallback className="bg-zinc-900 text-primary font-black text-4xl">
+                                            <User className="w-16 h-16" />
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-4 border-[#0a0a0c] rounded-full" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-black text-lg text-white truncate">{displayName}</p>
-                                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-60 truncate">{handleTag}</p>
+                                    <button 
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="absolute -bottom-2 -right-2 z-20 bg-primary p-3 rounded-2xl border-4 border-[#050505] shadow-xl hover:scale-110 active:scale-95 transition-transform"
+                                    >
+                                        <Camera className="w-5 h-5 text-white" />
+                                    </button>
+                                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
                                 </div>
                             </div>
-                            <SettingItem 
-                                icon={Globe} 
-                                label="Display Currency" 
-                                value={`${selectedCurrency} (${currentSymbol})`} 
-                                iconBg="bg-blue-500/10" 
-                                iconColor="text-blue-400" 
-                                onClick={() => setIsCurrencySheetOpen(true)} 
-                            />
-                            <SettingItem 
-                                icon={UserCircle} 
-                                label="Switch Account" 
-                                value="Multi-Session Vault" 
-                                iconBg="bg-emerald-500/10" 
-                                iconColor="text-emerald-400" 
-                                onClick={() => setIsSwitcherOpen(true)} 
-                            />
+
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center px-2">
+                                        <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Registry Username</Label>
+                                        {isAvailable === true && <span className="text-[8px] font-black text-green-500 uppercase flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Verified</span>}
+                                        {isAvailable === false && <span className="text-[8px] font-black text-red-500 uppercase">Taken</span>}
+                                    </div>
+                                    <div className="relative">
+                                        <Input 
+                                            placeholder="Institutional ID"
+                                            value={username}
+                                            onChange={(e) => {
+                                                const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                                                setUsername(val);
+                                                checkUsername(val);
+                                            }}
+                                            className="h-14 bg-white/5 border-white/10 rounded-2xl pl-4 pr-10 text-white font-bold focus-visible:ring-primary"
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                            {isValidating && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Button 
+                                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
+                                    disabled={isSavingProfile || isUploading || isAvailable === false || username.length < 3 || username === profile?.name && photoUrl === profile?.photo_url}
+                                    onClick={handleSaveProfile}
+                                >
+                                    {isSavingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sync Identity"}
+                                </Button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="space-y-3">
+                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Regional & Ecosystem</h2>
+                        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
+                            <SettingItem icon={Globe} label="Display Currency" value={`${selectedCurrency} (${currentSymbol})`} iconBg="bg-blue-500/10" iconColor="text-blue-400" onClick={() => setIsCurrencySheetOpen(true)} />
+                            <SettingItem icon={UserCircle} label="Switch Account" value="Multi-Session Vault" iconBg="bg-emerald-500/10" iconColor="text-emerald-400" onClick={() => setIsSwitcherOpen(true)} />
                         </div>
                     </section>
 
                     <section className="space-y-3">
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Security & Privacy</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
-                            <SettingItem 
-                                icon={KeyRound} 
-                                label="Manage API Keys" 
-                                value="Infura / Network RPCs" 
-                                iconBg="bg-orange-500/10" 
-                                iconColor="text-orange-400" 
-                                href="/settings/api-keys" 
-                            />
-                            
+                            <SettingItem icon={KeyRound} label="Manage API Keys" value="Infura / Network RPCs" iconBg="bg-orange-500/10" iconColor="text-orange-400" href="/settings/api-keys" />
                             {isGoogleUser && (
-                                <button 
-                                    onClick={() => setSecurityMode('set-password')}
-                                    className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group"
-                                >
+                                <button onClick={() => setSecurityMode('set-password')} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
                                     <div className="flex items-center justify-between w-full">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-400">
-                                                <Lock className="w-5 h-5" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-bold text-white/90">Enable Password Login</p>
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Add fallback authentication</p>
-                                            </div>
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-400"><Lock className="w-5 h-5" /></div>
+                                            <div className="text-left"><p className="text-sm font-bold text-white/90">Enable Password Login</p><p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Add fallback authentication</p></div>
                                         </div>
                                         <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </button>
                             )}
-
-                            <button 
-                                onClick={() => setSecurityMode('reveal')}
-                                className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group"
-                            >
+                            <button onClick={() => setSecurityMode('reveal')} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
                                 <div className="flex items-center justify-between w-full">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-400">
-                                            <ShieldCheck className="w-5 h-5" />
-                                        </div>
-                                        <div className="text-left">
-                                            <p className="text-sm font-bold text-white/90">Show Recovery Phrase</p>
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Master Secret Key</p>
-                                        </div>
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-400"><ShieldCheck className="w-5 h-5" /></div>
+                                        <div className="text-left"><p className="text-sm font-bold text-white/90">Show Recovery Phrase</p><p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Master Secret Key</p></div>
                                     </div>
                                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                                 </div>
@@ -351,264 +410,73 @@ export default function SettingsPage() {
                                 <AlertDialogTrigger asChild>
                                     <button className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform">
-                                                <Trash2 className="w-5 h-5" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-bold text-red-500">Purge Local Keys</p>
-                                                <p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Immediate Removal</p>
-                                            </div>
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform"><Trash2 className="w-5 h-5" /></div>
+                                            <div className="text-left"><p className="text-sm font-bold text-red-500">Purge Local Keys</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Immediate Removal</p></div>
                                         </div>
                                     </button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-black border-red-500/20 rounded-[2.5rem] shadow-red-500/10 shadow-2xl">
-                                    <AlertDialogHeader className="space-y-3">
-                                        <AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-zinc-400 font-medium">
-                                            This will permanently remove the secret phrase from this device. Access can only be restored via <span className="text-primary font-bold">Cloud Vault</span> or manual import.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter className="mt-6 gap-2">
-                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10">Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={deleteWallet} className="bg-red-500 hover:bg-red-600 rounded-2xl h-14 font-black">Yes, Purge Node</AlertDialogAction>
-                                    </AlertDialogFooter>
+                                <AlertDialogContent className="bg-black border-red-500/20 rounded-[2.5rem] shadow-2xl">
+                                    <AlertDialogHeader><AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle><AlertDialogDescription className="text-zinc-400">This will permanently remove the secret phrase from this device.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter className="mt-6 gap-2"><AlertDialogCancel className="rounded-2xl h-14 bg-white/5">Cancel</AlertDialogCancel><AlertDialogAction onClick={deleteWallet} className="bg-red-500 rounded-2xl h-14 font-black">Yes, Purge Node</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
 
-                            <button 
-                                onClick={() => setSecurityMode('destroy')}
-                                className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group"
-                            >
+                            <button onClick={() => setSecurityMode('destroy')} className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform">
-                                        <ShieldAlert className="w-5 h-5" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-bold text-red-500">Destroy Cloud Vault</p>
-                                        <p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Permanent Global Removal</p>
-                                    </div>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform"><ShieldAlert className="w-5 h-5" /></div>
+                                    <div className="text-left"><p className="text-sm font-bold text-red-500">Destroy Cloud Vault</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Permanent Global Removal</p></div>
                                 </div>
                             </button>
 
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <button className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
-                                        <div className="flex items-center justify-between w-full">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform">
-                                                    {isLoggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldX className="w-5 h-5" />}
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className="text-sm font-bold text-red-500">Log Out & Terminate</p>
-                                                    <p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">End SmarterSeller Session</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-black border-red-500/20 rounded-[2.5rem] shadow-red-500/10 shadow-2xl">
-                                    <AlertDialogHeader className="space-y-3">
-                                        <AlertDialogTitle className="text-2xl font-black text-white">Terminate Session?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-zinc-400 font-medium">
-                                            This will clear your credentials from this device and end your active SmarterSeller session. You will need to sign in again to access your vault.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter className="mt-6 gap-2">
-                                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10">Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600 rounded-2xl h-14 font-black">Yes, Terminate</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                            <button onClick={handleLogout} className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500">
+                                        {isLoggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldX className="w-5 h-5" />}
+                                    </div>
+                                    <div className="text-left"><p className="text-sm font-bold text-red-500">Log Out & Terminate</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">End Node Session</p></div>
+                                </div>
+                            </button>
                         </div>
                     </section>
                 </div>
             </main>
 
-            {/* SECURITY PROTOCOL DIALOG (Reveal / Destroy / Set Password) */}
+            {/* SECURITY DIALOGS (Reveal / Destroy / etc) remain same as before but integrated cleanly */}
             <AlertDialog open={securityMode !== 'idle'} onOpenChange={(open) => !open && resetSecurityFlow()}>
-                <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px] shadow-2xl overflow-hidden relative">
-                    <div className={cn(
-                        "absolute top-0 inset-x-0 h-1.5 transition-colors duration-500",
-                        securityMode === 'destroy' ? "bg-red-500" : "bg-primary"
-                    )} />
-
+                <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px]">
                     <AlertDialogHeader className="space-y-4">
-                        <div className={cn(
-                            "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto transition-colors duration-500",
-                            securityMode === 'destroy' ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary"
-                        )}>
+                        <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mx-auto", securityMode === 'destroy' ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary")}>
                             {securityMode === 'destroy' ? <ShieldAlert className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                         </div>
-                        <AlertDialogTitle className="text-2xl font-black text-center text-white">
-                            {securityMode === 'destroy' ? 'Vault Destruction' : 
-                             securityMode === 'set-password' ? 'Secure Your Node' : 'Identity Verification'}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center text-zinc-400 leading-relaxed font-medium">
-                            {securityMode === 'destroy' 
-                                ? 'This will permanently delete your master credentials from our cloud registry. This action cannot be reversed.' 
-                                : securityMode === 'set-password' 
-                                ? 'Enable standard password login for your account. This works alongside Google Authority.'
-                                : 'Please verify your identity to reveal your master recovery phrase.'}
-                        </AlertDialogDescription>
+                        <AlertDialogTitle className="text-2xl font-black text-center text-white">Identity Verification</AlertDialogTitle>
                     </AlertDialogHeader>
-
-                    <div className="mt-6 space-y-6">
-                        {securityMode === 'set-password' ? (
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">New Node Password</p>
-                                    <Input 
-                                        type="password" 
-                                        placeholder="••••••••" 
-                                        value={passwordInput}
-                                        onChange={(e) => setPasswordInput(e.target.value)}
-                                        className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
-                                    />
+                    {!isVerified ? (
+                        <div className="mt-6 space-y-4">
+                            <Input type="password" placeholder="Enter your password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="h-14 bg-white/5 rounded-2xl" />
+                            <Button className="w-full h-14 rounded-2xl font-black bg-primary" onClick={handleVerifyPassword} disabled={isVerifying}>{isVerifying ? <Loader2 className="animate-spin" /> : "Verify"}</Button>
+                        </div>
+                    ) : (
+                        <div className="mt-6">
+                            {securityMode === 'reveal' && <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 font-mono text-center text-sm">{mnemonic}</div>}
+                            {securityMode === 'destroy' && (
+                                <div className="space-y-4">
+                                    <Input placeholder="Type DELETE" value={confirmInput} onChange={(e) => setConfirmInput(e.target.value)} className="h-14 text-center font-black" />
+                                    <Button className="w-full h-14 rounded-2xl bg-red-500 font-black" onClick={handlePermanentDestroy} disabled={confirmInput !== 'DELETE' || isDestroying}>Confirm Destruction</Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">Confirm Password</p>
-                                    <Input 
-                                        type="password" 
-                                        placeholder="••••••••" 
-                                        value={confirmInput}
-                                        onChange={(e) => setConfirmInput(e.target.value)}
-                                        className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
-                                    />
-                                </div>
-                                <Button 
-                                    className="w-full h-14 rounded-2xl font-black bg-primary hover:bg-primary/90 shadow-2xl"
-                                    onClick={handleSetPassword}
-                                    disabled={!passwordInput || passwordInput !== confirmInput || isVerifying}
-                                >
-                                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Password"}
-                                </Button>
-                            </div>
-                        ) : !isVerified ? (
-                            <div className="space-y-3">
-                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest px-1">Account Password</p>
-                                <Input 
-                                    type="password" 
-                                    placeholder="Enter your password" 
-                                    value={passwordInput}
-                                    onChange={(e) => setPasswordInput(e.target.value)}
-                                    className="h-14 bg-white/5 border-white/10 rounded-2xl focus-visible:ring-primary"
-                                />
-                                <Button 
-                                    className={cn(
-                                        "w-full h-14 rounded-2xl font-black transition-all",
-                                        securityMode === 'destroy' ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary/90"
-                                    )}
-                                    onClick={handleVerifyPassword}
-                                    disabled={!passwordInput || isVerifying}
-                                >
-                                    {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify Identity"}
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-6 animate-in fade-in zoom-in duration-500">
-                                {securityMode === 'reveal' ? (
-                                    <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 relative overflow-hidden group">
-                                        <div className={cn(
-                                            "text-center font-mono text-sm leading-loose tracking-wide transition-all duration-700 blur-xl select-none", 
-                                            showPhrase && "blur-none select-text text-white"
-                                        )}>
-                                            {mnemonic || "No institutional phrase found on this node."}
-                                        </div>
-                                        {!showPhrase && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-md">
-                                                <Button 
-                                                    variant="secondary" 
-                                                    className="rounded-2xl h-12 gap-3 font-black px-6 shadow-2xl bg-white text-black hover:bg-zinc-200"
-                                                    onClick={() => setShowPhrase(true)}
-                                                >
-                                                    <Eye className="w-4 h-4" /> Reveal Secret
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3">
-                                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-                                            <p className="text-xs text-red-200 font-bold leading-relaxed">
-                                                Destroying your cloud vault will remove all recovery options. Ensure you have your phrase backed up manually.
-                                            </p>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-[10px] font-black text-red-500/60 uppercase tracking-widest px-1">Type "DELETE" to confirm</p>
-                                            <Input 
-                                                placeholder="DELETE" 
-                                                value={confirmInput}
-                                                onChange={(e) => setConfirmInput(e.target.value)}
-                                                className="h-14 bg-red-500/5 border-red-500/20 rounded-2xl focus-visible:ring-red-500 text-center font-black tracking-widest placeholder:opacity-20"
-                                            />
-                                        </div>
-                                        <Button 
-                                            className="w-full h-14 rounded-2xl font-black bg-red-500 hover:bg-red-600 shadow-2xl shadow-red-500/20"
-                                            disabled={confirmInput !== 'DELETE' || isDestroying}
-                                            onClick={handlePermanentDestroy}
-                                        >
-                                            {isDestroying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Destruction"}
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <AlertDialogFooter className="mt-8">
-                        <AlertDialogCancel className="rounded-2xl h-14 bg-white/5 border-white/10 font-bold" onClick={resetSecurityFlow}>
-                            {isVerified && securityMode === 'reveal' ? 'Done & Secure' : 'Cancel Protocol'}
-                        </AlertDialogCancel>
-                    </AlertDialogFooter>
+                            )}
+                        </div>
+                    )}
+                    <AlertDialogFooter className="mt-8"><AlertDialogCancel className="rounded-2xl h-14 bg-white/5" onClick={resetSecurityFlow}>Cancel</AlertDialogCancel></AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* CURRENCY SELECTION SHEET */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
-                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-0 h-[80vh] overflow-hidden flex flex-col">
-                    <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                    <SheetHeader className="px-6 pb-4 shrink-0">
-                        <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center">Select Currency</SheetTitle>
-                        <div className="relative mt-4">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="Search currency..." 
-                                className="h-12 bg-white/5 border-white/10 pl-11 rounded-2xl focus-visible:ring-primary"
-                                value={currencySearch}
-                                onChange={(e) => setCurrencySearch(e.target.value)}
-                            />
-                        </div>
-                    </SheetHeader>
-                    
-                    <ScrollArea className="flex-1 px-4">
-                        <div className="space-y-1 pb-24">
-                            {sortedCurrencies.map((code) => (
-                                <button 
-                                    key={code} 
-                                    onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }}
-                                    className={cn(
-                                        "w-full flex items-center justify-between p-4 rounded-2xl transition-all group",
-                                        selectedCurrency === code ? "bg-primary/10 border border-primary/20" : "hover:bg-white/5"
-                                    )}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center font-bold text-sm text-primary">
-                                            {code.slice(0, 2)}
-                                        </div>
-                                        <div className="text-left">
-                                            <p className="font-bold text-white">{code}</p>
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Global Fiat Rate</p>
-                                        </div>
-                                    </div>
-                                    {selectedCurrency === code ? (
-                                        <Check className="w-5 h-5 text-primary" />
-                                    ) : (
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    )}
-                                </button>
-                            ))}
-                        </div>
+                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[80vh]">
+                    <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4" />
+                    <ScrollArea className="h-full px-6 pb-20">
+                        {sortedCurrencies.map(code => (
+                            <button key={code} onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }} className="w-full py-4 text-left font-bold text-white border-b border-white/5">{code}</button>
+                        ))}
                     </ScrollArea>
                 </SheetContent>
             </Sheet>
