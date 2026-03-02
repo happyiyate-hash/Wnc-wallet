@@ -40,7 +40,9 @@ import {
   Loader2,
   ShieldX,
   Camera,
-  CheckCircle2
+  CheckCircle2,
+  XCircle,
+  AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -85,6 +87,7 @@ export default function SettingsPage() {
         if (profile) {
             setUsername(profile.name || '');
             setPhotoUrl(profile.photo_url || '');
+            setIsAvailable(true);
         }
     }, [profile]);
 
@@ -95,15 +98,24 @@ export default function SettingsPage() {
         }
     }, [user]);
 
+    // REAL-TIME SENSITIVE CHECK
     const checkUsername = async (val: string) => {
-        if (!val || val === profile?.name) {
+        if (!val) {
+            setIsAvailable(null);
+            return;
+        }
+        
+        // If it matches their current name, it's available to them
+        if (val === profile?.name) {
             setIsAvailable(true);
             return;
         }
+
         if (val.length < 3) {
             setIsAvailable(null);
             return;
         }
+
         setIsValidating(true);
         try {
             const { data, error } = await supabase!
@@ -111,8 +123,9 @@ export default function SettingsPage() {
                 .select('name')
                 .eq('name', val)
                 .maybeSingle();
+            
             if (error) throw error;
-            setIsAvailable(!data);
+            setIsAvailable(!data); // If no data found, name is available
         } catch (e) {
             console.error("USERNAME_CHECK_ERROR:", e);
         } finally {
@@ -153,9 +166,10 @@ export default function SettingsPage() {
     };
 
     const handleSaveProfile = async () => {
-        if (!user || !isAvailable || !supabase) return;
+        if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
+            // STEP 1: AUTH METADATA SYNC (For instant recognition)
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -164,6 +178,7 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
+            // STEP 2: UPSERT TO PUBLIC TABLE (For ecosystem consistency)
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -204,36 +219,6 @@ export default function SettingsPage() {
             setPasswordInput('');
         } finally {
             setIsVerifying(false);
-        }
-    };
-
-    const handleSetPassword = async () => {
-        if (!passwordInput || passwordInput !== confirmInput) return;
-        setIsVerifying(true);
-        try {
-            const { error } = await supabase!.auth.updateUser({ password: passwordInput });
-            if (error) throw error;
-            toast({ title: "Node Secured" });
-            setSecurityMode('idle');
-        } catch (e: any) {
-            toast({ title: "Security Error", variant: "destructive" });
-        } finally {
-            setIsVerifying(false);
-        }
-    };
-
-    const handlePermanentDestroy = async () => {
-        if (confirmInput !== 'DELETE' || !user) return;
-        setIsDestroying(true);
-        try {
-            await deleteWalletPermanently();
-            toast({ title: "Vault Destroyed", description: "Node keys erased from registry and device." });
-            setSecurityMode('idle');
-            router.push('/');
-        } catch (e: any) {
-            toast({ title: "Destruction Error", variant: "destructive", description: e.message });
-        } finally {
-            setIsDestroying(false);
         }
     };
 
@@ -279,7 +264,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-transparent text-foreground relative overflow-hidden">
+        <div className="flex flex-col min-h-screen bg-transparent text-foreground relative overflow-hidden">
             <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/20 backdrop-blur-2xl sticky top-0 z-50">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
                 <div className="flex flex-col items-center">
@@ -324,8 +309,8 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center px-2">
                                         <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Registry Username</Label>
-                                        {isAvailable === true && <span className="text-[8px] font-black text-green-500 uppercase flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Verified</span>}
-                                        {isAvailable === false && <span className="text-[8px] font-black text-red-500 uppercase">Taken</span>}
+                                        {isAvailable === true && username.length >= 3 && <span className="text-[8px] font-black text-green-500 uppercase flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Available</span>}
+                                        {isAvailable === false && <span className="text-[8px] font-black text-red-500 uppercase flex items-center gap-1"><XCircle className="w-2.5 h-2.5" /> Taken</span>}
                                     </div>
                                     <div className="relative">
                                         <Input 
@@ -336,16 +321,26 @@ export default function SettingsPage() {
                                                 setUsername(val);
                                                 checkUsername(val);
                                             }}
-                                            className="h-14 bg-white/5 border-white/10 rounded-2xl pl-4 pr-10 text-white font-bold focus-visible:ring-primary"
+                                            className={cn(
+                                                "h-14 bg-white/5 border-white/10 rounded-2xl pl-4 pr-10 text-white font-bold focus-visible:ring-primary transition-all",
+                                                isAvailable === false && "border-red-500/50 bg-red-500/5"
+                                            )}
                                         />
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
                                             {isValidating && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                                            {!isValidating && isAvailable === true && username.length >= 3 && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                            {!isValidating && isAvailable === false && <AlertCircle className="w-4 h-4 text-red-500" />}
                                         </div>
                                     </div>
+                                    {isAvailable === false && (
+                                        <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest px-2 animate-in fade-in slide-in-from-top-1">
+                                            This username already exists, please create a unique one.
+                                        </p>
+                                    )}
                                 </div>
 
                                 <Button 
-                                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
+                                    className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95"
                                     disabled={isSavingProfile || isUploading || isAvailable === false || username.length < 3 || (username === profile?.name && photoUrl === profile?.photo_url)}
                                     onClick={handleSaveProfile}
                                 >
@@ -366,17 +361,6 @@ export default function SettingsPage() {
                         <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Security & Privacy</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
                             <SettingItem icon={KeyRound} label="Manage API Keys" value="Infura / Network RPCs" iconBg="bg-orange-500/10" iconColor="text-orange-400" href="/settings/api-keys" />
-                            {isGoogleUser && (
-                                <button onClick={() => setSecurityMode('set-password')} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
-                                    <div className="flex items-center justify-between w-full">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-400"><Lock className="w-5 h-5" /></div>
-                                            <div className="text-left"><p className="text-sm font-bold text-white/90">Enable Password Login</p><p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Add fallback authentication</p></div>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                                    </div>
-                                </button>
-                            )}
                             <button onClick={() => setSecurityMode('reveal')} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
                                 <div className="flex items-center justify-between w-full">
                                     <div className="flex items-center gap-4">
