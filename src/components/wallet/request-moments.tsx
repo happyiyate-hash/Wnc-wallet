@@ -42,10 +42,23 @@ import { useToast } from '@/hooks/use-toast';
  */
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low to cover the transfer and network gas fees.";
-  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your wallet.";
-  if (msg.includes('websocket') || msg.includes('disconnected')) return "Network Timeout: The blockchain node closed the connection. Please try again.";
-  return "Dispatch Error: The blockchain rejected the transaction. Please check your balance.";
+  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
+    return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
+  }
+  if (msg.includes('user rejected')) {
+    return "Transaction Cancelled: You rejected the request in your terminal.";
+  }
+  if (msg.includes('websocket') || msg.includes('disconnected')) {
+    return "Network Timeout: The blockchain node closed the connection. Please try again.";
+  }
+  
+  // Surface specific database or protocol error messages directly
+  if (err.message) {
+    return `System Advisory: ${err.message}`;
+  }
+  
+  return "Dispatch Error: The transaction was rejected by the network protocol.";
 };
 
 /**
@@ -261,7 +274,8 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
             p_recipient_id: requester.id,
             p_amount: Math.floor(request.amount)
         });
-        if (rpcError || !data?.success) throw new Error(rpcError?.message || data?.message || "Atomic settlement failed.");
+        if (rpcError) throw new Error(rpcError.message);
+        if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
       } 
       else if (chainType === 'btc' || chainType === 'ltc') {

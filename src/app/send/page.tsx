@@ -131,9 +131,20 @@ const getDetectedNetworkMeta = (type: string) => {
 
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds')) return "Insufficient Funds: Your node balance is too low.";
-  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request.";
-  return "Dispatch Error: The transaction was rejected by the network.";
+  
+  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) {
+    return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
+  }
+  if (msg.includes('user rejected')) {
+    return "Transaction Cancelled: You rejected the request in your terminal.";
+  }
+  
+  // Surface specific database or protocol error messages directly
+  if (err.message) {
+    return `System Advisory: ${err.message}`;
+  }
+  
+  return "Dispatch Error: The transaction was rejected by the network protocol.";
 };
 
 function SendClient() {
@@ -381,7 +392,8 @@ function SendClient() {
       if (selectedToken.symbol === 'WNC') {
         const transferAmount = parseFloat(amount);
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: Math.floor(transferAmount) });
-        if (rpcError || !data?.success) throw new Error(rpcError?.message || "Settlement failed.");
+        if (rpcError) throw new Error(rpcError.message);
+        if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
         await refreshProfile(); 
       } else if (activeNetwork.type === 'xrp') {
