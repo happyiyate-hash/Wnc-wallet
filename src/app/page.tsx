@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -20,9 +21,27 @@ function HomeContent() {
     setIsRequestOverlayOpen, 
     activeFulfillmentId, 
     setActiveFulfillmentId,
+    runCloudDiagnostic,
+    isInitialized,
+    wallets,
+    hasFetchedInitialData
   } = useWallet();
 
   const searchParams = useSearchParams();
+
+  /**
+   * INSTITUTIONAL SYNC CONTROLLER
+   * Gated by Dashboard Mount Lifecycle.
+   * Ensures the audit only starts after the UI has fully stabilized.
+   */
+  useEffect(() => {
+    if (isInitialized && wallets && wallets.length > 0 && hasFetchedInitialData) {
+      const timer = setTimeout(() => {
+        runCloudDiagnostic();
+      }, 2000); // Deliberate 2s dwell for dashboard readiness
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, wallets, hasFetchedInitialData, runCloudDiagnostic]);
 
   // Deep Link Interceptor: Check for fulfillment ID in URL or search params
   useEffect(() => {

@@ -251,35 +251,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, profile]);
 
-  /**
-   * CORRECTED DELETE FLOW: Clear wallet state but KEEP user session.
-   */
   const deleteWallet = useCallback(async () => {
     if (user) {
-        // 1. Terminate Diagnostic Sentinel
         setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
-        
-        // 2. Clear Registry Cache
         purgeLocalWalletCache(user.id);
-        
-        // 3. Reset Wallet Memory
         setWallets(null);
         setAccountNumber(null);
         setBalances({});
         setHasFetchedInitialData(true);
-
-        // 4. Redirect to Wallet Setup (Gate)
         router.replace('/wallet-session');
     }
   }, [user, router]);
 
-  /**
-   * CORRECTED PERMANENT DELETE: Wipe cloud fields but KEEP user session.
-   */
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
     try {
-        // 1. Wipe Cloud Fields
         await supabase.from('profiles').update({
             vault_phrase: null,
             iv: null,
@@ -291,11 +277,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             account_number: null,
             onboarding_completed: false
         }).eq('id', user.id);
-        
-        // 2. Refresh profile state
         await refreshProfile();
-
-        // 3. Clear Local Wallet
         await deleteWallet();
     } catch (e) {
         console.error("PERMANENT_DELETE_FAIL:", e);
@@ -331,9 +313,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
-  /**
-   * CORRECTED DIAGNOSTIC TRIGGER: Gated by wallet existence.
-   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!user || !wallets || wallets.length === 0 || !accountNumber || chainsWithLogos.length === 0) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
@@ -341,16 +320,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => setSyncDiagnostic(p => ({ ...p, ...u })));
   }, [user, wallets, accountNumber, profile, chainsWithLogos]);
-
-  // Initial Sync Trigger - Gated by wallets !== null
-  useEffect(() => {
-    if (isInitialized && wallets && wallets.length > 0 && user && hasFetchedInitialData) {
-        const timer = setTimeout(() => {
-            runCloudDiagnostic();
-        }, 1000);
-        return () => clearTimeout(timer);
-    }
-  }, [isInitialized, wallets === null, user?.id, hasFetchedInitialData, runCloudDiagnostic]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
