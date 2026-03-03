@@ -158,7 +158,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hasFetchedInitialData || !wallets || !user || !accountNumber || chainsWithLogos.length === 0) return;
 
-    // Condition: Wait 3 seconds for UI stability (App Settled)
+    // Condition: Wait 1 second for UI stability (App Settled)
     const timer = setTimeout(() => {
       const auditKey = `${user.id}:${wallets[0].address}`;
       if (lastAuditRef.current === auditKey) return;
@@ -174,7 +174,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       ).then(() => {
           refreshProfile();
       });
-    }, 3000);
+    }, 1000); // Reduced from 3000
 
     return () => clearTimeout(timer);
   }, [hasFetchedInitialData, wallets, user, accountNumber, profile, refreshProfile, chainsWithLogos]);

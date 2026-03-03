@@ -7,7 +7,7 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
  * Optimized for grouped EVM verification and high-fidelity logical heartbeats.
- * Implements a "Heavy & Secure" cadence to ensure visual verification of every node.
+ * HIGH-SPEED VERSION: Artificial delays reduced for faster execution while maintaining sequential integrity.
  */
 
 export interface SyncDiagnostic {
@@ -38,7 +38,7 @@ export const backgroundSyncWorker = {
 
     // 1. Initial Settlement Pause: Allow dashboard to stabilize before auditing
     onUpdate({ status: 'idle', progress: 0 });
-    await breathe(3000);
+    await breathe(1000); // Reduced from 3000
 
     // 2. CONSTRUCT AUDIT SEQUENCE
     // Group EVM for efficiency, verify others individually
@@ -80,7 +80,7 @@ export const backgroundSyncWorker = {
     const totalSteps = sequence.length;
     let completed = 0;
 
-    // 3. STRICT SEQUENTIAL AUDIT LOOP
+    // 3. HIGH-SPEED SEQUENTIAL AUDIT LOOP
     for (const node of sequence) {
       // STEP 1: INITIALIZE SCAN
       onUpdate({ 
@@ -91,8 +91,8 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // Secure "Thinking" Dwell
-      await breathe(1200);
+      // Snappy "Thinking" Dwell
+      await breathe(400); // Reduced from 1200
 
       // STEP 2: LOGICAL COMPARISON (Local vs Cloud)
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
@@ -100,7 +100,7 @@ export const backgroundSyncWorker = {
       if (isMismatch) {
         // TRIGGER VISUAL ALERT
         onUpdate({ status: 'mismatch' });
-        await breathe(2000); // Visual dwell: Let the user see the RED mismatch
+        await breathe(800); // Reduced from 2000
 
         // STEP 3: ATOMIC REGISTRY REPAIR
         onUpdate({ status: 'syncing' });
@@ -112,7 +112,7 @@ export const backgroundSyncWorker = {
           // STEP 4: UI REFLECTION
           // Immediately update the displayed cloud address to match the local node
           onUpdate({ cloudValue: node.localAddr });
-          await breathe(1000); // "Handshake Fixed" dwell
+          await breathe(400); // Reduced from 1000
         } catch (e) {
           console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
@@ -125,18 +125,18 @@ export const backgroundSyncWorker = {
       completed++;
       
       // Delay progress update slightly for smooth transition
-      await breathe(400);
+      await breathe(200); // Reduced from 400
       onUpdate({ progress: (completed / totalSteps) * 100 });
       
       // Post-verification dwell (Checkmark visibility)
-      await breathe(800);
+      await breathe(200); // Reduced from 800
     }
 
     // FINAL STEP: AUDIT SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
     
     // Clear diagnostic from view after delay
-    await breathe(4000);
+    await breathe(2000); // Reduced from 4000
     onUpdate({ status: 'idle', progress: 0 });
   }
 };
