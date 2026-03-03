@@ -1,4 +1,3 @@
-
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,9 +16,9 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL SYNC OVERLAY (Independent Space Spec)
- * Re-engineered to eliminate "Container" look and implement Vertical Fade-Slide.
- * Uses isolated transition slots with mode="wait" to prevent overlaps.
+ * INSTITUTIONAL SYNC OVERLAY (Independent 3D Space)
+ * Re-engineered for SLIM MODE: h-16 cards with inline verification.
+ * Implements vertical Fade-and-Slide with isolated animation slots.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -56,11 +55,11 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // VERTICAL FADE VARIANTS: Optimized for Independent Space
+  // VERTICAL FADE VARIANTS: Optimized for Independent Space & Slim Profile
   const cardVariants = {
-    initial: { opacity: 0, y: 20, scale: 0.95 },
-    animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } },
-    exit: { opacity: 0, y: -15, scale: 0.95, transition: { duration: 0.25, ease: "easeIn" } }
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+    exit: { opacity: 0, y: -15, transition: { duration: 0.3 } }
   };
 
   return (
@@ -152,66 +151,74 @@ export default function CloudSyncCard() {
             </div>
           </div>
 
-          {/* INDEPENDENT CARD SPACE */}
-          <div className="relative min-h-[100px] flex items-center justify-center">
-            <AnimatePresence mode="wait">
-                <div key={chain} className="grid grid-cols-2 gap-4 w-full">
-                    {/* SLOT 1: CLOUD REGISTRY */}
-                    <motion.div 
-                        variants={cardVariants}
-                        initial="initial"
-                        animate="animate"
-                        exit="exit"
-                        className="p-4 rounded-3xl bg-white/[0.03] border border-white/5 space-y-2 shadow-2xl relative group overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent opacity-50" />
-                        <div className="flex items-center gap-2 relative z-10">
-                            <Database className="w-3.5 h-3.5 text-purple-400" />
-                            <span className="text-[8px] font-black text-purple-400/60 uppercase tracking-widest">Cloud Registry</span>
-                        </div>
-                        <p className={cn(
-                            "text-xs font-mono truncate transition-all duration-500 relative z-10",
-                            status === 'mismatch' ? "text-red-400 line-through opacity-50" : "text-white/80"
-                        )}>
-                            {truncateAddress(cloudValue)}
-                        </p>
-                    </motion.div>
-
-                    {/* SLOT 2: LOCAL NODE */}
-                    <motion.div 
-                        variants={cardVariants}
-                        initial="initial"
-                        animate="animate"
-                        exit="exit"
-                        transition={{ delay: 0.05 }}
-                        className="p-4 rounded-3xl bg-primary/5 border border-primary/20 space-y-2 relative shadow-2xl group overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-50" />
-                        <div className="flex items-center gap-2 relative z-10">
-                            <Cpu className="w-3.5 h-3.5 text-primary" />
-                            <span className="text-[8px] font-black text-primary uppercase tracking-widest">Local Node</span>
-                        </div>
-                        <p className="text-xs font-mono text-white relative z-10 truncate">
-                            {truncateAddress(localValue)}
-                        </p>
-                        
-                        <AnimatePresence>
-                            {status === 'success' && (
-                                <motion.div 
-                                    initial={{ scale: 0, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    exit={{ scale: 0, opacity: 0 }}
-                                    className="absolute top-2 right-2 z-20"
-                                >
-                                    <div className="bg-green-500 rounded-full p-0.5 border-2 border-[#0a0a0c] shadow-lg">
-                                        <CheckCircle2 className="w-3 h-3 text-white" />
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </motion.div>
+          {/* INDEPENDENT CARD SPACE - SLIM MODE */}
+          <div className="relative min-h-[80px] flex items-center justify-center">
+            <div className="grid grid-cols-2 gap-4 w-full">
+                
+                {/* SLOT 1: CLOUD REGISTRY */}
+                <div className="relative">
+                    <AnimatePresence mode="wait">
+                        <motion.div 
+                            key={chain ? `cloud-${chain}` : 'empty-cloud'}
+                            variants={cardVariants}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            className="h-16 py-2 px-4 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-center shadow-2xl relative group overflow-hidden"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent opacity-50" />
+                            <div className="flex items-center gap-2 relative z-10 mb-1">
+                                <Database className="w-3 h-3 text-purple-400" />
+                                <span className="text-[9px] font-black text-purple-400/60 uppercase tracking-widest">Cloud Registry</span>
+                            </div>
+                            <p className={cn(
+                                "text-[10px] font-mono truncate transition-all duration-500 relative z-10",
+                                status === 'mismatch' ? "text-red-400 line-through opacity-50" : "text-white/80"
+                            )}>
+                                {truncateAddress(cloudValue)}
+                            </p>
+                        </motion.div>
+                    </AnimatePresence>
                 </div>
-            </AnimatePresence>
+
+                {/* SLOT 2: LOCAL NODE */}
+                <div className="relative">
+                    <AnimatePresence mode="wait">
+                        <motion.div 
+                            key={chain ? `local-${chain}` : 'empty-local'}
+                            variants={cardVariants}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            className="h-16 py-2 px-4 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col justify-center relative shadow-2xl group overflow-hidden"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-50" />
+                            <div className="flex items-center justify-between relative z-10 mb-1">
+                                <div className="flex items-center gap-2">
+                                    <Cpu className="w-3 h-3 text-primary" />
+                                    <span className="text-[9px] font-black text-primary uppercase tracking-widest">Local Node</span>
+                                </div>
+                                <AnimatePresence>
+                                    {(status === 'success' || status === 'completed') && (
+                                        <motion.div 
+                                            initial={{ scale: 0, opacity: 0 }}
+                                            animate={{ scale: 1, opacity: 1 }}
+                                            exit={{ scale: 0, opacity: 0 }}
+                                        >
+                                            <div className="bg-green-500 rounded-full p-0.5 shadow-lg">
+                                                <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                            <p className="text-[10px] font-mono text-white relative z-10 truncate">
+                                {truncateAddress(localValue)}
+                            </p>
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+            </div>
 
             {/* BIG SUCCESS OVERLAY (CENTRAL BEAT) */}
             <AnimatePresence>
@@ -219,7 +226,7 @@ export default function CloudSyncCard() {
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.5 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="absolute inset-0 z-30 flex items-center justify-center bg-[#0a0a0c]/80 backdrop-blur-sm rounded-3xl"
+                        className="absolute inset-0 z-30 flex items-center justify-center bg-[#0a0a0c]/80 backdrop-blur-sm rounded-[2.5rem]"
                     >
                         <div className="flex flex-col items-center gap-4">
                             <div className="w-16 h-16 rounded-[2rem] bg-green-500/20 border border-green-500/40 flex items-center justify-center text-green-500 shadow-[0_0_40px_rgba(34,197,94,0.2)]">
