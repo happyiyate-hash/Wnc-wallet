@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -133,6 +132,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const initialFetchTriggeredRef = useRef(false);
+  const activeMnemonicRef = useRef<string | null>(null);
 
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
@@ -268,7 +268,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600);
+    await wait(400);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -287,7 +287,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(400); // Accelerated audit heartbeat
+      await wait(300);
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
@@ -299,13 +299,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(400); 
+        await wait(300); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      await wait(400);
+      await wait(300);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -316,19 +316,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(600);
+    await wait(400);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
       await wait(800);
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(600);
+      await wait(400);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
   }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
@@ -369,6 +369,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+        activeMnemonicRef.current = mnemonic;
         
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
@@ -378,6 +379,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await saveToVault();
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false); 
+        runCloudDiagnostic({ forceUI: true });
     }
     return mnemonic;
   };
@@ -387,6 +389,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (derived && user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+        activeMnemonicRef.current = mnemonic;
         
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
@@ -398,6 +401,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await saveToVault();
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false);
+        runCloudDiagnostic({ forceUI: true });
     }
   };
 
@@ -427,7 +431,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       ]);
 
       const [mnemonicVal, infuraVal] = results;
-      if (mnemonicVal) localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonicVal);
+      if (mnemonicVal) {
+          localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonicVal);
+          activeMnemonicRef.current = mnemonicVal;
+      }
       if (infuraVal) { setInfuraApiKey(infuraVal); localStorage.setItem('infura_api_key', infuraVal); }
 
       if (mnemonicVal) {
@@ -437,6 +444,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setWallets(derived);
           setIsSynced(false); 
           sessionStorage.removeItem(`identity_audit_${user.id}`);
+          runCloudDiagnostic({ forceUI: true });
         }
       }
 
@@ -592,6 +600,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, userAddedTokens]);
 
+  /**
+   * SAFE LOGIC: IMMEDIATE MNEMONIC CHANGE DETECTION
+   * Monitors the local storage key for the mnemonic. If it changes (manual swap or update),
+   * it triggers an immediate re-derivation and background cloud sync audit.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    const checkMnemonicChange = async () => {
+      const stored = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+      if (stored !== activeMnemonicRef.current) {
+        if (!stored) {
+          activeMnemonicRef.current = null;
+          setWallets(null);
+          return;
+        }
+        
+        activeMnemonicRef.current = stored;
+        const derived = await deriveAllWallets(stored, profile);
+        setWallets(derived);
+        setIsSynced(false);
+        sessionStorage.removeItem(`identity_audit_${user.id}`);
+        runCloudDiagnostic({ forceUI: true });
+      }
+    };
+
+    const interval = setInterval(checkMnemonicChange, 2000);
+    return () => clearInterval(interval);
+  }, [user, profile, runCloudDiagnostic]);
+
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
@@ -617,6 +655,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (cachedPrices) try { setPrices(JSON.parse(cachedPrices)); } catch (e) {}
       
       if (savedMnemonic) { 
+        activeMnemonicRef.current = savedMnemonic;
         const derived = await deriveAllWallets(savedMnemonic, profile); 
         setWallets(derived); 
       } else {
