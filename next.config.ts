@@ -61,6 +61,7 @@ const nextConfig: NextConfig = {
         assert: require.resolve('assert'),
         os: require.resolve('os-browserify'),
         path: require.resolve('path-browserify'),
+        process: require.resolve('process/browser'),
       };
     }
 
