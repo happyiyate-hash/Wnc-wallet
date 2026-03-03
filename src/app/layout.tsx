@@ -14,6 +14,7 @@ import GlobalOverlayManager from '@/components/global-overlay-manager';
 import MobileNav from '@/components/wallet/mobile-nav';
 import NotificationCenter from '@/components/notifications/notification-center';
 import RealtimeNotificationListener from '@/components/notifications/realtime-listener';
+import GlobalLoadingBarrier from '@/components/global-loading-barrier';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -66,8 +67,9 @@ export default function RootLayout({
                     </div>
                   </div>
                   
-                  {/* CENTRAL SENTINELS & OVERLAYS */}
+                  {/* CENTRAL SENTINELS, BARRIERS & OVERLAYS */}
                   <Suspense fallback={null}>
+                    <GlobalLoadingBarrier />
                     <GlobalOverlayManager />
                     <NotificationCenter />
                     <RealtimeNotificationListener />

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -16,29 +15,14 @@ export const dynamic = 'force-dynamic';
 
 function HomeContent() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
-  const { user, profile, loading } = useUser();
   const { 
-    isInitialized, 
-    isWalletLoading, 
     isRequestOverlayOpen, 
     setIsRequestOverlayOpen, 
     activeFulfillmentId, 
     setActiveFulfillmentId,
-    wallets,
-    hasFetchedInitialData
   } = useWallet();
 
   const searchParams = useSearchParams();
-
-  // Failsafe timer to prevent infinite loading if market APIs fail
-  const [showFailsafe, setShowFailsafe] = useState(false);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowFailsafe(true);
-    }, 12000);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Deep Link Interceptor: Check for fulfillment ID in URL or search params
   useEffect(() => {
@@ -65,45 +49,6 @@ function HomeContent() {
     window.addEventListener('scroll', handle);
     return () => window.removeEventListener('scroll', handle);
   }, []);
-
-  /**
-   * INSTITUTIONAL HANDSHAKE RESOLVER
-   * The app is only "Ready" when:
-   * 1. Auth is settled (user is logged in)
-   * 2. Profile metadata is fetched
-   * 3. Wallet core is initialized AND initial data (balances/prices) are hydrated
-   * 
-   * ONBOARDING EXCEPTION:
-   * If the user is logged in but has NO wallet and onboarding isn't complete, 
-   * we yield to the GlobalOverlayManager so it can route to /wallet-session.
-   */
-  const needsOnboarding = user && profile && !wallets && !profile.onboarding_completed;
-  const isAppLoading = !showFailsafe && !needsOnboarding && (loading || !isInitialized || !profile || !hasFetchedInitialData);
-
-  if (isAppLoading) {
-    return (
-      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#050505] text-white">
-        <div className="relative mb-12 flex items-center justify-center">
-          {/* HARDWARE-ACCELERATED CSS SPINNER */}
-          <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin shadow-[0_0_25px_rgba(139,92,246,0.5)]" />
-          
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* BRIGHT INNER NODE */}
-            <div className="w-10 h-10 rounded-2xl bg-primary border border-primary animate-pulse shadow-[0_0_35px_rgba(139,92,246,0.6)]" />
-          </div>
-        </div>
-        
-        <div className="space-y-4 text-center px-10">
-          <h2 className="text-lg font-black uppercase tracking-[0.5em] text-white">
-            Establishing Identity
-          </h2>
-          <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em] opacity-40 leading-relaxed max-w-[240px] mx-auto">
-            Synchronizing Cryptographic Vault
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 bg-transparent pb-32 relative">
