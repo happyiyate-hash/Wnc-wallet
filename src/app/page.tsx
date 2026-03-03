@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -71,8 +70,13 @@ function HomeContent() {
    * 1. Auth is settled (user is logged in)
    * 2. Profile metadata is fetched
    * 3. Wallet core is initialized AND initial data (balances/prices) are hydrated
+   * 
+   * ONBOARDING EXCEPTION:
+   * If the user is logged in but has NO wallet and onboarding isn't complete, 
+   * we yield to the GlobalOverlayManager so it can route to /wallet-session.
    */
-  const isAppLoading = !showFailsafe && (loading || !isInitialized || !profile || (!wallets && !!user));
+  const needsOnboarding = user && profile && !wallets && !profile.onboarding_completed;
+  const isAppLoading = !showFailsafe && !needsOnboarding && (loading || !isInitialized || !profile || (!wallets && !!user));
 
   if (isAppLoading) {
     return (
