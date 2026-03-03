@@ -7,7 +7,7 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
  * Optimized for "Snap-Dwell-Snap" rhythm.
- * transitions are snappy, while verification states stay deliberate.
+ * ensures logical verification stays visible while animations execute at full speed.
  */
 
 export interface SyncDiagnostic {
@@ -20,8 +20,8 @@ export interface SyncDiagnostic {
 
 export const backgroundSyncWorker = {
   /**
-   * Performs a sequential, logic-gated audit of the vault.
-   * Sharp transitions with intentional dwellers for readability.
+   * Performs a strict sequential audit of the vault registry.
+   * Forces the system to stop and verify each node one-by-one.
    */
   async performCloudAudit(
     userId: string,
@@ -79,9 +79,9 @@ export const backgroundSyncWorker = {
     const totalSteps = sequence.length;
     let completed = 0;
 
-    // 3. SNAP-DWELL-SNAP AUDIT LOOP
+    // 3. STRICT SEQUENTIAL HANDSHAKE LOOP
     for (const node of sequence) {
-      // STEP 1: APPEAR (Fast Transition triggered by chain change)
+      // PHASE 1: APPEAR (Snappy Transition)
       onUpdate({ 
         status: 'checking',
         chain: node.label, 
@@ -90,25 +90,25 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // DWELL: Stay for a bit so user can read addresses
+      // DWELL: Minimum visual time to read addresses
       await breathe(800);
 
-      // STEP 2: LOGICAL COMPARISON
+      // PHASE 2: LOGICAL COMPARISON
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
-        // TRIGGER MISMATCH: Immediate Visual Change
+        // TRIGGER MISMATCH: Visual Alert
         onUpdate({ status: 'mismatch' });
-        await breathe(1000); // Dwell on the mismatch state
+        await breathe(1000); 
 
-        // REPAIR: Syncing phase
+        // REPAIR: Syncing phase (Wait for database confirmation)
         onUpdate({ status: 'syncing' });
         
         try {
           await syncAddressesToCloud(userId, wallets, accountNumber);
-          // UI REFLECTION: Update the displayed cloud side to match local
+          // UI REFLECTION: Physically update the displayed cloud value to match local
           onUpdate({ cloudValue: node.localAddr });
-          await breathe(800); // Dwell on the fix
+          await breathe(800); 
         } catch (e) {
           console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
@@ -116,20 +116,18 @@ export const backgroundSyncWorker = {
         }
       }
 
-      // STEP 3: VERIFIED (Success Dwell)
+      // PHASE 3: VERIFIED (Stay for checkmark)
       onUpdate({ status: 'success' });
-      
-      // Deliberate Dwell on Success (Stay for a bit)
       await breathe(1000); 
       
       completed++;
       onUpdate({ progress: (completed / totalSteps) * 100 });
       
-      // Post-dwell pause before snapping to next (triggers exit animation)
+      // FINAL SNAP: Wait briefly for transition logic to prepare next chain
       await breathe(200);
     }
 
-    // FINAL STEP: AUDIT SUMMARY
+    // FINAL SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
     await breathe(2000);
     onUpdate({ status: 'idle', progress: 0 });
