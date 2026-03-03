@@ -6,25 +6,22 @@ import { useUser } from '@/contexts/user-provider';
 
 /**
  * GLOBAL LOADING BARRIER (Hydration-Safe)
- * Optimized for SWR performance while ensuring server/client parity.
- * Prevents hydration errors by rendering a stable skeleton first.
+ * Hardened to ensure server/client parity.
+ * Prevents hydration errors by rendering a stable skeleton on both sides.
  */
 export default function GlobalLoadingBarrier() {
   const { loading: authLoading, profile } = useUser();
   const [hasMounted, setHasMounted] = useState(false);
-  const [showFailsafe, setShowFailsafe] = useState(false);
   
   useEffect(() => {
     setHasMounted(true);
-    const timer = setTimeout(() => {
-      setShowFailsafe(true);
-    }, 8000);
-    return () => clearTimeout(timer);
   }, []);
 
-  // Hydration safety: render matching UI on server and first client pass
-  const hasCachedData = !!profile;
-  const isAppLoading = !showFailsafe && (authLoading || !hasMounted) && !hasCachedData;
+  // STABILITY SENTINEL:
+  // On server: hasMounted is false.
+  // On client (first pass): hasMounted is false.
+  // This ensures the initial HTML matches exactly.
+  const isAppLoading = !hasMounted || (authLoading && !profile);
 
   if (isAppLoading) {
     return (

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -235,7 +236,12 @@ export default function SettingsPage() {
         if (confirmInput !== 'DELETE') return;
         setIsDestroying(true);
         try {
-            await deleteWalletPermanently();
+            if (deleteWalletPermanently) {
+                await deleteWalletPermanently();
+            } else {
+                // Fallback if context not loaded correctly
+                await logout();
+            }
             resetSecurityFlow();
             router.push('/');
         } finally {

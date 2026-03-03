@@ -68,10 +68,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  const [prices, setPrices] = useState<PriceResult>({});
-  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
-  const [accountNumber, setAccountNumber] = useState<string | null>(null);
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
+  // INITIALIZE STATE FROM LOCALSTORAGE (Non-blocking)
+  const [prices, setPrices] = useState<PriceResult>(() => {
+    if (typeof window === 'undefined') return {};
+    const cached = localStorage.getItem('cache_prices_global');
+    return cached ? JSON.parse(cached) : {};
+  });
+
+  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>(() => {
+    if (typeof window === 'undefined') return {};
+    const cached = localStorage.getItem('cache_balances_all');
+    return cached ? JSON.parse(cached) : {};
+  });
+
+  const [accountNumber, setAccountNumber] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    // Note: We need the user ID for correct lookup, so we hydrate properly in useEffect
+    return null; 
+  });
+
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const cached = localStorage.getItem('last_viewing_network');
+    return cached ? JSON.parse(cached) : null;
+  });
 
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -91,21 +111,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // Hydration Effect
+  // HYDRATION: Ensure browser-only data is loaded safely
   useEffect(() => {
-    const cachedPrices = localStorage.getItem('cache_prices_global');
-    if (cachedPrices) setPrices(JSON.parse(cachedPrices));
-
-    const cachedBalances = localStorage.getItem('cache_balances_all');
-    if (cachedBalances) setBalances(JSON.parse(cachedBalances));
-
-    if (user) {
-        const acc = localStorage.getItem(`account_number_${user.id}`);
-        if (acc) setAccountNumber(acc);
-    }
-
-    const savedNetwork = localStorage.getItem('last_viewing_network');
-    if (savedNetwork) setViewingNetwork(JSON.parse(savedNetwork));
+    if (!user) return;
+    const acc = localStorage.getItem(`account_number_${user.id}`);
+    if (acc) setAccountNumber(acc);
   }, [user]);
 
   useEffect(() => {
