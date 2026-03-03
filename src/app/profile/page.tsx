@@ -66,8 +66,8 @@ export default function ProfilePage() {
     const [isRedeeming, setIsRedeeming] = useState(false);
     const [redeemResult, setRedeemResult] = useState<{ success: boolean, amount?: number, message?: string } | null>(null);
 
-    // INSTANT IDENTITY RESOLUTION: Prioritize profile data for zero-latency display
-    const displayAccountNumber = profile?.account_number || walletAccountNumber;
+    // INSTANT IDENTITY RESOLUTION: Prioritize the immediate provider ID for zero-latency
+    const displayAccountNumber = walletAccountNumber || profile?.account_number;
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 

@@ -167,9 +167,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
+  /**
+   * ATOMIC REGISTRY SYNC
+   * Ensures Account ID and Derived Addresses are perfectly matched in the Master Cloud.
+   */
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
-    if (!user || !supabase || !currentWallets) return;
+    if (!user || !supabase) return;
     
     let targetAcc = accountNumber;
     if (!targetAcc) {
@@ -180,26 +184,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // 1. ATOMIC PROFILE UPDATE: Push Account ID first
       await supabase
         .from('profiles')
         .update({ 
           account_number: targetAcc, 
           updated_at: new Date().toISOString(),
-          evm_address: currentWallets.find(w => w.type === 'evm')?.address,
-          xrp_address: currentWallets.find(w => w.type === 'xrp')?.address,
-          polkadot_address: currentWallets.find(w => w.type === 'polkadot')?.address
+          evm_address: currentWallets?.find(w => w.type === 'evm')?.address,
+          xrp_address: currentWallets?.find(w => w.type === 'xrp')?.address,
+          polkadot_address: currentWallets?.find(w => w.type === 'polkadot')?.address
         })
         .eq('id', user.id);
 
-      const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
-      await supabase.rpc('sync_user_wallets', {
-          p_user_id: user.id,
-          p_wallets: walletPayload
-      });
+      // 2. WALLET REGISTRY SYNC: Map all derived chains
+      if (currentWallets && currentWallets.length > 0) {
+        const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
+        await supabase.rpc('sync_user_wallets', {
+            p_user_id: user.id,
+            p_wallets: walletPayload
+        });
+      }
 
       await refreshProfile();
     } catch (e: any) {
-      console.error("Address Sync Failed:", e.message);
+      console.error("Registry Sync Interrupted:", e.message);
     }
   }, [user, wallets, accountNumber, refreshProfile]);
 
@@ -334,14 +342,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        // Immediate encryption of phrase
-        await saveToVault();
-        setIsSynced(false); 
-        // Trigger dashboard-first address sync
+        
+        // INSTANT REGISTRY HANDSHAKE
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${user.id}`, newId);
+
+        // Immediate encryption and address sync
+        await saveToVault();
+        await syncAllAddresses(derived);
+        setIsSynced(false); 
     }
     return mnemonic;
   };
@@ -351,14 +362,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (derived && user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        await saveToVault();
-        setIsSynced(false);
+        
+        // INSTANT REGISTRY HANDSHAKE
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
             setAccountNumber(newId);
             localStorage.setItem(`account_number_${user.id}`, newId);
         }
+
+        await saveToVault();
+        await syncAllAddresses(derived);
+        setIsSynced(false);
     }
   };
 
@@ -546,9 +561,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       
-      // INSTANT SYNC: Set account number as soon as we have a profile or local cache
-      if (profile?.account_number) setAccountNumber(profile.account_number);
-      else if (localAcc) setAccountNumber(localAcc);
+      // INSTANT IDENTITY RESOLUTION: Generate immediately if missing
+      let targetAcc = profile?.account_number || localAcc;
+      if (!targetAcc) {
+          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
+          targetAcc = `835${randomSuffix}`;
+          localStorage.setItem(`account_number_${user.id}`, targetAcc);
+          // Trigger async sync without blocking the UI
+          syncAllAddresses();
+      }
+      setAccountNumber(targetAcc);
 
       setIsWalletLoading(true);
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
@@ -572,7 +594,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsWalletLoading(false);
     };
     initLocalSession();
-  }, [authLoading, user, profile]);
+  }, [authLoading, user, profile, syncAllAddresses]);
 
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
