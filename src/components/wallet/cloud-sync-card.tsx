@@ -7,14 +7,43 @@ import {
   RefreshCw, 
   Cpu,
   Search,
-  AlertCircle
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
+import { useState, useEffect, useRef } from 'react';
 
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
+  
+  // PEEK STATE: Allows user to hide/show the banner during scan
+  const [isManuallyHidden, setIsManuallyHidden] = useState(false);
+  const lastTapRef = useRef<number>(0);
+
+  useEffect(() => {
+    // 1. DESKTOP HANDSHAKE (Double Click)
+    const handleDblClick = () => {
+      setIsManuallyHidden(prev => !prev);
+    };
+
+    // 2. MOBILE HANDSHAKE (Double Tap)
+    const handleTouchStart = () => {
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 300;
+      if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+        setIsManuallyHidden(prev => !prev);
+      }
+      lastTapRef.current = now;
+    };
+
+    window.addEventListener('dblclick', handleDblClick);
+    window.addEventListener('touchstart', handleTouchStart);
+
+    return () => {
+      window.removeEventListener('dblclick', handleDblClick);
+      window.removeEventListener('touchstart', handleTouchStart);
+    };
+  }, []);
 
   if (status === 'idle') return null;
 
@@ -24,7 +53,6 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // NEW PREMIUM ANIMATION: Vertical Fade (No more horizontal ghosting)
   const verticalFadeVariants = {
     initial: { y: 15, opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 20, stiffness: 200 } },
@@ -32,8 +60,8 @@ export default function CloudSyncCard() {
   };
 
   /**
-   * INTERRUPTIVE ICON LOGIC
-   * Changes based on the active diagnostic state
+   * DYNAMIC STATUS EYE
+   * Transforms based on the real-time audit engine state.
    */
   const renderStatusIcon = () => {
     switch (status) {
@@ -54,11 +82,17 @@ export default function CloudSyncCard() {
   return (
     <motion.div 
       initial={{ y: -100, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+      animate={{ 
+        y: isManuallyHidden ? -250 : 0, 
+        opacity: isManuallyHidden ? 0 : 1 
+      }}
       exit={{ y: -100, opacity: 0 }}
-      className="fixed top-12 left-4 right-4 z-[100] max-w-md mx-auto"
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      className={cn(
+        "fixed top-12 left-4 right-4 z-[100] max-w-md mx-auto transition-all duration-500",
+        isManuallyHidden ? "pointer-events-none" : "pointer-events-auto"
+      )}
     >
-      {/* MAIN CONTAINER: Reduced height to be SLIM like a Swap Card */}
       <div className="bg-[#0a0a0c]/95 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible">
         
         {/* Header Section */}
@@ -70,17 +104,18 @@ export default function CloudSyncCard() {
             )}>
               {renderStatusIcon()}
             </div>
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white/80">Cloud Sync Node</h3>
+            <div className="flex flex-col">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-white/80 leading-none">Cloud Sync Node</h3>
+              <p className="text-[7px] font-black uppercase text-primary/40 mt-1">Double-tap to hide</p>
+            </div>
           </div>
           <div className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-bold text-primary">
             {chain || 'Network'}
           </div>
         </div>
 
-        {/* DATA SLOTS: Two separate, independent cards */}
+        {/* DATA SLOTS */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          
-          {/* SLOT 1: CLOUD */}
           <div className="relative h-14">
             <AnimatePresence mode="popLayout">
               <motion.div 
@@ -98,7 +133,6 @@ export default function CloudSyncCard() {
             </AnimatePresence>
           </div>
 
-          {/* SLOT 2: LOCAL + PREMIUM BADGE */}
           <div className="relative h-14">
             <AnimatePresence mode="popLayout">
               <motion.div 
@@ -113,7 +147,6 @@ export default function CloudSyncCard() {
                 </div>
                 <p className="text-[10px] font-mono text-white truncate">{truncateAddress(localValue)}</p>
 
-                {/* THE BADGE: Half-in, Half-out Premium Checkmark */}
                 {(status === 'success' || status === 'completed') && (
                   <motion.div 
                     initial={{ scale: 0, rotate: -45 }}
@@ -130,7 +163,6 @@ export default function CloudSyncCard() {
           </div>
         </div>
 
-        {/* Progress Bar: Slim line at the bottom */}
         <div className="space-y-1">
           <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div 
