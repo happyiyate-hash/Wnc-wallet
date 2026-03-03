@@ -17,7 +17,10 @@ import {
   Cpu,
   Loader2,
   User as UserIcon,
-  ChevronRight
+  ChevronRight,
+  HandCoins,
+  AlertCircle,
+  ArrowUpRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/user-provider';
@@ -26,21 +29,27 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useToast } from '@/hooks/use-toast';
 
 /**
  * INSTITUTIONAL GROWTH NODE (AFFILIATE)
- * Visualizes the 400 WNC Referral Protocol with real-time registry tracking.
+ * Visualizes the 100 WNC Escrow Referral Protocol.
  */
 export default function InvitesPage() {
     const router = useRouter();
-    const { user } = useUser();
+    const { user, profile, refreshProfile } = useUser();
     const { accountNumber } = useWallet();
     const [isCopied, copy] = useCopyToClipboard();
+    const { toast } = useToast();
+    
     const [currentStep, setCurrentStep] = useState(0);
-
-    // Referral Registry State
     const [referrals, setReferrals] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+    const MIN_WITHDRAWAL = 1000;
+    const escrowBalance = profile?.wnc_referral_escrow || 0;
+    const isEligible = escrowBalance >= MIN_WITHDRAWAL;
 
     const referralCode = useMemo(() => {
         if (!accountNumber) return null;
@@ -52,7 +61,6 @@ export default function InvitesPage() {
         return `${window.location.origin}/auth/signup?ref=${referralCode}`;
     }, [referralCode]);
 
-    // Fetch Referrals Protocol
     useEffect(() => {
         if (!user?.id || !supabase) return;
 
@@ -85,13 +93,30 @@ export default function InvitesPage() {
         fetchReferrals();
     }, [user?.id]);
 
-    // Derived Statistics
-    const activeNodesCount = referrals.filter(r => r.status === 'pending').length;
-    const totalRewards = referrals
-        .filter(r => r.status === 'completed')
-        .reduce((sum, r) => sum + (r.reward_amount || 0), 0);
+    const handleWithdraw = async () => {
+        if (!isEligible || isWithdrawing) return;
+        
+        setIsWithdrawing(true);
+        try {
+            const { data, error } = await supabase!.rpc('withdraw_referral_bonus', {
+                p_user_id: user?.id
+            });
 
-    // CINEMATIC AUTOMATION: Rotate through scenes
+            if (error) throw error;
+            
+            if (data.success) {
+                toast({ title: "Settlement Authorized", description: `Transferred ${data.amount} WNC to your main vault.` });
+                await refreshProfile();
+            } else {
+                toast({ variant: "destructive", title: "Withdrawal Denied", description: data.message });
+            }
+        } catch (e: any) {
+            toast({ variant: "destructive", title: "Protocol Error", description: e.message });
+        } finally {
+            setIsWithdrawing(false);
+        }
+    };
+
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentStep((prev) => (prev + 1) % 4);
@@ -117,16 +142,16 @@ export default function InvitesPage() {
             border: "border-purple-500/20"
         },
         {
-            title: "Vitality Protocol",
-            desc: "Nodes remain active for 48 cycles to verify registry integrity.",
+            title: "Escrow Protocol",
+            desc: "Earnings are held in a secure growth escrow until registry verification.",
             icon: Clock,
             color: "text-amber-400",
             bg: "bg-amber-500/10",
             border: "border-amber-500/20"
         },
         {
-            title: "Reward Settlement",
-            desc: "Institutional 400 WNC is credited directly to your Vault.",
+            title: "Registry Settlement",
+            desc: "Claim your 100 WNC rewards once you reach the 1,000 WNC threshold.",
             icon: Zap,
             color: "text-green-400",
             bg: "bg-green-500/10",
@@ -197,18 +222,55 @@ export default function InvitesPage() {
                     </div>
                 </section>
 
-                {/* EARNINGS SUMMARY */}
+                {/* EARNINGS SUMMARY - DUAL BALANCES */}
                 <div className="grid grid-cols-2 gap-3 shrink-0">
-                    <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1 shadow-2xl">
-                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Active Nodes</p>
-                        <p className="text-2xl font-black text-white">{activeNodesCount}</p>
+                    <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/20" />
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Pending Escrow</p>
+                        <p className="text-2xl font-black text-white tabular-nums">{escrowBalance.toLocaleString()}</p>
+                        <p className="text-[7px] font-black text-amber-500 uppercase tracking-tighter">Growth Lock</p>
                     </div>
                     <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 blur-2xl -mr-8 -mt-8" />
-                        <p className="text-[9px] font-black text-primary uppercase tracking-widest">WNC Rewards</p>
-                        <p className="text-2xl font-black text-white tabular-nums">{totalRewards.toLocaleString()}</p>
+                        <p className="text-[9px] font-black text-primary uppercase tracking-widest">Withdrawable</p>
+                        <p className={cn("text-2xl font-black tabular-nums", isEligible ? "text-green-400" : "text-white/40")}>
+                            {isEligible ? escrowBalance.toLocaleString() : "0"}
+                        </p>
+                        <div className="flex items-center gap-1">
+                            <span className="text-[7px] font-black text-primary uppercase tracking-tighter">Threshold: 1,000 WNC</span>
+                            {!isEligible && <Lock className="w-2 h-2 text-white/20" />}
+                        </div>
                     </div>
                 </div>
+
+                {/* WITHDRAW CONTROL */}
+                <section className="px-2">
+                    <Button 
+                        onClick={handleWithdraw}
+                        disabled={!isEligible || isWithdrawing}
+                        className={cn(
+                            "w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all shadow-2xl group",
+                            isEligible 
+                                ? "bg-primary hover:bg-primary/90 shadow-primary/20" 
+                                : "bg-zinc-900 border-zinc-950 opacity-50 cursor-not-allowed"
+                        )}
+                    >
+                        {isWithdrawing ? <Loader2 className="animate-spin w-5 h-5" /> : (
+                            <div className="flex items-center gap-3">
+                                {isEligible ? <HandCoins className="w-5 h-5 animate-pulse" /> : <Lock className="w-4 h-4 opacity-40" />}
+                                <span>{isEligible ? "Authorize Settlement to Vault" : `Reach ${MIN_WITHDRAWAL} WNC to Withdraw`}</span>
+                            </div>
+                        )}
+                    </Button>
+                    {!isEligible && (
+                        <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start">
+                            <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                Institutional rewards are held in the **Growth Escrow**. To ensure registry integrity, you must reach a minimum of **1,000 WNC** before authorized settlement to your main vault.
+                            </p>
+                        </div>
+                    )}
+                </section>
 
                 {/* SHARE CONTROL NODE */}
                 <section className="space-y-4 shrink-0">
@@ -300,10 +362,10 @@ export default function InvitesPage() {
                                             "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
                                             ref.status === 'completed' ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500"
                                         )}>
-                                            {ref.status}
+                                            {ref.status === 'completed' ? 'escrowed' : ref.status}
                                         </div>
                                         <p className="text-[10px] font-black text-white tabular-nums">
-                                            {ref.status === 'completed' ? `+${ref.reward_amount} WNC` : 'Pending'}
+                                            {ref.status === 'completed' ? `+100 WNC` : 'Pending'}
                                         </p>
                                     </div>
                                 </motion.div>
@@ -330,7 +392,7 @@ export default function InvitesPage() {
                         <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Registry Integrity: SECURE</span>
                     </div>
                     <p className="text-[8px] text-white/20 uppercase font-black tracking-widest text-center max-w-[240px] leading-relaxed">
-                        Referral settlement subject to institutional activity verification protocol v2.1
+                        Referral settlement subject to institutional escrow verification protocol v3.2
                     </p>
                 </div>
             </main>

@@ -47,6 +47,7 @@ export interface UserProfile {
     name: string; // Username Column
     photo_url?: string;
     wnc_earnings: number;
+    wnc_referral_escrow: number; // New Institutional Escrow Field
     tokens: number;
     plan_type?: string;
     country_code?: string;
