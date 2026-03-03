@@ -32,7 +32,7 @@ import {
   KeyRound, 
   LogOut, 
   Globe, 
-  ChevronRight,
+  ChevronRight, 
   ShieldCheck,
   Settings2,
   Lock,
@@ -98,21 +98,14 @@ export default function SettingsPage() {
         }
     }, [user]);
 
-    // REAL-TIME SENSITIVE CHECK
     const checkUsername = async (val: string) => {
-        if (!val) {
+        if (!val || val.length < 3) {
             setIsAvailable(null);
             return;
         }
         
-        // If it matches their current name, it's available to them
         if (val === profile?.name) {
             setIsAvailable(true);
-            return;
-        }
-
-        if (val.length < 3) {
-            setIsAvailable(null);
             return;
         }
 
@@ -125,7 +118,7 @@ export default function SettingsPage() {
                 .maybeSingle();
             
             if (error) throw error;
-            setIsAvailable(!data); // If no data found, name is available
+            setIsAvailable(!data);
         } catch (e) {
             console.error("USERNAME_CHECK_ERROR:", e);
         } finally {
@@ -169,7 +162,6 @@ export default function SettingsPage() {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // STEP 1: AUTH METADATA SYNC (For instant recognition)
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -178,7 +170,6 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
-            // STEP 2: UPSERT TO PUBLIC TABLE (For ecosystem consistency)
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -211,11 +202,22 @@ export default function SettingsPage() {
                 email: user.email,
                 password: passwordInput
             });
+            
             if (error) throw error;
+
+            // Retrieve mnemonic again to ensure it's fresh
+            const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+            setMnemonic(saved);
+            
             setIsVerified(true);
             if (securityMode === 'reveal') setShowPhrase(true);
         } catch (e: any) {
-            toast({ title: "Verification Failed", variant: "destructive" });
+            console.error("VERIFICATION_ERROR:", e);
+            toast({ 
+                title: "Verification Failed", 
+                description: e.message || "Invalid password standard.",
+                variant: "destructive" 
+            });
             setPasswordInput('');
         } finally {
             setIsVerifying(false);
@@ -235,7 +237,12 @@ export default function SettingsPage() {
     };
 
     const resetSecurityFlow = () => {
-        setSecurityMode('idle'); setPasswordInput(''); setIsVerified(false); setConfirmInput(''); setShowPhrase(false);
+        setSecurityMode('idle'); 
+        setPasswordInput(''); 
+        setIsVerified(false); 
+        setConfirmInput(''); 
+        setShowPhrase(false);
+        setIsVerifying(false);
     };
 
     const handleLogout = async () => {
@@ -344,11 +351,6 @@ export default function SettingsPage() {
                                             {!isValidating && isAvailable === false && <AlertCircle className="w-4 h-4 text-red-500" />}
                                         </div>
                                     </div>
-                                    {isAvailable === false && (
-                                        <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest px-2 animate-in fade-in slide-in-from-top-1">
-                                            This username already exists, please create a unique one.
-                                        </p>
-                                    )}
                                 </div>
 
                                 <Button 
@@ -438,7 +440,17 @@ export default function SettingsPage() {
                         </div>
                     ) : (
                         <div className="mt-6">
-                            {securityMode === 'reveal' && <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 font-mono text-center text-sm">{mnemonic}</div>}
+                            {securityMode === 'reveal' && (
+                                <div className="space-y-4">
+                                    <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 font-mono text-center text-sm break-words">
+                                        {mnemonic || "No phrase detected in local registry."}
+                                    </div>
+                                    <Button variant="outline" className="w-full h-14 rounded-2xl font-black text-xs uppercase" onClick={() => {
+                                        navigator.clipboard.writeText(mnemonic || '');
+                                        toast({ title: "Copied to clipboard" });
+                                    }} disabled={!mnemonic}>Copy Phrase</Button>
+                                </div>
+                            )}
                             {securityMode === 'destroy' && (
                                 <div className="space-y-4">
                                     <Input placeholder="Type DELETE" value={confirmInput} onChange={(e) => setConfirmInput(e.target.value)} className="h-14 text-center font-black" />

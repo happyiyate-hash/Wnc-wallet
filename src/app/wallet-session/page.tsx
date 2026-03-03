@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -210,7 +211,7 @@ export default function WalletSessionPage() {
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-white uppercase tracking-tight">Import Existing</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest opacity-60">Manual Phrase Entry</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest font-black opacity-60">Manual Phrase Entry</p>
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground opacity-20 group-hover:opacity-60 transition-opacity" />
