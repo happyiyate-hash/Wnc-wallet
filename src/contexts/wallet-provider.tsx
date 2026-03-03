@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -241,18 +240,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  /**
-   * INSTITUTIONAL REAL-TIME SCANNER (Granular)
-   * Re-engineered to follow the "Dashboard-First" selective protocol.
-   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    // Check if we already verified in this tab session
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
-    
-    // Only proceed if forced OR never audited in session OR isSynced is explicitly false
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -269,7 +261,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
-    // Single pull of cloud addresses to optimize scanning
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
 
@@ -294,7 +285,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await wait(400);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
-        // Sync this specific chain node
         await supabase.rpc('sync_user_wallets', {
             p_user_id: user.id,
             p_wallets: [{ type: chainInfo.type, address: local }]
@@ -310,7 +300,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Final Vault Check
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -339,13 +328,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        
-        // Immediate Cloud Backup Handshake (Phrase/API Key)
         await saveToVault();
-        
-        // Mark as unsynced so diagnostic runs on dashboard
         setIsSynced(false); 
-        
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
@@ -359,13 +343,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (derived && user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        
-        // Immediate Cloud Backup Handshake
         await saveToVault();
-        
-        // Trigger verification on dashboard
         setIsSynced(false);
-        
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
@@ -409,11 +388,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const derived = await deriveAllWallets(mnemonicVal, latestProfile);
         if (derived) { 
           setWallets(derived);
-          setIsSynced(false); // Trigger visual handshake on dashboard
+          setIsSynced(false); 
         }
       }
 
-      if (latestProfile.account_number) { setAccountNumber(latestProfile.account_number); localStorage.setItem(`account_number_${user.id}`, latestProfile.account_number); }
+      if (latestProfile.account_number) { 
+        setAccountNumber(latestProfile.account_number); 
+        localStorage.setItem(`account_number_${user.id}`, latestProfile.account_number); 
+      }
 
       await refreshProfile();
       onStatusUpdate?.('Restoration Complete');
@@ -553,18 +535,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const initLocalSession = async () => {
       if (authLoading) return;
       if (!user) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return; }
+      
+      const localAcc = localStorage.getItem(`account_number_${user.id}`);
+      
+      // INSTANT SYNC: Set account number as soon as we have a profile or local cache
+      if (profile?.account_number) setAccountNumber(profile.account_number);
+      else if (localAcc) setAccountNumber(localAcc);
+
       setIsWalletLoading(true);
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
       const cachedPrices = localStorage.getItem(`market_prices_${user.id}`);
-      const localAcc = localStorage.getItem(`account_number_${user.id}`);
       const savedKey = localStorage.getItem('infura_api_key');
+      
       if (savedKey) setInfuraApiKey(savedKey);
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
       if (cachedPrices) try { setPrices(JSON.parse(cachedPrices)); } catch (e) {}
-      if (profile?.account_number) setAccountNumber(profile.account_number);
-      else if (localAcc) setAccountNumber(localAcc);
-      if (savedMnemonic) { const derived = await deriveAllWallets(savedMnemonic, profile); setWallets(derived); }
+      
+      if (savedMnemonic) { 
+        const derived = await deriveAllWallets(savedMnemonic, profile); 
+        setWallets(derived); 
+      }
+      
       const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
@@ -595,21 +587,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
   }, [isInitialized, startEngine]);
 
-  /**
-   * DASHBOARD-FIRST SELECTIVE DIAGNOSTIC TRIGGER
-   * Detects landing on dashboard and initiates visual scan ONLY if required.
-   */
   useEffect(() => {
-    // Only trigger on the dashboard ('/')
     if (pathname !== '/') return;
-    
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
-    
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
-    
-    // Only trigger if:
-    // A) First time in this tab session
-    // B) OR a manual action marked isSynced as false (e.g. wallet change)
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
@@ -651,7 +632,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setInfuraApiKey(k); 
       if (k) {
         localStorage.setItem('infura_api_key', k);
-        // Immediate Cloud Save for API Key
         if (user) saveToVault();
       } else {
         localStorage.removeItem('infura_api_key');

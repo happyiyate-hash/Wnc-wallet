@@ -49,7 +49,7 @@ export default function ProfilePage() {
         viewingNetwork, 
         wallets, 
         getAddressForChain, 
-        accountNumber, 
+        accountNumber: walletAccountNumber, 
         isRefreshing, 
         syncAllAddresses,
         runCloudDiagnostic 
@@ -66,6 +66,8 @@ export default function ProfilePage() {
     const [isRedeeming, setIsRedeeming] = useState(false);
     const [redeemResult, setRedeemResult] = useState<{ success: boolean, amount?: number, message?: string } | null>(null);
 
+    // INSTANT IDENTITY RESOLUTION: Prioritize profile data for zero-latency display
+    const displayAccountNumber = profile?.account_number || walletAccountNumber;
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
 
@@ -192,7 +194,7 @@ export default function ProfilePage() {
                         <div className="space-y-3 flex flex-col items-center w-full">
                             <h2 className="text-3xl font-black text-white tracking-tight leading-none">{displayName}</h2>
                             
-                            {!accountNumber ? (
+                            {!displayAccountNumber ? (
                                 <div className="flex flex-col items-center gap-4">
                                     <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 animate-pulse">
                                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -201,7 +203,7 @@ export default function ProfilePage() {
                                 </div>
                             ) : (
                                 <div 
-                                    onClick={() => copyId(accountNumber)} 
+                                    onClick={() => copyId(displayAccountNumber)} 
                                     className="flex flex-col items-center gap-1.5 p-1 px-4 rounded-2xl bg-primary/10 border border-primary/20 cursor-pointer active:scale-95 transition-all group"
                                 >
                                     <div className="flex items-center gap-2">
@@ -211,7 +213,7 @@ export default function ProfilePage() {
                                         </div>
                                     </div>
                                     <p className="text-lg font-mono font-black text-white tracking-[0.1em]">
-                                        {accountNumber}
+                                        {displayAccountNumber}
                                     </p>
                                 </div>
                             )}
