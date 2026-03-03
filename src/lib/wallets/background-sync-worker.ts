@@ -6,8 +6,7 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Implements a strict SEQUENTIAL handshake protocol.
- * Optimized for high-fidelity verification beats rather than raw speed.
+ * Optimized for grouped EVM verification and symbol-only branding.
  */
 
 export interface SyncDiagnostic {
@@ -20,8 +19,8 @@ export interface SyncDiagnostic {
 
 export const backgroundSyncWorker = {
   /**
-   * Performs a high-fidelity, sequential audit of the vault.
-   * Checks every node in the registry one-by-one with deliberate logical pauses.
+   * Performs a sequential audit of the vault.
+   * Groups all EVM chains into a single check to increase efficiency.
    */
   async performCloudAudit(
     userId: string,
@@ -40,33 +39,62 @@ export const backgroundSyncWorker = {
     onUpdate({ status: 'idle', progress: 0 });
     await breathe(3000);
 
-    const totalSteps = allChains.length;
+    // 2. CONSTRUCT GROUPED AUDIT SEQUENCE
+    // We group all EVM chains because they share the same address derivation.
+    const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
+    const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
+
+    interface AuditNode {
+      label: string;
+      type: string;
+      localAddr: string | null;
+      cloudAddr: string | null;
+    }
+
+    const sequence: AuditNode[] = [];
+
+    // Step A: Unified EVM Node
+    if (evmChains.length > 0) {
+      const localWallet = wallets.find(w => w.type === 'evm');
+      sequence.push({
+        label: 'EVM',
+        type: 'evm',
+        localAddr: localWallet?.address || null,
+        cloudAddr: profile?.evm_address || null
+      });
+    }
+
+    // Step B: Individual Non-EVM Symbols
+    nonEvmChains.forEach(c => {
+      const localWallet = wallets.find(w => w.type === c.type);
+      const fieldName = `${c.type}_address`;
+      sequence.push({
+        label: c.symbol.toUpperCase(),
+        type: c.type || 'unknown',
+        localAddr: localWallet?.address || null,
+        cloudAddr: (profile as any)?.[fieldName] || null
+      });
+    });
+
+    const totalSteps = sequence.length;
     let completed = 0;
 
-    // 2. SEQUENTIAL HANDSHAKE LOOP
-    // We use a for...of loop to ensure we AWAIT every single operation
-    for (const chain of allChains) {
-      const localWallet = wallets.find(w => w.type === (chain.type || 'evm'));
-      const localAddr = localWallet?.address || null;
-      
-      // Determine which field in UserProfile corresponds to this chain
-      const fieldName = chain.type === 'evm' ? 'evm_address' : `${chain.type}_address`;
-      const cloudAddr = (profile as any)?.[fieldName] || null;
-
+    // 3. SEQUENTIAL VERIFICATION LOOP
+    for (const node of sequence) {
       // STEP A: INITIALIZE SCAN
       onUpdate({ 
         status: 'checking',
-        chain: chain.name.toUpperCase(), 
-        localValue: localAddr, 
-        cloudValue: cloudAddr,
+        chain: node.label, 
+        localValue: node.localAddr, 
+        cloudValue: node.cloudAddr,
         progress: (completed / totalSteps) * 100
       });
 
-      // Deliberate "Thinking" Beat - Allows the user to read the chain name
+      // Deliberate "Thinking" Beat
       await breathe(700);
 
-      // STEP B: LOGICAL COMPARISON (Real Logic Gating)
-      const isMismatch = localAddr && localAddr !== cloudAddr;
+      // STEP B: LOGICAL COMPARISON
+      const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
         onUpdate({ status: 'mismatch' });
@@ -76,11 +104,11 @@ export const backgroundSyncWorker = {
         onUpdate({ status: 'syncing' });
         
         try {
-          // Perform bulk sync but within the loop context to ensure data is updated for next iterations
+          // Perform bulk sync to ensure all related fields are updated
           await syncAddressesToCloud(userId, wallets, accountNumber);
           await breathe(800); // Confirmation dwell
         } catch (e) {
-          console.error(`[REGISTRY_REPAIR_FAIL] ${chain.name}:`, e);
+          console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
           return;
         }
@@ -98,9 +126,9 @@ export const backgroundSyncWorker = {
     }
 
     // FINAL STEP: AUDIT SUMMARY
-    onUpdate({ status: 'completed', chain: 'REGISTRY', progress: 100 });
+    onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
     
-    // Final Dwell: Professional confirmation before dismissal
+    // Final Dwell before dismissal
     await breathe(3500);
     onUpdate({ status: 'idle', progress: 0 });
   }

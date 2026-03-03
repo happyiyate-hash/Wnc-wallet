@@ -30,7 +30,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
-import SyncAlertCard from './wallet/sync-alert-card';
 import { motion, animate } from 'framer-motion';
 
 const AnimatedNumber = ({ value }: { value: number }) => {
@@ -243,8 +242,6 @@ export default function WalletTab() {
                 </div>
             </div>
         </div>
-
-        <SyncAlertCard />
 
         <div className="flex justify-center gap-2.5 my-10 px-4">
           <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
