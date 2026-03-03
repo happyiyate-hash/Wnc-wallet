@@ -244,6 +244,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
+    // SESSION GUARD: Prevent repetitive scans during the same tab session
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
@@ -261,6 +262,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
+    // Pre-fetch cloud states to ensure real-time visual feedback
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
 
@@ -285,6 +287,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await wait(400);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
+        // Push actual update to cloud registry
         await supabase.rpc('sync_user_wallets', {
             p_user_id: user.id,
             p_wallets: [{ type: chainInfo.type, address: local }]
@@ -300,6 +303,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Vault Phase
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -317,6 +321,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    
+    // Lock audit for current tab session
     sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
     setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
@@ -328,8 +334,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+        // Immediate encryption of phrase
         await saveToVault();
         setIsSynced(false); 
+        // Trigger dashboard-first address sync
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
@@ -590,7 +598,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pathname !== '/') return;
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
+    
+    // SESSION LOCK: Check if we have already audited in this tab session
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
+    
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
