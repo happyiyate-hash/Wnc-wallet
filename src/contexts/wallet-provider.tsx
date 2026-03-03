@@ -111,6 +111,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const priceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const initialFetchTriggeredRef = useRef<boolean>(false);
 
+  // AUTOMATIC NETWORK INITIALIZATION
+  useEffect(() => {
+    if (!viewingNetwork && chainsWithLogos.length > 0) {
+      setViewingNetwork(chainsWithLogos[0]);
+    }
+  }, [chainsWithLogos, viewingNetwork]);
+
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -215,7 +222,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setIsRefreshing(true);
     try {
-        const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, prices);
+        // BREAK THE LOOP: Don't depend on 'prices' state here, just fetch and set
+        const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, {});
         setPrices(newPrices);
         
         const currentChain = viewingNetwork;
@@ -228,7 +236,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally { 
         setIsRefreshing(false); 
     }
-  }, [wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, prices, fetchBalancesForChain]);
+    // EXCLUDE 'prices' and 'balances' to prevent infinite loop
+  }, [wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, fetchBalancesForChain]);
 
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Authentication required");
@@ -260,7 +269,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-      const localInfuraKey = localStorage.getItem('infura_api_key');
       const updates: any = {};
 
       if (mnemonic) {
@@ -301,7 +309,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * INITIALIZATION LIFECYCLE
-   * Strictly sequences: Auth -> Profile -> Wallet -> Market Sync
    */
   useEffect(() => {
     if (authLoading) return;
@@ -371,6 +378,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
+    
     const wncPriceInfo = prices['internal:wnc'];
     const wncAsset: AssetRow = {
         chainId: viewingNetwork.chainId, address: 'internal:wnc', symbol: 'WNC', name: 'Wevinacoin', 
@@ -378,25 +386,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         priceUsd: wncPriceInfo?.price || 0.0006, fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
         pctChange24h: wncPriceInfo?.change || 0, decimals: 0, iconUrl: null 
     };
+
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
     const chainBalances = balances[viewingNetwork.chainId] || [];
+
     const onChainAssets = available.map((asset) => {
         const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
-        const priceId = (asset.priceId || asset.coingeckoId || asset.address)?.toLowerCase();
-        const priceInfo = prices[priceId];
+        
+        // BULLETPROOF PRICE LOOKUP: Use any available identifier
+        const lookupKeys = [
+            asset.priceId,
+            asset.coingeckoId,
+            asset.address,
+            asset.symbol
+        ].filter(Boolean).map(k => k!.toLowerCase());
+        
+        let priceInfo = null;
+        for (const key of lookupKeys) {
+            if (prices[key]) {
+                priceInfo = prices[key];
+                break;
+            }
+        }
+        
+        const price = priceInfo?.price || 0;
+        const change = priceInfo?.change || 0;
+
         return { 
           ...asset, 
           balance, 
-          priceUsd: priceInfo?.price || 0, 
-          pctChange24h: priceInfo?.change || 0, 
-          fiatValueUsd: parseFloat(balance) * (priceInfo?.price || 0) 
+          priceUsd: price, 
+          pctChange24h: change, 
+          fiatValueUsd: parseFloat(balance) * price 
         } as AssetRow;
     });
-    return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, userAddedTokens]);
 
-  const value = useMemo(() => ({
+    return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
+  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
+
+  const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
     setNetwork: (net: ChainConfig) => { setViewingNetwork(net); setFetchError(null); },
@@ -419,10 +448,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, fetchError, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isSynced, syncDiagnostic, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, hasFetchedInitialData, generateWallet, importWallet, restoreFromCloud, logout,
-    getAddressForChain, toggleTokenVisibility, addUserToken, getAvailableAssetsForChain, syncAllAddresses
+    getAddressForChain, toggleTokenVisibility, addUserToken, getAvailableAssetsForChain, syncAllAddresses, startEngine
   ]);
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+  return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }
 
 export function useWallet() {
