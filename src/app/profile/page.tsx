@@ -42,6 +42,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
+// BUILD FIX: Force dynamic rendering to prevent crypto derivation errors during static build
+export const dynamic = 'force-dynamic';
+
 export default function ProfilePage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
