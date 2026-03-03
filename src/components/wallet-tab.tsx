@@ -64,7 +64,6 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   const router = useRouter();
   const { formatFiat } = useCurrency();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
-  const isFirstLoad = isLoading && (token.priceUsd === 0 || token.priceUsd === undefined);
 
   const handleRowClick = () => {
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
@@ -101,23 +100,14 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
         </div>
       </div>
       <div className="text-right">
-        {isFirstLoad ? (
-          <div className="flex flex-col items-end gap-2">
-            <Skeleton className="h-5 w-24 rounded-lg bg-white/5" />
-            <Skeleton className="h-3 w-16 rounded-lg bg-white/5" />
-          </div>
-        ) : (
-          <>
-            <p className="font-bold text-base text-white leading-none">
-              {parseFloat(token.balance || '0').toLocaleString('en-US', {
-                maximumFractionDigits: 6,
-              })}{' '}
-            </p>
-            <p className="text-[10px] font-medium text-muted-foreground/60 mt-2 uppercase">
-              ≈ {formatFiat(token.fiatValueUsd ?? 0)}
-            </p>
-          </>
-        )}
+        <p className="font-bold text-base text-white leading-none">
+          {parseFloat(token.balance || '0').toLocaleString('en-US', {
+            maximumFractionDigits: 6,
+          })}{' '}
+        </p>
+        <p className="text-[10px] font-medium text-muted-foreground/60 mt-2 uppercase">
+          ≈ {formatFiat(token.fiatValueUsd ?? 0)}
+        </p>
       </div>
     </div>
   );

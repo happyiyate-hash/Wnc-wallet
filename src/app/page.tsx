@@ -35,7 +35,7 @@ function HomeContent() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowFailsafe(true);
-    }, 8000);
+    }, 12000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -77,14 +77,13 @@ function HomeContent() {
   if (isAppLoading) {
     return (
       <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#050505] text-white">
-        <div className="relative mb-16">
-          <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            className="w-40 h-40 rounded-full border-l-[1px] border-primary/40"
-          />
+        <div className="relative mb-12 flex items-center justify-center">
+          {/* HIGH-BRIGHTNESS CSS SPINNER (HARDWARE ACCELERATED) */}
+          <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin shadow-[0_0_20px_rgba(139,92,246,0.4)]" />
+          
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-[2rem] bg-primary/10 border border-primary/20 animate-pulse shadow-[0_0_40px_rgba(139,92,246,0.1)]" />
+            {/* BRIGHT INNER NODE */}
+            <div className="w-10 h-10 rounded-2xl bg-primary/20 border border-primary/50 animate-pulse shadow-[0_0_30px_rgba(139,92,246,0.3)]" />
           </div>
         </div>
         
