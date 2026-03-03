@@ -6,7 +6,8 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Optimized for grouped EVM verification and symbol-only branding.
+ * Optimized for grouped EVM verification and high-fidelity logical heartbeats.
+ * Implements a "Heavy & Secure" cadence to ensure visual verification of every node.
  */
 
 export interface SyncDiagnostic {
@@ -19,8 +20,8 @@ export interface SyncDiagnostic {
 
 export const backgroundSyncWorker = {
   /**
-   * Performs a sequential audit of the vault.
-   * Groups all EVM chains into a single check to increase efficiency.
+   * Performs a sequential, logic-gated audit of the vault.
+   * Forces the UI to wait for database responses and comparison results.
    */
   async performCloudAudit(
     userId: string,
@@ -32,15 +33,15 @@ export const backgroundSyncWorker = {
   ) {
     if (!userId || !wallets || wallets.length === 0 || allChains.length === 0) return;
 
-    // Helper for deliberate logical pauses (Secure Beats)
+    // Helper for deliberate logical pauses (Secure Dwell Times)
     const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // 1. Initial Settlement Pause: Wait for dashboard to stabilize
+    // 1. Initial Settlement Pause: Allow dashboard to stabilize before auditing
     onUpdate({ status: 'idle', progress: 0 });
     await breathe(3000);
 
-    // 2. CONSTRUCT GROUPED AUDIT SEQUENCE
-    // We group all EVM chains because they share the same address derivation.
+    // 2. CONSTRUCT AUDIT SEQUENCE
+    // Group EVM for efficiency, verify others individually
     const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
     const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
 
@@ -53,7 +54,7 @@ export const backgroundSyncWorker = {
 
     const sequence: AuditNode[] = [];
 
-    // Step A: Unified EVM Node
+    // Node A: Unified EVM Protocol
     if (evmChains.length > 0) {
       const localWallet = wallets.find(w => w.type === 'evm');
       sequence.push({
@@ -64,7 +65,7 @@ export const backgroundSyncWorker = {
       });
     }
 
-    // Step B: Individual Non-EVM Symbols
+    // Nodes B-Z: Ecosystem-Specific Symbols
     nonEvmChains.forEach(c => {
       const localWallet = wallets.find(w => w.type === c.type);
       const fieldName = `${c.type}_address`;
@@ -79,9 +80,9 @@ export const backgroundSyncWorker = {
     const totalSteps = sequence.length;
     let completed = 0;
 
-    // 3. SEQUENTIAL VERIFICATION LOOP
+    // 3. STRICT SEQUENTIAL AUDIT LOOP
     for (const node of sequence) {
-      // STEP A: INITIALIZE SCAN
+      // STEP 1: INITIALIZE SCAN
       onUpdate({ 
         status: 'checking',
         chain: node.label, 
@@ -90,23 +91,28 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // Deliberate "Thinking" Beat
-      await breathe(700);
+      // Secure "Thinking" Dwell
+      await breathe(1200);
 
-      // STEP B: LOGICAL COMPARISON
+      // STEP 2: LOGICAL COMPARISON (Local vs Cloud)
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
+        // TRIGGER VISUAL ALERT
         onUpdate({ status: 'mismatch' });
-        await breathe(1200); // Visual alert dwell
+        await breathe(2000); // Visual dwell: Let the user see the RED mismatch
 
-        // STEP C: ATOMIC REGISTRY REPAIR
+        // STEP 3: ATOMIC REGISTRY REPAIR
         onUpdate({ status: 'syncing' });
         
         try {
-          // Perform bulk sync to ensure all related fields are updated
+          // Perform bulk sync and AWAIT response
           await syncAddressesToCloud(userId, wallets, accountNumber);
-          await breathe(800); // Confirmation dwell
+          
+          // STEP 4: UI REFLECTION
+          // Immediately update the displayed cloud address to match the local node
+          onUpdate({ cloudValue: node.localAddr });
+          await breathe(1000); // "Handshake Fixed" dwell
         } catch (e) {
           console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
@@ -114,22 +120,23 @@ export const backgroundSyncWorker = {
         }
       }
 
-      // STEP D: VERIFICATION COMPLETE
+      // STEP 5: VERIFICATION COMPLETE
+      onUpdate({ status: 'success' });
       completed++;
-      onUpdate({ 
-        status: 'success', 
-        progress: (completed / totalSteps) * 100 
-      });
       
-      // Verification heartbeat pause
+      // Delay progress update slightly for smooth transition
       await breathe(400);
+      onUpdate({ progress: (completed / totalSteps) * 100 });
+      
+      // Post-verification dwell (Checkmark visibility)
+      await breathe(800);
     }
 
     // FINAL STEP: AUDIT SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
     
-    // Final Dwell before dismissal
-    await breathe(3500);
+    // Clear diagnostic from view after delay
+    await breathe(4000);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };

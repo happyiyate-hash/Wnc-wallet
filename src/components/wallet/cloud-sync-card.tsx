@@ -17,7 +17,7 @@ import { useState, useEffect, useRef } from 'react';
 
 /**
  * INSTITUTIONAL DIAGNOSTIC SENTINEL (Ultra-Smooth Sequence)
- * Optimized for hardware-accelerated gliding and sequential logic beats.
+ * Visualizes the background identity audit with state-aware transitions.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -27,10 +27,6 @@ export default function CloudSyncCard() {
   const lastTapRef = useRef<number>(0);
 
   useEffect(() => {
-    const handleDblClick = () => {
-      setIsManuallyHidden(prev => !prev);
-    };
-
     const handleTouchStart = () => {
       const now = Date.now();
       const DOUBLE_TAP_DELAY = 300;
@@ -39,21 +35,15 @@ export default function CloudSyncCard() {
       }
       lastTapRef.current = now;
     };
-
-    window.addEventListener('dblclick', handleDblClick);
     window.addEventListener('touchstart', handleTouchStart);
-
-    return () => {
-      window.removeEventListener('dblclick', handleDblClick);
-      window.removeEventListener('touchstart', handleTouchStart);
-    };
+    return () => window.removeEventListener('touchstart', handleTouchStart);
   }, []);
 
   if (status === 'idle') return null;
 
   const truncateAddress = (addr: string | null) => {
     if (!addr) return 'None';
-    if (addr === 'Stored' || addr === 'Missing' || addr === 'Encrypted Phrase') return addr;
+    if (addr === 'Stored' || addr === 'Missing') return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
@@ -135,7 +125,7 @@ export default function CloudSyncCard() {
           <div className="relative h-14">
             <AnimatePresence mode="wait">
               <motion.div 
-                key={`${chain}-cloud`}
+                key={`${chain}-cloud-${cloudValue}`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
                 className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden"
@@ -168,7 +158,7 @@ export default function CloudSyncCard() {
           <div className="relative h-14">
             <AnimatePresence mode="wait">
               <motion.div 
-                key={`${chain}-local`}
+                key={`${chain}-local-${localValue}`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
                 className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible"
@@ -216,7 +206,7 @@ export default function CloudSyncCard() {
               "text-[8px] font-black uppercase tracking-widest transition-colors duration-500",
               isMismatch ? "text-red-500" : "text-muted-foreground"
             )}>
-              {status === 'mismatch' ? 'REGISTRY MISMATCH DETECTED' : status === 'syncing' ? 'UPDATING CLOUD NODE...' : status}
+              {status === 'mismatch' ? 'REGISTRY MISMATCH DETECTED' : status === 'syncing' ? 'UPDATING CLOUD NODE...' : status === 'success' ? 'CRYPTO HANDSHAKE SUCCESS' : status === 'checking' ? 'VERIFYING IDENTITY NODE...' : status}
             </span>
             <span className="text-[8px] font-black text-white/40 uppercase">{Math.round(progress)}%</span>
           </div>
