@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 
-// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
 function HomeContent() {

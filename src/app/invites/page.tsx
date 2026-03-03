@@ -19,7 +19,8 @@ import {
   ChevronRight,
   HandCoins,
   AlertCircle,
-  ArrowUpRight
+  ArrowUpRight,
+  Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/user-provider';
@@ -30,7 +31,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 
-// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
 /**

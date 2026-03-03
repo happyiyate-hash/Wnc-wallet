@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "UserProfile": {
@@ -33,14 +32,14 @@
     },
     "Referral": {
       "title": "Referral",
-      "description": "Growth event record for the 400 WNC protocol.",
+      "description": "Growth event record for the 100 WNC protocol.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "referrer_id": { "type": "string" },
         "referred_id": { "type": "string" },
         "status": { "enum": ["pending", "credited"], "type": "string" },
-        "reward_amount": { "type": "number", "default": 400 }
+        "reward_amount": { "type": "number", "default": 100 }
       }
     }
   },

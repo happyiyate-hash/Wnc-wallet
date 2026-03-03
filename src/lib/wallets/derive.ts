@@ -26,14 +26,14 @@ import { dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE
- * Decoupled from UI to ensure stability, performance, and security.
- * Initializations are moved inside the function to prevent SSR/Build-time crashes.
+ * Decoupled from top-level scope to ensure Vercel build stability.
+ * Initializations are contained inside the function to prevent SSR/Build-time Lock ReferenceErrors.
  */
 export async function deriveAllWallets(mnemonic: string, profile?: UserProfile | null): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
   
-  // Safe initialization for BIP32 which requires secp256k1
-  // Moving this inside the function prevents the Web Locks ReferenceError during build
+  // LAZY INITIALIZATION: Prevents "ReferenceError: Lock is not defined" during Next.js build.
+  // This ensures WASM and Web Lock APIs are only accessed in the browser environment.
   const bip32 = BIP32Factory(ecc);
 
   try {

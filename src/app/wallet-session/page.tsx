@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase/client';
 
-// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
 export default function WalletSessionPage() {

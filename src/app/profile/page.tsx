@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -219,7 +218,7 @@ export default function ProfilePage() {
                             <ActionBox 
                                 icon={Users} 
                                 label="Invite Nodes" 
-                                desc="Refer & Earn 400 WNC" 
+                                desc="Refer & Earn 100 WNC" 
                                 color="text-purple-400"
                                 bgColor="bg-purple-500/10"
                                 onClick={() => router.push('/invites')} 
