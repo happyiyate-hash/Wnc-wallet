@@ -138,7 +138,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const base = getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
-    // ATOMIC FIX: Use the live state instead of refs to ensure instant reactivity in selectors
     const custom = userAddedTokens.filter(t => t.chainId === chainId);
     
     return [...base, ...custom].reduce((acc, curr) => {
@@ -529,7 +528,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const pctChange24h = priceInfo?.change || 0;
         return { ...asset, balance, priceUsd, pctChange24h, fiatValueUsd: parseFloat(balance) * priceUsd } as AssetRow;
     });
-    // ATOMIC FIX: Ensure the hiddenTokenKeys state change triggers a recalculation
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, userAddedTokens]);
 
@@ -581,7 +579,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
-    runCloudDiagnostic();
+    
+    // INSTITUTIONAL DELAY: Allow the dashboard to settle before starting diagnostic animations
+    const timer = setTimeout(() => {
+      runCloudDiagnostic();
+    }, 2500); 
+    
+    return () => clearTimeout(timer);
   }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic]);
 
   useEffect(() => {

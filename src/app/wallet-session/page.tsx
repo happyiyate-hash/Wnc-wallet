@@ -69,7 +69,6 @@ export default function WalletSessionPage() {
     setStatus('Finalizing Node...');
     
     try {
-      // Atomic Upsert to mark completion
       const { error: dbError } = await supabase
         .from('profiles')
         .upsert({ 
