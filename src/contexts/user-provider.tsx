@@ -18,7 +18,25 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  
+  // 1. INSTANT HYDRATION: Initialize profile from cache if available
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const lastUser = localStorage.getItem('supabase.auth.token'); // Crude check for session
+    if (!lastUser) return null;
+    
+    // Attempt to find any profile cache in storage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('profile_cache_')) {
+        try {
+          return JSON.parse(localStorage.getItem(key)!);
+        } catch (e) { return null; }
+      }
+    }
+    return null;
+  });
+
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
@@ -45,7 +63,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   /**
    * ECOSYSTEM REAL-TIME SYNC
-   * Subscribes to changes in the profiles table to reflect SmarterSeller updates instantly.
    */
   useEffect(() => {
     if (!supabase || !user) return;
@@ -58,7 +75,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         table: 'profiles',
         filter: `id=eq.${user.id}`
       }, (payload) => {
-        // Atomic UI Update
         const updatedProfile = payload.new as UserProfile;
         setProfile(updatedProfile);
         localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(updatedProfile));
@@ -82,12 +98,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         if (currentUser) {
-            // INSTANT LOAD: Use stale cache while revalidation happens in background
-            const cacheKey = `profile_cache_${currentUser.id}`;
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-                try { setProfile(JSON.parse(cached)); } catch (e) {}
-            }
             await fetchProfile(currentUser.id);
         }
       } catch (e) {
@@ -98,10 +108,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     checkSession();
 
-    /**
-     * GLOBAL AUTH LISTENER
-     * Hardened to handle SIGNED_OUT events with atomic cleanup.
-     */
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -109,7 +115,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         await fetchProfile(currentUser.id);
       } else if (event === 'SIGNED_OUT') {
-        // ATOMIC CLEANUP: Stop data-ghosting and prevent flickering
         setProfile(null);
         setUser(null);
       }

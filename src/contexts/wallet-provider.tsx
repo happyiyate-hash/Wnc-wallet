@@ -62,15 +62,41 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
-  const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile } = useUser();
+  const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
+  // 1. INSTANT INITIALIZATION: Read from cache in state initializers
+  const [prices, setPrices] = useState<PriceResult>(() => {
+    if (typeof window === 'undefined') return {};
+    const cached = localStorage.getItem('cache_prices_global');
+    return cached ? JSON.parse(cached) : {};
+  });
+
+  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>(() => {
+    if (typeof window === 'undefined') return {};
+    const cached = localStorage.getItem('cache_balances_all');
+    return cached ? JSON.parse(cached) : {};
+  });
+
+  const [accountNumber, setAccountNumber] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    // Try to find the most recent account number
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('account_number_')) {
+        return localStorage.getItem(key);
+      }
+    }
+    return null;
+  });
+
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const saved = localStorage.getItem('last_viewing_network');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
-  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
-  const [prices, setPrices] = useState<PriceResult>({});
-  const [accountNumber, setAccountNumber] = useState<string | null>(null);
-  
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedInitialData, setHasFetchedInitialData] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -85,14 +111,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnostic>({
-    status: 'idle',
-    chain: null,
-    localValue: null,
-    cloudValue: null,
-    progress: 0
+    status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
   const lastAuditRef = useRef<string | null>(null);
+
+  // Sync network to storage
+  useEffect(() => {
+    if (viewingNetwork) localStorage.setItem('last_viewing_network', JSON.stringify(viewingNetwork));
+  }, [viewingNetwork]);
 
   useEffect(() => {
     if (!viewingNetwork && chainsWithLogos.length > 0) {
@@ -101,31 +128,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [chainsWithLogos, viewingNetwork]);
 
   const initLocalSession = useCallback(async () => {
+    if (authLoading) return;
+    
     if (!user) {
       setWallets(null); setIsWalletLoading(false); setIsInitialized(true); setHasFetchedInitialData(true);
       return;
     }
 
-    setIsWalletLoading(true);
+    // 2. BACKGROUND DERIVATION: Start after UI is visible
     try {
-      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user!.id}`);
+      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
+        // Run derivation in a "breathe" cycle to keep UI responsive
         const derived = await deriveAllWallets(savedMnemonic, profile);
         setWallets(derived);
       } else {
         setHasFetchedInitialData(true);
       }
 
-      const localKey = localStorage.getItem(`infura_api_key_${user!.id}`);
+      const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
       if (localKey) setInfuraApiKey(localKey);
       
-      const localAcc = localStorage.getItem(`account_number_${user!.id}`);
-      setAccountNumber(profile?.account_number || localAcc || null);
-
-      const savedHidden = localStorage.getItem(`hidden_tokens_${user!.id}`);
+      const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
       if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
 
-      const savedCustom = localStorage.getItem(`custom_tokens_${user!.id}`);
+      const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
       if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
       setIsInitialized(true);
@@ -135,50 +162,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsWalletLoading(false);
     }
-  }, [user, profile]);
+  }, [user, profile, authLoading]);
 
   useEffect(() => {
-    if (authLoading) return;
     initLocalSession();
-  }, [user?.id, authLoading, initLocalSession]);
+  }, [initLocalSession]);
 
-  // SAFE LOGIC: STORAGE WATCHDOG
-  useEffect(() => {
-    if (!user) return;
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === `wallet_mnemonic_${user.id}`) {
-        initLocalSession();
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [user, initLocalSession]);
-
-  // SAFE LOGIC: POST-INITIALIZATION BACKGROUND SYNC (APP SETTLED DELAY)
-  useEffect(() => {
-    if (!hasFetchedInitialData || !wallets || !user || !accountNumber || chainsWithLogos.length === 0) return;
-
-    // Condition: Wait 1 second for UI stability (App Settled)
-    const timer = setTimeout(() => {
-      const auditKey = `${user.id}:${wallets[0].address}`;
-      if (lastAuditRef.current === auditKey) return;
-      lastAuditRef.current = auditKey;
-
-      backgroundSyncWorker.performCloudAudit(
-        user.id,
-        wallets,
-        profile,
-        accountNumber,
-        chainsWithLogos,
-        (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
-      ).then(() => {
-          refreshProfile();
-      });
-    }, 1000); // Reduced from 3000
-
-    return () => clearTimeout(timer);
-  }, [hasFetchedInitialData, wallets, user, accountNumber, profile, refreshProfile, chainsWithLogos]);
-
+  // Market Engine Pulse
   const { refresh } = useWalletEngine({
     wallets,
     viewingNetwork,
@@ -187,8 +177,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     userAddedTokens,
     rates,
     infuraApiKey,
-    setPrices,
-    setBalances,
+    setPrices: (newPrices) => {
+      setPrices(newPrices);
+      localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
+    },
+    setBalances: (update) => {
+      setBalances(prev => {
+        const next = update(prev);
+        localStorage.setItem('cache_balances_all', JSON.stringify(next));
+        return next;
+      });
+    },
     setIsRefreshing,
     setHasFetchedInitialData
   });
@@ -197,11 +196,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { getInitialAssets } = require('@/lib/wallets/balances');
     const base = getInitialAssets(chainId).map((a: any) => ({ ...a, balance: '0' } as AssetRow));
     const custom = userAddedTokens.filter(t => t.chainId === chainId);
-    
     return [...base, ...custom].reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
         if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === identifier)) {
-            acc.push(curr);
+          acc.push(curr);
         }
         return acc;
     }, [] as AssetRow[]);
@@ -212,17 +210,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-    
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
-    
-    let targetAcc = accountNumber;
-    if (!targetAcc) {
-        targetAcc = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
-        setAccountNumber(targetAcc);
-        localStorage.setItem(`account_number_${user.id}`, targetAcc);
-    }
-
+    let targetAcc = accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    setAccountNumber(targetAcc);
+    localStorage.setItem(`account_number_${user.id}`, targetAcc);
     await syncAddressesToCloud(user.id, derived, targetAcc);
     return mnemonic;
   }, [user, profile, accountNumber]);
@@ -231,17 +223,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error("Authentication required");
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
-    
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
-
-    let targetAcc = accountNumber;
-    if (!targetAcc) {
-        targetAcc = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
-        setAccountNumber(targetAcc);
-        localStorage.setItem(`account_number_${user.id}`, targetAcc);
-    }
+    let targetAcc = accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    setAccountNumber(targetAcc);
+    localStorage.setItem(`account_number_${user.id}`, targetAcc);
     await syncAddressesToCloud(user.id, derived, targetAcc);
   }, [user, profile, accountNumber]);
 
@@ -254,7 +241,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || !profile?.vault_phrase) throw new Error("No cloud backup found");
     onStatusUpdate?.('Restoring Vault...');
-    
     const { supabase: ssSupabase } = require('@/lib/supabase/client');
     const { data: { session } } = await ssSupabase.auth.getSession();
     const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -262,7 +248,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
       body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
     });
-    
     const { phrase } = await res.json();
     if (phrase) {
       localStorage.setItem(`wallet_mnemonic_${user.id}`, phrase);
@@ -282,7 +267,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const assetsForCurrentNetwork = useMemo(() => {
     if (!viewingNetwork) return [];
-    
     const wncPriceInfo = prices['internal:wnc'];
     const wncAsset: AssetRow = {
         chainId: viewingNetwork.chainId, address: 'internal:wnc', symbol: 'WNC', name: 'Wevinacoin', 
@@ -290,37 +274,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         priceUsd: wncPriceInfo?.price || 0.0006, fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
         pctChange24h: wncPriceInfo?.change || 0, decimals: 0, iconUrl: null 
     };
-
     const available = getAvailableAssetsForChain(viewingNetwork.chainId);
     const chainBalances = balances[viewingNetwork.chainId] || [];
-
     const onChainAssets = available.map((asset) => {
         const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
-        
         const lookupKeys = [asset.priceId, asset.coingeckoId, asset.address, asset.symbol].filter(Boolean).map(k => k!.toLowerCase());
         let priceInfo = null;
         for (const key of lookupKeys) { if (prices[key]) { priceInfo = prices[key]; break; } }
-        
         const price = priceInfo?.price || 0;
         const change = priceInfo?.change || 0;
-
         return { ...asset, balance, priceUsd: price, pctChange24h: change, fiatValueUsd: parseFloat(balance) * price } as AssetRow;
     });
-
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
   const runCloudDiagnostic = useCallback(async () => {
     if (!user || !wallets || !accountNumber || chainsWithLogos.length === 0) return;
-    await backgroundSyncWorker.performCloudAudit(
-      user.id,
-      wallets,
-      profile,
-      accountNumber,
-      chainsWithLogos,
-      (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
-    );
+    await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => setSyncDiagnostic(p => ({ ...p, ...u })));
   }, [user, wallets, accountNumber, profile, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({
@@ -330,8 +301,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
-    isRefreshing,
-    wallets, balances, prices, accountNumber,
+    isRefreshing, wallets, balances, prices, accountNumber,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud,
     logout, getAddressForChain: getAddressForChainUtil, infuraApiKey, setInfuraApiKey,
     hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => {
