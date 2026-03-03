@@ -14,6 +14,10 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 
+/**
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL (Butter-Smooth Edition)
+ * Optimized for hardware-accelerated gliding and thread-safe animations.
+ */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
@@ -52,7 +56,6 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // SMOTHED TRANSITIONS: Increased spring damping and slightly longer durations
   const verticalFadeVariants = {
     initial: { y: 15, opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 150 } },
@@ -87,12 +90,13 @@ export default function CloudSyncCard() {
       exit={{ y: -100, opacity: 0 }}
       transition={{ type: 'spring', damping: 30, stiffness: 150 }}
       className={cn(
-        "fixed top-4 left-4 right-4 z-[100] max-w-lg mx-auto",
+        "fixed top-4 left-4 right-4 z-[100] max-w-lg mx-auto will-change-transform",
         isManuallyHidden ? "pointer-events-none" : "pointer-events-auto"
       )}
+      style={{ translateZ: 0 }}
     >
       <div className={cn(
-        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-700",
+        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-1000",
         isMismatch ? "bg-red-500/10 border-red-500/20" : "bg-[#0a0a0c]/95 border-white/10"
       )}>
         
@@ -125,7 +129,7 @@ export default function CloudSyncCard() {
                 key={`${chain}-cloud`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden"
+                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden will-change-transform"
               >
                 <div className="flex items-center gap-1.5">
                   <Database className="w-2.5 h-2.5 text-white/40" />
@@ -161,7 +165,7 @@ export default function CloudSyncCard() {
                 key={`${chain}-local`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible"
+                className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible will-change-transform"
               >
                 <div className="flex items-center gap-1.5">
                   <Cpu className="w-2.5 h-2.5 text-primary" />
@@ -174,7 +178,7 @@ export default function CloudSyncCard() {
                     initial={{ scale: 0, rotate: -45 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className="absolute -top-1 -right-1 z-20"
+                    className="absolute -top-1.5 -right-1.5 z-20"
                   >
                     <div className="bg-black rounded-full p-0.5 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]">
                       <CheckCircle2 className="w-2.5 h-2.5 text-green-500 fill-black" />
@@ -194,8 +198,11 @@ export default function CloudSyncCard() {
                 width: `${progress}%`,
                 backgroundColor: isMismatch ? '#ef4444' : '#8b5cf6' 
               }}
-              transition={{ duration: 0.6 }} // Slower, smoother progress bar
-              className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
+              transition={{ 
+                width: { type: "spring", stiffness: 40, damping: 25 },
+                backgroundColor: { duration: 0.8 } 
+              }}
+              className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)] will-change-[width]"
             />
           </div>
           <div className="flex justify-between items-center px-1">

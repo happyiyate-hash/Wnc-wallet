@@ -268,7 +268,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600);
+    await wait(500);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -494,7 +494,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const startEngine = useCallback(async () => {
     if (!wallets || !viewingNetwork || !user) {
-        // If auth is settled but no user/wallet, we signal data ready to allow onboarding
         if (!authLoading) setHasFetchedInitialData(true);
         return;
     }
@@ -602,12 +601,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings, userAddedTokens]);
 
   /**
-   * SAFE LOGIC: IMMEDIATE MNEMONIC CHANGE DETECTION
+   * PERFORMANCE OPTIMIZED: INSTANT MNEMONIC WATCHER
+   * Decoupled from heavy derivation thread beat.
    */
   useEffect(() => {
     if (!user) return;
 
-    const checkMnemonicChange = async () => {
+    const handleIdentityShift = async () => {
       const stored = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (stored !== activeMnemonicRef.current) {
         if (!stored) {
@@ -617,6 +617,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
         
         activeMnemonicRef.current = stored;
+        // The derivation now yields, keeping animations smooth
         const derived = await deriveAllWallets(stored, profile);
         setWallets(derived);
         setIsSynced(false);
@@ -625,31 +626,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const interval = setInterval(checkMnemonicChange, 2000);
+    const interval = setInterval(handleIdentityShift, 1000);
     return () => clearInterval(interval);
   }, [user, profile, runCloudDiagnostic]);
 
-  /**
-   * PRODUCTION-SAFE INITIALIZATION HANDSHAKE
-   */
   useEffect(() => {
     const initLocalSession = async () => {
-      // Step 1: Wait for Auth Resolution
       if (authLoading) return;
-
-      // Step 2: Clear state if no user
       if (!user) { 
         setWallets(null); setBalances({}); setAccountNumber(null); 
         setIsWalletLoading(false); setHasFetchedInitialData(true); 
         return; 
       }
-      
-      // Step 3: Wait for Profile Sync
       if (!profile) return;
 
       setIsWalletLoading(true);
-      
-      // Step 4: Derive Identity Nodes (PURE LOCAL - TRIGGERED FIRST)
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) { 
         activeMnemonicRef.current = savedMnemonic;
@@ -657,7 +648,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallets(derived); 
       }
 
-      // Step 5: Restore Regional Config
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       let targetAcc = profile?.account_number || localAcc;
       if (!targetAcc) {
@@ -681,7 +671,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
       
       setIsWalletLoading(false);
-      // Logic Ready, but we wait for startEngine to flip hasFetchedInitialData
     };
     initLocalSession();
   }, [authLoading, user, profile, syncAllAddresses]);
@@ -713,26 +702,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pathname !== '/') return;
     if (!profile || !user || !wallets || !isInitialized || !hasFetchedInitialData) return;
-    
     handleReferralHandshake();
-
     const auditKey = `identity_audit_${user.id}`;
     const hasAudited = sessionStorage.getItem(auditKey);
-    
     if (!hasAudited || !isSynced) {
         const timer = setTimeout(() => { runCloudDiagnostic(); }, 3000); 
         return () => clearTimeout(timer);
     }
   }, [profile, user, wallets, isInitialized, hasFetchedInitialData, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
 
-  const value: WalletContextType = {
+  /**
+   * PERFORMANCE ARCHITECTURE: MEMOIZED CONTEXT
+   * Prevents app-wide re-renders during high-frequency diagnostic updates.
+   */
+  const value = useMemo(() => ({
     isInitialized: isInitialized && !authLoading && (user ? !!wallets : true),
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
     hasNewNotifications,
     setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
-    setNetwork: (net) => { setViewingNetwork(net); setFetchError(null); localStorage.setItem('last_viewed_chain_id', net.chainId.toString()); },
+    setNetwork: (net: ChainConfig) => { setViewingNetwork(net); setFetchError(null); localStorage.setItem('last_viewed_chain_id', net.chainId.toString()); },
     allAssets: assetsForCurrentNetwork,
     allChains: chainsWithLogos,
     allChainsMap,
@@ -745,7 +735,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refresh: startEngine,
     generateWallet,
     importWallet,
-    resolveLocalDerivation: (m) => deriveAllWallets(m, profile).then(d => { setWallets(d); }),
+    resolveLocalDerivation: (m: string) => deriveAllWallets(m, profile).then(d => { setWallets(d); }),
     saveToVault,
     restoreFromCloud,
     logout,
@@ -754,7 +744,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     fetchError,
     getAddressForChain,
     infuraApiKey,
-    setInfuraApiKey: (k) => { 
+    setInfuraApiKey: (k: string | null) => { 
       setInfuraApiKey(k); 
       if (k) { localStorage.setItem('infura_api_key', k); if (user) saveToVault(); }
       else { localStorage.removeItem('infura_api_key'); if (user) saveToVault(); }
@@ -775,7 +765,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     activeFulfillmentId,
     setActiveFulfillmentId,
     hasFetchedInitialData
-  };
+  }), [
+    isInitialized, authLoading, user, wallets, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork, 
+    assetsForCurrentNetwork, chainsWithLogos, allChainsMap, isRefreshing, balances, prices, accountNumber, syncDiagnostic, 
+    isSynced, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, hasFetchedInitialData
+  ]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

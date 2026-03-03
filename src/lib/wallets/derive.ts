@@ -3,12 +3,15 @@
 import type { WalletWithMetadata, UserProfile } from '@/lib/types';
 
 /**
- * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Build-Safe Version)
+ * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Build-Safe & Smooth Version)
  * All heavy crypto libraries are dynamically imported inside the function.
- * This prevents "ReferenceError: Lock is not defined" during Vercel's server-side prerendering.
+ * Implements a "Yielding Handshake" to prevent UI thread blocking.
  */
 export async function deriveAllWallets(mnemonic: string, profile?: UserProfile | null): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
+
+  // Helper to yield the main thread and keep animations smooth
+  const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
 
   try {
     // 1. DYNAMIC HANDSHAKE: Load libraries only in the client environment
@@ -61,25 +64,29 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
     ]);
 
     const bip32 = BIP32Factory(ecc);
+    await breathe();
 
     // 2. Pre-Handshake Validation
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid BIP39 Mnemonic");
     
-    // 3. Multi-Protocol Derivation
+    // 3. Multi-Protocol Derivation (Sequenced with breathers for UI smoothness)
     const evmWallet = ethers.Wallet.fromPhrase(mnemonic);
     const xrpWallet = xrpl.Wallet.fromMnemonic(mnemonic);
+    await breathe();
     
     await cryptoWaitReady();
     const keyring = new Keyring({ type: 'sr25519' });
     const dotWallet = keyring.addFromMnemonic(mnemonic);
     const ksmKeyring = new Keyring({ type: 'sr25519', ss58Format: 2 });
     const ksmWallet = ksmKeyring.addFromMnemonic(mnemonic);
+    await breathe();
 
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     const nearSecretKey = seed.slice(0, 32);
     const nearBase58Secret = utils.serialize.base_encode(nearSecretKey);
     const nearKeyPair = KeyPair.fromString(`ed25519:${nearBase58Secret}`);
     const nearAddress = Buffer.from(nearKeyPair.getPublicKey().data).toString('hex');
+    await breathe();
 
     const btcRoot = bip32.fromSeed(seed);
     const btcChild = btcRoot.derivePath("m/84'/0'/0'/0/0");
@@ -88,6 +95,7 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
     const ltcRoot = bip32.fromSeed(seed, litecoinNetwork);
     const ltcChild = ltcRoot.derivePath("m/84'/2'/0'/0/0");
     const { address: ltcAddress } = bitcoin.payments.p2wpkh({ pubkey: ltcChild.publicKey, network: litecoinNetwork });
+    await breathe();
 
     const dogeRoot = bip32.fromSeed(seed, dogecoinNetwork);
     const dogeChild = dogeRoot.derivePath("m/44'/3'/0'/0/0");
@@ -95,24 +103,28 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
 
     const solRoot = derivePath("m/44'/501'/0'/0'", seed.toString('hex'));
     const solKeypair = SolanaKeypair.fromSeed(solRoot.key);
+    await breathe();
 
     const cosmosWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: "cosmos", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
     const [cosmosAccount] = await cosmosWallet.getAccounts();
 
     const osmosisWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: "osmo", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
     const [osmosisAccount] = await osmosisWallet.getAccounts();
+    await breathe();
 
     const secretWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: "secret", hdPaths: [stringToPath("m/44'/529'/0'/0/0")] });
     const [secretAccount] = await secretWallet.getAccounts();
 
     const injectiveWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: "inj", hdPaths: [stringToPath("m/44'/60'/0'/0/0")] });
     const [injectiveAccount] = await injectiveWallet.getAccounts();
+    await breathe();
 
     const celestiaWallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: "celestia", hdPaths: [stringToPath("m/44'/118'/0'/0/0")] });
     const [celestiaAccount] = await celestiaWallet.getAccounts();
 
     const adaRoot = btcRoot.derivePath("m/1852'/1815'/0'/0/0");
     const adaAddress = `addr1${Buffer.from(adaRoot.publicKey).toString('hex').slice(0, 50)}`; 
+    await breathe();
 
     const tronRoot = btcRoot.derivePath("m/44'/195'/0'/0/0");
     const tronPrivateKey = tronRoot.privateKey!.toString('hex');
@@ -120,6 +132,7 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
 
     const algoRoot = btcRoot.derivePath("m/44'/283'/0'/0/0");
     const algoAddress = algosdk.encodeAddress(algoRoot.privateKey!);
+    await breathe();
 
     const hbarMnemonic = await HederaMnemonic.fromString(mnemonic);
     const hbarPrivateKey = await hbarMnemonic.toStandardEd25519PrivateKey();
@@ -129,6 +142,7 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
     const xtzSecretKey = b58cencode(xtzSeed.key, prefix.edsk2); 
     const xtzSigner = await InMemorySigner.fromSecretKey(xtzSecretKey);
     const xtzAddress = await xtzSigner.publicKeyHash();
+    await breathe();
 
     const aptosSeed = derivePath("m/44'/637'/0'/0'/0'", seed.toString('hex'));
     const aptosAccount = new AptosAccount(aptosSeed.key);
