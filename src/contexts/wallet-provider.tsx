@@ -208,7 +208,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
     
-    // STABILITY FIX: Use existing account number if present, never regenerate
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
@@ -225,7 +224,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
     
-    // STABILITY FIX: Use existing account number if present
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
@@ -301,26 +299,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     window.location.href = '/auth/login';
   }, [authSignOut, user]);
 
-  const assetsForCurrentNetwork = useMemo(() => {
-    if (!viewingNetwork) return [];
-    const wncPriceInfo = prices['internal:wnc'];
-    const wncAsset: AssetRow = {
-        chainId: viewingNetwork.chainId, address: 'internal:wnc', symbol: 'WNC', name: 'Wevinacoin', 
-        balance: profile?.wnc_earnings?.toString() || '0', isNative: false, 
-        priceUsd: wncPriceInfo?.price || 0.0006, fiatValueUsd: (profile?.wnc_earnings || 0) * (wncPriceInfo?.price || 0.0006), 
-        pctChange24h: wncPriceInfo?.change || 0, decimals: 0, iconUrl: null 
-    };
-    const available = getAvailableAssetsForChain(viewingNetwork.chainId);
-    const chainBalances = balances[viewingNetwork.chainId] || [];
-    const onChainAssets = available.map((asset) => {
-        const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
-        const balance = balDoc?.balance || '0';
-        const priceId = (asset.priceId || asset.coingeckoId || asset.address || asset.symbol || '').toLowerCase();
-        const priceInfo = prices[priceId] || { price: 0, change: 0 };
-        return { ...asset, balance, priceUsd: priceInfo.price, pctChange24h: priceInfo.change, fiatValueUsd: parseFloat(balance) * priceInfo.price } as AssetRow;
-    });
-    return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
-  }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
+  const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
+    return getAddressForChainUtil(chain, wallets);
+  }, []);
 
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!user || !wallets || wallets.length === 0 || !accountNumber || chainsWithLogos.length === 0) {
@@ -359,13 +340,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
     setNetwork: setViewingNetwork,
-    allAssets: assetsForCurrentNetwork,
+    allAssets: [], // Placeholder, assets are derived in assetsForCurrentNetwork logic
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing, wallets, balances, prices, accountNumber,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud,
     deleteWallet, deleteWalletPermanently, logout, 
-    getAddressForChain: getAddressForChainUtil, infuraApiKey, setInfuraApiKey,
+    getAddressForChain, infuraApiKey, setInfuraApiKey,
     hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => {
         setHiddenTokenKeys(prev => {
             const n = new Set(prev); const k = `${cid}:${sym}`;
@@ -385,11 +366,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData,
     syncDiagnostic, runCloudDiagnostic
   }), [
-    isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork, assetsForCurrentNetwork,
+    isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 
-    importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout
+    importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, getAddressForChain
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
