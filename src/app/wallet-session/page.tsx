@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -152,12 +151,12 @@ export default function WalletSessionPage() {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 blur-[120px] -mr-64 -mt-64 rounded-full pointer-events-none" />
       
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className="w-full max-w-sm space-y-10 relative z-10"
       >
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary">
+          <div className="w-16 h-16 bg-primary/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 border border-primary/20 text-primary shadow-2xl">
             <Lock className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight uppercase">Establish Vault</h1>
@@ -245,13 +244,13 @@ export default function WalletSessionPage() {
                   placeholder="Enter your 12 or 24 word mnemonic phrase here..."
                   value={importInput}
                   onChange={(e) => setImportInput(e.target.value)}
-                  className="min-h-[120px] bg-black/40 backdrop-blur-xl border-white/10 rounded-[2rem] p-5 text-sm leading-relaxed focus-visible:ring-primary text-white"
+                  className="min-h-[120px] bg-black/40 backdrop-blur-xl border-white/10 rounded-[2rem] p-5 text-sm leading-relaxed focus-visible:ring-primary text-white shadow-2xl"
                 />
               </div>
               <div className="flex gap-3">
                 <Button variant="ghost" className="flex-1 h-14 rounded-2xl font-bold uppercase tracking-widest text-xs" onClick={() => { setStep('options'); setError(null); }}>Back</Button>
                 <Button 
-                  className="flex-[2] h-14 rounded-2xl font-black uppercase tracking-widest text-xs bg-primary"
+                  className="flex-[2] h-14 rounded-2xl font-black uppercase tracking-widest text-xs bg-primary shadow-xl shadow-primary/20"
                   onClick={handleImport}
                   disabled={!importInput.trim() || isProcessing}
                 >
