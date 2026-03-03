@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -158,10 +157,15 @@ export default function SettingsPage() {
         }
     };
 
+    /**
+     * INSTITUTIONAL 3-STEP SAVE SEQUENCE
+     * Ensures session stability and data consistency across ecosystem.
+     */
     const handleSaveProfile = async () => {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
+            // STEP 1: Update Auth Metadata (For instant UI handshake)
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -170,6 +174,7 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
+            // STEP 2: Upsert to Public Profiles (Persistence Node)
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -181,6 +186,7 @@ export default function SettingsPage() {
 
             if (dbError) throw dbError;
 
+            // STEP 3: Refresh Identity Session
             await refreshProfile();
             toast({ title: "Profile Secured", description: "Identity node fully synchronized with ecosystem." });
         } catch (error: any) {
