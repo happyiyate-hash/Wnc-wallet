@@ -1,0 +1,75 @@
+
+'use client';
+
+import { supabase } from '@/lib/supabase/client';
+import type { WalletWithMetadata } from '@/lib/types';
+
+/**
+ * INSTITUTIONAL WALLET ACTIONS SERVICE
+ * Handles data persistence, cloud synchronization, and cache management.
+ */
+
+export async function syncAddressesToCloud(
+  userId: string,
+  wallets: WalletWithMetadata[],
+  accountNumber: string
+) {
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        account_number: accountNumber, 
+        updated_at: new Date().toISOString(),
+        evm_address: wallets.find(w => w.type === 'evm')?.address,
+        xrp_address: wallets.find(w => w.type === 'xrp')?.address,
+        polkadot_address: wallets.find(w => w.type === 'polkadot')?.address,
+        near_address: wallets.find(w => w.type === 'near')?.address,
+        solana_address: wallets.find(w => w.type === 'solana')?.address,
+        btc_address: wallets.find(w => w.type === 'btc')?.address,
+      })
+      .eq('id', userId);
+
+    if (error) throw error;
+  } catch (e: any) {
+    console.error("Registry Sync Interrupted:", e.message);
+  }
+}
+
+export async function saveVaultToCloud(userId: string, mnemonic: string) {
+  if (!supabase) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/wallet/encrypt-phrase', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': `Bearer ${session?.access_token}` 
+      },
+      body: JSON.stringify({ phrase: mnemonic })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      await supabase.from('profiles').update({
+        vault_phrase: data.encrypted,
+        iv: data.iv
+      }).eq('id', userId);
+    }
+  } catch (e) {
+    console.error("Vault Backup Advisory:", e);
+  }
+}
+
+export function purgeLocalWalletCache(userId: string) {
+  const keys = [
+    'wallet_mnemonic', 
+    'infura_api_key', 
+    'account_number', 
+    'custom_tokens', 
+    'hidden_tokens',
+    'profile_cache'
+  ];
+  keys.forEach(key => localStorage.removeItem(`${key}_${userId}`));
+}
