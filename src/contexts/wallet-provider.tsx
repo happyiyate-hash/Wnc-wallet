@@ -278,6 +278,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = ((i + 1) / (chains.length + 1)) * 100;
 
+      // 1. SCANNING BEAT
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -286,11 +287,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(600);
+      await wait(800);
 
+      // 2. RECONCILIATION BEAT
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(500); 
+        await wait(600); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -298,13 +300,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(600); 
+        await wait(800); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      await wait(850);
+      // 3. EXIT WINDOW (Wait for cards to be seen before next pair)
+      await wait(1000);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -315,17 +318,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(1000);
+    await wait(1200);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(1000);
+      await wait(1200);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 3000);
   }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
@@ -336,6 +339,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     if (refCode && !profile.referral_handled && !sessionRefHandled) {
         try {
+            // Case-insensitive lookup for Account ID match (registry nodes use 835 prefix)
             const { data: referrer, error: refError } = await supabase
                 .from('profiles')
                 .select('id')
@@ -343,6 +347,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 .maybeSingle();
 
             if (!refError && referrer && referrer.id !== user.id) {
+                // Atomic Growth Link
                 await supabase.from('referrals').insert({
                     referrer_id: referrer.id,
                     referred_id: user.id,
@@ -510,10 +515,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
 
-  /**
-   * RESILIENT HARD-RESET LOGOUT
-   * Implements a 5-second timeout and hard browser reset to ensure clean exit.
-   */
   const logout = useCallback(async () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
@@ -525,7 +526,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const prevUserId = user?.id;
       
-      // Attempt clean sign out with race-condition protection
       await Promise.race([authSignOut(), timeout]).catch(() => {
           console.warn("Auth sign-out timed out. Proceeding with hard reset.");
       });
@@ -546,7 +546,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setBalances({});
       setAccountNumber(null);
       
-      // Hard redirect to clear all React states
       window.location.href = '/auth/login';
     } catch (e) {
       window.location.href = '/auth/login';
