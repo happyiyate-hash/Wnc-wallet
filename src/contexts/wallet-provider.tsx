@@ -230,14 +230,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (res.ok) { updates.vault_infura_key = data.encrypted; updates.infura_iv = data.iv; }
       }
 
-      const { error } = await supabase!.from('profiles').update(updates).eq('id', user.id);
-      if (error) throw error;
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase!.from('profiles').update(updates).eq('id', user.id);
+        if (error) throw error;
+      }
       
       setIsSynced(true);
     } catch (e: any) { 
       console.error("Vault Backup Failed:", e.message); 
     }
-  }, [user, refreshProfile]);
+  }, [user]);
 
   /**
    * INSTITUTIONAL REAL-TIME SCANNER
@@ -329,13 +331,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         chain: 'Vault', 
         status: 'checking', 
         localValue: 'Encrypted Phrase', 
-        cloudValue: profile.vault_phrase ? 'Stored' : 'Missing', 
+        cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
         progress: 95 
       }));
       await wait(800);
     }
 
-    if (!profile.vault_phrase) {
+    if (!profile?.vault_phrase) {
       if (!isUIMode) {
         isUIMode = true;
         setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: 'Missing', progress: 95 }));
@@ -363,7 +365,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        setIsSynced(false); // Triggers visual scan on landing
+        
+        // Immediate Cloud Backup Handshake
+        await saveToVault();
+        await syncAllAddresses(derived);
+        
+        setIsSynced(true); 
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
@@ -377,7 +384,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (derived && user) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-        setIsSynced(false); // Triggers visual scan on landing
+        
+        // Immediate Cloud Backup Handshake
+        await saveToVault();
+        await syncAllAddresses(derived);
+        
+        setIsSynced(true);
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
@@ -421,7 +433,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const derived = await deriveAllWallets(mnemonicVal, latestProfile);
         if (derived) { 
           setWallets(derived);
-          setIsSynced(false); // Triggers visual scan on dashboard landing
+          setIsSynced(true); // Should be synced if restored from cloud
         }
       }
 
@@ -656,9 +668,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     infuraApiKey,
     setInfuraApiKey: (k) => { 
       setInfuraApiKey(k); 
-      if (k) localStorage.setItem('infura_api_key', k); 
-      else localStorage.removeItem('infura_api_key');
-      if (user) saveToVault(); 
+      if (k) {
+        localStorage.setItem('infura_api_key', k);
+        // Immediate Cloud Save for API Key
+        if (user) saveToVault();
+      } else {
+        localStorage.removeItem('infura_api_key');
+        if (user) saveToVault();
+      }
     },
     hiddenTokenKeys,
     toggleTokenVisibility,
