@@ -1,5 +1,7 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Database, 
@@ -20,8 +22,13 @@ import { cn } from '@/lib/utils';
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
   
-  if (status === 'idle') return null;
+  if (!hasMounted || status === 'idle') return null;
 
   const truncateAddress = (addr: string | null) => {
     if (!addr) return 'None';

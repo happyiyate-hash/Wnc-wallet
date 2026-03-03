@@ -1,12 +1,13 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/user-provider';
-import { useWallet } from '@/contexts/wallet-provider';
 
 /**
  * GLOBAL LOADING BARRIER (Hydration-Safe)
  * Optimized for SWR performance while ensuring server/client parity.
+ * Prevents hydration errors by rendering a stable skeleton first.
  */
 export default function GlobalLoadingBarrier() {
   const { loading: authLoading, profile } = useUser();
@@ -21,11 +22,11 @@ export default function GlobalLoadingBarrier() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Hydration safety: render matching UI on server and first client pass
   const hasCachedData = !!profile;
-  const isAppLoading = !showFailsafe && authLoading && !hasCachedData;
+  const isAppLoading = !showFailsafe && (authLoading || !hasMounted) && !hasCachedData;
 
-  // Render identical UI on server and first client pass to avoid hydration mismatch
-  if (!hasMounted || isAppLoading) {
+  if (isAppLoading) {
     return (
       <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white">
         <div className="relative mb-12 flex items-center justify-center">

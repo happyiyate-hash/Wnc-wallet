@@ -16,6 +16,7 @@ import {
   purgeLocalWalletCache 
 } from '@/lib/wallets/services/wallet-actions';
 import { backgroundSyncWorker, type SyncDiagnostic } from '@/lib/wallets/background-sync-worker';
+import { supabase } from '@/lib/supabase/client';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -38,6 +39,8 @@ interface WalletContextType {
   generateWallet: () => Promise<string>;
   saveToVault: () => Promise<void>;
   restoreFromCloud: (onStatusUpdate?: (status: string) => void) => Promise<void>;
+  deleteWallet: () => Promise<void>;
+  deleteWalletPermanently: () => Promise<void>;
   logout: () => Promise<void>;
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
   infuraApiKey: string | null;
@@ -65,7 +68,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  // HYDRATION REPAIR: Initialize with stable defaults, then populate from cache in useEffect
   const [prices, setPrices] = useState<PriceResult>({});
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // 1. Initial Cache Hydration (Client-Side Only)
+  // Hydration Effect
   useEffect(() => {
     const cachedPrices = localStorage.getItem('cache_prices_global');
     if (cachedPrices) setPrices(JSON.parse(cachedPrices));
@@ -97,19 +99,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const cachedBalances = localStorage.getItem('cache_balances_all');
     if (cachedBalances) setBalances(JSON.parse(cachedBalances));
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('account_number_')) {
-        setAccountNumber(localStorage.getItem(key));
-        break;
-      }
+    if (user) {
+        const acc = localStorage.getItem(`account_number_${user.id}`);
+        if (acc) setAccountNumber(acc);
     }
 
     const savedNetwork = localStorage.getItem('last_viewing_network');
     if (savedNetwork) setViewingNetwork(JSON.parse(savedNetwork));
-  }, []);
+  }, [user]);
 
-  // 2. Sync network to storage
   useEffect(() => {
     if (viewingNetwork) localStorage.setItem('last_viewing_network', JSON.stringify(viewingNetwork));
   }, [viewingNetwork]);
@@ -159,15 +157,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [initLocalSession]);
 
-  // Market Engine Pulse
   const { refresh } = useWalletEngine({
-    wallets,
-    viewingNetwork,
-    user,
-    chainsWithLogos,
-    userAddedTokens,
-    rates,
-    infuraApiKey,
+    wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, infuraApiKey,
     setPrices: (newPrices) => {
       setPrices(newPrices);
       localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
@@ -179,8 +170,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    setIsRefreshing,
-    setHasFetchedInitialData
+    setIsRefreshing, setHasFetchedInitialData
   });
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
@@ -232,8 +222,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || !profile?.vault_phrase) throw new Error("No cloud backup found");
     onStatusUpdate?.('Restoring Vault...');
-    const { supabase: ssSupabase } = require('@/lib/supabase/client');
-    const { data: { session } } = await ssSupabase.auth.getSession();
+    const { data: { session } } = await supabase!.auth.getSession();
     const res = await fetch('/api/wallet/decrypt-phrase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
@@ -244,9 +233,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(`wallet_mnemonic_${user.id}`, phrase);
       const derived = await deriveAllWallets(phrase, profile);
       setWallets(derived);
-      if (profile.account_number) setAccountNumber(profile.account_number);
+      if (profile.account_number) {
+          setAccountNumber(profile.account_number);
+          localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+      }
     }
   }, [user, profile]);
+
+  const deleteWallet = useCallback(async () => {
+    if (user) {
+        purgeLocalWalletCache(user.id);
+        setWallets(null);
+        setAccountNumber(null);
+        setBalances({});
+    }
+  }, [user]);
+
+  const deleteWalletPermanently = useCallback(async () => {
+    if (!user || !supabase) return;
+    try {
+        await supabase.from('profiles').update({
+            vault_phrase: null,
+            iv: null,
+            evm_address: null,
+            xrp_address: null,
+            polkadot_address: null,
+            near_address: null,
+            solana_address: null,
+            account_number: null,
+            onboarding_completed: false
+        }).eq('id', user.id);
+        
+        await deleteWallet();
+        await authSignOut();
+    } catch (e) {
+        console.error("PERMANENT_DELETE_FAIL:", e);
+    }
+  }, [user, deleteWallet, authSignOut]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
@@ -270,34 +293,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const onChainAssets = available.map((asset) => {
         const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
-        
-        // Multi-key fallback registry for bulletproof price resolution
-        const lookupKeys = [
-            asset.priceId,
-            asset.coingeckoId,
-            asset.address,
-            asset.symbol
-        ].filter(Boolean).map(k => k!.toLowerCase());
-
-        let priceInfo = null;
-        for (const key of lookupKeys) {
-            if (prices[key]) {
-                priceInfo = prices[key];
-                break;
-            }
-        }
-
-        const price = priceInfo?.price || 0;
-        const change = priceInfo?.change || 0;
-        return { ...asset, balance, priceUsd: price, pctChange24h: change, fiatValueUsd: parseFloat(balance) * price } as AssetRow;
+        const priceId = (asset.priceId || asset.coingeckoId || asset.address || asset.symbol || '').toLowerCase();
+        const priceInfo = prices[priceId] || { price: 0, change: 0 };
+        return { ...asset, balance, priceUsd: priceInfo.price, pctChange24h: priceInfo.change, fiatValueUsd: parseFloat(balance) * priceInfo.price } as AssetRow;
     });
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
-  const runCloudDiagnostic = useCallback(async () => {
+  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!user || !wallets || !accountNumber || chainsWithLogos.length === 0) return;
     await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => setSyncDiagnostic(p => ({ ...p, ...u })));
   }, [user, wallets, accountNumber, profile, chainsWithLogos]);
+
+  // Initial Sync Trigger
+  useEffect(() => {
+    if (isInitialized && wallets && user && hasFetchedInitialData) {
+        const timer = setTimeout(() => {
+            runCloudDiagnostic();
+        }, 1000);
+        return () => clearTimeout(timer);
+    }
+  }, [isInitialized, wallets === null, user?.id, hasFetchedInitialData, runCloudDiagnostic]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
@@ -308,7 +324,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChainsMap,
     isRefreshing, wallets, balances, prices, accountNumber,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud,
-    logout, getAddressForChain: getAddressForChainUtil, infuraApiKey, setInfuraApiKey,
+    deleteWallet, deleteWalletPermanently, logout, 
+    getAddressForChain: getAddressForChainUtil, infuraApiKey, setInfuraApiKey,
     hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => {
         setHiddenTokenKeys(prev => {
             const n = new Set(prev); const k = `${cid}:${sym}`;
@@ -331,7 +348,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork, assetsForCurrentNetwork,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
-    activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, importWallet, restoreFromCloud, logout
+    activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 
+    importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
