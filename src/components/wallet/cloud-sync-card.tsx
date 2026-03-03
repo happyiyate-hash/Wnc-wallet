@@ -18,8 +18,8 @@ import { cn } from '@/lib/utils';
 
 /**
  * INSTITUTIONAL SYNC OVERLAY
- * Optimized for "Real-Time" swiping feedback. 
- * Cards enter from right, pause for checkmark, and slide out to the left.
+ * Optimized for "Real-Time" swiping feedback with isolated transition slots.
+ * Prevents overlapping/ghosting by using popLayout mode and independent containers.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -56,11 +56,11 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // SLIDE TRANSITION CONFIG: No fading, strict horizontal flow
+  // STABILIZED SWIPE CONFIG: Strict horizontal carousel with zero fading
   const swipeVariants = {
-    initial: { x: 50, opacity: 1 },
-    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 120 } },
-    exit: { x: -100, opacity: 1, transition: { duration: 0.3, ease: "easeIn" } }
+    initial: { x: '100%', opacity: 1 },
+    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 150 } },
+    exit: { x: '-100%', opacity: 1, transition: { duration: 0.25, ease: "easeIn" } }
   };
 
   return (
@@ -152,54 +152,62 @@ export default function CloudSyncCard() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 h-16 relative">
-            <AnimatePresence mode="popLayout">
-                <motion.div 
-                    key={`${chain}-cloud`}
-                    variants={swipeVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative h-full flex flex-col justify-center"
-                >
-                    <div className="flex items-center gap-1.5">
-                        <Database className="w-2.5 h-2.5 text-muted-foreground" />
-                        <span className="text-[7px] font-black text-muted-foreground uppercase">Cloud Registry</span>
-                    </div>
-                    <p className={cn(
-                        "text-[10px] font-mono truncate transition-all duration-500",
-                        status === 'mismatch' ? "text-red-400 line-through scale-95 opacity-50" : "text-white/60"
-                    )}>
-                        {truncateAddress(cloudValue)}
-                    </p>
-                </motion.div>
+            {/* SLOT 1: CLOUD REGISTRY */}
+            <div className="relative overflow-hidden h-full rounded-2xl">
+                <AnimatePresence mode="popLayout">
+                    <motion.div 
+                        key={`${chain}-cloud`}
+                        variants={swipeVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 h-full flex flex-col justify-center"
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <Database className="w-2.5 h-2.5 text-muted-foreground" />
+                            <span className="text-[7px] font-black text-muted-foreground uppercase">Cloud Registry</span>
+                        </div>
+                        <p className={cn(
+                            "text-[10px] font-mono truncate transition-all duration-500",
+                            status === 'mismatch' ? "text-red-400 line-through scale-95 opacity-50" : "text-white/60"
+                        )}>
+                            {truncateAddress(cloudValue)}
+                        </p>
+                    </motion.div>
+                </AnimatePresence>
+            </div>
 
-                <motion.div 
-                    key={`${chain}-local`}
-                    variants={swipeVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit="exit"
-                    className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative h-full flex flex-col justify-center"
-                >
-                    <div className="flex items-center gap-1.5">
-                        <Cpu className="w-2.5 h-2.5 text-primary" />
-                        <span className="text-[7px] font-black text-primary uppercase">Local Node</span>
-                    </div>
-                    <p className="text-[10px] font-mono text-white truncate">
-                        {truncateAddress(localValue)}
-                    </p>
-                    {status === 'success' && (
-                        <motion.div 
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ type: 'spring', bounce: 0.5, delay: 0.1 }}
-                            className="absolute -top-1 -right-1"
-                        >
-                            <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
-                        </motion.div>
-                    )}
-                </motion.div>
-            </AnimatePresence>
+            {/* SLOT 2: LOCAL NODE */}
+            <div className="relative overflow-hidden h-full rounded-2xl">
+                <AnimatePresence mode="popLayout">
+                    <motion.div 
+                        key={`${chain}-local`}
+                        variants={swipeVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative h-full flex flex-col justify-center"
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <Cpu className="w-2.5 h-2.5 text-primary" />
+                            <span className="text-[7px] font-black text-primary uppercase">Local Node</span>
+                        </div>
+                        <p className="text-[10px] font-mono text-white truncate">
+                            {truncateAddress(localValue)}
+                        </p>
+                        {status === 'success' && (
+                            <motion.div 
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ type: 'spring', bounce: 0.5, delay: 0.1 }}
+                                className="absolute -top-1 -right-1"
+                            >
+                                <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
+                            </motion.div>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
+            </div>
           </div>
 
           {status === 'mismatch' && (

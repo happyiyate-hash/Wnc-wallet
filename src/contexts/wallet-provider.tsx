@@ -72,7 +72,7 @@ interface WalletContextType {
   restoreFromCloud: (onStatusUpdate?: (status: string) => void) => Promise<void>;
   logout: () => Promise<void>;
   deleteWallet: () => void;
-  deleteWalletPermanently: () => Promise<void>;
+  deleteWalletPermanently: Promise<void>;
   fetchError: string | null;
   getAddressForChain: (chain: ChainConfig, wallets: WalletWithMetadata[]) => string | undefined;
   infuraApiKey: string | null;
@@ -243,15 +243,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  /**
+   * RE-ENGINEERED DIAGNOSTIC ENGINE
+   * Optimized for high-speed, synchronized carousel transitions.
+   * Prevents card overlapping by enforcing sequential state updates.
+   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    // PREVENT RE-TRIGGER: Mark as audited immediately to prevent loops
     const auditKey = `identity_audit_${user.id}`;
     const hasAudited = sessionStorage.getItem(auditKey);
     if (!options?.forceUI && hasAudited === 'verified') return;
     
+    // IMMEDIATE LOCK to prevent race-condition re-triggering
     sessionStorage.setItem(auditKey, 'verified');
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -267,7 +272,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600); // Initial build-up
+    await wait(400);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -278,6 +283,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = ((i + 1) / (chains.length + 1)) * 100;
 
+      // 1. SCANNING BEAT
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -286,12 +292,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      
-      await wait(300); // SCANNING BEAT (FASTER)
+      await wait(250); 
 
+      // 2. LOGIC CHECK & ACTION
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(300);
+        await wait(200);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -299,16 +305,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(500); 
+        await wait(300); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(400); 
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(400); // SUCCESS BEAT
       }
+
+      // 3. EXIT BEAT: Enforce dedicated time for the exit animation before the next chain ID is emitted
+      await wait(350); 
     }
 
-    // Vault Step
+    // Vault Final Verification
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -317,17 +324,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(600);
+    await wait(400);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(800);
+      await wait(400);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 1500);
   }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
