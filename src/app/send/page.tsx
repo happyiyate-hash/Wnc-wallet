@@ -225,11 +225,10 @@ function SendClient() {
     return activeType !== addrType;
   }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
 
-  // SMART RESOLVER: Manage isResolving state instantly
   const handleRecipientInputChange = (val: string) => {
     setRecipientInput(val);
     const type = detectAddressType(val);
-    // Instant stop for raw addresses or clear mismatches
+    // INSTANT STOP: Spinner only activates if we need to resolve a database Identity (835...)
     if (type === 'account-id') {
         setIsResolving(true);
     } else {
@@ -297,7 +296,6 @@ function SendClient() {
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
 
-  // QR ENGINE NODES
   const startCamera = async (scanner: Html5Qrcode) => {
     try {
       await scanner.start(
@@ -359,7 +357,7 @@ function SendClient() {
     const file = e.target.files?.[0];
     if (!file || !scannerRef.current) return;
     
-    // Stop camera first to prevent resource collision on mobile
+    // THREAD-SAFE SCANNING: Pause camera to prevent resource collision
     if (scannerRef.current.isScanning) {
         await scannerRef.current.stop().catch(() => {});
     }
@@ -369,7 +367,6 @@ function SendClient() {
       handleScanSuccess(decodedText);
     } catch (err) {
       toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in this image." });
-      // Restart camera so the user can try scanning normally
       if (isScannerOpen && scannerRef.current) startCamera(scannerRef.current);
     }
   };
@@ -379,9 +376,12 @@ function SendClient() {
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
-        // FIX: Strict integer casting to resolve registry ambiguity
+        // REGISTRY AMBIGUITY RESOLUTION: Explicit integer settlement
         const transferAmount = Math.floor(parseFloat(amount));
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { p_recipient_id: recipientProfile!.id, p_amount: transferAmount });
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { 
+          p_recipient_id: recipientProfile!.id, 
+          p_amount: transferAmount 
+        });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
