@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -70,26 +69,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  const [prices, setPrices] = useState<PriceResult>(() => {
-    if (typeof window === 'undefined') return {};
-    const cached = localStorage.getItem('cache_prices_global');
-    return cached ? JSON.parse(cached) : {};
-  });
-
-  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>(() => {
-    if (typeof window === 'undefined') return {};
-    const cached = localStorage.getItem('cache_balances_all');
-    return cached ? JSON.parse(cached) : {};
-  });
-
+  const [prices, setPrices] = useState<PriceResult>({});
+  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
-
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const cached = localStorage.getItem('last_viewing_network');
-    return cached ? JSON.parse(cached) : null;
-  });
-
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedInitialData, setHasFetchedInitialData] = useState(false);
@@ -108,12 +91,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // HYDRATION: Sync accountNumber from localStorage
+  const isAuditRunningRef = useRef(false);
+
   useEffect(() => {
     if (!user) {
-      setAccountNumber(null);
+      setPrices({}); setBalances({}); setAccountNumber(null); setViewingNetwork(null);
       return;
     }
+
+    const cachedPrices = localStorage.getItem('cache_prices_global');
+    if (cachedPrices) setPrices(JSON.parse(cachedPrices));
+
+    const cachedBalances = localStorage.getItem('cache_balances_all');
+    if (cachedBalances) setBalances(JSON.parse(cachedBalances));
+
+    const lastNetwork = localStorage.getItem('last_viewing_network');
+    if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
+
     const acc = localStorage.getItem(`account_number_${user.id}`);
     if (acc) setAccountNumber(acc);
   }, [user]);
@@ -318,7 +312,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
         return;
     }
-    await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => setSyncDiagnostic(p => ({ ...p, ...u })));
+
+    // CONCURRENCY & PERSISTENCE GUARD
+    if (isAuditRunningRef.current) return;
+    
+    const auditKey = `audit_done_${user.id}`;
+    if (localStorage.getItem(auditKey) === 'true' && !options?.forceUI) {
+        return;
+    }
+
+    isAuditRunningRef.current = true;
+    try {
+        await backgroundSyncWorker.performCloudAudit(
+            user.id, 
+            wallets, 
+            profile, 
+            accountNumber, 
+            chainsWithLogos, 
+            (u) => {
+                setSyncDiagnostic(p => ({ ...p, ...u }));
+                // Set persistent flag upon successful completion
+                if (u.status === 'completed') {
+                    localStorage.setItem(auditKey, 'true');
+                }
+            }
+        );
+    } finally {
+        isAuditRunningRef.current = false;
+    }
   }, [user, wallets, accountNumber, profile, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({

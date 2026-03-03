@@ -1,4 +1,3 @@
-
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -85,7 +84,8 @@ export function purgeLocalWalletCache(userId: string) {
     'account_number', 
     'custom_tokens', 
     'hidden_tokens',
-    'profile_cache'
+    'profile_cache',
+    'audit_done'
   ];
   keys.forEach(key => localStorage.removeItem(`${key}_${userId}`));
 }
