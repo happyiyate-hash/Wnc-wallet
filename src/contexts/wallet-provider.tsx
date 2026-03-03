@@ -466,21 +466,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     setIsWalletLoading(true);
-    const prevUserId = user?.id;
-    if (abortControllerRef.current) abortControllerRef.current.abort();
-    if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-    await authSignOut();
-    localStorage.removeItem('infura_api_key');
-    if (prevUserId) {
-        localStorage.removeItem(`wallet_mnemonic_${prevUserId}`);
-        localStorage.removeItem(`wallet_balances_${prevUserId}`);
-        localStorage.removeItem(`market_prices_${prevUserId}`);
-        localStorage.removeItem(`hidden_tokens_${prevUserId}`);
-        localStorage.removeItem(`custom_tokens_${prevUserId}`);
-        localStorage.removeItem(`account_number_${prevUserId}`);
-        sessionStorage.removeItem(`identity_audit_${prevUserId}`);
+    try {
+      const prevUserId = user?.id;
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
+      
+      await authSignOut();
+      
+      localStorage.removeItem('infura_api_key');
+      if (prevUserId) {
+          localStorage.removeItem(`wallet_mnemonic_${prevUserId}`);
+          localStorage.removeItem(`wallet_balances_${prevUserId}`);
+          localStorage.removeItem(`market_prices_${prevUserId}`);
+          localStorage.removeItem(`hidden_tokens_${prevUserId}`);
+          localStorage.removeItem(`custom_tokens_${prevUserId}`);
+          localStorage.removeItem(`account_number_${prevUserId}`);
+          sessionStorage.removeItem(`identity_audit_${prevUserId}`);
+      }
+      setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true);
+      
+      // Perform a clean-slate reload to ensure the login node is correctly established
+      window.location.href = '/auth/login';
+    } catch (e) {
+      console.error("LOGOUT_HANDSHAKE_ERROR:", e);
+      window.location.reload();
+    } finally {
+      setIsWalletLoading(false);
     }
-    setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true); setIsWalletLoading(false);
   }, [authSignOut, user?.id]);
 
   const deleteWallet = useCallback(() => {
@@ -580,9 +592,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
-    // INSTITUTIONAL LOGIC: Automatic verification triggers ONLY IF:
-    // 1. Audit never run in this tab session (Initial load check)
-    // 2. OR the wallet was just changed/unsynced (Secret phrase update)
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     
     if (!hasAuditedInThisTabSession || !isSynced) {

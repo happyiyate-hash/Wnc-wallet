@@ -65,7 +65,7 @@ const mapTechnicalError = (err: any): string => {
  * A cinematic overlay node for generating P2P requests.
  */
 export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const { allAssets, viewingNetwork, accountNumber } = useWallet();
+  const { allAssets, viewingNetwork, accountNumber, prices } = useWallet();
   const { user } = useUser();
   const { formatFiat } = useCurrency();
   const { toast } = useToast();
@@ -122,6 +122,12 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
   const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
 
+  const livePrice = useMemo(() => {
+    if (!selectedToken) return 0;
+    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
+    return prices[priceId]?.price || selectedToken.priceUsd || 0;
+  }, [selectedToken, prices]);
+
   const cardVariants = {
     initial: { y: "100%", opacity: 0 },
     animate: { y: 0, opacity: 1 },
@@ -177,7 +183,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
                         <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-4xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter text-white" />
                         <span className="text-sm font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
                       </div>
-                      <p className="mt-2 text-[10px] font-bold text-primary">≈ {formatFiat((parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0))}</p>
+                      <p className="mt-2 text-[10px] font-bold text-primary">≈ {formatFiat((parseFloat(amount) || 0) * livePrice)}</p>
                     </div>
                   </section>
 
@@ -218,8 +224,8 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
             </AnimatePresence>
           </div>
         </motion.div>
+        <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
       </motion.div>
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
     </>
   );
 }
@@ -229,7 +235,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
  * Cinematic deep-link fulfillment overlay.
  */
 export function RequestReviewMoment({ requestId, onClose }: { requestId: string, onClose: () => void }) {
-  const { wallets, infuraApiKey, allChainsMap, allAssets, refresh } = useWallet();
+  const { wallets, infuraApiKey, allChainsMap, allAssets, refresh, prices } = useWallet();
   const { profile: currentUserProfile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
   const { toast } = useToast();
@@ -347,6 +353,13 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const totalDebit = request.amount + adminFee;
   const hasInsufficientFunds = totalDebit > userBalance;
 
+  // Live price lookup for fulfillment display
+  const livePrice = useMemo(() => {
+    if (!activeToken) return 0;
+    const priceId = (activeToken.priceId || activeToken.coingeckoId || activeToken.address || '').toLowerCase();
+    return prices[priceId]?.price || activeToken.priceUsd || 0;
+  }, [activeToken, prices]);
+
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -387,7 +400,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
               <h2 className={cn("text-5xl font-black tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")}>
                 {request.amount} {request.token_symbol}
               </h2>
-              <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * (activeToken?.priceUsd || 0))}</p>
+              <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * livePrice)}</p>
 
               {isWnc && !isAlreadyPaid && (
                 <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 space-y-2 w-full max-w-[280px]">

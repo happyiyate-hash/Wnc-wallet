@@ -454,6 +454,13 @@ function SendClient() {
   const hasInsufficientFunds = totalDebit > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
+  // INSTITUTIONAL FIX: Direct price lookup from context to prevent $0.00 display
+  const livePrice = useMemo(() => {
+    if (!selectedToken) return 0;
+    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
+    return prices[priceId]?.price || selectedToken.priceUsd || 0;
+  }, [selectedToken, prices]);
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
       <header className="p-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-black/50 backdrop-blur-2xl z-50">
@@ -533,7 +540,7 @@ function SendClient() {
                       {hasInsufficientFunds ? (
                         <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Fee)</span>
                       ) : (
-                        <>≈ {formatFiat(amountNum * (selectedToken?.priceUsd || 0))} <span className="opacity-50">Estimated Value</span></>
+                        <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>
                       )}
                     </div>
                     {isWnc && (
