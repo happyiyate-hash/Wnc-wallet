@@ -16,9 +16,8 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 
 /**
- * INSTITUTIONAL DIAGNOSTIC SENTINEL (Butter-Smooth Edition)
- * Optimized for hardware-accelerated gliding and thread-safe animations.
- * Slim form factor (h-14 data cards).
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL (Ultra-Smooth Sequence)
+ * Optimized for hardware-accelerated gliding and sequential logic beats.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -59,15 +58,15 @@ export default function CloudSyncCard() {
   };
 
   const verticalFadeVariants = {
-    initial: { y: 15, opacity: 0 },
-    animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 150 } },
-    exit: { y: -15, opacity: 0, transition: { duration: 0.4 } }
+    initial: { y: 10, opacity: 0, filter: 'blur(4px)' },
+    animate: { y: 0, opacity: 1, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+    exit: { y: -10, opacity: 0, filter: 'blur(4px)', transition: { duration: 0.3 } }
   };
 
   const renderStatusIcon = () => {
     switch (status) {
       case 'checking':
-        return <Search className="w-4 h-4 text-white/80" />;
+        return <Search className="w-4 h-4 text-white/80 animate-pulse" />;
       case 'mismatch':
         return <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />;
       case 'syncing':
@@ -80,7 +79,7 @@ export default function CloudSyncCard() {
     }
   };
 
-  const isMismatch = status === 'mismatch';
+  const isMismatch = status === 'mismatch' || status === 'syncing';
 
   return (
     <motion.div 
@@ -98,8 +97,8 @@ export default function CloudSyncCard() {
       style={{ translateZ: 0 }}
     >
       <div className={cn(
-        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-1000",
-        isMismatch ? "bg-red-500/10 border-red-500/20" : "bg-[#0a0a0c]/95 border-white/10"
+        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-hidden transition-all duration-700",
+        isMismatch ? "bg-red-500/10 border-red-500/30" : "bg-[#0a0a0c]/95 border-white/10"
       )}>
         
         <div className="flex items-center justify-between mb-4">
@@ -111,16 +110,24 @@ export default function CloudSyncCard() {
               {renderStatusIcon()}
             </div>
             <div className="flex flex-col">
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-white leading-none">Cloud Sync Node</h3>
-              <p className="text-[7px] font-black uppercase text-white/40 tracking-widest mt-1">Hardware Handshake</p>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-white leading-none">Identity Auditor</h3>
+              <p className="text-[7px] font-black uppercase text-white/40 tracking-widest mt-1">Cross-Chain Verification</p>
             </div>
           </div>
           
           <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
             <Zap className="w-3 h-3 text-primary fill-primary" />
-            <span className="text-[9px] font-black uppercase text-white tracking-widest">
-              {chain || 'Registry'}
-            </span>
+            <AnimatePresence mode="wait">
+              <motion.span 
+                key={chain}
+                initial={{ opacity: 0, x: 5 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -5 }}
+                className="text-[9px] font-black uppercase text-white tracking-widest"
+              >
+                {chain || 'Registry'}
+              </motion.span>
+            </AnimatePresence>
           </div>
         </div>
 
@@ -131,7 +138,7 @@ export default function CloudSyncCard() {
                 key={`${chain}-cloud`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden will-change-transform"
+                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden"
               >
                 <div className="flex items-center gap-1.5">
                   <Database className="w-2.5 h-2.5 text-white/40" />
@@ -145,17 +152,14 @@ export default function CloudSyncCard() {
                     {truncateAddress(cloudValue)}
                   </p>
                   
-                  <AnimatePresence>
-                    {isMismatch && (
-                      <motion.div 
-                        initial={{ scaleX: 0 }}
-                        animate={{ scaleX: 1 }}
-                        exit={{ scaleX: 0 }}
-                        transition={{ duration: 0.5, ease: "easeInOut" }}
-                        className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-red-500 origin-left z-10"
-                      />
-                    )}
-                  </AnimatePresence>
+                  {isMismatch && (
+                    <motion.div 
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-red-500 origin-left z-10"
+                    />
+                  )}
                 </div>
               </motion.div>
             </AnimatePresence>
@@ -167,7 +171,7 @@ export default function CloudSyncCard() {
                 key={`${chain}-local`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible will-change-transform"
+                className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible"
               >
                 <div className="flex items-center gap-1.5">
                   <Cpu className="w-2.5 h-2.5 text-primary" />
@@ -204,7 +208,7 @@ export default function CloudSyncCard() {
                 width: { type: "spring", stiffness: 40, damping: 25 },
                 backgroundColor: { duration: 0.8 } 
               }}
-              className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)] will-change-[width]"
+              className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
             />
           </div>
           <div className="flex justify-between items-center px-1">
@@ -212,7 +216,7 @@ export default function CloudSyncCard() {
               "text-[8px] font-black uppercase tracking-widest transition-colors duration-500",
               isMismatch ? "text-red-500" : "text-muted-foreground"
             )}>
-              {isMismatch ? 'REGISTRY MISMATCH DETECTED' : status}
+              {status === 'mismatch' ? 'REGISTRY MISMATCH DETECTED' : status === 'syncing' ? 'UPDATING CLOUD NODE...' : status}
             </span>
             <span className="text-[8px] font-black text-white/40 uppercase">{Math.round(progress)}%</span>
           </div>

@@ -1,14 +1,13 @@
 
 'use client';
 
-import { supabase } from '@/lib/supabase/client';
 import type { WalletWithMetadata, UserProfile } from '@/lib/types';
 import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Decouples heavy registry auditing from the UI thread.
- * Slowed cadence for high-fidelity deliberate handshake.
+ * Implements a strict sequential handshake protocol.
+ * Optimized for high-fidelity verification beats rather than raw speed.
  */
 
 export interface SyncDiagnostic {
@@ -21,8 +20,8 @@ export interface SyncDiagnostic {
 
 export const backgroundSyncWorker = {
   /**
-   * Performs a high-fidelity audit of local addresses against the cloud registry.
-   * Triggers background corrections if mismatches are detected.
+   * Performs a high-fidelity, sequential audit of the vault.
+   * Checks each node one-by-one with deliberate pauses for visual confirmation.
    */
   async performCloudAudit(
     userId: string,
@@ -33,11 +32,12 @@ export const backgroundSyncWorker = {
   ) {
     if (!userId || !wallets || wallets.length === 0) return;
 
-    // Helper to yield the main thread for smooth animations (Extended beat)
-    const breathe = (ms = 800) => new Promise(resolve => setTimeout(resolve, ms));
+    // Helper for deliberate logical pauses (Smooth Beats)
+    const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    onUpdate({ status: 'checking', progress: 5, chain: 'Registry' });
-    await breathe(1000);
+    // Initial Settlement Pause: Wait for dashboard to stabilize
+    onUpdate({ status: 'idle', progress: 0 });
+    await breathe(3000);
 
     const chainsToAudit = [
       { id: 'evm', name: 'Ethereum', field: 'evm_address' },
@@ -47,7 +47,7 @@ export const backgroundSyncWorker = {
       { id: 'polkadot', name: 'Polkadot', field: 'polkadot_address' }
     ];
 
-    let detectedMismatches = false;
+    let totalMismatchesDetected = 0;
     const totalSteps = chainsToAudit.length;
 
     for (let i = 0; i < totalSteps; i++) {
@@ -56,47 +56,50 @@ export const backgroundSyncWorker = {
       const localAddr = localWallet?.address || null;
       const cloudAddr = (profile as any)?.[config.field] || null;
 
+      // STEP 1: INITIALIZE SCAN
       onUpdate({ 
+        status: 'checking',
         chain: config.name, 
         localValue: localAddr, 
         cloudValue: cloudAddr,
-        progress: 10 + ((i / totalSteps) * 40)
+        progress: (i / totalSteps) * 100
       });
 
-      // Audit Logic
-      if (localAddr && localAddr !== cloudAddr) {
-        detectedMismatches = true;
-        onUpdate({ status: 'mismatch' });
-        await breathe(1500); // Allow user to see the mismatch (Red Alert)
-      } else {
-        await breathe(600); // Deliberate scanning beat
-      }
-    }
-
-    // Secondary Check: Ensure Master Account Number is registered
-    if (!profile?.account_number || profile.account_number !== accountNumber) {
-        detectedMismatches = true;
-    }
-
-    // RECONCILIATION PHASE
-    if (detectedMismatches) {
-      onUpdate({ status: 'syncing', chain: 'Registry', progress: 60 });
+      // Deliberate "Thinking" Beat
       await breathe(1200);
-      
-      try {
-        await syncAddressesToCloud(userId, wallets, accountNumber);
-        onUpdate({ status: 'success', progress: 100 });
-      } catch (e) {
-        console.error("[WORKER_SYNC_FAIL]", e);
-        onUpdate({ status: 'idle' });
-        return;
+
+      // STEP 2: LOGICAL COMPARISON
+      const isMismatch = localAddr !== cloudAddr;
+
+      if (isMismatch) {
+        totalMismatchesDetected++;
+        onUpdate({ status: 'mismatch' });
+        await breathe(1500); // Let user see the red alert
+
+        // STEP 3: ATOMIC CORRECTION
+        onUpdate({ status: 'syncing' });
+        
+        try {
+          // Real await: The animation stays on "Syncing" until the DB confirms success
+          await syncAddressesToCloud(userId, wallets, accountNumber);
+          await breathe(1000); // Visual stability pause
+        } catch (e) {
+          console.error(`[REGISTRY_REPAIR_FAIL] ${config.name}:`, e);
+          onUpdate({ status: 'idle' });
+          return;
+        }
       }
-    } else {
-      onUpdate({ status: 'completed', progress: 100 });
+
+      // STEP 4: VERIFICATION COMPLETE
+      onUpdate({ status: 'success', progress: ((i + 1) / totalSteps) * 100 });
+      await breathe(800); // Deliberate "Checked" state pause
     }
 
-    // Success Dwell (Extended)
-    await breathe(2500);
+    // FINAL STEP: AUDIT SUMMARY
+    onUpdate({ status: 'completed', chain: 'Registry', progress: 100 });
+    
+    // Final Dwell: Keep the success banner visible before gliding out
+    await breathe(3000);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };
