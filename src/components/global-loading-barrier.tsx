@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,6 +16,7 @@ export default function GlobalLoadingBarrier() {
   const { 
     isInitialized, 
     hasFetchedInitialData, 
+    isWalletLoading,
     wallets 
   } = useWallet();
 
@@ -30,27 +32,32 @@ export default function GlobalLoadingBarrier() {
   /**
    * HANDSHAKE RESOLVER
    * The app is only "Ready" when:
-   * 1. Auth is settled
-   * 2. Profile metadata is fetched
-   * 3. Wallet core is initialized AND initial data (balances/prices) are hydrated
+   * 1. Auth is settled (authenticated or unauthenticated)
+   * 2. If authenticated:
+   *    -> Wallet core derived (isInitialized)
+   *    -> Initial market sync complete (hasFetchedInitialData)
    * 
    * ONBOARDING EXCEPTION:
-   * If the user needs onboarding, we yield to allow the GlobalOverlayManager to route them.
+   * If user is authenticated but has no wallet derived yet AND onboarding is not complete,
+   * we yield the splash screen to allow the /wallet-session routing.
    */
   const needsOnboarding = user && profile && (!wallets || wallets.length === 0) && !profile.onboarding_completed;
-  const isAppLoading = !showFailsafe && !needsOnboarding && (authLoading || (user && (!isInitialized || !profile || !hasFetchedInitialData)));
+  
+  // Hard gate: loading until auth resolves, or until authenticated wallet + data are ready
+  const isAppLoading = !showFailsafe && (
+    authLoading || 
+    (user && !needsOnboarding && (!isInitialized || !hasFetchedInitialData || isWalletLoading))
+  );
 
   if (!isAppLoading) return null;
 
   return (
     <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white">
       <div className="relative mb-12 flex items-center justify-center">
-        {/* HARDWARE-ACCELERATED CSS SPINNER - Glowing shadows removed */}
-        <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin drop-shadow-xl" />
+        <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]" />
         
         <div className="absolute inset-0 flex items-center justify-center">
-          {/* BRIGHT INNER NODE - Glowing shadows removed */}
-          <div className="w-10 h-10 rounded-2xl bg-primary border border-primary animate-pulse drop-shadow-md" />
+          <div className="w-10 h-10 rounded-2xl bg-primary border border-primary animate-pulse drop-shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
         </div>
       </div>
       
