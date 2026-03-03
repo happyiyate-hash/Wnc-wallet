@@ -5,7 +5,9 @@ import {
   Database, 
   CheckCircle2, 
   RefreshCw, 
-  Cpu
+  Cpu,
+  Search,
+  AlertCircle
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
@@ -29,6 +31,26 @@ export default function CloudSyncCard() {
     exit: { y: -15, opacity: 0, transition: { duration: 0.2 } }
   };
 
+  /**
+   * INTERRUPTIVE ICON LOGIC
+   * Changes based on the active diagnostic state
+   */
+  const renderStatusIcon = () => {
+    switch (status) {
+      case 'checking':
+        return <Search className="w-4 h-4 text-primary animate-pulse" />;
+      case 'mismatch':
+        return <RefreshCw className="w-4 h-4 text-amber-500" />;
+      case 'syncing':
+        return <RefreshCw className="w-4 h-4 text-primary animate-spin" />;
+      case 'success':
+      case 'completed':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      default:
+        return <RefreshCw className="w-4 h-4 text-primary" />;
+    }
+  };
+
   return (
     <motion.div 
       initial={{ y: -100, opacity: 0 }}
@@ -42,8 +64,11 @@ export default function CloudSyncCard() {
         {/* Header Section */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-              <RefreshCw className={cn("w-4 h-4 text-primary", status === 'syncing' && "animate-spin")} />
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-500",
+              (status === 'success' || status === 'completed') ? "bg-green-500/10" : "bg-primary/20"
+            )}>
+              {renderStatusIcon()}
             </div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-white/80">Cloud Sync Node</h3>
           </div>
@@ -57,7 +82,7 @@ export default function CloudSyncCard() {
           
           {/* SLOT 1: CLOUD */}
           <div className="relative h-14">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="popLayout">
               <motion.div 
                 key={`${chain}-cloud`}
                 variants={verticalFadeVariants}
@@ -75,7 +100,7 @@ export default function CloudSyncCard() {
 
           {/* SLOT 2: LOCAL + PREMIUM BADGE */}
           <div className="relative h-14">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="popLayout">
               <motion.div 
                 key={`${chain}-local`}
                 variants={verticalFadeVariants}
@@ -115,7 +140,7 @@ export default function CloudSyncCard() {
             />
           </div>
           <div className="flex justify-between items-center text-[8px] font-black uppercase text-muted-foreground tracking-tighter">
-            <span>{status}</span>
+            <span className="animate-pulse">{status}</span>
             <span>{Math.round(progress)}%</span>
           </div>
         </div>
