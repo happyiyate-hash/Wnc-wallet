@@ -242,10 +242,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  /**
-   * INSTITUTIONAL DIAGNOSTIC SENTINEL
-   * Re-engineered for deliberate, smooth verification steps.
-   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
@@ -253,7 +249,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
-    // SLOWED DOWN FOR VISUAL IMPACT
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
     const chains: { label: string; type: string }[] = [
@@ -286,7 +281,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         progress 
       }));
       
-      // Deliberate pause for user to verify entrance
       await wait(1200); 
 
       if (local && local !== cloud) {
@@ -299,12 +293,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(1500); // Reconciliation time
+        await wait(1500); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(1500); // Visual lock pause
+        await wait(1500); 
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(1200); // Verification pause
+        await wait(1200); 
       }
     }
 
@@ -331,20 +325,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 3000);
   }, [wallets, profile, user, saveToVault, isSynced]);
 
-  /**
-   * GROWTH HANDSHAKE PROTOCOL
-   * Links a new referred node to its referrer in the institutional registry.
-   */
   const handleReferralHandshake = useCallback(async () => {
     if (!user || !profile || !supabase) return;
     
-    // Check if user was referred (from auth metadata)
     const refCode = user.user_metadata?.referral_code;
     const sessionRefHandled = sessionStorage.getItem(`ref_handshake_${user.id}`);
     
     if (refCode && !profile.referral_handled && !sessionRefHandled) {
         try {
-            // 1. Resolve referrer ID from the 6-char code
             const { data: referrer, error: refError } = await supabase
                 .from('profiles')
                 .select('id')
@@ -352,7 +340,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 .maybeSingle();
 
             if (!refError && referrer && referrer.id !== user.id) {
-                // 2. Insert Referral Record
                 await supabase.from('referrals').insert({
                     referrer_id: referrer.id,
                     referred_id: user.id,
@@ -360,7 +347,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                     reward_amount: 100
                 });
 
-                // 3. Mark Handled
                 await supabase.from('profiles').update({ referral_handled: true }).eq('id', user.id);
                 sessionStorage.setItem(`ref_handshake_${user.id}`, 'linked');
                 await refreshProfile();
@@ -516,14 +502,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
 
   const logout = useCallback(async () => {
-    setIsWalletLoading(true);
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
+    
     try {
       const prevUserId = user?.id;
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
-      
+      // 1. Hard reset Supabase session
       await authSignOut();
       
+      // 2. Clear sensitive local keys synchronously
       localStorage.removeItem('infura_api_key');
       if (prevUserId) {
           localStorage.removeItem(`wallet_mnemonic_${prevUserId}`);
@@ -535,12 +522,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem(`identity_audit_${prevUserId}`);
           sessionStorage.removeItem(`ref_handshake_${prevUserId}`);
       }
-      setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true);
+      
+      // 3. Clear transient state
+      setWallets(null);
+      setBalances({});
+      setAccountNumber(null);
+      
+      // 4. Force hard redirect to kill all lingering contexts
       window.location.href = '/auth/login';
     } catch (e) {
-      window.location.reload();
-    } finally {
-      setIsWalletLoading(false);
+      window.location.href = '/auth/login';
     }
   }, [authSignOut, user?.id]);
 
@@ -655,7 +646,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (pathname !== '/') return;
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
-    // Trigger Referral Handshake first
     handleReferralHandshake();
 
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);

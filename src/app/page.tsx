@@ -64,44 +64,29 @@ function HomeContent() {
     return () => window.removeEventListener('scroll', handle);
   }, []);
 
-  // PRODUCTION OPTIMIZATION: If we have cached wallets or profile, bypass splash
-  const hasCachedIdentity = !!profile || !!wallets;
-  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !hasCachedIdentity && !!user;
+  // Handshake determination
+  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !wallets && !!user;
 
   if (isAppLoading) {
     return (
-      <div className="flex h-svh w-full flex-col items-center justify-center bg-[#050505] text-white">
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#050505] text-white">
         <div className="relative mb-16">
-          {/* Institutional Rotating Ring */}
           <motion.div 
             animate={{ rotate: 360 }}
             transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
             className="w-40 h-40 rounded-full border-l-[1px] border-primary/40"
           />
-          {/* Inner Static Squircle */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 rounded-[2rem] bg-primary/10 border border-primary/20 animate-pulse shadow-[0_0_40px_rgba(139,92,246,0.1)]" />
           </div>
         </div>
         
-        <div className="space-y-8 text-center px-10">
+        <div className="space-y-4 text-center px-10">
           <h2 className="text-lg font-black uppercase tracking-[0.5em] text-white/90">
             Establishing Identity
           </h2>
-          
-          <div className="flex items-center justify-center gap-3">
-            {[0, 1, 2].map((i) => (
-              <motion.div 
-                key={i}
-                animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} 
-                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} 
-                className="w-2 h-2 rounded-full bg-primary" 
-              />
-            ))}
-          </div>
-
-          <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em] opacity-30 pt-10 leading-relaxed max-w-[240px] mx-auto">
-            {isWalletLoading ? "Synchronizing Cryptographic Vault" : "Establishing Institutional Tunnel"}
+          <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em] opacity-30 leading-relaxed max-w-[240px] mx-auto">
+            Synchronizing Cryptographic Vault
           </p>
         </div>
       </div>
@@ -129,11 +114,7 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={
-      <div className="flex h-svh w-full flex-col items-center justify-center bg-[#050505]">
-        <div className="w-12 h-12 rounded-[1.5rem] border-t-2 border-primary animate-spin" />
-      </div>
-    }>
+    <Suspense fallback={null}>
       <HomeContent />
     </Suspense>
   );
