@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -91,6 +92,7 @@ interface WalletContextType {
   setIsNotificationsOpen: (open: boolean) => void;
   activeFulfillmentId: string | null;
   setActiveFulfillmentId: (id: string | null) => void;
+  hasFetchedInitialData: boolean;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -251,7 +253,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasAudited = sessionStorage.getItem(auditKey);
     if (!options?.forceUI && hasAudited === 'verified') return;
     
-    // HARD LOCK: Mark as audited immediately to prevent double-triggers
     sessionStorage.setItem(auditKey, 'verified');
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -278,7 +279,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = ((i + 1) / (chains.length + 1)) * 100;
 
-      // 1. SCANNING BEAT
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -287,9 +287,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(600);
+      await wait(400); // Accelerated audit heartbeat
 
-      // 2. RECONCILIATION BEAT
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
         await wait(800); 
@@ -300,14 +299,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(600); 
+        await wait(400); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      // 3. EXIT WINDOW
-      await wait(800);
+      await wait(400);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -318,14 +316,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(800);
+    await wait(600);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
       await wait(800);
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(800);
+      await wait(600);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
@@ -341,7 +339,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     if (refCode && !profile.referral_handled && !sessionRefHandled) {
         try {
-            // Case-insensitive lookup for Account ID match (registry nodes use 835 prefix)
             const { data: referrer, error: refError } = await supabase
                 .from('profiles')
                 .select('id')
@@ -349,7 +346,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
                 .maybeSingle();
 
             if (!refError && referrer && referrer.id !== user.id) {
-                // Atomic Growth Link
                 await supabase.from('referrals').insert({
                     referrer_id: referrer.id,
                     referred_id: user.id,
@@ -527,10 +523,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     try {
       const prevUserId = user?.id;
-      
-      await Promise.race([authSignOut(), timeout]).catch(() => {
-          console.warn("Auth sign-out timed out. Proceeding with hard reset.");
-      });
+      await Promise.race([authSignOut(), timeout]).catch(() => { console.warn("Auth timeout."); });
       
       localStorage.removeItem('infura_api_key');
       if (prevUserId) {
@@ -544,10 +537,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem(`ref_handshake_${prevUserId}`);
       }
       
-      setWallets(null);
-      setBalances({});
-      setAccountNumber(null);
-      
+      setWallets(null); setBalances({}); setAccountNumber(null);
       window.location.href = '/auth/login';
     } catch (e) {
       window.location.href = '/auth/login';
@@ -630,7 +620,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const derived = await deriveAllWallets(savedMnemonic, profile); 
         setWallets(derived); 
       } else {
-        // If NO wallet found, we are "done" with initial data (which is empty)
         setHasFetchedInitialData(true);
       }
       
@@ -678,9 +667,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasAudited = sessionStorage.getItem(auditKey);
     
     if (!hasAudited || !isSynced) {
-        const timer = setTimeout(() => {
-          runCloudDiagnostic();
-        }, 3000); 
+        const timer = setTimeout(() => { runCloudDiagnostic(); }, 3000); 
         return () => clearTimeout(timer);
     }
   }, [profile, user, wallets, isInitialized, hasFetchedInitialData, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
@@ -716,17 +703,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     infuraApiKey,
     setInfuraApiKey: (k) => { 
       setInfuraApiKey(k); 
-      if (k) {
-        localStorage.setItem('infura_api_key', k);
-        if (user) {
-          saveToVault();
-        }
-      } else {
-        localStorage.removeItem('infura_api_key');
-        if (user) {
-          saveToVault();
-        }
-      }
+      if (k) { localStorage.setItem('infura_api_key', k); if (user) saveToVault(); }
+      else { localStorage.removeItem('infura_api_key'); if (user) saveToVault(); }
     },
     hiddenTokenKeys,
     toggleTokenVisibility,
@@ -742,7 +720,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isNotificationsOpen,
     setIsNotificationsOpen,
     activeFulfillmentId,
-    setActiveFulfillmentId
+    setActiveFulfillmentId,
+    hasFetchedInitialData
   };
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
