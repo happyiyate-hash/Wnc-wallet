@@ -119,8 +119,15 @@ export default function WalletTab() {
   
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // HYDRATION REPAIR: Ensure component doesn't render dynamic content until mounted
+  const [hasMounted, setHasMounted] = useState(false);
 
   const router = useRouter();
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
@@ -202,6 +209,11 @@ export default function WalletTab() {
       <span className="text-[9px] uppercase font-bold tracking-widest text-muted-foreground">{label}</span>
     </div>
   );
+
+  // Prevent server render mismatch by yielding until hydrated
+  if (!hasMounted) {
+    return <div className="flex-1 bg-transparent" />;
+  }
 
   return (
     <div className="flex flex-col h-full bg-transparent">

@@ -65,36 +65,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  // 1. INSTANT INITIALIZATION: Read from cache in state initializers
-  const [prices, setPrices] = useState<PriceResult>(() => {
-    if (typeof window === 'undefined') return {};
-    const cached = localStorage.getItem('cache_prices_global');
-    return cached ? JSON.parse(cached) : {};
-  });
-
-  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>(() => {
-    if (typeof window === 'undefined') return {};
-    const cached = localStorage.getItem('cache_balances_all');
-    return cached ? JSON.parse(cached) : {};
-  });
-
-  const [accountNumber, setAccountNumber] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    // Try to find the most recent account number
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('account_number_')) {
-        return localStorage.getItem(key);
-      }
-    }
-    return null;
-  });
-
-  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem('last_viewing_network');
-    return saved ? JSON.parse(saved) : null;
-  });
+  // HYDRATION REPAIR: Initialize with stable defaults, then populate from cache in useEffect
+  const [prices, setPrices] = useState<PriceResult>({});
+  const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
+  const [accountNumber, setAccountNumber] = useState<string | null>(null);
+  const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
 
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -114,9 +89,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  const lastAuditRef = useRef<string | null>(null);
+  // 1. Initial Cache Hydration (Client-Side Only)
+  useEffect(() => {
+    const cachedPrices = localStorage.getItem('cache_prices_global');
+    if (cachedPrices) setPrices(JSON.parse(cachedPrices));
 
-  // Sync network to storage
+    const cachedBalances = localStorage.getItem('cache_balances_all');
+    if (cachedBalances) setBalances(JSON.parse(cachedBalances));
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('account_number_')) {
+        setAccountNumber(localStorage.getItem(key));
+        break;
+      }
+    }
+
+    const savedNetwork = localStorage.getItem('last_viewing_network');
+    if (savedNetwork) setViewingNetwork(JSON.parse(savedNetwork));
+  }, []);
+
+  // 2. Sync network to storage
   useEffect(() => {
     if (viewingNetwork) localStorage.setItem('last_viewing_network', JSON.stringify(viewingNetwork));
   }, [viewingNetwork]);
@@ -135,11 +128,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 2. BACKGROUND DERIVATION: Start after UI is visible
     try {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        // Run derivation in a "breathe" cycle to keep UI responsive
         const derived = await deriveAllWallets(savedMnemonic, profile);
         setWallets(derived);
       } else {
@@ -279,9 +270,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const onChainAssets = available.map((asset) => {
         const balDoc = chainBalances.find((b) => (b.isNative ? b.symbol : b.address?.toLowerCase()) === (asset.isNative ? asset.symbol : asset.address?.toLowerCase()));
         const balance = balDoc?.balance || '0';
-        const lookupKeys = [asset.priceId, asset.coingeckoId, asset.address, asset.symbol].filter(Boolean).map(k => k!.toLowerCase());
+        
+        // Multi-key fallback registry for bulletproof price resolution
+        const lookupKeys = [
+            asset.priceId,
+            asset.coingeckoId,
+            asset.address,
+            asset.symbol
+        ].filter(Boolean).map(k => k!.toLowerCase());
+
         let priceInfo = null;
-        for (const key of lookupKeys) { if (prices[key]) { priceInfo = prices[key]; break; } }
+        for (const key of lookupKeys) {
+            if (prices[key]) {
+                priceInfo = prices[key];
+                break;
+            }
+        }
+
         const price = priceInfo?.price || 0;
         const change = priceInfo?.change || 0;
         return { ...asset, balance, priceUsd: price, pctChange24h: change, fiatValueUsd: parseFloat(balance) * price } as AssetRow;
