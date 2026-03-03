@@ -369,8 +369,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${user.id}`, newId);
 
+        // DO NOT SYNC ALL ADDRESSES HERE
+        // Just save the Master Phrase vault and reset audit to run on dashboard
         await saveToVault();
-        await syncAllAddresses(derived);
         
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false); 
@@ -391,8 +392,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(`account_number_${user.id}`, newId);
         }
 
+        // DO NOT SYNC ALL ADDRESSES HERE
+        // Just save the Master Phrase vault and reset audit to run on dashboard
         await saveToVault();
-        await syncAllAddresses(derived);
         
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false);
@@ -691,10 +693,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setInfuraApiKey(k); 
       if (k) {
         localStorage.setItem('infura_api_key', k);
-        if (user) saveToVault();
+        // Force immediate vault synchronization
+        if (user) {
+          saveToVault();
+        }
       } else {
         localStorage.removeItem('infura_api_key');
-        if (user) saveToVault();
+        if (user) {
+          saveToVault();
+        }
       }
     },
     hiddenTokenKeys,
