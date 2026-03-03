@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -205,8 +206,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
                   <div className="w-full space-y-3">
                     <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
-                      <div className="flex items-center gap-3 overflow-hidden">                      
-                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
+                      <div className="flex items-center gap-3 overflow-hidden">                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
                         <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
                       </div>
                       <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>

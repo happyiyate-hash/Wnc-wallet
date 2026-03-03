@@ -198,6 +198,7 @@ export default function SettingsPage() {
         if (!user?.email || !passwordInput) return;
         setIsVerifying(true);
         try {
+            // Re-authenticate node
             const { error } = await supabase!.auth.signInWithPassword({
                 email: user.email,
                 password: passwordInput
@@ -205,7 +206,7 @@ export default function SettingsPage() {
             
             if (error) throw error;
 
-            // Retrieve mnemonic again to ensure it's fresh
+            // Retrieve identity standard from local registry
             const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
             setMnemonic(saved);
             
