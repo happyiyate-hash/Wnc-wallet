@@ -70,7 +70,7 @@ function HomeContent() {
    * The app is only "Ready" when:
    * 1. Auth is settled (user is logged in)
    * 2. Profile metadata is fetched
-   * 3. Wallet core is initialized (mnemonic derived + initial balances fetched)
+   * 3. Wallet core is initialized AND initial data (balances/prices) are hydrated
    */
   const isAppLoading = !showFailsafe && (loading || !isInitialized || !profile || (!wallets && !!user));
 

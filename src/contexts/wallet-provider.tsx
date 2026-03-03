@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -629,6 +630,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (savedMnemonic) { 
         const derived = await deriveAllWallets(savedMnemonic, profile); 
         setWallets(derived); 
+      } else {
+        // If NO wallet found, we are "done" with initial data (which is empty)
+        setHasFetchedInitialData(true);
       }
       
       const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
