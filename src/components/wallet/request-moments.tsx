@@ -130,94 +130,97 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   if (!isOpen) return null;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4 md:items-center"
-    >
+    <>
       <motion.div 
-        variants={cardVariants} initial="initial" animate="animate" exit="exit" transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl relative"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4 md:items-center"
       >
-        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
+        <motion.div 
+          variants={cardVariants} initial="initial" animate="animate" exit="exit" transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl relative"
+        >
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
 
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                <HandCoins className="w-5 h-5" />
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <HandCoins className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Request Node</h3>
+                  <p className="text-[8px] font-black uppercase text-primary opacity-60">P2P Handshake Protocol</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Request Node</h3>
-                <p className="text-[8px] font-black uppercase text-primary opacity-60">P2P Handshake Protocol</p>
-              </div>
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
+
+            <AnimatePresence mode="wait">
+              {step === 'edit' ? (
+                <motion.div key="edit" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
+                  <section className="space-y-3">
+                    <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Target Asset</Label>
+                    <button onClick={() => setIsSelectorOpen(true)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all">
+                      <div className="flex items-center gap-3">
+                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={32} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                        <div className="text-left"><p className="font-bold text-sm text-white">{selectedToken?.symbol}</p><p className="text-[9px] text-muted-foreground uppercase">{viewingNetwork.name}</p></div>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </section>
+
+                  <section className="space-y-3">
+                    <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Request Amount</Label>
+                    <div className="p-6 rounded-[2rem] bg-secondary/20 border border-white/5 text-center">
+                      <div className="flex items-baseline justify-center gap-2">
+                        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-4xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter text-white" />
+                        <span className="text-sm font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                      </div>
+                      <p className="mt-2 text-[10px] font-bold text-primary">≈ {formatFiat((parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0))}</p>
+                    </div>
+                  </section>
+
+                  <Textarea placeholder="What's this for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="rounded-2xl bg-white/5 border-white/5 p-4 min-h-[100px] text-sm" />
+
+                  <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20" disabled={!amount || parseFloat(amount) <= 0 || isCreating} onClick={handleGenerate}>
+                    {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Request Node"}
+                  </Button>
+                </motion.div>
+              ) : (
+                <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-8 py-4">
+                  <div className="text-center space-y-2">
+                    <div className="w-16 h-16 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mx-auto mb-4 border border-green-500/20"><CheckCircle2 className="w-8 h-8" /></div>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Ready</h3>
+                    <p className="text-xs text-muted-foreground">Share this node to receive payment</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative group">
+                    <QRCode value={shareUrl} size={180} level="H" />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
+                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={32} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="w-full space-y-3">
+                    <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
+                        <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
+                    </button>
+                    <Button onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} className="w-full h-14 rounded-2xl gap-3 font-black text-sm uppercase bg-primary"><Share2 className="w-4 h-4" /> Share Node</Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-
-          <AnimatePresence mode="wait">
-            {step === 'edit' ? (
-              <motion.div key="edit" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-6">
-                <section className="space-y-3">
-                  <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Target Asset</Label>
-                  <button onClick={() => setIsSelectorOpen(true)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all">
-                    <div className="flex items-center gap-3">
-                      <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={32} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                      <div className="text-left"><p className="font-bold text-sm text-white">{selectedToken?.symbol}</p><p className="text-[9px] text-muted-foreground uppercase">{viewingNetwork.name}</p></div>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </section>
-
-                <section className="space-y-3">
-                  <Label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Request Amount</Label>
-                  <div className="p-6 rounded-[2rem] bg-secondary/20 border border-white/5 text-center">
-                    <div className="flex items-baseline justify-center gap-2">
-                      <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-4xl font-black bg-transparent border-none p-0 h-auto text-center focus-visible:ring-0 tracking-tighter text-white" />
-                      <span className="text-sm font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
-                    </div>
-                    <p className="mt-2 text-[10px] font-bold text-primary">≈ {formatFiat((parseFloat(amount) || 0) * (selectedToken?.priceUsd || 0))}</p>
-                  </div>
-                </section>
-
-                <Textarea placeholder="What's this for? (Optional)" value={note} onChange={(e) => setNote(e.target.value)} className="rounded-2xl bg-white/5 border-white/5 p-4 min-h-[100px] text-sm" />
-
-                <Button className="w-full h-14 rounded-2xl font-black text-sm uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20" disabled={!amount || parseFloat(amount) <= 0 || isCreating} onClick={handleGenerate}>
-                  {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize Request Node"}
-                </Button>
-              </motion.div>
-            ) : (
-              <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-8 py-4">
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mx-auto mb-4 border border-green-500/20"><CheckCircle2 className="w-8 h-8" /></div>
-                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Ready</h3>
-                  <p className="text-xs text-muted-foreground">Share this node to receive payment</p>
-                </div>
-
-                <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative group">
-                  <QRCode value={shareUrl} size={180} level="H" />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
-                      <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={32} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full space-y-3">
-                  <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
-                    <div className="flex items-center gap-3 overflow-hidden">                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
-                      <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
-                  </button>
-                  <Button onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} className="w-full h-14 rounded-2xl gap-3 font-black text-sm uppercase bg-primary"><Share2 className="w-4 h-4" /> Share Node</Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        </motion.div>
       </motion.div>
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
-    </motion.div>
+    </>
   );
 }
 
