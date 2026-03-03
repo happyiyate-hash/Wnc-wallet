@@ -6,8 +6,8 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Optimized for grouped EVM verification and high-fidelity logical heartbeats.
- * HIGH-SPEED VERSION: Artificial delays reduced for faster execution while maintaining sequential integrity.
+ * Optimized for "Snap-Dwell-Snap" rhythm.
+ * transitions are snappy, while verification states stay deliberate.
  */
 
 export interface SyncDiagnostic {
@@ -21,7 +21,7 @@ export interface SyncDiagnostic {
 export const backgroundSyncWorker = {
   /**
    * Performs a sequential, logic-gated audit of the vault.
-   * Forces the UI to wait for database responses and comparison results.
+   * Sharp transitions with intentional dwellers for readability.
    */
   async performCloudAudit(
     userId: string,
@@ -36,12 +36,11 @@ export const backgroundSyncWorker = {
     // Helper for deliberate logical pauses (Secure Dwell Times)
     const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // 1. Initial Settlement Pause: Allow dashboard to stabilize before auditing
+    // 1. Initial Settlement Pause: App-ready buffer
     onUpdate({ status: 'idle', progress: 0 });
-    await breathe(1000); // Reduced from 3000
+    await breathe(1000);
 
-    // 2. CONSTRUCT AUDIT SEQUENCE
-    // Group EVM for efficiency, verify others individually
+    // 2. CONSTRUCT AUDIT SEQUENCE (Symbol-Only Branding)
     const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
     const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
 
@@ -80,9 +79,9 @@ export const backgroundSyncWorker = {
     const totalSteps = sequence.length;
     let completed = 0;
 
-    // 3. HIGH-SPEED SEQUENTIAL AUDIT LOOP
+    // 3. SNAP-DWELL-SNAP AUDIT LOOP
     for (const node of sequence) {
-      // STEP 1: INITIALIZE SCAN
+      // STEP 1: APPEAR (Fast Transition triggered by chain change)
       onUpdate({ 
         status: 'checking',
         chain: node.label, 
@@ -91,28 +90,25 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // Snappy "Thinking" Dwell
-      await breathe(400); // Reduced from 1200
+      // DWELL: Stay for a bit so user can read addresses
+      await breathe(800);
 
-      // STEP 2: LOGICAL COMPARISON (Local vs Cloud)
+      // STEP 2: LOGICAL COMPARISON
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
-        // TRIGGER VISUAL ALERT
+        // TRIGGER MISMATCH: Immediate Visual Change
         onUpdate({ status: 'mismatch' });
-        await breathe(800); // Reduced from 2000
+        await breathe(1000); // Dwell on the mismatch state
 
-        // STEP 3: ATOMIC REGISTRY REPAIR
+        // REPAIR: Syncing phase
         onUpdate({ status: 'syncing' });
         
         try {
-          // Perform bulk sync and AWAIT response
           await syncAddressesToCloud(userId, wallets, accountNumber);
-          
-          // STEP 4: UI REFLECTION
-          // Immediately update the displayed cloud address to match the local node
+          // UI REFLECTION: Update the displayed cloud side to match local
           onUpdate({ cloudValue: node.localAddr });
-          await breathe(400); // Reduced from 1000
+          await breathe(800); // Dwell on the fix
         } catch (e) {
           console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
@@ -120,23 +116,22 @@ export const backgroundSyncWorker = {
         }
       }
 
-      // STEP 5: VERIFICATION COMPLETE
+      // STEP 3: VERIFIED (Success Dwell)
       onUpdate({ status: 'success' });
-      completed++;
       
-      // Delay progress update slightly for smooth transition
-      await breathe(200); // Reduced from 400
+      // Deliberate Dwell on Success (Stay for a bit)
+      await breathe(1000); 
+      
+      completed++;
       onUpdate({ progress: (completed / totalSteps) * 100 });
       
-      // Post-verification dwell (Checkmark visibility)
-      await breathe(200); // Reduced from 800
+      // Post-dwell pause before snapping to next (triggers exit animation)
+      await breathe(200);
     }
 
     // FINAL STEP: AUDIT SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
-    
-    // Clear diagnostic from view after delay
-    await breathe(2000); // Reduced from 4000
+    await breathe(2000);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };

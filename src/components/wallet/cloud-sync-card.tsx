@@ -16,8 +16,9 @@ import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 
 /**
- * INSTITUTIONAL DIAGNOSTIC SENTINEL (Ultra-Smooth Sequence)
- * Visualizes the background identity audit with state-aware transitions.
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL
+ * Refined for "Snap-Dwell-Snap" rhythm.
+ * Entries and Exits are full-speed, while verification states stay deliberate.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -48,9 +49,19 @@ export default function CloudSyncCard() {
   };
 
   const verticalFadeVariants = {
-    initial: { y: 10, opacity: 0, filter: 'blur(4px)' },
-    animate: { y: 0, opacity: 1, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
-    exit: { y: -10, opacity: 0, filter: 'blur(4px)', transition: { duration: 0.3 } }
+    initial: { y: 15, opacity: 0, filter: 'blur(4px)' },
+    animate: { 
+      y: 0, 
+      opacity: 1, 
+      filter: 'blur(0px)', 
+      transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } 
+    },
+    exit: { 
+      y: -15, 
+      opacity: 0, 
+      filter: 'blur(4px)', 
+      transition: { duration: 0.2, ease: "easeIn" } 
+    }
   };
 
   const renderStatusIcon = () => {
@@ -113,6 +124,7 @@ export default function CloudSyncCard() {
                 initial={{ opacity: 0, x: 5 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -5 }}
+                transition={{ duration: 0.15 }}
                 className="text-[9px] font-black uppercase text-white tracking-widest"
               >
                 {chain || 'Registry'}
@@ -125,7 +137,7 @@ export default function CloudSyncCard() {
           <div className="relative h-14">
             <AnimatePresence mode="wait">
               <motion.div 
-                key={`${chain}-cloud-${cloudValue}`}
+                key={`${chain}-cloud-${cloudValue}-${status}`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
                 className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-hidden"
@@ -146,7 +158,7 @@ export default function CloudSyncCard() {
                     <motion.div 
                       initial={{ scaleX: 0 }}
                       animate={{ scaleX: 1 }}
-                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
                       className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-red-500 origin-left z-10"
                     />
                   )}
@@ -158,7 +170,7 @@ export default function CloudSyncCard() {
           <div className="relative h-14">
             <AnimatePresence mode="wait">
               <motion.div 
-                key={`${chain}-local-${localValue}`}
+                key={`${chain}-local-${localValue}-${status}`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
                 className="h-full w-full p-2.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center gap-0.5 relative overflow-visible"
@@ -173,7 +185,7 @@ export default function CloudSyncCard() {
                   <motion.div 
                     initial={{ scale: 0, rotate: -45 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                     className="absolute -top-1.5 -right-1.5 z-20"
                   >
                     <div className="bg-black rounded-full p-0.5 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]">
@@ -195,8 +207,8 @@ export default function CloudSyncCard() {
                 backgroundColor: isMismatch ? '#ef4444' : '#8b5cf6' 
               }}
               transition={{ 
-                width: { type: "spring", stiffness: 40, damping: 25 },
-                backgroundColor: { duration: 0.8 } 
+                width: { type: "spring", stiffness: 60, damping: 20 },
+                backgroundColor: { duration: 0.4 } 
               }}
               className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
             />
@@ -206,7 +218,7 @@ export default function CloudSyncCard() {
               "text-[8px] font-black uppercase tracking-widest transition-colors duration-500",
               isMismatch ? "text-red-500" : "text-muted-foreground"
             )}>
-              {status === 'mismatch' ? 'REGISTRY MISMATCH DETECTED' : status === 'syncing' ? 'UPDATING CLOUD NODE...' : status === 'success' ? 'CRYPTO HANDSHAKE SUCCESS' : status === 'checking' ? 'VERIFYING IDENTITY NODE...' : status}
+              {status === 'mismatch' ? 'REGISTRY MISMATCH DETECTED' : status === 'syncing' ? 'UPDATING CLOUD NODE...' : (status === 'success' || status === 'completed') ? 'CRYPTO HANDSHAKE SUCCESS' : status === 'checking' ? 'VERIFYING IDENTITY NODE...' : status}
             </span>
             <span className="text-[8px] font-black text-white/40 uppercase">{Math.round(progress)}%</span>
           </div>
