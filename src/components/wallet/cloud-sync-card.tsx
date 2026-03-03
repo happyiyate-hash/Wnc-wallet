@@ -1,4 +1,3 @@
-
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -49,6 +48,7 @@ export default function CloudSyncCard() {
     if (addr === 'Encrypted Phrase') return addr;
     if (addr === 'Stored') return addr;
     if (addr === 'Missing') return addr;
+    if (addr === 'None') return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
