@@ -1,12 +1,12 @@
 
 'use client';
 
-import type { WalletWithMetadata, UserProfile } from '@/lib/types';
+import type { WalletWithMetadata, UserProfile, ChainConfig } from '@/lib/types';
 import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Implements a strict sequential handshake protocol.
+ * Implements a strict SEQUENTIAL handshake protocol.
  * Optimized for high-fidelity verification beats rather than raw speed.
  */
 
@@ -21,85 +21,87 @@ export interface SyncDiagnostic {
 export const backgroundSyncWorker = {
   /**
    * Performs a high-fidelity, sequential audit of the vault.
-   * Checks each node one-by-one with deliberate pauses for visual confirmation.
+   * Checks every node in the registry one-by-one with deliberate logical pauses.
    */
   async performCloudAudit(
     userId: string,
     wallets: WalletWithMetadata[],
     profile: UserProfile | null,
     accountNumber: string,
+    allChains: ChainConfig[],
     onUpdate: (update: Partial<SyncDiagnostic>) => void
   ) {
-    if (!userId || !wallets || wallets.length === 0) return;
+    if (!userId || !wallets || wallets.length === 0 || allChains.length === 0) return;
 
-    // Helper for deliberate logical pauses (Smooth Beats)
+    // Helper for deliberate logical pauses (Secure Beats)
     const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // Initial Settlement Pause: Wait for dashboard to stabilize
+    // 1. Initial Settlement Pause: Wait for dashboard to stabilize
     onUpdate({ status: 'idle', progress: 0 });
     await breathe(3000);
 
-    const chainsToAudit = [
-      { id: 'evm', name: 'Ethereum', field: 'evm_address' },
-      { id: 'xrp', name: 'XRP Ledger', field: 'xrp_address' },
-      { id: 'solana', name: 'Solana', field: 'solana_address' },
-      { id: 'near', name: 'NEAR', field: 'near_address' },
-      { id: 'polkadot', name: 'Polkadot', field: 'polkadot_address' }
-    ];
+    const totalSteps = allChains.length;
+    let completed = 0;
 
-    let totalMismatchesDetected = 0;
-    const totalSteps = chainsToAudit.length;
-
-    for (let i = 0; i < totalSteps; i++) {
-      const config = chainsToAudit[i];
-      const localWallet = wallets.find(w => w.type === config.id);
+    // 2. SEQUENTIAL HANDSHAKE LOOP
+    // We use a for...of loop to ensure we AWAIT every single operation
+    for (const chain of allChains) {
+      const localWallet = wallets.find(w => w.type === (chain.type || 'evm'));
       const localAddr = localWallet?.address || null;
-      const cloudAddr = (profile as any)?.[config.field] || null;
+      
+      // Determine which field in UserProfile corresponds to this chain
+      const fieldName = chain.type === 'evm' ? 'evm_address' : `${chain.type}_address`;
+      const cloudAddr = (profile as any)?.[fieldName] || null;
 
-      // STEP 1: INITIALIZE SCAN
+      // STEP A: INITIALIZE SCAN
       onUpdate({ 
         status: 'checking',
-        chain: config.name, 
+        chain: chain.name.toUpperCase(), 
         localValue: localAddr, 
         cloudValue: cloudAddr,
-        progress: (i / totalSteps) * 100
+        progress: (completed / totalSteps) * 100
       });
 
-      // Deliberate "Thinking" Beat
-      await breathe(1200);
+      // Deliberate "Thinking" Beat - Allows the user to read the chain name
+      await breathe(700);
 
-      // STEP 2: LOGICAL COMPARISON
-      const isMismatch = localAddr !== cloudAddr;
+      // STEP B: LOGICAL COMPARISON (Real Logic Gating)
+      const isMismatch = localAddr && localAddr !== cloudAddr;
 
       if (isMismatch) {
-        totalMismatchesDetected++;
         onUpdate({ status: 'mismatch' });
-        await breathe(1500); // Let user see the red alert
+        await breathe(1200); // Visual alert dwell
 
-        // STEP 3: ATOMIC CORRECTION
+        // STEP C: ATOMIC REGISTRY REPAIR
         onUpdate({ status: 'syncing' });
         
         try {
-          // Real await: The animation stays on "Syncing" until the DB confirms success
+          // Perform bulk sync but within the loop context to ensure data is updated for next iterations
           await syncAddressesToCloud(userId, wallets, accountNumber);
-          await breathe(1000); // Visual stability pause
+          await breathe(800); // Confirmation dwell
         } catch (e) {
-          console.error(`[REGISTRY_REPAIR_FAIL] ${config.name}:`, e);
+          console.error(`[REGISTRY_REPAIR_FAIL] ${chain.name}:`, e);
           onUpdate({ status: 'idle' });
           return;
         }
       }
 
-      // STEP 4: VERIFICATION COMPLETE
-      onUpdate({ status: 'success', progress: ((i + 1) / totalSteps) * 100 });
-      await breathe(800); // Deliberate "Checked" state pause
+      // STEP D: VERIFICATION COMPLETE
+      completed++;
+      onUpdate({ 
+        status: 'success', 
+        progress: (completed / totalSteps) * 100 
+      });
+      
+      // Verification heartbeat pause
+      await breathe(400);
     }
 
     // FINAL STEP: AUDIT SUMMARY
-    onUpdate({ status: 'completed', chain: 'Registry', progress: 100 });
+    onUpdate({ status: 'completed', chain: 'REGISTRY', progress: 100 });
     
-    // Final Dwell: Keep the success banner visible before gliding out
-    await breathe(3000);
+    // Final Dwell: Professional confirmation before dismissal
+    await breathe(3500);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };

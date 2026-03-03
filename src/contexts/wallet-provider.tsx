@@ -156,7 +156,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // SAFE LOGIC: POST-INITIALIZATION BACKGROUND SYNC (APP SETTLED DELAY)
   useEffect(() => {
-    if (!hasFetchedInitialData || !wallets || !user || !accountNumber) return;
+    if (!hasFetchedInitialData || !wallets || !user || !accountNumber || chainsWithLogos.length === 0) return;
 
     // Condition: Wait 3 seconds for UI stability (App Settled)
     const timer = setTimeout(() => {
@@ -169,6 +169,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         wallets,
         profile,
         accountNumber,
+        chainsWithLogos,
         (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
       ).then(() => {
           refreshProfile();
@@ -176,7 +177,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [hasFetchedInitialData, wallets, user, accountNumber, profile, refreshProfile]);
+  }, [hasFetchedInitialData, wallets, user, accountNumber, profile, refreshProfile, chainsWithLogos]);
 
   const { refresh } = useWalletEngine({
     wallets,
@@ -311,15 +312,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
   const runCloudDiagnostic = useCallback(async () => {
-    if (!user || !wallets || !accountNumber) return;
+    if (!user || !wallets || !accountNumber || chainsWithLogos.length === 0) return;
     await backgroundSyncWorker.performCloudAudit(
       user.id,
       wallets,
       profile,
       accountNumber,
+      chainsWithLogos,
       (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
     );
-  }, [user, wallets, accountNumber, profile]);
+  }, [user, wallets, accountNumber, profile, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
