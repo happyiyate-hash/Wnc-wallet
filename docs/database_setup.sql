@@ -1,151 +1,95 @@
 
--- ===================================================================================
--- WEVINA TERMINAL: INSTITUTIONAL REGISTRY SETUP
--- Version: 3.1.0
--- Purpose: Establishes omni-chain identity tables and atomic RPC functions.
--- ===================================================================================
+-- ==========================================
+-- INSTITUTIONAL REGISTRY SQL SUITE v3.2
+-- Implementation: Supabase / PostgreSQL
+-- ==========================================
 
--- 1. EXTEND PROFILES WITH MULTI-CHAIN SLOTS
-ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS account_number TEXT UNIQUE,
-ADD COLUMN IF NOT EXISTS vault_phrase TEXT,
-ADD COLUMN IF NOT EXISTS iv TEXT,
-ADD COLUMN IF NOT EXISTS vault_infura_key TEXT,
-ADD COLUMN IF NOT EXISTS infura_iv TEXT,
-ADD COLUMN IF NOT EXISTS evm_address TEXT,
-ADD COLUMN IF NOT EXISTS xrp_address TEXT,
-ADD COLUMN IF NOT EXISTS polkadot_address TEXT,
-ADD COLUMN IF NOT EXISTS kusama_address TEXT,
-ADD COLUMN IF NOT EXISTS near_address TEXT,
-ADD COLUMN IF NOT EXISTS btc_address TEXT,
-ADD COLUMN IF NOT EXISTS ltc_address TEXT,
-ADD COLUMN IF NOT EXISTS doge_address TEXT,
-ADD COLUMN IF NOT EXISTS solana_address TEXT,
-ADD COLUMN IF NOT EXISTS cosmos_address TEXT,
-ADD COLUMN IF NOT EXISTS osmosis_address TEXT,
-ADD COLUMN IF NOT EXISTS secret_address TEXT,
-ADD COLUMN IF NOT EXISTS injective_address TEXT,
-ADD COLUMN IF NOT EXISTS celestia_address TEXT,
-ADD COLUMN IF NOT EXISTS cardano_address TEXT,
-ADD COLUMN IF NOT EXISTS tron_address TEXT,
-ADD COLUMN IF NOT EXISTS algorand_address TEXT,
-ADD COLUMN IF NOT EXISTS hedera_address TEXT,
-ADD COLUMN IF NOT EXISTS tezos_address TEXT,
-ADD COLUMN IF NOT EXISTS aptos_address TEXT,
-ADD COLUMN IF NOT EXISTS sui_address TEXT,
-ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE,
-ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES auth.users(id),
-ADD COLUMN IF NOT EXISTS signup_date TIMESTAMPTZ DEFAULT now();
-
--- 2. REGISTRY TABLES
-CREATE TABLE IF NOT EXISTS public.wallets (
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    blockchain_id TEXT NOT NULL, -- 'evm', 'xrp', 'solana', etc.
-    address TEXT NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (user_id, blockchain_id)
-);
-
-CREATE TABLE IF NOT EXISTS public.referrals (
+-- 1. REFERRALS REGISTRY TABLE
+-- Anchors growth events to the permanent database.
+CREATE TABLE IF NOT EXISTS referrals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    referrer_id UUID REFERENCES auth.users(id),
-    referred_id UUID REFERENCES auth.users(id) UNIQUE,
-    status TEXT DEFAULT 'pending', -- 'pending', 'credited'
-    reward_amount NUMERIC DEFAULT 400,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    credited_at TIMESTAMPTZ
+    referrer_id UUID REFERENCES auth.users(id) NOT NULL,
+    referred_id UUID REFERENCES auth.users(id) UNIQUE NOT NULL, -- Prevents duplicate handshakes
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'credited')),
+    reward_amount INTEGER DEFAULT 100,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS public.payment_requests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    requester_id UUID REFERENCES auth.users(id),
-    requester_account_number TEXT NOT NULL,
-    chain_type TEXT NOT NULL,
-    token_symbol TEXT NOT NULL,
-    token_address TEXT,
-    amount NUMERIC NOT NULL,
-    note TEXT,
-    status TEXT DEFAULT 'pending', -- 'pending', 'paid', 'expired', 'cancelled'
-    created_at TIMESTAMPTZ DEFAULT now(),
-    expires_at TIMESTAMPTZ DEFAULT (now() + interval '48 hours')
-);
-
-CREATE TABLE IF NOT EXISTS public.transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL, -- 'deposit', 'withdrawal', 'swap'
-    amount NUMERIC NOT NULL,
-    status TEXT NOT NULL, -- 'success', 'error', 'pending'
-    timestamp TIMESTAMPTZ DEFAULT now(),
-    tx_hash TEXT,
-    token_symbol TEXT
-);
-
--- 3. ATOMIC SYNC FUNCTION (Identity Handshake)
-CREATE OR REPLACE FUNCTION public.sync_user_wallets(p_user_id UUID, p_wallets JSONB)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
+-- 2. WITHDRAWAL PROTOCOL (PENDING -> CREDITED)
+-- Logic: When growth escrow reaches 1,000 WNC, authorize settlement to main vault.
+CREATE OR REPLACE FUNCTION withdraw_referral_bonus(p_user_id UUID)
+RETURNS JSON AS $$
 DECLARE
-    wallet_record RECORD;
-    col_name TEXT;
+    v_pending_total INTEGER;
+    v_min_threshold INTEGER := 1000; -- 1,000 WNC Minimum
 BEGIN
-    FOR wallet_record IN SELECT * FROM jsonb_to_recordset(p_wallets) AS x(type TEXT, address TEXT)
-    LOOP
-        -- Update Wallets Table
-        INSERT INTO public.wallets (user_id, blockchain_id, address, updated_at)
-        VALUES (p_user_id, wallet_record.type, wallet_record.address, now())
-        ON CONFLICT (user_id, blockchain_id) 
-        DO UPDATE SET address = EXCLUDED.address, updated_at = now();
+    -- Determine total growth escrow for this node
+    SELECT COALESCE(SUM(reward_amount), 0)
+    INTO v_pending_total
+    FROM referrals
+    WHERE referrer_id = p_user_id AND status = 'pending';
 
-        -- Update Profile Column
-        col_name := wallet_record.type || '_address';
-        
-        -- Handle mapping anomalies
-        IF wallet_record.type = 'solana' THEN col_name := 'solana_address'; END IF;
-
-        BEGIN
-            EXECUTE format('UPDATE public.profiles SET %I = $1 WHERE id = $2', col_name)
-            USING wallet_record.address, p_user_id;
-        EXCEPTION WHEN OTHERS THEN
-            -- Skip if column missing
-        END;
-    END LOOP;
-
-    RETURN jsonb_build_object('success', true);
-END;
-$$;
-
--- 4. ATOMIC WNC SETTLEMENT
-CREATE OR REPLACE FUNCTION public.transfer_wnc(p_recipient_id UUID, p_amount NUMERIC)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-    v_sender_id UUID := auth.uid();
-    v_sender_balance NUMERIC;
-BEGIN
-    -- 1. Check sender
-    SELECT wnc_earnings INTO v_sender_balance FROM public.profiles WHERE id = v_sender_id;
-    
-    IF v_sender_balance < p_amount THEN
-        RETURN jsonb_build_object('success', false, 'message', 'Insufficient WNC balance');
+    -- Verify threshold integrity
+    IF v_pending_total < v_min_threshold THEN
+        RETURN json_build_object(
+            'success', false, 
+            'message', 'Threshold not met. Node requires ' || v_min_threshold || ' WNC for settlement.'
+        );
     END IF;
 
-    -- 2. Atomic Move
-    UPDATE public.profiles SET wnc_earnings = wnc_earnings - p_amount WHERE id = v_sender_id;
-    UPDATE public.profiles SET wnc_earnings = wnc_earnings + p_amount WHERE id = p_recipient_id;
+    -- Atomic Transition: Resolve nodes to credited status
+    UPDATE referrals
+    SET status = 'credited'
+    WHERE referrer_id = p_user_id AND status = 'pending';
 
-    -- 3. Log Movement
-    INSERT INTO public.transactions (user_id, type, amount, status, timestamp, token_symbol)
-    VALUES 
-        (v_sender_id, 'withdrawal', p_amount, 'success', now(), 'WNC'),
-        (p_recipient_id, 'deposit', p_amount, 'success', now(), 'WNC');
+    -- Update Public Registry Earnings
+    UPDATE profiles
+    SET wnc_earnings = wnc_earnings + v_pending_total
+    WHERE id = p_user_id;
 
-    RETURN jsonb_build_object('success', true);
-EXCEPTION WHEN OTHERS THEN
-    RETURN jsonb_build_object('success', false, 'message', SQLERRM);
+    -- Generate Registry Log (Transaction)
+    INSERT INTO transactions (user_id, type, amount, status, timestamp)
+    VALUES (p_user_id, 'referral_reward', v_pending_total, 'completed', NOW());
+
+    RETURN json_build_object('success', true, 'amount', v_pending_total);
 END;
-$$;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. UNIVERSAL P2P SETTLEMENT (WNC TRANSFER)
+-- Atomic transfer of internal credits between identity nodes.
+CREATE OR REPLACE FUNCTION transfer_wnc_universal(
+    p_receiver_id UUID,
+    p_destination_type TEXT,
+    p_amount INTEGER,
+    p_reference TEXT
+) RETURNS JSON AS $$
+DECLARE
+    v_sender_id UUID := auth.uid();
+    v_sender_balance INTEGER;
+    v_fee INTEGER := 50; -- Mandatory Registry Protocol Fee
+    v_total_debit INTEGER;
+BEGIN
+    -- Identity Check
+    SELECT wnc_earnings INTO v_sender_balance FROM profiles WHERE id = v_sender_id;
+    
+    v_total_debit := p_amount + v_fee;
+
+    -- Solvency Check
+    IF v_sender_balance < v_total_debit THEN
+        RETURN json_build_object('success', false, 'message', 'Insufficient funds in main vault.');
+    END IF;
+
+    -- Atomic Settlement Sequence
+    UPDATE profiles SET wnc_earnings = wnc_earnings - v_total_debit WHERE id = v_sender_id;
+    UPDATE profiles SET wnc_earnings = wnc_earnings + p_amount WHERE id = p_receiver_id;
+
+    -- Log Registry Handshake
+    INSERT INTO transactions (user_id, type, amount, status, timestamp, peer_id)
+    VALUES (v_sender_id, 'transfer_out', p_amount, 'completed', NOW(), p_receiver_id);
+
+    INSERT INTO transactions (user_id, type, amount, status, timestamp, peer_id)
+    VALUES (p_receiver_id, 'transfer_in', p_amount, 'completed', NOW(), v_sender_id);
+
+    RETURN json_build_object('success', true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

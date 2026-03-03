@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -14,8 +15,8 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL DIAGNOSTIC SENTINEL
- * Ultra-slim, edge-to-edge hardware interface for registry auditing.
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL (Ultra-Slim Hardware v3.5)
+ * Reduced height, edge-to-edge stretch, and dynamic logic-gated icons.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic, wallets } = useWallet();
