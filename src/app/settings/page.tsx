@@ -442,7 +442,7 @@ export default function SettingsPage() {
                         <div className="mt-6">
                             {securityMode === 'reveal' && (
                                 <div className="space-y-4">
-                                    <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 font-mono text-center text-sm break-words">
+                                    <div className="p-6 rounded-3xl bg-white/[0.03] border border-white/5 font-mono text-center text-sm break-words text-white">
                                         {mnemonic || "No phrase detected in local registry."}
                                     </div>
                                     <Button variant="outline" className="w-full h-14 rounded-2xl font-black text-xs uppercase" onClick={() => {
