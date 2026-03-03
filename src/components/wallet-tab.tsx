@@ -24,15 +24,12 @@ import type { AssetRow, ChainConfig } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import TokenManager from '@/components/wallet/tokens/token-manager';
-import NotificationCenter from '@/components/notifications/notification-center';
 import { useUser } from '@/contexts/user-provider';
 import { useCurrency } from '@/contexts/currency-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
-import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from './ui/skeleton';
 import SyncAlertCard from './wallet/sync-alert-card';
 import { motion, animate } from 'framer-motion';
 
@@ -114,12 +111,10 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
 };
 
 export default function WalletTab() {
-  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
-  const { user } = useUser();
+  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen, hasFetchedInitialData } = useWallet();
   const { formatFiat } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const [isQuickSwapOpen, setIsQuickSwapOpen] = useState(false);
   
@@ -152,27 +147,24 @@ export default function WalletTab() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRefreshing]);
 
-  const totalFiatValue = useMemo(() => {
-    return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
-  }, [allAssets]);
-  
-  const total24hChange = useMemo(() => {
-    if (!allAssets || allAssets.length === 0 || totalFiatValue === 0) return 0;
+  const { totalFiatValue, total24hChange } = useMemo(() => {
+    const totalValue = allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     let totalValueYesterday = 0;
+    
     for (const asset of allAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
       if (!price || !balance) continue;
       const denom = 1 + change / 100;
-      if (!isFinite(denom) || denom === 0) continue;
+      if (denom === 0) continue;
       const priceYesterday = price / denom;
       totalValueYesterday += priceYesterday * balance;
     }
-    if (totalValueYesterday === 0) return 0;
-    const changeValue = totalFiatValue - totalValueYesterday;
-    return (changeValue / totalValueYesterday) * 100;
-  }, [allAssets, totalFiatValue]);
+    
+    const delta = totalValueYesterday === 0 ? 0 : ((totalValue - totalValueYesterday) / totalValueYesterday) * 100;
+    return { totalFiatValue: totalValue, total24hChange: delta };
+  }, [allAssets]);
 
   const getBalanceFontSize = (balance: number) => {
     const s = balance.toLocaleString('en-US', { minimumFractionDigits: 2 });

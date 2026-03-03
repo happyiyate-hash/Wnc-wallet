@@ -54,10 +54,10 @@ export default function GlobalLoadingBarrier() {
   return (
     <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white">
       <div className="relative mb-12 flex items-center justify-center">
-        <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]" />
+        <div className="w-24 h-24 rounded-full border-l-2 border-primary animate-spin shadow-md" />
         
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-10 h-10 rounded-2xl bg-primary border border-primary animate-pulse drop-shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
+          <div className="w-10 h-10 rounded-2xl bg-primary border border-primary animate-pulse shadow-sm" />
         </div>
       </div>
       
