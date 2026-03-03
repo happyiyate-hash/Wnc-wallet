@@ -109,6 +109,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [prices, setPrices] = useState<PriceResult>({});
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasFetchedInitialData, setHasFetchedInitialData] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isWalletLoading, setIsWalletLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -243,11 +244,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  /**
-   * DELIBERATE SPEED DIAGNOSTIC ENGINE
-   * Reduced speed for a more impactful visual handshake.
-   * Optimized for premium, hardware-level swiping feedback.
-   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
@@ -256,7 +252,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasAudited = sessionStorage.getItem(auditKey);
     if (!options?.forceUI && hasAudited === 'verified') return;
     
-    // IMMEDIATE LOCK
     sessionStorage.setItem(auditKey, 'verified');
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -272,7 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600); // Initial breathing room
+    await wait(600);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -283,7 +278,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = ((i + 1) / (chains.length + 1)) * 100;
 
-      // 1. SCANNING BEAT (Reduced Speed)
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -292,9 +286,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(450); // Increased from 250 for readability
+      await wait(450);
 
-      // 2. LOGIC CHECK & ACTION
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
         await wait(350); 
@@ -311,11 +304,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      // 3. EXIT BEAT (Success Dwell Time)
-      await wait(600); // Give the user time to see the success state
+      await wait(600);
     }
 
-    // Vault Final Verification
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -491,10 +482,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [wallets, infuraApiKey, getAvailableAssetsForChain]);
 
   const startEngine = useCallback(async () => {
-    if (!isInitialized || !wallets || !viewingNetwork || !user) return;
+    if (!wallets || !viewingNetwork || !user) {
+        setHasFetchedInitialData(true);
+        return;
+    }
+    
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
     setIsRefreshing(true);
+    
     try {
         const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, prices);
         setPrices(newPrices);
@@ -506,8 +502,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(`wallet_balances_${user.id}`, JSON.stringify(next));
             return next;
         });
-    } catch (e) {} finally { setIsRefreshing(false); }
-  }, [isInitialized, wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
+    } catch (e) {
+        console.warn("Handshake Advisory: Market sync limited.");
+    } finally { 
+        setIsRefreshing(false); 
+        setHasFetchedInitialData(true);
+    }
+  }, [wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
 
   const logout = useCallback(async () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -589,7 +590,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initLocalSession = async () => {
       if (authLoading) return;
-      if (!user) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return; }
+      if (!user) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); setHasFetchedInitialData(true); return; }
       
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       let targetAcc = profile?.account_number || localAcc;
@@ -619,6 +620,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
       if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
+      
       setIsWalletLoading(false);
     };
     initLocalSession();
@@ -634,20 +636,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [areLogosLoading, chainsWithLogos, isInitialized]);
 
   useEffect(() => {
-    if (isInitialized && wallets && !initialFetchTriggeredRef.current) { initialFetchTriggeredRef.current = true; startEngine(); }
+    if (isInitialized && wallets && !initialFetchTriggeredRef.current) { 
+        initialFetchTriggeredRef.current = true; 
+        startEngine(); 
+    }
   }, [isInitialized, wallets, startEngine]);
 
   useEffect(() => {
-    if (isInitialized) {
+    if (isInitialized && hasFetchedInitialData) {
         if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
         priceIntervalRef.current = setInterval(startEngine, 30000);
     }
     return () => { if (priceIntervalRef.current) clearInterval(priceIntervalRef.current); };
-  }, [isInitialized, startEngine]);
+  }, [isInitialized, hasFetchedInitialData, startEngine]);
 
   useEffect(() => {
     if (pathname !== '/') return;
-    if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
+    if (!profile || !user || !wallets || !isInitialized || !hasFetchedInitialData) return;
     
     handleReferralHandshake();
 
@@ -660,10 +665,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }, 3000); 
         return () => clearTimeout(timer);
     }
-  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
+  }, [profile, user, wallets, isInitialized, hasFetchedInitialData, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
 
   const value: WalletContextType = {
-    isInitialized: isInitialized && !authLoading,
+    isInitialized: isInitialized && !authLoading && hasFetchedInitialData,
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
     hasNewNotifications,

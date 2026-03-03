@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -28,7 +29,7 @@ function HomeContent() {
 
   const searchParams = useSearchParams();
 
-  // Failsafe timer to prevent infinite loading
+  // Failsafe timer to prevent infinite loading if market APIs fail
   const [showFailsafe, setShowFailsafe] = useState(false);
   
   useEffect(() => {
@@ -64,8 +65,14 @@ function HomeContent() {
     return () => window.removeEventListener('scroll', handle);
   }, []);
 
-  // Handshake determination
-  const isAppLoading = !showFailsafe && (loading || !isInitialized || isWalletLoading) && !wallets && !!user;
+  /**
+   * INSTITUTIONAL HANDSHAKE RESOLVER
+   * The app is only "Ready" when:
+   * 1. Auth is settled (user is logged in)
+   * 2. Profile metadata is fetched
+   * 3. Wallet core is initialized (mnemonic derived + initial balances fetched)
+   */
+  const isAppLoading = !showFailsafe && (loading || !isInitialized || !profile || (!wallets && !!user));
 
   if (isAppLoading) {
     return (
