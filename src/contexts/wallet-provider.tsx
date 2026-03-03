@@ -268,7 +268,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600); // Increased initial wait for deliberate feel
+    await wait(600);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -287,11 +287,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(500); // Increased check dwell for visibility
+      await wait(500);
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(1200); // Increased mismatch dwell for red-alert visibility
+        await wait(1200);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -299,13 +299,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(500); // Sync animation dwell
+        await wait(500);
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      await wait(500); // Post-success dwell for badge pop
+      await wait(500);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -494,7 +494,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const startEngine = useCallback(async () => {
     if (!wallets || !viewingNetwork || !user) {
-        setHasFetchedInitialData(true);
+        // If auth is settled but no user/wallet, we signal data ready to allow onboarding
+        if (!authLoading) setHasFetchedInitialData(true);
         return;
     }
     
@@ -519,7 +520,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setIsRefreshing(false); 
         setHasFetchedInitialData(true);
     }
-  }, [wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
+  }, [wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices, authLoading]);
 
   const logout = useCallback(async () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -602,8 +603,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * SAFE LOGIC: IMMEDIATE MNEMONIC CHANGE DETECTION
-   * Monitors the local storage key for the mnemonic. If it changes (manual swap or update),
-   * it triggers an immediate re-derivation and background cloud sync audit.
    */
   useEffect(() => {
     if (!user) return;
@@ -630,11 +629,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user, profile, runCloudDiagnostic]);
 
+  /**
+   * PRODUCTION-SAFE INITIALIZATION HANDSHAKE
+   */
   useEffect(() => {
     const initLocalSession = async () => {
+      // Step 1: Wait for Auth Resolution
       if (authLoading) return;
-      if (!user) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); setHasFetchedInitialData(true); return; }
+
+      // Step 2: Clear state if no user
+      if (!user) { 
+        setWallets(null); setBalances({}); setAccountNumber(null); 
+        setIsWalletLoading(false); setHasFetchedInitialData(true); 
+        return; 
+      }
       
+      // Step 3: Wait for Profile Sync
+      if (!profile) return;
+
+      setIsWalletLoading(true);
+      
+      // Step 4: Derive Identity Nodes (PURE LOCAL - TRIGGERED FIRST)
+      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+      if (savedMnemonic) { 
+        activeMnemonicRef.current = savedMnemonic;
+        const derived = await deriveAllWallets(savedMnemonic, profile); 
+        setWallets(derived); 
+      }
+
+      // Step 5: Restore Regional Config
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
       let targetAcc = profile?.account_number || localAcc;
       if (!targetAcc) {
@@ -644,8 +667,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       setAccountNumber(targetAcc);
 
-      setIsWalletLoading(true);
-      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       const cachedBalances = localStorage.getItem(`wallet_balances_${user.id}`);
       const cachedPrices = localStorage.getItem(`market_prices_${user.id}`);
       const savedKey = localStorage.getItem('infura_api_key');
@@ -654,23 +675,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (cachedBalances) try { setBalances(JSON.parse(cachedBalances)); } catch (e) {}
       if (cachedPrices) try { setPrices(JSON.parse(cachedPrices)); } catch (e) {}
       
-      if (savedMnemonic) { 
-        activeMnemonicRef.current = savedMnemonic;
-        const derived = await deriveAllWallets(savedMnemonic, profile); 
-        setWallets(derived); 
-      } else {
-        setHasFetchedInitialData(true);
-      }
-      
       const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
       if (savedHidden) try { setHiddenTokenKeys(new Set(JSON.parse(savedHidden))); } catch (e) {}
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
       if (savedCustom) try { setUserAddedTokens(JSON.parse(savedCustom)); } catch (e) {}
       
       setIsWalletLoading(false);
+      // Logic Ready, but we wait for startEngine to flip hasFetchedInitialData
     };
     initLocalSession();
-  }, [authLoading, user, profile]);
+  }, [authLoading, user, profile, syncAllAddresses]);
 
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
@@ -712,7 +726,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [profile, user, wallets, isInitialized, hasFetchedInitialData, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
 
   const value: WalletContextType = {
-    isInitialized: isInitialized && !authLoading && hasFetchedInitialData,
+    isInitialized: isInitialized && !authLoading && (user ? !!wallets : true),
     isAssetsLoading: areLogosLoading,
     isWalletLoading,
     hasNewNotifications,
