@@ -50,14 +50,6 @@ export default function RootLayout({
         <meta name="theme-color" content="#673AB7" />
       </head>
       <body className="font-body antialiased min-h-screen bg-background flex flex-col relative">
-        {/* GLOBAL BRAND WATERMARK */}
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none z-0">
-          <div className="text-[40rem] font-black italic transform -rotate-12">W</div>
-        </div>
-        
-        {/* GLOBAL GRADIENT DEPTH */}
-        <div className="fixed inset-0 bg-gradient-to-b from-primary/5 via-transparent to-black/40 pointer-events-none z-0" />
-
         <Web3Provider>
           <UserProvider>
             <CurrencyProvider>
