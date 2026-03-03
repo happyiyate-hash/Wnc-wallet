@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cloud, 
   Database, 
-  CheckCircle2, 
+  Check, 
   AlertCircle, 
   RefreshCw, 
   Cpu, 
@@ -16,9 +16,9 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL SYNC HEADER BAR (Slim Profile)
+ * INSTITUTIONAL SYNC HEADER BAR (Slim Top Node)
  * Re-engineered from a centered card to a top-fixed horizontal banner.
- * Height: 100px | Positioning: top-0 | Layout: Horizontal Flex
+ * Features corner-badge verification nodes with Neon Green styling.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -26,23 +26,13 @@ export default function CloudSyncCard() {
 
   if (status === 'idle') return null;
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'mismatch': return 'text-red-400';
-      case 'syncing': return 'text-primary';
-      case 'success':
-      case 'completed': return 'text-green-400';
-      default: return 'text-blue-400';
-    }
-  };
-
   const getStatusIcon = () => {
     switch (status) {
       case 'checking': return <Search className="w-3 h-3 animate-pulse" />;
       case 'mismatch': return <AlertCircle className="w-3 h-3" />;
       case 'syncing': return <RefreshCw className="w-3 h-3 animate-spin" />;
       case 'success':
-      case 'completed': return <CheckCircle2 className="w-3 h-3" />;
+      case 'completed': return <Check className="w-3 h-3" />;
       default: return <Cloud className="w-3 h-3" />;
     }
   };
@@ -53,10 +43,19 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const cardVariants = {
-    initial: { opacity: 0, y: 15 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
-    exit: { opacity: 0, y: -10, transition: { duration: 0.3 } }
+  const swipeVariants = {
+    initial: { x: "50%", opacity: 0 },
+    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } },
+    exit: { x: "-100%", opacity: 0, transition: { duration: 0.4, ease: "easeInOut" } }
+  };
+
+  const badgeVariants = {
+    initial: { scale: 0, opacity: 0 },
+    animate: { 
+      scale: 1, 
+      opacity: 1, 
+      transition: { type: 'spring', stiffness: 300, damping: 20 } 
+    }
   };
 
   return (
@@ -69,7 +68,7 @@ export default function CloudSyncCard() {
     >
       <div className="bg-[#050505]/95 backdrop-blur-3xl border-b border-white/10 h-[100px] px-6 py-3 relative flex flex-col justify-center shadow-[0_10px_50px_rgba(0,0,0,0.5)]">
         
-        {/* TOP ROW: TITLE & GLOBAL STATUS */}
+        {/* TOP ROW: HEADER & GLOBAL BADGE */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className={cn(
@@ -104,18 +103,19 @@ export default function CloudSyncCard() {
           </AnimatePresence>
         </div>
 
-        {/* BOTTOM ROW: SIDE-BY-SIDE SLIM CARDS */}
-        <div className="grid grid-cols-2 gap-3 relative h-12">
+        {/* BOTTOM ROW: SIDE-BY-SIDE SLIM NODES WITH CORNER BADGES */}
+        <div className="grid grid-cols-2 gap-4 relative h-12">
+          
           {/* SLOT 1: CLOUD REGISTRY */}
           <div className="relative">
             <AnimatePresence mode="wait">
               <motion.div 
                 key={chain ? `cloud-${chain}` : 'empty-cloud'}
-                variants={cardVariants}
+                variants={swipeVariants}
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="h-full px-3 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center relative overflow-hidden"
+                className="h-full px-3 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center relative overflow-visible"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <Database className="w-2.5 h-2.5 text-purple-400 opacity-60" />
@@ -127,6 +127,20 @@ export default function CloudSyncCard() {
                 )}>
                   {truncateAddress(cloudValue)}
                 </p>
+
+                {/* PREMIUM SUCCESS BADGE (TOP-RIGHT) */}
+                <AnimatePresence>
+                  {(status === 'success' || status === 'completed') && (
+                    <motion.div 
+                      variants={badgeVariants}
+                      initial="initial"
+                      animate="animate"
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-black/80 border border-[#00FF00] shadow-[0_0_10px_rgba(0,255,0,0.3)] flex items-center justify-center z-20"
+                    >
+                      <Check className="w-3 h-3 text-[#00FF00]" strokeWidth={3} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -136,37 +150,44 @@ export default function CloudSyncCard() {
             <AnimatePresence mode="wait">
               <motion.div 
                 key={chain ? `local-${chain}` : 'empty-local'}
-                variants={cardVariants}
+                variants={swipeVariants}
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="h-full px-3 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center relative overflow-hidden"
+                className="h-full px-3 rounded-xl bg-primary/5 border border-primary/20 flex flex-col justify-center relative overflow-visible"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Cpu className="w-2.5 h-2.5 text-primary" />
-                    <span className="text-[8px] font-black text-primary uppercase tracking-widest">Local</span>
-                  </div>
-                  {(status === 'success' || status === 'completed') && (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                      <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
-                    </motion.div>
-                  )}
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <Cpu className="w-2.5 h-2.5 text-primary" />
+                  <span className="text-[8px] font-black text-primary uppercase tracking-widest">Local</span>
                 </div>
                 <p className="text-[9px] font-mono text-white truncate">
                   {truncateAddress(localValue)}
                 </p>
+
+                {/* PREMIUM SUCCESS BADGE (TOP-RIGHT) */}
+                <AnimatePresence>
+                  {(status === 'success' || status === 'completed') && (
+                    <motion.div 
+                      variants={badgeVariants}
+                      initial="initial"
+                      animate="animate"
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-black/80 border border-[#00FF00] shadow-[0_0_10px_rgba(0,255,0,0.3)] flex items-center justify-center z-20"
+                    >
+                      <Check className="w-3 h-3 text-[#00FF00]" strokeWidth={3} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </AnimatePresence>
           </div>
 
-          {/* BIG SUCCESS OVERLAY (CENTRAL BEAT) */}
+          {/* BIG SUCCESS OVERLAY (FINAL STATE) */}
           <AnimatePresence>
             {status === 'completed' && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="absolute inset-0 z-30 flex items-center justify-center bg-[#050505]/90 backdrop-blur-sm rounded-xl border border-green-500/30"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="absolute inset-0 z-30 flex items-center justify-center bg-[#050505]/90 backdrop-blur-sm rounded-xl border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.1)]"
               >
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="w-4 h-4 text-green-500" />
@@ -182,6 +203,7 @@ export default function CloudSyncCard() {
           <motion.div 
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
+            transition={{ type: 'spring', damping: 30, stiffness: 50 }}
             className={cn(
               "h-full bg-gradient-to-r transition-colors duration-500",
               status === 'mismatch' ? "from-red-500 to-orange-500" : "from-primary to-purple-500"
