@@ -8,6 +8,7 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
  * Decouples heavy registry auditing from the UI thread.
+ * Slowed cadence for high-fidelity deliberate handshake.
  */
 
 export interface SyncDiagnostic {
@@ -32,11 +33,11 @@ export const backgroundSyncWorker = {
   ) {
     if (!userId || !wallets || wallets.length === 0) return;
 
-    // Helper to yield the main thread for smooth animations
-    const breathe = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms));
+    // Helper to yield the main thread for smooth animations (Extended beat)
+    const breathe = (ms = 800) => new Promise(resolve => setTimeout(resolve, ms));
 
     onUpdate({ status: 'checking', progress: 5, chain: 'Registry' });
-    await breathe(800);
+    await breathe(1000);
 
     const chainsToAudit = [
       { id: 'evm', name: 'Ethereum', field: 'evm_address' },
@@ -66,9 +67,9 @@ export const backgroundSyncWorker = {
       if (localAddr && localAddr !== cloudAddr) {
         detectedMismatches = true;
         onUpdate({ status: 'mismatch' });
-        await breathe(1200); // Allow user to see the mismatch
+        await breathe(1500); // Allow user to see the mismatch (Red Alert)
       } else {
-        await breathe(400); // Standard scanning beat
+        await breathe(600); // Deliberate scanning beat
       }
     }
 
@@ -80,7 +81,7 @@ export const backgroundSyncWorker = {
     // RECONCILIATION PHASE
     if (detectedMismatches) {
       onUpdate({ status: 'syncing', chain: 'Registry', progress: 60 });
-      await breathe(1000);
+      await breathe(1200);
       
       try {
         await syncAddressesToCloud(userId, wallets, accountNumber);
@@ -94,8 +95,8 @@ export const backgroundSyncWorker = {
       onUpdate({ status: 'completed', progress: 100 });
     }
 
-    // Success Dwell
-    await breathe(2000);
+    // Success Dwell (Extended)
+    await breathe(2500);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };

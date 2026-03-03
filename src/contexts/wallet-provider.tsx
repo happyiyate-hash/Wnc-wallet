@@ -100,65 +100,83 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [chainsWithLogos, viewingNetwork]);
 
-  useEffect(() => {
-    if (authLoading) return;
+  const initLocalSession = useCallback(async () => {
     if (!user) {
       setWallets(null); setIsWalletLoading(false); setIsInitialized(true); setHasFetchedInitialData(true);
       return;
     }
 
-    async function initLocalSession() {
-      setIsWalletLoading(true);
-      try {
-        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user!.id}`);
-        if (savedMnemonic) {
-          const derived = await deriveAllWallets(savedMnemonic, profile);
-          setWallets(derived);
-        } else {
-          setHasFetchedInitialData(true);
-        }
-
-        const localKey = localStorage.getItem(`infura_api_key_${user!.id}`);
-        if (localKey) setInfuraApiKey(localKey);
-        
-        const localAcc = localStorage.getItem(`account_number_${user!.id}`);
-        setAccountNumber(profile?.account_number || localAcc || null);
-
-        const savedHidden = localStorage.getItem(`hidden_tokens_${user!.id}`);
-        if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
-
-        const savedCustom = localStorage.getItem(`custom_tokens_${user!.id}`);
-        if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
-
-        setIsInitialized(true);
-      } catch (e) {
-        console.error("Initialization Failed:", e);
+    setIsWalletLoading(true);
+    try {
+      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user!.id}`);
+      if (savedMnemonic) {
+        const derived = await deriveAllWallets(savedMnemonic, profile);
+        setWallets(derived);
+      } else {
         setHasFetchedInitialData(true);
-      } finally {
-        setIsWalletLoading(false);
       }
+
+      const localKey = localStorage.getItem(`infura_api_key_${user!.id}`);
+      if (localKey) setInfuraApiKey(localKey);
+      
+      const localAcc = localStorage.getItem(`account_number_${user!.id}`);
+      setAccountNumber(profile?.account_number || localAcc || null);
+
+      const savedHidden = localStorage.getItem(`hidden_tokens_${user!.id}`);
+      if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
+
+      const savedCustom = localStorage.getItem(`custom_tokens_${user!.id}`);
+      if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
+
+      setIsInitialized(true);
+    } catch (e) {
+      console.error("Initialization Failed:", e);
+      setHasFetchedInitialData(true);
+    } finally {
+      setIsWalletLoading(false);
     }
-    initLocalSession();
-  }, [user, authLoading]);
+  }, [user, profile]);
 
-  // SAFE LOGIC: BACKGROUND SYNC OBSERVER
   useEffect(() => {
-    if (!isInitialized || !wallets || !user || !accountNumber) return;
+    if (authLoading) return;
+    initLocalSession();
+  }, [user?.id, authLoading, initLocalSession]);
 
-    const auditKey = `${user.id}:${wallets[0].address}`;
-    if (lastAuditRef.current === auditKey) return;
-    lastAuditRef.current = auditKey;
+  // SAFE LOGIC: STORAGE WATCHDOG
+  useEffect(() => {
+    if (!user) return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `wallet_mnemonic_${user.id}`) {
+        initLocalSession();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [user, initLocalSession]);
 
-    backgroundSyncWorker.performCloudAudit(
-      user.id,
-      wallets,
-      profile,
-      accountNumber,
-      (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
-    ).then(() => {
-        refreshProfile();
-    });
-  }, [isInitialized, wallets, user, accountNumber, profile]);
+  // SAFE LOGIC: POST-INITIALIZATION BACKGROUND SYNC (APP SETTLED DELAY)
+  useEffect(() => {
+    if (!hasFetchedInitialData || !wallets || !user || !accountNumber) return;
+
+    // Condition: Wait 3 seconds for UI stability (App Settled)
+    const timer = setTimeout(() => {
+      const auditKey = `${user.id}:${wallets[0].address}`;
+      if (lastAuditRef.current === auditKey) return;
+      lastAuditRef.current = auditKey;
+
+      backgroundSyncWorker.performCloudAudit(
+        user.id,
+        wallets,
+        profile,
+        accountNumber,
+        (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
+      ).then(() => {
+          refreshProfile();
+      });
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [hasFetchedInitialData, wallets, user, accountNumber, profile, refreshProfile]);
 
   const { refresh } = useWalletEngine({
     wallets,

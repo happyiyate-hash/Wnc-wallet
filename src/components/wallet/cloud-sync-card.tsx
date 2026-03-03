@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,6 +18,7 @@ import { useState, useEffect, useRef } from 'react';
 /**
  * INSTITUTIONAL DIAGNOSTIC SENTINEL (Butter-Smooth Edition)
  * Optimized for hardware-accelerated gliding and thread-safe animations.
+ * Slim form factor (h-14 data cards).
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
