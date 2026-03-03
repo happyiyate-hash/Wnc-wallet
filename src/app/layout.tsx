@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Suspense } from 'react';
@@ -69,8 +68,9 @@ export default function RootLayout({
                   
                   {/* CENTRAL SENTINELS & OVERLAYS */}
                   <Suspense fallback={
-                    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#050505]">
-                      <div className="w-12 h-12 rounded-[1.5rem] border-t-2 border-primary animate-spin" />
+                    <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505]">
+                      <div className="w-12 h-12 rounded-[1.5rem] border-t-2 border-primary animate-spin mb-8" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Synchronizing Node</p>
                     </div>
                   }>
                     <GlobalOverlayManager />
