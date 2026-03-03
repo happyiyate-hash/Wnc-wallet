@@ -6,8 +6,8 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Optimized for "Snap-Dwell-Snap" rhythm.
- * ensures logical verification stays visible while animations execute at full speed.
+ * Optimized for logic-gated "Snap-Dwell-Snap" rhythm.
+ * Force-terminates if wallet state becomes null.
  */
 
 export interface SyncDiagnostic {
@@ -21,27 +21,24 @@ export interface SyncDiagnostic {
 export const backgroundSyncWorker = {
   /**
    * Performs a strict sequential audit of the vault registry.
-   * Forces the system to stop and verify each node one-by-one.
    */
   async performCloudAudit(
     userId: string,
-    wallets: WalletWithMetadata[],
+    wallets: WalletWithMetadata[] | null,
     profile: UserProfile | null,
-    accountNumber: string,
+    accountNumber: string | null,
     allChains: ChainConfig[],
     onUpdate: (update: Partial<SyncDiagnostic>) => void
   ) {
-    if (!userId || !wallets || wallets.length === 0 || allChains.length === 0) return;
+    // 1. PRE-FLIGHT GUARD: Terminate if wallet state is missing
+    if (!userId || !wallets || wallets.length === 0 || !accountNumber || allChains.length === 0) {
+        onUpdate({ status: 'idle', progress: 0 });
+        return;
+    }
 
-    // Helper for deliberate logical pauses (Secure Dwell Times)
     const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // 1. Initial Settlement Pause: App-ready buffer
-    onUpdate({ status: 'idle', progress: 0 });
-    await breathe(1000);
-
     // 2. CONSTRUCT AUDIT SEQUENCE (Symbol-Only Branding)
-    // GROUP EVM: All EVM-compatible chains use the same address, so we check them as one "EVM" node.
     const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
     const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
 
@@ -82,7 +79,12 @@ export const backgroundSyncWorker = {
 
     // 3. STRICT SEQUENTIAL HANDSHAKE LOOP
     for (const node of sequence) {
-      // PHASE 1: APPEAR (Snappy Transition)
+      // MID-FLIGHT GUARD: Check if wallet was deleted during the loop
+      if (!wallets || wallets.length === 0) {
+          onUpdate({ status: 'idle', progress: 0 });
+          return;
+      }
+
       onUpdate({ 
         status: 'checking',
         chain: node.label, 
@@ -91,23 +93,20 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // DWELL: Logic breathing time for comparison icon
       await breathe(800);
 
-      // PHASE 2: LOGICAL COMPARISON
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
-        // TRIGGER MISMATCH: Visual Alert (Red Progress + Spinner)
         onUpdate({ status: 'mismatch' });
         await breathe(800); 
 
-        // REPAIR: Syncing phase (Wait for database confirmation)
         onUpdate({ status: 'syncing' });
         
         try {
-          await syncAddressesToCloud(userId, wallets, accountNumber);
-          // UI REFLECTION: Physically update the displayed cloud value to match local
+          // Trigger atomic repair
+          await syncAddressesToCloud(userId, wallets, accountNumber!);
+          // UI REFLECTION: Physically update displayed cloud value to match local
           onUpdate({ cloudValue: node.localAddr });
           await breathe(500); 
         } catch (e) {
@@ -117,18 +116,15 @@ export const backgroundSyncWorker = {
         }
       }
 
-      // PHASE 3: VERIFIED (Stay for checkmark dwell)
+      // PHASE 3: VERIFIED
       onUpdate({ status: 'success' });
       await breathe(1000); 
       
       completed++;
       onUpdate({ progress: (completed / totalSteps) * 100 });
-      
-      // FINAL SNAP: Wait briefly for snappy exit transition before next node
       await breathe(200);
     }
 
-    // FINAL SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
     await breathe(1500);
     onUpdate({ status: 'idle', progress: 0 });

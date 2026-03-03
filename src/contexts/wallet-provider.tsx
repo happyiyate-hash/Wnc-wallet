@@ -17,6 +17,7 @@ import {
 } from '@/lib/wallets/services/wallet-actions';
 import { backgroundSyncWorker, type SyncDiagnostic } from '@/lib/wallets/background-sync-worker';
 import { supabase } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -64,11 +65,11 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
   
-  // INITIALIZE STATE FROM LOCALSTORAGE (Non-blocking)
   const [prices, setPrices] = useState<PriceResult>(() => {
     if (typeof window === 'undefined') return {};
     const cached = localStorage.getItem('cache_prices_global');
@@ -81,11 +82,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return cached ? JSON.parse(cached) : {};
   });
 
-  const [accountNumber, setAccountNumber] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    // Note: We need the user ID for correct lookup, so we hydrate properly in useEffect
-    return null; 
-  });
+  const [accountNumber, setAccountNumber] = useState<string | null>(null);
 
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -111,9 +108,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // HYDRATION: Ensure browser-only data is loaded safely
+  // HYDRATION: Sync accountNumber from localStorage
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setAccountNumber(null);
+      return;
+    }
     const acc = localStorage.getItem(`account_number_${user.id}`);
     if (acc) setAccountNumber(acc);
   }, [user]);
@@ -142,6 +142,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const derived = await deriveAllWallets(savedMnemonic, profile);
         setWallets(derived);
       } else {
+        setWallets(null);
         setHasFetchedInitialData(true);
       }
 
@@ -250,18 +251,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, profile]);
 
+  /**
+   * CORRECTED DELETE FLOW: Clear wallet state but KEEP user session.
+   */
   const deleteWallet = useCallback(async () => {
     if (user) {
+        // 1. Terminate Diagnostic Sentinel
+        setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
+        
+        // 2. Clear Registry Cache
         purgeLocalWalletCache(user.id);
+        
+        // 3. Reset Wallet Memory
         setWallets(null);
         setAccountNumber(null);
         setBalances({});
-    }
-  }, [user]);
+        setHasFetchedInitialData(true);
 
+        // 4. Redirect to Wallet Setup (Gate)
+        router.replace('/wallet-session');
+    }
+  }, [user, router]);
+
+  /**
+   * CORRECTED PERMANENT DELETE: Wipe cloud fields but KEEP user session.
+   */
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
     try {
+        // 1. Wipe Cloud Fields
         await supabase.from('profiles').update({
             vault_phrase: null,
             iv: null,
@@ -274,12 +292,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             onboarding_completed: false
         }).eq('id', user.id);
         
+        // 2. Refresh profile state
+        await refreshProfile();
+
+        // 3. Clear Local Wallet
         await deleteWallet();
-        await authSignOut();
     } catch (e) {
         console.error("PERMANENT_DELETE_FAIL:", e);
     }
-  }, [user, deleteWallet, authSignOut]);
+  }, [user, deleteWallet, refreshProfile]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
@@ -310,14 +331,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
+  /**
+   * CORRECTED DIAGNOSTIC TRIGGER: Gated by wallet existence.
+   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
-    if (!user || !wallets || !accountNumber || chainsWithLogos.length === 0) return;
+    if (!user || !wallets || wallets.length === 0 || !accountNumber || chainsWithLogos.length === 0) {
+        setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
+        return;
+    }
     await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => setSyncDiagnostic(p => ({ ...p, ...u })));
   }, [user, wallets, accountNumber, profile, chainsWithLogos]);
 
-  // Initial Sync Trigger
+  // Initial Sync Trigger - Gated by wallets !== null
   useEffect(() => {
-    if (isInitialized && wallets && user && hasFetchedInitialData) {
+    if (isInitialized && wallets && wallets.length > 0 && user && hasFetchedInitialData) {
         const timer = setTimeout(() => {
             runCloudDiagnostic();
         }, 1000);

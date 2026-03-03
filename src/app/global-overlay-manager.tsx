@@ -9,7 +9,8 @@ import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * GLOBAL IDENTITY SENTINEL
- * Enforces route protection and onboarding state management.
+ * Hardened route protection and onboarding state management.
+ * Decouples user session from wallet state.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -19,12 +20,13 @@ export default function GlobalOverlayManager() {
 
   // Define route groups
   const isAuthRoute = pathname.startsWith('/auth');
-  const isOnboardingRoute = ['/complete-profile', '/wallet-session'].includes(pathname);
+  const isWalletSessionRoute = pathname === '/wallet-session';
+  const isCompleteProfileRoute = pathname === '/complete-profile';
   
   useEffect(() => {
     if (userLoading || !isInitialized || isWalletLoading) return;
 
-    // 1. ROUTE PROTECTION: Redirect to login if session missing
+    // 1. SESSION PROTECTION: Redirect to login if unauthenticated
     if (!user) {
       if (!isAuthRoute) {
         router.replace('/auth/login');
@@ -32,10 +34,8 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 2. ONBOARDING SEQUENCE: Verify Email
-    // Only check verification for non-OAuth users (Google automatically verifies email)
+    // 2. ONBOARDING SEQUENCE: Verify Email (Skip for Google)
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
-    
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
         router.replace(`/auth/signup?verify=true&email=${encodeURIComponent(user.email || '')}`);
@@ -44,24 +44,27 @@ export default function GlobalOverlayManager() {
     }
 
     // 3. ONBOARDING SEQUENCE: Complete Profile
-    if (!profile?.name && pathname !== '/complete-profile') {
+    if (!profile?.name && !isCompleteProfileRoute) {
       router.replace('/complete-profile');
       return;
     }
 
     // 4. ONBOARDING SEQUENCE: Establish Wallet
-    if (profile?.name && (!wallets || wallets.length === 0) && pathname !== '/wallet-session' && !profile?.onboarding_completed) {
+    // Only redirect if profile is ready but wallet is missing and user isn't on setup screen
+    const hasWallet = wallets && wallets.length > 0;
+    if (profile?.name && !hasWallet && !isWalletSessionRoute) {
       router.replace('/wallet-session');
       return;
     }
 
-    // 5. REDIRECT: If on auth/onboarding but everything is ready, go home
-    if ((isAuthRoute || isOnboardingRoute) && profile?.onboarding_completed && wallets && wallets.length > 0) {
+    // 5. REDIRECT: If on onboarding/auth but everything is established, go home
+    if ((isAuthRoute || isWalletSessionRoute || isCompleteProfileRoute) && hasWallet && profile?.onboarding_completed) {
       router.replace('/');
     }
 
-  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isOnboardingRoute]);
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isCompleteProfileRoute]);
 
+  // If user purged wallet but session exists, the card will return null via its internal check
   return (
     <>
       <CloudSyncCard />
