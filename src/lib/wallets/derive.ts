@@ -33,6 +33,7 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
   
   // Safe initialization for BIP32 which requires secp256k1
+  // Moving this inside the function prevents the Web Locks ReferenceError during build
   const bip32 = BIP32Factory(ecc);
 
   try {
