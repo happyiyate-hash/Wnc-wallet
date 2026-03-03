@@ -1,6 +1,8 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import type { AssetRow, ChainConfig, WalletWithMetadata, IWalletAdapter, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser } from './user-provider';
@@ -99,6 +101,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading, signOut: authSignOut, profile, refreshProfile } = useUser();
   const { rates } = useCurrency();
   const { toast } = useToast();
+  const pathname = usePathname();
   
   const [viewingNetwork, setViewingNetwork] = useState<ChainConfig | null>(null);
   const [wallets, setWallets] = useState<WalletWithMetadata[] | null>(null);
@@ -195,7 +198,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           p_wallets: walletPayload
       });
 
-      setIsSynced(true);
       await refreshProfile();
     } catch (e: any) {
       console.error("Address Sync Failed:", e.message);
@@ -234,23 +236,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase!.from('profiles').update(updates).eq('id', user.id);
         if (error) throw error;
       }
-      
-      setIsSynced(true);
     } catch (e: any) { 
       console.error("Vault Backup Failed:", e.message); 
     }
   }, [user]);
 
   /**
-   * INSTITUTIONAL REAL-TIME SCANNER
-   * Compares local node state with cloud registry chain-by-chain.
+   * INSTITUTIONAL REAL-TIME SCANNER (Granular)
+   * Re-engineered to follow the "Dashboard-First" selective protocol.
    */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
+    // Check if we already verified in this tab session
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
-    let isUIMode = options?.forceUI || !hasAuditedInThisTabSession;
+    
+    // Only proceed if forced OR never audited in session OR isSynced is explicitly false
+    if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
@@ -264,9 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       { label: 'XTZ', type: 'tezos' }, { label: 'APT', type: 'aptos' }, { label: 'SUI', type: 'sui' }
     ];
 
-    if (isUIMode) {
-      setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    }
+    setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
     // Single pull of cloud addresses to optimize scanning
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
@@ -278,32 +279,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = (i / chains.length) * 100;
 
-      if (isUIMode) {
-        setSyncDiagnostic(prev => ({ 
-          ...prev, 
-          chain: chainInfo.label, 
-          status: 'checking', 
-          localValue: local, 
-          cloudValue: cloud || 'None', 
-          progress 
-        }));
-        await wait(600); 
-      }
+      setSyncDiagnostic(prev => ({ 
+        ...prev, 
+        chain: chainInfo.label, 
+        status: 'checking', 
+        localValue: local, 
+        cloudValue: cloud || 'None', 
+        progress 
+      }));
+      await wait(600); 
 
       if (local && local !== cloud) {
-        if (!isUIMode) {
-          isUIMode = true;
-          setSyncDiagnostic(prev => ({ 
-            ...prev, 
-            chain: chainInfo.label, 
-            status: 'checking', 
-            localValue: local, 
-            cloudValue: cloud || 'None', 
-            progress 
-          }));
-          await wait(600);
-        }
-        
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
         await wait(400);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
@@ -318,46 +304,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloud = local; 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: cloud }));
         await wait(400);
-      } else if (isUIMode) {
+      } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
         await wait(300);
       }
     }
 
     // Final Vault Check
-    if (isUIMode) {
-      setSyncDiagnostic(prev => ({ 
-        ...prev, 
-        chain: 'Vault', 
-        status: 'checking', 
-        localValue: 'Encrypted Phrase', 
-        cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
-        progress: 95 
-      }));
-      await wait(800);
-    }
+    setSyncDiagnostic(prev => ({ 
+      ...prev, 
+      chain: 'Vault', 
+      status: 'checking', 
+      localValue: 'Encrypted Phrase', 
+      cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
+      progress: 95 
+    }));
+    await wait(800);
 
     if (!profile?.vault_phrase) {
-      if (!isUIMode) {
-        isUIMode = true;
-        setSyncDiagnostic(prev => ({ ...prev, chain: 'Vault', status: 'checking', localValue: 'Encrypted Phrase', cloudValue: 'Missing', progress: 95 }));
-        await wait(800);
-      }
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
       await wait(1000);
     }
 
-    if (isUIMode) {
-      setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
-      sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
-      setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
-    } else {
-      sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
-    }
-    
+    setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
+    sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
-  }, [wallets, profile, user, saveToVault]);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+  }, [wallets, profile, user, saveToVault, isSynced]);
 
   const generateWallet = async (): Promise<string> => {
     const mnemonic = (await import('bip39')).generateMnemonic();
@@ -366,11 +340,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
         
-        // Immediate Cloud Backup Handshake
+        // Immediate Cloud Backup Handshake (Phrase/API Key)
         await saveToVault();
-        await syncAllAddresses(derived);
         
-        setIsSynced(true); 
+        // Mark as unsynced so diagnostic runs on dashboard
+        setIsSynced(false); 
+        
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
@@ -387,9 +362,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         // Immediate Cloud Backup Handshake
         await saveToVault();
-        await syncAllAddresses(derived);
         
-        setIsSynced(true);
+        // Trigger verification on dashboard
+        setIsSynced(false);
+        
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
@@ -433,7 +409,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const derived = await deriveAllWallets(mnemonicVal, latestProfile);
         if (derived) { 
           setWallets(derived);
-          setIsSynced(true); // Should be synced if restored from cloud
+          setIsSynced(false); // Trigger visual handshake on dashboard
         }
       }
 
@@ -620,22 +596,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, startEngine]);
 
   /**
-   * DASHBOARD-FIRST DIAGNOSTIC TRIGGER
-   * Detects landing on dashboard and initiates visual scan if required.
+   * DASHBOARD-FIRST SELECTIVE DIAGNOSTIC TRIGGER
+   * Detects landing on dashboard and initiates visual scan ONLY if required.
    */
   useEffect(() => {
+    // Only trigger on the dashboard ('/')
+    if (pathname !== '/') return;
+    
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     
-    // Only trigger if session is new OR a manual action marked isSynced as false
+    // Only trigger if:
+    // A) First time in this tab session
+    // B) OR a manual action marked isSynced as false (e.g. wallet change)
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
         }, 2500); 
         return () => clearTimeout(timer);
     }
-  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced]);
+  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname]);
 
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
