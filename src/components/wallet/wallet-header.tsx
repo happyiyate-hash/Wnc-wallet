@@ -1,7 +1,7 @@
-
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Copy, Bell, Link2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -18,13 +18,18 @@ export default function WalletHeader({
 }) {
   const router = useRouter();
   const [isCopied, copy] = useCopyToClipboard();
+  const [hasMounted, setHasMounted] = useState(false);
 
   const { viewingNetwork, wallets, hasNewNotifications, getAddressForChain, setIsNotificationsOpen } = useWallet();
   const { profile } = useUser();
 
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
   // Resolve the native address for the current viewing network (XRP, DOT, EVM, etc.)
   const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
-  const username = profile?.username || profile?.name || 'User';
+  const username = profile?.name || 'User';
 
   const handleCopyAddress = () => {
     if (address) {
@@ -32,9 +37,9 @@ export default function WalletHeader({
     }
   };
 
-  const shortAddress = address
+  const shortAddress = hasMounted && address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
-    : 'No Wallet Connected';
+    : 'Synchronizing...';
 
   return (
     <div
@@ -56,7 +61,7 @@ export default function WalletHeader({
             </Avatar>
             <div className="flex flex-col">
               <span className="font-semibold text-xs leading-none text-white">
-                @{username}
+                @{hasMounted ? username : 'Node'}
               </span>
               <span className="text-[0.625rem] text-gray-400 font-mono">
                 {shortAddress}

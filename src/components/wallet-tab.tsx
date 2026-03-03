@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -119,8 +118,6 @@ export default function WalletTab() {
   
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // HYDRATION REPAIR: Ensure component doesn't render dynamic content until mounted
   const [hasMounted, setHasMounted] = useState(false);
 
   const router = useRouter();
@@ -210,7 +207,7 @@ export default function WalletTab() {
     </div>
   );
 
-  // Prevent server render mismatch by yielding until hydrated
+  // Hydration safety: render matching skeleton on server and first pass
   if (!hasMounted) {
     return <div className="flex-1 bg-transparent" />;
   }
