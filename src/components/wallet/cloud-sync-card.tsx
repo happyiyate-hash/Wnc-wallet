@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,11 +56,11 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // SLIDE TRANSITION CONFIG
+  // SLIDE TRANSITION CONFIG: No fading, strict horizontal flow
   const swipeVariants = {
-    initial: { x: 100, opacity: 0 },
-    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 20, stiffness: 100 } },
-    exit: { x: -100, opacity: 0, transition: { duration: 0.4, ease: "easeIn" } }
+    initial: { x: 50, opacity: 1 },
+    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 120 } },
+    exit: { x: -100, opacity: 1, transition: { duration: 0.3, ease: "easeIn" } }
   };
 
   return (
@@ -141,7 +142,7 @@ export default function CloudSyncCard() {
                 <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.8, ease: "easeInOut" }}
+                    transition={{ duration: 0.3, ease: "linear" }}
                     className={cn(
                         "h-full bg-gradient-to-r transition-colors duration-500",
                         status === 'mismatch' ? "from-red-500 to-orange-500" : "from-primary to-purple-500"
@@ -191,7 +192,7 @@ export default function CloudSyncCard() {
                         <motion.div 
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ type: 'spring', bounce: 0.5, delay: 0.3 }}
+                            transition={{ type: 'spring', bounce: 0.5, delay: 0.1 }}
                             className="absolute -top-1 -right-1"
                         >
                             <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />

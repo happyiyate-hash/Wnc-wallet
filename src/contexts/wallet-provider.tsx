@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -246,8 +247,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
-    if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
+    // PREVENT RE-TRIGGER: Mark as audited immediately to prevent loops
+    const auditKey = `identity_audit_${user.id}`;
+    const hasAudited = sessionStorage.getItem(auditKey);
+    if (!options?.forceUI && hasAudited === 'verified') return;
+    
+    sessionStorage.setItem(auditKey, 'verified');
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
@@ -262,6 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
+    await wait(600); // Initial build-up
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -270,7 +276,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const chainInfo = chains[i];
       const local = wallets.find(w => w.type === chainInfo.type)?.address || null;
       let cloud = getCloudAddr(chainInfo.type);
-      const progress = (i / chains.length) * 100;
+      const progress = ((i + 1) / (chains.length + 1)) * 100;
 
       setSyncDiagnostic(prev => ({ 
         ...prev, 
@@ -281,11 +287,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         progress 
       }));
       
-      await wait(1200); 
+      await wait(300); // SCANNING BEAT (FASTER)
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(1000);
+        await wait(300);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -293,37 +299,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(1500); 
+        await wait(500); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(1500); 
+        await wait(400); 
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(1200); 
+        await wait(400); // SUCCESS BEAT
       }
     }
 
+    // Vault Step
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
       status: 'checking', 
       localValue: 'Encrypted Phrase', 
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
-      progress: 95 
+      progress: 98 
     }));
-    await wait(1500);
+    await wait(600);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(2000);
+      await wait(800);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
-    
-    sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 3000);
-  }, [wallets, profile, user, saveToVault, isSynced]);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+  }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
     if (!user || !profile || !supabase) return;
@@ -369,10 +374,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${user.id}`, newId);
 
-        // DO NOT SYNC ALL ADDRESSES HERE
-        // Just save the Master Phrase vault and reset audit to run on dashboard
         await saveToVault();
-        
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false); 
     }
@@ -392,10 +394,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             localStorage.setItem(`account_number_${user.id}`, newId);
         }
 
-        // DO NOT SYNC ALL ADDRESSES HERE
-        // Just save the Master Phrase vault and reset audit to run on dashboard
         await saveToVault();
-        
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false);
     }
@@ -509,10 +508,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     try {
       const prevUserId = user?.id;
-      // 1. Hard reset Supabase session
       await authSignOut();
       
-      // 2. Clear sensitive local keys synchronously
       localStorage.removeItem('infura_api_key');
       if (prevUserId) {
           localStorage.removeItem(`wallet_mnemonic_${prevUserId}`);
@@ -525,12 +522,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem(`ref_handshake_${prevUserId}`);
       }
       
-      // 3. Clear transient state
       setWallets(null);
       setBalances({});
       setAccountNumber(null);
-      
-      // 4. Force hard redirect to kill all lingering contexts
       window.location.href = '/auth/login';
     } catch (e) {
       window.location.href = '/auth/login';
@@ -650,9 +644,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     handleReferralHandshake();
 
-    const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
+    const auditKey = `identity_audit_${user.id}`;
+    const hasAudited = sessionStorage.getItem(auditKey);
     
-    if (!hasAuditedInThisTabSession || !isSynced) {
+    if (!hasAudited || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
         }, 3000); 
@@ -693,7 +688,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setInfuraApiKey(k); 
       if (k) {
         localStorage.setItem('infura_api_key', k);
-        // Force immediate vault synchronization
         if (user) {
           saveToVault();
         }
