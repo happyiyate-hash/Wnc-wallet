@@ -28,11 +28,18 @@ import {
   Zap,
   Activity,
   KeyRound,
-  Settings2
+  Settings2,
+  Gift,
+  Ticket,
+  X
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -48,9 +55,16 @@ export default function ProfilePage() {
         runCloudDiagnostic 
     } = useWallet();
     const { formatFiat, rates } = useCurrency();
+    const { toast } = useToast();
     const [isAddressCopied, copyAddress] = useCopyToClipboard();
     const [isIdCopied, copyId] = useCopyToClipboard();
     const [isSyncing, setIsSyncing] = useState(false);
+
+    // GIFT CARD REDEMPTION STATE
+    const [isRedeemOpen, setIsRedeemOpen] = useState(false);
+    const [giftCode, setGiftCode] = useState('');
+    const [isRedeeming, setIsRedeeming] = useState(false);
+    const [redeemResult, setRedeemResult] = useState<{ success: boolean, amount?: number, message?: string } | null>(null);
 
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
@@ -74,6 +88,41 @@ export default function ProfilePage() {
         } finally {
             setTimeout(() => setIsSyncing(false), 1000);
         }
+    };
+
+    const handleRedeemCode = async () => {
+        if (!giftCode.trim() || !user || !supabase) return;
+        
+        setIsRedeeming(true);
+        setRedeemResult(null);
+        
+        try {
+            const { data, error } = await supabase.rpc('redeem_gift_card', {
+                user_id: user.id,
+                input_code: giftCode.trim().toUpperCase()
+            });
+
+            if (error) throw error;
+
+            if (data.success) {
+                setRedeemResult({ success: true, amount: data.amount });
+                toast({ title: "Redemption Authorized", description: `Credited ${data.amount} WNC to your node.` });
+                await refreshProfile();
+            } else {
+                setRedeemResult({ success: false, message: data.message });
+            }
+        } catch (e: any) {
+            console.error("REDEMPTION_FAIL:", e);
+            setRedeemResult({ success: false, message: "Registry connection failed. Try again." });
+        } finally {
+            setIsRedeeming(false);
+        }
+    };
+
+    const resetRedeem = () => {
+        setIsRedeemOpen(false);
+        setGiftCode('');
+        setRedeemResult(null);
     };
 
     const ActionBox = ({ 
@@ -113,7 +162,10 @@ export default function ProfilePage() {
                     <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Identity Vault</h1>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => setIsRedeemOpen(true)} className="rounded-xl hover:bg-primary/10 text-primary transition-all">
+                        <Gift className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={handleSync} className={cn("rounded-xl", isSyncing && "animate-spin")}>
                         <RefreshCw className="w-4 h-4 text-muted-foreground" />
                     </Button>
@@ -258,6 +310,81 @@ export default function ProfilePage() {
                         <p className="text-[8px] text-muted-foreground/20 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">Secured by Master Wevina Cloud Protocol v3.0</p>
                     </div>
             </main>
+
+            {/* GIFT CARD REDEMPTION DIALOG */}
+            <Dialog open={isRedeemOpen} onOpenChange={(o) => !o && resetRedeem()}>
+                <DialogContent className="bg-[#0a0a0c] border-white/10 rounded-[3rem] p-8 max-w-[95vw] sm:max-w-[400px] overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
+                    
+                    <DialogHeader className="space-y-4 items-center text-center">
+                        <div className={cn(
+                            "w-16 h-16 rounded-[2rem] flex items-center justify-center transition-all duration-500 border",
+                            redeemResult?.success ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-primary/10 border-primary/20 text-primary"
+                        )}>
+                            {redeemResult?.success ? <CheckCircle2 className="w-8 h-8" /> : <Ticket className="w-8 h-8" />}
+                        </div>
+                        <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
+                            {redeemResult?.success ? 'Credits Secured' : 'Redeem WNC Node'}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground uppercase tracking-widest font-black opacity-60">
+                            Institutional Reward Protocol
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mt-8 space-y-6">
+                        <AnimatePresence mode="wait">
+                            {redeemResult ? (
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.9 }} 
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="space-y-6 text-center"
+                                >
+                                    {redeemResult.success ? (
+                                        <div className="p-6 rounded-[2.5rem] bg-green-500/10 border border-green-500/20 space-y-2">
+                                            <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">Amount Authorized</p>
+                                            <h3 className="text-4xl font-black text-white">+{redeemResult.amount} WNC</h3>
+                                            <p className="text-[10px] text-green-400/60 leading-relaxed px-4">
+                                                Funds have been verified and added to your registry balance.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="p-6 rounded-[2.5rem] bg-red-500/10 border border-red-500/20 space-y-2">
+                                            <div className="flex justify-center mb-2"><AlertCircle className="w-6 h-6 text-red-500" /></div>
+                                            <p className="text-sm font-bold text-red-400">{redeemResult.message}</p>
+                                            <Button variant="ghost" onClick={() => setRedeemResult(null)} className="h-8 text-[10px] uppercase font-black tracking-widest text-white/40 hover:text-white">Retry Handshake</Button>
+                                        </div>
+                                    )}
+                                    <Button className="w-full h-14 rounded-2xl font-black uppercase tracking-widest" onClick={resetRedeem}>Dismiss Node</Button>
+                                </motion.div>
+                            ) : (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest px-2">Gift Access Code</label>
+                                        <Input 
+                                            placeholder="XXXX-XXXX-XXXX"
+                                            value={giftCode}
+                                            onChange={(e) => setGiftCode(e.target.value.toUpperCase())}
+                                            className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-2xl font-mono tracking-[0.2em] focus-visible:ring-primary text-white"
+                                        />
+                                    </div>
+                                    <Button 
+                                        className="w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
+                                        disabled={!giftCode || isRedeeming}
+                                        onClick={handleRedeemCode}
+                                    >
+                                        {isRedeeming ? <Loader2 className="w-6 h-6 animate-spin" /> : "Verify & Claim"}
+                                    </Button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    <div className="mt-8 pt-4 border-t border-white/5 flex items-center justify-center gap-2 opacity-20">
+                        <ShieldCheck className="w-3 h-3" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Registry Protocol v3.2 Verified</span>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
