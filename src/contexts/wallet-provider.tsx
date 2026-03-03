@@ -267,7 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(600);
+    await wait(800);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -286,11 +286,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(450);
+      await wait(600);
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(350); 
+        await wait(500); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -298,13 +298,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(450); 
+        await wait(600); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      await wait(600);
+      await wait(850);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -315,17 +315,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(700);
+    await wait(1000);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(700);
+      await wait(1000);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
   }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
@@ -510,13 +510,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [wallets, viewingNetwork, user, fetchBalancesForChain, chainsWithLogos, userAddedTokens, rates, prices]);
 
+  /**
+   * RESILIENT HARD-RESET LOGOUT
+   * Implements a 5-second timeout and hard browser reset to ensure clean exit.
+   */
   const logout = useCallback(async () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     if (priceIntervalRef.current) clearInterval(priceIntervalRef.current);
     
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("LOGOUT_TIMEOUT")), 5000)
+    );
+
     try {
       const prevUserId = user?.id;
-      await authSignOut();
+      
+      // Attempt clean sign out with race-condition protection
+      await Promise.race([authSignOut(), timeout]).catch(() => {
+          console.warn("Auth sign-out timed out. Proceeding with hard reset.");
+      });
       
       localStorage.removeItem('infura_api_key');
       if (prevUserId) {
@@ -533,6 +545,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setWallets(null);
       setBalances({});
       setAccountNumber(null);
+      
+      // Hard redirect to clear all React states
       window.location.href = '/auth/login';
     } catch (e) {
       window.location.href = '/auth/login';

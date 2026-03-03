@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -197,8 +198,7 @@ export default function ProfilePage() {
                             {!displayAccountNumber ? (
                                 <div className="flex flex-col items-center gap-4">
                                     <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 animate-pulse">
-                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Establishing Node...</span>
+                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Establishing Identity...</span>
                                     </div>
                                 </div>
                             ) : (

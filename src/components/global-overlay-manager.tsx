@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -8,7 +9,8 @@ import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * GLOBAL IDENTITY SENTINEL
- * Authority for routing authenticated nodes.
+ * Hardened authority node for routing authenticated sessions.
+ * Implements strict zero-flicker policy by returning null immediately on sign-out.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -22,7 +24,7 @@ export default function GlobalOverlayManager() {
   useEffect(() => {
     if (userLoading || !isInitialized || isWalletLoading) return;
 
-    // 1. UNAUTHENTICATED REDIRECT
+    // 1. ATOMIC SESSION GUARD: Redirect instantly if credentials missing
     if (!user) {
       if (!isAuthRoute) {
         router.replace('/auth/login');
@@ -30,9 +32,9 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 2. AUTHENTICATED VALIDATION
+    // 2. AUTHENTICATED VALIDATION NODES
     
-    // Verify Email (Skip for OAuth)
+    // Verify Email (Bypass for Google Authority)
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
@@ -41,7 +43,7 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // Wallet Mandatory Gate
+    // Vault Mandatory Gate
     const hasLocalWallet = wallets && wallets.length > 0;
     if (!profile?.onboarding_completed && !hasLocalWallet) {
       if (!isWalletSessionRoute) {
@@ -50,14 +52,15 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 3. DASHBOARD REDIRECT
+    // 3. DASHBOARD CONVERGENCE
     if ((isAuthRoute || isWalletSessionRoute) && hasLocalWallet) {
       router.replace('/');
     }
 
   }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute]);
 
-  if (!user) return null;
+  // ZERO-FLICKER SENTINEL: If user just logged out, return null immediately
+  if (!user && !isAuthRoute) return null;
 
   return (
     <>

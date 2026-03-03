@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -97,15 +98,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     checkSession();
 
+    /**
+     * GLOBAL AUTH LISTENER
+     * Hardened to handle SIGNED_OUT events with atomic cleanup.
+     */
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      
       if (currentUser) {
         await fetchProfile(currentUser.id);
       } else if (event === 'SIGNED_OUT') {
+        // ATOMIC CLEANUP: Stop data-ghosting and prevent flickering
         setProfile(null);
         setUser(null);
       }
+      
       setLoading(false);
     });
 
