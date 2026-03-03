@@ -248,11 +248,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  /**
+   * THREAD-STABILIZED DIAGNOSTIC ENGINE
+   * Optimized to be non-blocking and flicker-free.
+   */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    // SESSION GUARD: Prevent repetitive scans during the same tab session
+    // SESSION GUARD: Trigger only on new sessions or identity changes
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
@@ -270,7 +274,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
-    // Pre-fetch cloud states to ensure real-time visual feedback
+    // Fetch cloud state once to prevent repetitive network blocking
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
 
@@ -280,6 +284,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = (i / chains.length) * 100;
 
+      // Update state without blocking
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -288,30 +293,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(600); 
+      await wait(400); // UI Breathing space
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(400);
+        await wait(300);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
-        // Push actual update to cloud registry
-        await supabase.rpc('sync_user_wallets', {
+        // Push actual update asynchronously
+        supabase.rpc('sync_user_wallets', {
             p_user_id: user.id,
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(600);
-        cloud = local; 
-        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: cloud }));
-        await wait(400);
+        await wait(500);
+        setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
+        await wait(300);
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(300);
+        await wait(200);
       }
     }
 
-    // Vault Phase
+    // Vault Finalization
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -320,20 +324,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 95 
     }));
-    await wait(800);
+    await wait(600);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(1000);
+      await wait(800);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     
-    // Lock audit for current tab session
+    // Lock session state
     sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2000);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 1500);
   }, [wallets, profile, user, saveToVault, isSynced]);
 
   const generateWallet = async (): Promise<string> => {
@@ -343,15 +347,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
         
-        // INSTANT REGISTRY HANDSHAKE
         const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
         const newId = `835${randomSuffix}`;
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${user.id}`, newId);
 
-        // Immediate encryption and address sync
+        // Immediate reactive save
         await saveToVault();
         await syncAllAddresses(derived);
+        
+        // Clear session audit to trigger visual re-verification on dashboard
+        sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false); 
     }
     return mnemonic;
@@ -363,7 +369,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallets(derived);
         localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
         
-        // INSTANT REGISTRY HANDSHAKE
         if (!accountNumber) {
             const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
             const newId = `835${randomSuffix}`;
@@ -373,6 +378,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await saveToVault();
         await syncAllAddresses(derived);
+        
+        // Clear session audit
+        sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false);
     }
   };
@@ -412,6 +420,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (derived) { 
           setWallets(derived);
           setIsSynced(false); 
+          sessionStorage.removeItem(`identity_audit_${user.id}`);
         }
       }
 
@@ -560,14 +569,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!user) { setWallets(null); setBalances({}); setAccountNumber(null); setIsWalletLoading(false); return; }
       
       const localAcc = localStorage.getItem(`account_number_${user.id}`);
-      
-      // INSTANT IDENTITY RESOLUTION: Generate immediately if missing
       let targetAcc = profile?.account_number || localAcc;
       if (!targetAcc) {
-          const randomSuffix = Math.floor(Math.random() * 9000000 + 1000000);
-          targetAcc = `835${randomSuffix}`;
+          targetAcc = `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
           localStorage.setItem(`account_number_${user.id}`, targetAcc);
-          // Trigger async sync without blocking the UI
           syncAllAddresses();
       }
       setAccountNumber(targetAcc);
@@ -594,7 +599,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsWalletLoading(false);
     };
     initLocalSession();
-  }, [authLoading, user, profile, syncAllAddresses]);
+  }, [authLoading, user, profile]);
 
   useEffect(() => {
     if (!areLogosLoading && !isInitialized) {
@@ -621,13 +626,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (pathname !== '/') return;
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
-    // SESSION LOCK: Check if we have already audited in this tab session
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
-        }, 2500); 
+        }, 2000); 
         return () => clearTimeout(timer);
     }
   }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname]);

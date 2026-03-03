@@ -1,46 +1,71 @@
 'use client';
 
-import { ethers } from 'ethers';
-import * as xrpl from 'xrpl';
-import * as bip39 from 'bip39';
-import { Keyring } from '@polkadot/keyring';
-import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { KeyPair, utils } from "near-api-js";
-import * as bitcoin from "bitcoinjs-lib";
-import BIP32Factory from "bip32";
-import * as ecc from "tiny-secp256k1";
-import { derivePath } from "ed25519-hd-key";
-import { Keypair as SolanaKeypair } from "@solana/web3.js";
-import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-import { stringToPath } from "@cosmjs/crypto";
-import { TronWeb } from "tronweb";
-import * as algosdk from "algosdk";
-import { Mnemonic as HederaMnemonic } from "@hashgraph/sdk";
-import { InMemorySigner } from "@taquito/signer";
-import { b58cencode, prefix } from "@taquito/utils";
-import { AptosAccount } from "aptos";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import type { WalletWithMetadata, UserProfile } from '@/lib/types';
-import { litecoinNetwork } from '@/lib/wallets/adapters/litecoin';
-import { dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
 
 /**
- * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE
- * Decoupled from top-level scope to ensure Vercel build stability.
- * Initializations are contained inside the function to prevent SSR/Build-time Lock ReferenceErrors.
+ * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Build-Safe Version)
+ * All heavy crypto libraries are dynamically imported inside the function.
+ * This prevents "ReferenceError: Lock is not defined" during Vercel's server-side prerendering.
  */
 export async function deriveAllWallets(mnemonic: string, profile?: UserProfile | null): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
-  
-  // LAZY INITIALIZATION: Prevents "ReferenceError: Lock is not defined" during Next.js build.
-  // This ensures WASM and Web Lock APIs are only accessed in the browser environment.
-  const bip32 = BIP32Factory(ecc);
 
   try {
-    // 1. Pre-Handshake Validation
+    // 1. DYNAMIC HANDSHAKE: Load libraries only in the client environment
+    const [
+      ecc,
+      { default: BIP32Factory },
+      bip39,
+      { ethers },
+      xrpl,
+      { Keyring },
+      { cryptoWaitReady },
+      { KeyPair, utils },
+      bitcoin,
+      { derivePath },
+      { Keypair: SolanaKeypair },
+      { DirectSecp256k1HdWallet },
+      { stringToPath },
+      { TronWeb },
+      algosdk,
+      { Mnemonic: HederaMnemonic },
+      { InMemorySigner },
+      { b58cencode, prefix },
+      { AptosAccount },
+      { Ed25519Keypair },
+      { litecoinNetwork },
+      { dogecoinNetwork }
+    ] = await Promise.all([
+      import("tiny-secp256k1"),
+      import("bip32"),
+      import('bip39'),
+      import('ethers'),
+      import('xrpl'),
+      import('@polkadot/keyring'),
+      import('@polkadot/util-crypto'),
+      import("near-api-js"),
+      import("bitcoinjs-lib"),
+      import("ed25519-hd-key"),
+      import("@solana/web3.js"),
+      import("@cosmjs/proto-signing"),
+      import("@cosmjs/crypto"),
+      import("tronweb"),
+      import("algosdk"),
+      import("@hashgraph/sdk"),
+      import("@taquito/signer"),
+      import("@taquito/utils"),
+      import("aptos"),
+      import("@mysten/sui/keypairs/ed25519"),
+      import('@/lib/wallets/adapters/litecoin'),
+      import('@/lib/wallets/adapters/dogecoin')
+    ]);
+
+    const bip32 = BIP32Factory(ecc);
+
+    // 2. Pre-Handshake Validation
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid BIP39 Mnemonic");
     
-    // 2. Multi-Protocol Derivation
+    // 3. Multi-Protocol Derivation
     const evmWallet = ethers.Wallet.fromPhrase(mnemonic);
     const xrpWallet = xrpl.Wallet.fromMnemonic(mnemonic);
     
