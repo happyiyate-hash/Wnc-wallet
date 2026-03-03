@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -24,6 +23,9 @@ import {
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase/client';
+
+// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+export const dynamic = 'force-dynamic';
 
 export default function WalletSessionPage() {
   const { generateWallet, importWallet, restoreFromCloud, wallets } = useWallet();

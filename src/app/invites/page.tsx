@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -30,6 +29,9 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+
+// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+export const dynamic = 'force-dynamic';
 
 /**
  * INSTITUTIONAL GROWTH NODE (AFFILIATE)

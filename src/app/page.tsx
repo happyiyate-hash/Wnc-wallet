@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -10,6 +9,9 @@ import { RequestCreateMoment, RequestReviewMoment } from '@/components/wallet/re
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+
+// INSTITUTIONAL FIX: Force dynamic rendering to prevent build-time crypto crashes
+export const dynamic = 'force-dynamic';
 
 function HomeContent() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);

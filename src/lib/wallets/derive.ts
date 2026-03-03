@@ -1,4 +1,3 @@
-
 'use client';
 
 import { ethers } from 'ethers';
@@ -25,15 +24,17 @@ import type { WalletWithMetadata, UserProfile } from '@/lib/types';
 import { litecoinNetwork } from '@/lib/wallets/adapters/litecoin';
 import { dogecoinNetwork } from '@/lib/wallets/adapters/dogecoin';
 
-const bip32 = BIP32Factory(ecc);
-
 /**
  * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE
  * Decoupled from UI to ensure stability, performance, and security.
+ * Initializations are moved inside the function to prevent SSR/Build-time crashes.
  */
 export async function deriveAllWallets(mnemonic: string, profile?: UserProfile | null): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
   
+  // Safe initialization for BIP32 which requires secp256k1
+  const bip32 = BIP32Factory(ecc);
+
   try {
     // 1. Pre-Handshake Validation
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid BIP39 Mnemonic");
