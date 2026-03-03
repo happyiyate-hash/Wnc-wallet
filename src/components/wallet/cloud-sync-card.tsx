@@ -15,6 +15,11 @@ import {
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
+/**
+ * INSTITUTIONAL SYNC OVERLAY
+ * Optimized for "Real-Time" swiping feedback. 
+ * Cards enter from right, pause for checkmark, and slide out to the left.
+ */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
@@ -47,8 +52,14 @@ export default function CloudSyncCard() {
     if (addr === 'Encrypted Phrase') return addr;
     if (addr === 'Stored') return addr;
     if (addr === 'Missing') return addr;
-    if (addr === 'None') return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  // SLIDE TRANSITION CONFIG
+  const swipeVariants = {
+    initial: { x: 100, opacity: 0 },
+    animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 20, stiffness: 100 } },
+    exit: { x: -100, opacity: 0, transition: { duration: 0.4, ease: "easeIn" } }
   };
 
   return (
@@ -72,14 +83,6 @@ export default function CloudSyncCard() {
                     status === 'mismatch' ? "bg-red-500" : status === 'success' || status === 'completed' ? "bg-green-500" : "bg-primary"
                 )}
             />
-            {status === 'checking' && (
-                <motion.div 
-                    initial={{ x: '-100%' }}
-                    animate={{ x: '200%' }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-primary/20 to-transparent skew-x-12"
-                />
-            )}
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -147,15 +150,15 @@ export default function CloudSyncCard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <AnimatePresence mode="wait">
+          <div className="grid grid-cols-2 gap-2 h-16 relative">
+            <AnimatePresence mode="popLayout">
                 <motion.div 
                     key={`${chain}-cloud`}
-                    initial={{ x: 20, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    exit={{ x: -20, opacity: 0 }}
-                    transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                    className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative"
+                    variants={swipeVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative h-full flex flex-col justify-center"
                 >
                     <div className="flex items-center gap-1.5">
                         <Database className="w-2.5 h-2.5 text-muted-foreground" />
@@ -167,25 +170,15 @@ export default function CloudSyncCard() {
                     )}>
                         {truncateAddress(cloudValue)}
                     </p>
-                    {status === 'syncing' && (
-                        <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: '100%' }}
-                            transition={{ duration: 1.5, ease: "linear" }}
-                            className="absolute bottom-0 left-0 h-[1px] bg-primary"
-                        />
-                    )}
                 </motion.div>
-            </AnimatePresence>
 
-            <AnimatePresence mode="wait">
                 <motion.div 
                     key={`${chain}-local`}
-                    initial={{ x: 20, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    exit={{ x: -20, opacity: 0 }}
-                    transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                    className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative"
+                    variants={swipeVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative h-full flex flex-col justify-center"
                 >
                     <div className="flex items-center gap-1.5">
                         <Cpu className="w-2.5 h-2.5 text-primary" />
@@ -198,7 +191,7 @@ export default function CloudSyncCard() {
                         <motion.div 
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ type: 'spring', bounce: 0.5 }}
+                            transition={{ type: 'spring', bounce: 0.5, delay: 0.3 }}
                             className="absolute -top-1 -right-1"
                         >
                             <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
@@ -212,11 +205,11 @@ export default function CloudSyncCard() {
             <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-center gap-2 py-1.5 px-4 rounded-xl bg-red-500/10 border border-red-500/20 animate-pulse"
+                className="flex items-center justify-center gap-2 py-1.5 px-4 rounded-xl bg-red-500/10 border border-red-500/20"
             >
                 <AlertCircle className="w-3 h-3 text-red-500" />
                 <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">
-                    Outdated Registry Node Found - Reconciling...
+                    Registry Mismatch Found - Reconciling...
                 </span>
             </motion.div>
           )}

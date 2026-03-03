@@ -253,7 +253,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
-    // Slowed down 'wait' utility for smoother visual processing
+    // SLOWED DOWN FOR VISUAL IMPACT
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
     const chains: { label: string; type: string }[] = [
@@ -286,12 +286,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         progress 
       }));
       
-      // Deliberate pause for user to read/verify
-      await wait(800); 
+      // Deliberate pause for user to verify entrance
+      await wait(1200); 
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(600);
+        await wait(1000);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -299,12 +299,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(1000); // Institutional verification time
+        await wait(1500); // Reconciliation time
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(600);
+        await wait(1500); // Visual lock pause
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(400);
+        await wait(1200); // Verification pause
       }
     }
 
@@ -316,20 +316,60 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 95 
     }));
-    await wait(1200);
+    await wait(1500);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(1500);
+      await wait(2000);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     
     sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 3000);
   }, [wallets, profile, user, saveToVault, isSynced]);
+
+  /**
+   * GROWTH HANDSHAKE PROTOCOL
+   * Links a new referred node to its referrer in the institutional registry.
+   */
+  const handleReferralHandshake = useCallback(async () => {
+    if (!user || !profile || !supabase) return;
+    
+    // Check if user was referred (from auth metadata)
+    const refCode = user.user_metadata?.referral_code;
+    const sessionRefHandled = sessionStorage.getItem(`ref_handshake_${user.id}`);
+    
+    if (refCode && !profile.referral_handled && !sessionRefHandled) {
+        try {
+            // 1. Resolve referrer ID from the 6-char code
+            const { data: referrer, error: refError } = await supabase
+                .from('profiles')
+                .select('id')
+                .filter('account_number', 'ilike', `%${refCode}`)
+                .maybeSingle();
+
+            if (!refError && referrer && referrer.id !== user.id) {
+                // 2. Insert Referral Record
+                await supabase.from('referrals').insert({
+                    referrer_id: referrer.id,
+                    referred_id: user.id,
+                    status: 'pending',
+                    reward_amount: 100
+                });
+
+                // 3. Mark Handled
+                await supabase.from('profiles').update({ referral_handled: true }).eq('id', user.id);
+                sessionStorage.setItem(`ref_handshake_${user.id}`, 'linked');
+                await refreshProfile();
+            }
+        } catch (e) {
+            console.warn("[REFERRAL_HANDSHAKE_FAIL]", e);
+        }
+    }
+  }, [user, profile, refreshProfile]);
 
   const generateWallet = async (): Promise<string> => {
     const mnemonic = (await import('bip39')).generateMnemonic();
@@ -493,6 +533,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem(`custom_tokens_${prevUserId}`);
           localStorage.removeItem(`account_number_${prevUserId}`);
           sessionStorage.removeItem(`identity_audit_${prevUserId}`);
+          sessionStorage.removeItem(`ref_handshake_${prevUserId}`);
       }
       setWallets(null); setBalances({}); setAccountNumber(null); setIsSynced(true);
       window.location.href = '/auth/login';
@@ -614,15 +655,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (pathname !== '/') return;
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
+    // Trigger Referral Handshake first
+    handleReferralHandshake();
+
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
-        }, 3000); // 3 second initial delay for dashboard settling
+        }, 3000); 
         return () => clearTimeout(timer);
     }
-  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname]);
+  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname, handleReferralHandshake]);
 
   const value: WalletContextType = {
     isInitialized: isInitialized && !authLoading,
