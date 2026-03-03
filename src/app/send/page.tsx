@@ -168,6 +168,7 @@ function SendClient() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const hasInitialized = useRef(false);
   const resolutionCounter = useRef(0);
+  const retryCount = useRef(0);
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -236,8 +237,13 @@ function SendClient() {
     }
   };
 
+  /**
+   * ROBUST ADDRESS RESOLVER
+   * Hardened against app resume hangs and network jitter.
+   */
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
+    
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isInternalWnc = selectedToken?.symbol === 'WNC';
@@ -267,21 +273,42 @@ function SendClient() {
         setRecipientProfile(null); 
         setIsResolving(true); 
         setResolutionError(null);
+        
         try {
-          if (!supabase) throw new Error("No connection");
-          const { data: userRecord } = await supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
+          if (!supabase) throw new Error("Registry offline.");
+          
+          // CONNECTION GUARD: Race the DB query against a timeout to prevent forever hangs
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 10000));
+          const queryPromise = supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
+          
+          const { data: userRecord, error: fetchErr } = await Promise.race([queryPromise, timeoutPromise]) as any;
+          
           if (currentId !== resolutionCounter.current) return;
+          if (fetchErr) throw fetchErr;
+
           if (userRecord) {
             setRecipientProfile({ id: userRecord.id, avatar: userRecord.photo_url || '', verified: true, name: userRecord.name || input });
-            if (isInternalWnc) setResolvedAddress(userRecord.account_number || '');
-            else {
+            if (isInternalWnc) {
+              setResolvedAddress(userRecord.account_number || '');
+            } else {
               const targetChainType = activeNetwork.type || 'evm';
               const { data: chainWallet } = await supabase.from('wallets').select('address').eq('user_id', userRecord.id).eq('blockchain_id', targetChainType).maybeSingle();
               if (chainWallet?.address) setResolvedAddress(chainWallet.address);
-              else { setResolvedAddress(''); setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); }
+              else { 
+                setResolvedAddress(''); 
+                setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); 
+              }
             }
-          } else { setResolvedAddress(''); setResolutionError("Identity Node not found in registry."); }
-        } catch (e: any) { if (currentId === resolutionCounter.current) { setResolvedAddress(''); setResolutionError("Handshake failed."); } }
+          } else { 
+            setResolvedAddress(''); 
+            setResolutionError("Identity Node not found in registry."); 
+          }
+        } catch (e: any) { 
+          if (currentId === resolutionCounter.current) { 
+            setResolvedAddress(''); 
+            setResolutionError(e.message === "TIMEOUT" ? "Registry connection timed out. Retrying..." : "Handshake failed."); 
+          } 
+        }
         finally { if (currentId === resolutionCounter.current) setIsResolving(false); }
         return;
       }
@@ -295,6 +322,23 @@ function SendClient() {
     }
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
+
+  /**
+   * RESUME SENTINEL
+   * Re-triggers resolution when user returns to the app from background.
+   */
+  useEffect(() => {
+    const handleFocus = () => {
+      if (recipientInput.length >= 10 && !resolvedAddress && !resolutionError && !isResolving) {
+        // Force a state nudge to re-trigger the effect logic
+        const current = recipientInput;
+        setRecipientInput('');
+        setTimeout(() => setRecipientInput(current), 10);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [recipientInput, resolvedAddress, resolutionError, isResolving]);
 
   const startCamera = async (scanner: Html5Qrcode) => {
     try {

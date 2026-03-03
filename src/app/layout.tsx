@@ -68,7 +68,11 @@ export default function RootLayout({
                   </div>
                   
                   {/* CENTRAL SENTINELS & OVERLAYS */}
-                  <Suspense fallback={null}>
+                  <Suspense fallback={
+                    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#050505]">
+                      <div className="w-12 h-12 rounded-[1.5rem] border-t-2 border-primary animate-spin" />
+                    </div>
+                  }>
                     <GlobalOverlayManager />
                     <NotificationCenter />
                     <RealtimeNotificationListener />
