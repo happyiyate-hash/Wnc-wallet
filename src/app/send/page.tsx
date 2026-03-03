@@ -168,7 +168,6 @@ function SendClient() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const hasInitialized = useRef(false);
   const resolutionCounter = useRef(0);
-  const retryCount = useRef(0);
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -229,7 +228,6 @@ function SendClient() {
   const handleRecipientInputChange = (val: string) => {
     setRecipientInput(val);
     const type = detectAddressType(val);
-    // INSTANT STOP: Spinner only activates if we need to resolve a database Identity (835...)
     if (type === 'account-id') {
         setIsResolving(true);
     } else {
@@ -239,7 +237,6 @@ function SendClient() {
 
   /**
    * ROBUST ADDRESS RESOLVER
-   * Hardened against app resume hangs and network jitter.
    */
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
@@ -276,8 +273,6 @@ function SendClient() {
         
         try {
           if (!supabase) throw new Error("Registry offline.");
-          
-          // CONNECTION GUARD: Race the DB query against a timeout to prevent forever hangs
           const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 10000));
           const queryPromise = supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
           
@@ -325,12 +320,10 @@ function SendClient() {
 
   /**
    * RESUME SENTINEL
-   * Re-triggers resolution when user returns to the app from background.
    */
   useEffect(() => {
     const handleFocus = () => {
       if (recipientInput.length >= 10 && !resolvedAddress && !resolutionError && !isResolving) {
-        // Force a state nudge to re-trigger the effect logic
         const current = recipientInput;
         setRecipientInput('');
         setTimeout(() => setRecipientInput(current), 10);
@@ -400,12 +393,9 @@ function SendClient() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !scannerRef.current) return;
-    
-    // THREAD-SAFE SCANNING: Pause camera to prevent resource collision
     if (scannerRef.current.isScanning) {
         await scannerRef.current.stop().catch(() => {});
     }
-
     try {
       const decodedText = await scannerRef.current.scanFile(file, false);
       handleScanSuccess(decodedText);
@@ -420,7 +410,6 @@ function SendClient() {
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
-        // Universal Ledger Migration: Use transfer_wnc_universal protocol
         const transferAmount = Math.floor(parseFloat(amount));
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
           p_receiver_id: recipientProfile!.id, 
@@ -459,7 +448,10 @@ function SendClient() {
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
-  const hasInsufficientFunds = amountNum > balance;
+  const isWnc = selectedToken?.symbol === 'WNC';
+  const adminFee = isWnc ? 50 : 0;
+  const totalDebit = amountNum + adminFee;
+  const hasInsufficientFunds = totalDebit > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
   return (
@@ -522,8 +514,36 @@ function SendClient() {
             </section>
 
             <div className="space-y-3">
-                <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label><div className="flex items-center gap-2"><span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>Bal: {balance.toFixed(4)} {selectedToken?.symbol}</span><button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button></div></div>
-                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}><div className="flex items-baseline justify-between gap-4"><Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} /><span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span></div><div className="mt-2 text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Funds</span> : <>≈ {formatFiat(amountNum * (selectedToken?.priceUsd || 0))} <span className="opacity-50">Estimated Value</span></>}</div></div>
+                <div className="flex justify-between items-center px-2">
+                  <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>
+                      Bal: {balance.toFixed(2)} {selectedToken?.symbol}
+                    </span>
+                    <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(isWnc ? (balance >= 50 ? (balance - 50).toString() : '0') : balance.toString())}>MAX</button>
+                  </div>
+                </div>
+                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
+                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
+                      {hasInsufficientFunds ? (
+                        <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Fee)</span>
+                      ) : (
+                        <>≈ {formatFiat(amountNum * (selectedToken?.priceUsd || 0))} <span className="opacity-50">Estimated Value</span></>
+                      )}
+                    </div>
+                    {isWnc && (
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                        <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
+                        <span className="text-[9px] font-black text-primary uppercase tracking-widest">Fee: 50 WNC</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
             </div>
           </div>
 
@@ -549,7 +569,7 @@ function SendClient() {
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={selectedToken?.symbol === 'WNC' ? '0.00 WNC' : `${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={selectedToken?.symbol === 'WNC' ? '50 WNC' : `${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
     </div>
   );
 }

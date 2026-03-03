@@ -340,7 +340,12 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const isAlreadyPaid = request.status === 'paid';
   const activeToken = allAssets.find(a => a.symbol === request.token_symbol);
   const userBalance = parseFloat(activeToken?.balance || '0');
-  const hasInsufficientFunds = request.amount > userBalance;
+  
+  // WNC Specific Fee Calculation
+  const isWnc = request.token_symbol === 'WNC';
+  const adminFee = isWnc ? 50 : 0;
+  const totalDebit = request.amount + adminFee;
+  const hasInsufficientFunds = totalDebit > userBalance;
 
   return (
     <>
@@ -384,11 +389,24 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
               </h2>
               <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * (activeToken?.priceUsd || 0))}</p>
 
+              {isWnc && !isAlreadyPaid && (
+                <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 space-y-2 w-full max-w-[280px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black text-white/40 uppercase">Registry Fee</span>
+                    <span className="text-xs font-bold text-primary">50 WNC</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/5 pt-2">
+                    <span className="text-[9px] font-black text-white uppercase">Total Debit</span>
+                    <span className="text-sm font-black text-white">{totalDebit} WNC</span>
+                  </div>
+                </div>
+              )}
+
               {hasInsufficientFunds && (
                 <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 animate-pulse">
                   <AlertCircle className="w-3.5 h-3.5 text-red-500" />
                   <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
-                    Insufficient Balance ({userBalance.toFixed(4)})
+                    Insufficient Balance ({userBalance.toFixed(2)})
                   </span>
                 </div>
               )}
@@ -418,7 +436,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       </motion.div>
 
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={currentUserProfile?.photo_url} recipientName={requester.name} recipientAvatar={requester.photo_url} token={{ symbol: request.token_symbol, iconUrl: activeToken?.iconUrl, chainId: activeToken?.chainId || 1, name: activeToken?.name }} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} txHash={txHash} errorReason={receiptError} fee="Standard" networkName={request.chain_type.toUpperCase()} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} txHash={txHash} errorReason={receiptError} fee={isWnc ? "50 WNC" : "Standard"} networkName={request.chain_type.toUpperCase()} />
     </>
   );
 }
