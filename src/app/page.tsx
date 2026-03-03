@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import WalletTab from '@/components/wallet-tab';
 import WalletHeader from '@/components/wallet/wallet-header';
 import { useUser } from '@/contexts/user-provider';
@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 
-// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
 function HomeContent() {
@@ -24,35 +23,88 @@ function HomeContent() {
     runCloudDiagnostic,
     isInitialized,
     wallets,
-    hasFetchedInitialData
+    hasFetchedInitialData,
+    balances,
+    prices,
+    viewingNetwork,
+    hiddenTokenKeys,
+    userAddedTokens
   } = useWallet();
 
-  const searchParams = useSearchParams();
+  const { profile } = useUser();
+
+  /**
+   * ASSET AGGREGATION PROTOCOL
+   * This is the "Heartbeat" of the dashboard. It computes the final asset list
+   * from balances, prices, and visibility rules.
+   */
+  const allAssets = useMemo(() => {
+    if (!isInitialized) return [];
+
+    const { getInitialAssets } = require('@/lib/wallets/balances');
+    const base = getInitialAssets(viewingNetwork.chainId);
+    const custom = userAddedTokens.filter(t => t.chainId === viewingNetwork.chainId);
+    
+    // Unified registry
+    const registry = [...base, ...custom].reduce((acc, curr) => {
+      const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
+      if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === identifier)) {
+        acc.push(curr);
+      }
+      return acc;
+    }, [] as any[]);
+
+    // 1. Inject WNC (Internal Cloud Node)
+    const wncAsset = {
+      chainId: viewingNetwork.chainId,
+      address: 'internal:wnc',
+      symbol: 'WNC',
+      name: 'Wevinacoin',
+      balance: profile?.wnc_earnings?.toString() || '0',
+      isNative: false,
+      priceUsd: prices['internal:wnc']?.price || 0.0006,
+      fiatValueUsd: (profile?.wnc_earnings || 0) * (prices['internal:wnc']?.price || 0.0006),
+      pctChange24h: prices['internal:wnc']?.change || 0,
+      decimals: 0
+    };
+
+    // 2. Map chain-specific balances and prices
+    const chainBalances = balances[viewingNetwork.chainId] || [];
+    const onChainAssets = registry.map(asset => {
+      const balDoc = chainBalances.find(b => 
+        asset.isNative ? b.symbol === asset.symbol : b.address?.toLowerCase() === asset.address?.toLowerCase()
+      );
+      
+      const priceId = (asset.priceId || asset.coingeckoId || asset.address || '').toLowerCase();
+      const marketData = prices[priceId];
+      const balNum = parseFloat(balDoc?.balance || '0');
+
+      return {
+        ...asset,
+        balance: balDoc?.balance || '0',
+        priceUsd: marketData?.price || 0,
+        fiatValueUsd: balNum * (marketData?.price || 0),
+        pctChange24h: marketData?.change || 0
+      };
+    });
+
+    // 3. Filter and Sort
+    return [wncAsset, ...onChainAssets]
+      .filter(a => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${a.symbol}`))
+      .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
+  }, [isInitialized, viewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
   /**
    * INSTITUTIONAL SYNC CONTROLLER
-   * Gated by Dashboard Mount Lifecycle.
-   * Ensures the audit only starts after the UI has fully stabilized.
    */
   useEffect(() => {
     if (isInitialized && wallets && wallets.length > 0 && hasFetchedInitialData) {
       const timer = setTimeout(() => {
         runCloudDiagnostic();
-      }, 2000); // Deliberate 2s dwell for dashboard readiness
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [isInitialized, wallets, hasFetchedInitialData, runCloudDiagnostic]);
-
-  // Deep Link Interceptor: Check for fulfillment ID in URL or search params
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      const match = path.match(/\/request\/([^\/]+)/);
-      if (match && match[1]) {
-        setActiveFulfillmentId(match[1]);
-      }
-    }
-  }, [setActiveFulfillmentId]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -77,11 +129,10 @@ function HomeContent() {
         (isRequestOverlayOpen || activeFulfillmentId) && "blur-xl scale-95 opacity-50 pointer-events-none"
       )}>
         <div className="w-full mx-auto max-w-4xl pt-4">
-          <WalletTab />
+          <WalletTab computedAssets={allAssets} />
         </div>
       </main>
       
-      {/* GLOBAL P2P OVERLAY MOMENTS */}
       <RequestCreateMoment isOpen={isRequestOverlayOpen} onClose={() => setIsRequestOverlayOpen(false)} />
       {activeFulfillmentId && <RequestReviewMoment requestId={activeFulfillmentId} onClose={() => setActiveFulfillmentId(null)} />}
     </div>

@@ -94,19 +94,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
-  // Sync state with profile data as soon as it becomes available
+  // 1. Initial State Hydration (Safe for SSR)
   useEffect(() => {
-    if (profile?.account_number) {
-      setAccountNumber(profile.account_number);
-      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
-    }
-  }, [profile, user]);
-
-  useEffect(() => {
-    if (!user) {
-      setPrices({}); setBalances({}); setAccountNumber(null); setViewingNetwork(null);
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
     const cachedPrices = localStorage.getItem('cache_prices_global');
     if (cachedPrices) setPrices(JSON.parse(cachedPrices));
@@ -116,39 +106,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const lastNetwork = localStorage.getItem('last_viewing_network');
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
+  }, []);
 
-    const acc = localStorage.getItem(`account_number_${user.id}`);
-    if (acc && !accountNumber) setAccountNumber(acc);
-  }, [user, accountNumber]);
-
+  // 2. Profile Sync
   useEffect(() => {
-    if (viewingNetwork) localStorage.setItem('last_viewing_network', JSON.stringify(viewingNetwork));
-  }, [viewingNetwork]);
-
-  useEffect(() => {
-    if (!viewingNetwork && chainsWithLogos.length > 0) {
-      setViewingNetwork(chainsWithLogos[0]);
+    if (profile?.account_number) {
+      setAccountNumber(profile.account_number);
+      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
     }
-  }, [chainsWithLogos, viewingNetwork]);
+  }, [profile, user]);
 
+  // 3. SECURE BLOCKING INITIALIZATION
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
     
+    // If no user, we are initialized (at the login screen)
     if (!user) {
-      setWallets(null); setIsWalletLoading(false); setIsInitialized(true); setHasFetchedInitialData(true);
+      setWallets(null);
+      setIsWalletLoading(false);
+      setIsInitialized(true);
       return;
     }
 
     try {
+      // Check for local keys
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
+        // DERIVE ALL (BLOCKING)
         const derived = await deriveAllWallets(savedMnemonic, profile);
         setWallets(derived);
-      } else {
-        setWallets(null);
-        setHasFetchedInitialData(true);
       }
 
+      // Load metadata
       const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
       if (localKey) setInfuraApiKey(localKey);
       
@@ -158,10 +147,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
       if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
+      // Mark as initialized so the barrier can yield
       setIsInitialized(true);
     } catch (e) {
       console.error("Initialization Failed:", e);
-      setHasFetchedInitialData(true);
+      setIsInitialized(true); // Yield even on error to show error states
     } finally {
       setIsWalletLoading(false);
     }
@@ -171,6 +161,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [initLocalSession]);
 
+  // Use the engine for price/balance logic
   const { refresh } = useWalletEngine({
     wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, infuraApiKey,
     setPrices: (newPrices) => {
@@ -340,7 +331,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
     setNetwork: setViewingNetwork,
-    allAssets: [], // Placeholder, assets are derived in assetsForCurrentNetwork logic
+    allAssets: [], // Computed elsewhere
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing, wallets, balances, prices, accountNumber,

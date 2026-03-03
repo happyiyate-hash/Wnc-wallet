@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -108,8 +109,8 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   );
 };
 
-export default function WalletTab() {
-  const { wallets, isInitialized, isWalletLoading, allAssets, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen, hasFetchedInitialData } = useWallet();
+export default function WalletTab({ computedAssets }: { computedAssets: AssetRow[] }) {
+  const { wallets, isInitialized, isWalletLoading, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen, hasFetchedInitialData } = useWallet();
   const { formatFiat } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
@@ -133,8 +134,6 @@ export default function WalletTab() {
         if (!currentKey) setIsApiKeySheetOpen(true);
       }, 2000);
       return () => clearTimeout(timer);
-    } else if (infuraApiKey) {
-      setIsApiKeySheetOpen(false);
     }
   }, [isInitialized, isWalletLoading, wallets, infuraApiKey]);
 
@@ -151,10 +150,10 @@ export default function WalletTab() {
   }, [isRefreshing]);
 
   const { totalFiatValue, total24hChange } = useMemo(() => {
-    const totalValue = allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
+    const totalValue = computedAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     let totalValueYesterday = 0;
     
-    for (const asset of allAssets) {
+    for (const asset of computedAssets) {
       const price = asset.priceUsd ?? 0;
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
@@ -167,15 +166,7 @@ export default function WalletTab() {
     
     const delta = totalValueYesterday === 0 ? 0 : ((totalValue - totalValueYesterday) / totalValueYesterday) * 100;
     return { totalFiatValue: totalValue, total24hChange: delta };
-  }, [allAssets]);
-
-  const getBalanceFontSize = (balance: number) => {
-    const s = balance.toLocaleString('en-US', { minimumFractionDigits: 2 });
-    if (s.length > 16) return 'text-xl';
-    if (s.length > 12) return 'text-2xl';
-    if (s.length > 9) return 'text-3xl';
-    return 'text-4xl';
-  };
+  }, [computedAssets]);
 
   const openAction = (type: 'send' | 'receive' | 'swap' | 'request' | 'my-requests') => {
     if (type === 'swap') {
@@ -207,7 +198,6 @@ export default function WalletTab() {
     </div>
   );
 
-  // Hydration safety: render matching skeleton on server and first pass
   if (!hasMounted) {
     return <div className="flex-1 bg-transparent" />;
   }
@@ -218,8 +208,7 @@ export default function WalletTab() {
         <div className="flex items-center justify-between px-6">
             <div className="relative group">
                 <h2 className={cn(
-                  'font-black tracking-tighter text-white transition-opacity',
-                  getBalanceFontSize(Number(totalFiatValue ?? 0)),
+                  'font-black tracking-tighter text-white transition-opacity text-4xl',
                   isRefreshing && "opacity-80"
                 )}>
                   <AnimatedNumber value={totalFiatValue || 0} />
@@ -304,7 +293,7 @@ export default function WalletTab() {
                   )}
 
                   <div className="space-y-0">
-                    {allAssets.map((token) => (
+                    {computedAssets.map((token) => (
                       <TokenRow
                         key={`${token.chainId}-${token.address || token.symbol}`}
                         token={token}
