@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser } from './user-provider';
@@ -15,6 +15,7 @@ import {
   saveVaultToCloud, 
   purgeLocalWalletCache 
 } from '@/lib/wallets/services/wallet-actions';
+import { backgroundSyncWorker, type SyncDiagnostic } from '@/lib/wallets/background-sync-worker';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -53,7 +54,8 @@ interface WalletContextType {
   activeFulfillmentId: string | null;
   setActiveFulfillmentId: (id: string | null) => void;
   hasFetchedInitialData: boolean;
-  syncDiagnostic: any; 
+  syncDiagnostic: SyncDiagnostic;
+  runCloudDiagnostic: (options?: { forceUI?: boolean }) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -82,14 +84,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
-  // AUTOMATIC NETWORK HANDSHAKE
+  const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnostic>({
+    status: 'idle',
+    chain: null,
+    localValue: null,
+    cloudValue: null,
+    progress: 0
+  });
+
+  const lastAuditRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!viewingNetwork && chainsWithLogos.length > 0) {
       setViewingNetwork(chainsWithLogos[0]);
     }
   }, [chainsWithLogos, viewingNetwork]);
 
-  // INITIAL LOAD ENGINE
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -131,7 +141,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [user, authLoading]);
 
-  // ACTIVATE DATA ENGINE
+  // SAFE LOGIC: BACKGROUND SYNC OBSERVER
+  useEffect(() => {
+    if (!isInitialized || !wallets || !user || !accountNumber) return;
+
+    const auditKey = `${user.id}:${wallets[0].address}`;
+    if (lastAuditRef.current === auditKey) return;
+    lastAuditRef.current = auditKey;
+
+    backgroundSyncWorker.performCloudAudit(
+      user.id,
+      wallets,
+      profile,
+      accountNumber,
+      (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
+    ).then(() => {
+        refreshProfile();
+    });
+  }, [isInitialized, wallets, user, accountNumber, profile]);
+
   const { refresh } = useWalletEngine({
     wallets,
     viewingNetwork,
@@ -264,6 +292,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets].filter((asset) => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${asset.symbol}`));
   }, [viewingNetwork, balances, prices, hiddenTokenKeys, getAvailableAssetsForChain, profile?.wnc_earnings]);
 
+  const runCloudDiagnostic = useCallback(async () => {
+    if (!user || !wallets || !accountNumber) return;
+    await backgroundSyncWorker.performCloudAudit(
+      user.id,
+      wallets,
+      profile,
+      accountNumber,
+      (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
+    );
+  }, [user, wallets, accountNumber, profile]);
+
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
@@ -292,12 +331,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     },
     getAvailableAssetsForChain, isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData,
-    syncDiagnostic: { status: 'idle' }
+    syncDiagnostic, runCloudDiagnostic
   }), [
     isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork, assetsForCurrentNetwork,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
-    activeFulfillmentId, hasFetchedInitialData, refresh, generateWallet, importWallet, restoreFromCloud, logout
+    activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, importWallet, restoreFromCloud, logout
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

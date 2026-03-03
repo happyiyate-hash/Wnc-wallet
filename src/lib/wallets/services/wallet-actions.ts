@@ -25,15 +25,31 @@ export async function syncAddressesToCloud(
         evm_address: wallets.find(w => w.type === 'evm')?.address,
         xrp_address: wallets.find(w => w.type === 'xrp')?.address,
         polkadot_address: wallets.find(w => w.type === 'polkadot')?.address,
+        kusama_address: wallets.find(w => w.type === 'kusama')?.address,
         near_address: wallets.find(w => w.type === 'near')?.address,
         solana_address: wallets.find(w => w.type === 'solana')?.address,
         btc_address: wallets.find(w => w.type === 'btc')?.address,
+        ltc_address: wallets.find(w => w.type === 'ltc')?.address,
+        doge_address: wallets.find(w => w.type === 'doge')?.address,
+        cosmos_address: wallets.find(w => w.type === 'cosmos')?.address,
+        osmosis_address: wallets.find(w => w.type === 'osmosis')?.address,
+        secret_address: wallets.find(w => w.type === 'secret')?.address,
+        injective_address: wallets.find(w => w.type === 'injective')?.address,
+        celestia_address: wallets.find(w => w.type === 'celestia')?.address,
+        cardano_address: wallets.find(w => w.type === 'cardano')?.address,
+        tron_address: wallets.find(w => w.type === 'tron')?.address,
+        algorand_address: wallets.find(w => w.type === 'algorand')?.address,
+        hedera_address: wallets.find(w => w.type === 'hedera')?.address,
+        tezos_address: wallets.find(w => w.type === 'tezos')?.address,
+        aptos_address: wallets.find(w => w.type === 'aptos')?.address,
+        sui_address: wallets.find(w => w.type === 'sui')?.address,
       })
       .eq('id', userId);
 
     if (error) throw error;
   } catch (e: any) {
     console.error("Registry Sync Interrupted:", e.message);
+    throw e;
   }
 }
 
