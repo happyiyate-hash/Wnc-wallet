@@ -41,6 +41,7 @@ export const backgroundSyncWorker = {
     await breathe(1000);
 
     // 2. CONSTRUCT AUDIT SEQUENCE (Symbol-Only Branding)
+    // GROUP EVM: All EVM-compatible chains use the same address, so we check them as one "EVM" node.
     const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
     const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
 
@@ -64,7 +65,7 @@ export const backgroundSyncWorker = {
       });
     }
 
-    // Nodes B-Z: Ecosystem-Specific Symbols
+    // Nodes B-Z: Ecosystem-Specific Symbols (BTC, XRP, SOL, etc.)
     nonEvmChains.forEach(c => {
       const localWallet = wallets.find(w => w.type === c.type);
       const fieldName = `${c.type}_address`;
@@ -90,16 +91,16 @@ export const backgroundSyncWorker = {
         progress: (completed / totalSteps) * 100
       });
 
-      // DWELL: Minimum visual time to read addresses
+      // DWELL: Logic breathing time for comparison icon
       await breathe(800);
 
       // PHASE 2: LOGICAL COMPARISON
       const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
 
       if (isMismatch) {
-        // TRIGGER MISMATCH: Visual Alert
+        // TRIGGER MISMATCH: Visual Alert (Red Progress + Spinner)
         onUpdate({ status: 'mismatch' });
-        await breathe(1000); 
+        await breathe(800); 
 
         // REPAIR: Syncing phase (Wait for database confirmation)
         onUpdate({ status: 'syncing' });
@@ -108,7 +109,7 @@ export const backgroundSyncWorker = {
           await syncAddressesToCloud(userId, wallets, accountNumber);
           // UI REFLECTION: Physically update the displayed cloud value to match local
           onUpdate({ cloudValue: node.localAddr });
-          await breathe(800); 
+          await breathe(500); 
         } catch (e) {
           console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
@@ -116,20 +117,20 @@ export const backgroundSyncWorker = {
         }
       }
 
-      // PHASE 3: VERIFIED (Stay for checkmark)
+      // PHASE 3: VERIFIED (Stay for checkmark dwell)
       onUpdate({ status: 'success' });
       await breathe(1000); 
       
       completed++;
       onUpdate({ progress: (completed / totalSteps) * 100 });
       
-      // FINAL SNAP: Wait briefly for transition logic to prepare next chain
+      // FINAL SNAP: Wait briefly for snappy exit transition before next node
       await breathe(200);
     }
 
     // FINAL SUMMARY
     onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
-    await breathe(2000);
+    await breathe(1500);
     onUpdate({ status: 'idle', progress: 0 });
   }
 };
