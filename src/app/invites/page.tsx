@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,10 +17,8 @@ import {
   Cpu,
   Loader2,
   User as UserIcon,
-  ChevronRight,
   HandCoins,
   AlertCircle,
-  ArrowUpRight,
   Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,13 +30,8 @@ import { supabase } from '@/lib/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 
-// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
-/**
- * INSTITUTIONAL GROWTH NODE (AFFILIATE)
- * Visualizes the 100 WNC Escrow Referral Protocol.
- */
 export default function InvitesPage() {
     const router = useRouter();
     const { user, profile, refreshProfile } = useUser();
@@ -51,12 +45,23 @@ export default function InvitesPage() {
     const [isWithdrawing, setIsWithdrawing] = useState(false);
 
     const MIN_WITHDRAWAL = 1000;
-    const escrowBalance = profile?.wnc_referral_escrow || 0;
+
+    /**
+     * DUAL WALLET CALCULATION
+     * Dynamically computes balances from the referrals registry.
+     */
+    const { escrowBalance, completedBalance } = useMemo(() => {
+        const escrow = referrals.reduce((sum, r) => sum + (r.status === 'pending' ? r.reward_amount : 0), 0);
+        const done = referrals.reduce((sum, r) => sum + (r.status === 'credited' ? r.reward_amount : 0), 0);
+        return { escrowBalance: escrow, completedBalance: done };
+    }, [referrals]);
+
     const isEligible = escrowBalance >= MIN_WITHDRAWAL;
 
+    // STABILITY FIX: referralCode is derived from the permanent accountNumber suffix
     const referralCode = useMemo(() => {
         if (!accountNumber) return null;
-        return accountNumber.slice(-6);
+        return accountNumber.slice(-6).toUpperCase();
     }, [accountNumber]);
 
     const shareUrl = useMemo(() => {
@@ -179,7 +184,6 @@ export default function InvitesPage() {
             </header>
 
             <main className="flex-1 p-6 flex flex-col gap-8 max-w-lg mx-auto w-full pb-32 overflow-y-auto thin-scrollbar">
-                {/* CINEMATIC MOVIE CARD */}
                 <section className="relative h-[280px] w-full shrink-0 rounded-[3rem] bg-black/40 backdrop-blur-xl border border-white/10 overflow-hidden shadow-2xl">
                     <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black/80 z-0" />
                     
@@ -225,19 +229,18 @@ export default function InvitesPage() {
                     </div>
                 </section>
 
-                {/* EARNINGS SUMMARY - DUAL BALANCES */}
                 <div className="grid grid-cols-2 gap-3 shrink-0">
                     <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 space-y-1 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/20" />
-                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Pending Escrow</p>
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Growth Escrow</p>
                         <p className="text-2xl font-black text-white tabular-nums">{escrowBalance.toLocaleString()}</p>
-                        <p className="text-[7px] font-black text-amber-500 uppercase tracking-tighter">Growth Lock</p>
+                        <p className="text-[7px] font-black text-amber-500 uppercase tracking-tighter">Handshake Pool</p>
                     </div>
                     <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 blur-2xl -mr-8 -mt-8" />
-                        <p className="text-[9px] font-black text-primary uppercase tracking-widest">Withdrawable</p>
-                        <p className={cn("text-2xl font-black tabular-nums", isEligible ? "text-green-400" : "text-white/40")}>
-                            {isEligible ? escrowBalance.toLocaleString() : "0"}
+                        <p className="text-[9px] font-black text-primary uppercase tracking-widest">Authorized</p>
+                        <p className={cn("text-2xl font-black tabular-nums", completedBalance > 0 ? "text-green-400" : "text-white/40")}>
+                            {completedBalance.toLocaleString()}
                         </p>
                         <div className="flex items-center gap-1">
                             <span className="text-[7px] font-black text-primary uppercase tracking-tighter">Threshold: 1,000 WNC</span>
@@ -246,7 +249,6 @@ export default function InvitesPage() {
                     </div>
                 </div>
 
-                {/* WITHDRAW CONTROL */}
                 <section className="px-2">
                     <Button 
                         onClick={handleWithdraw}
@@ -269,18 +271,17 @@ export default function InvitesPage() {
                         <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start">
                             <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                             <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                Institutional rewards are held in the **Growth Escrow**. To ensure registry integrity, you must reach a minimum of **1,000 WNC** before authorized settlement to your main vault.
+                                Institutional rewards are held in the **Growth Escrow**. Rewards are calculated in real-time from the database registry and move to the settlement pool once verified.
                             </p>
                         </div>
                     )}
                 </section>
 
-                {/* SHARE CONTROL NODE */}
                 <section className="space-y-4 shrink-0">
                     <div className="flex justify-between items-center px-2">
                         <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Node ID & Invitation</p>
                         <div className="flex items-center gap-1.5 text-[8px] font-black text-green-500 uppercase">
-                            <Cpu className="w-2.5 h-2.5 animate-pulse" /> Protocol: Verified
+                            <Cpu className="w-2.5 h-2.5 animate-pulse" /> Registry: Immutable
                         </div>
                     </div>
 
@@ -288,7 +289,7 @@ export default function InvitesPage() {
                         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl -mr-16 -mt-16" />
                         
                         <div className="space-y-2">
-                            <p className="text-[10px] font-black text-white/60 uppercase tracking-widest px-1">Your Registry Code</p>
+                            <p className="text-[10px] font-black text-white/60 uppercase tracking-widest px-1">Your Invitation Code</p>
                             <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
                                 <p className="text-2xl font-mono font-black text-primary tracking-[0.2em]">{referralCode || '------'}</p>
                                 <button 
@@ -312,11 +313,10 @@ export default function InvitesPage() {
                     </div>
                 </section>
 
-                {/* REFERRAL REGISTRY LIST */}
                 <section className="space-y-4">
                     <div className="flex justify-between items-center px-2">
                         <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p>
-                        <span className="text-[8px] font-black text-white/20 uppercase">Registry v3.1</span>
+                        <span className="text-[8px] font-black text-white/20 uppercase">Registry v3.2</span>
                     </div>
 
                     <div className="space-y-2">
@@ -342,11 +342,12 @@ export default function InvitesPage() {
                                                     <UserIcon className="w-5 h-5" />
                                                 </AvatarFallback>
                                             </Avatar>
-                                            {ref.status === 'completed' && (
-                                                <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5 border-2 border-[#050505] shadow-lg">
-                                                    <CheckCircle2 className="w-2.5 h-2.5 text-white" />
-                                                </div>
-                                            )}
+                                            <div className={cn(
+                                                "absolute -bottom-1 -right-1 rounded-full p-0.5 border-2 border-[#050505] shadow-lg",
+                                                ref.status === 'completed' ? "bg-green-500" : "bg-amber-500"
+                                            )}>
+                                                {ref.status === 'completed' ? <CheckCircle2 className="w-2.5 h-2.5 text-white" /> : <Clock className="w-2.5 h-2.5 text-white" />}
+                                            </div>
                                         </div>
                                         <div className="text-left">
                                             <p className="font-black text-sm text-white tracking-tight">@{ref.profile?.name || 'Anonymous Node'}</p>
@@ -365,10 +366,10 @@ export default function InvitesPage() {
                                             "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
                                             ref.status === 'completed' ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500"
                                         )}>
-                                            {ref.status === 'completed' ? 'escrowed' : ref.status}
+                                            {ref.status === 'completed' ? 'verified' : 'escrow'}
                                         </div>
                                         <p className="text-[10px] font-black text-white tabular-nums">
-                                            {ref.status === 'completed' ? `+100 WNC` : 'Pending'}
+                                            +{ref.reward_amount} WNC
                                         </p>
                                     </div>
                                 </motion.div>
@@ -392,10 +393,10 @@ export default function InvitesPage() {
                 <div className="flex flex-col items-center gap-3 pt-4">
                     <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/5">
                         <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Registry Integrity: SECURE</span>
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Handshake Integrity: SECURE</span>
                     </div>
                     <p className="text-[8px] text-white/20 uppercase font-black tracking-widest text-center max-w-[240px] leading-relaxed">
-                        Referral settlement subject to institutional escrow verification protocol v3.2
+                        Identity nodes are established once and anchored permanently to the public registry.
                     </p>
                 </div>
             </main>

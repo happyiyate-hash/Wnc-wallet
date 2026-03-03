@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -93,6 +94,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
+  // Sync state with profile data as soon as it becomes available
+  useEffect(() => {
+    if (profile?.account_number) {
+      setAccountNumber(profile.account_number);
+      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+    }
+  }, [profile, user]);
+
   useEffect(() => {
     if (!user) {
       setPrices({}); setBalances({}); setAccountNumber(null); setViewingNetwork(null);
@@ -109,8 +118,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
 
     const acc = localStorage.getItem(`account_number_${user.id}`);
-    if (acc) setAccountNumber(acc);
-  }, [user]);
+    if (acc && !accountNumber) setAccountNumber(acc);
+  }, [user, accountNumber]);
 
   useEffect(() => {
     if (viewingNetwork) localStorage.setItem('last_viewing_network', JSON.stringify(viewingNetwork));
@@ -198,9 +207,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
-    let targetAcc = accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    
+    // STABILITY FIX: Use existing account number if present, never regenerate
+    let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     await syncAddressesToCloud(user.id, derived, targetAcc);
     return mnemonic;
   }, [user, profile, accountNumber]);
@@ -212,9 +224,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic, profile);
     setWallets(derived);
-    let targetAcc = accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    
+    // STABILITY FIX: Use existing account number if present
+    let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     await syncAddressesToCloud(user.id, derived, targetAcc);
   }, [user, profile, accountNumber]);
 
@@ -313,7 +328,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return;
     }
 
-    // CONCURRENCY & PERSISTENCE GUARD
     if (isAuditRunningRef.current) return;
     
     const auditKey = `audit_done_${user.id}`;
@@ -331,7 +345,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             chainsWithLogos, 
             (u) => {
                 setSyncDiagnostic(p => ({ ...p, ...u }));
-                // Set persistent flag upon successful completion
                 if (u.status === 'completed') {
                     localStorage.setItem(auditKey, 'true');
                 }

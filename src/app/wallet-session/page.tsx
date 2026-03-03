@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -24,7 +25,6 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase/client';
 
-// BUILD FIX: Force dynamic rendering to bypass "ReferenceError: Lock is not defined" during static prerendering
 export const dynamic = 'force-dynamic';
 
 export default function WalletSessionPage() {
@@ -61,6 +61,52 @@ export default function WalletSessionPage() {
     return () => stopTimer();
   }, []);
 
+  /**
+   * INSTITUTIONAL REFERRAL HANDSHAKE
+   * Finalizes the invitation link by creating a permanent entry in the 'referrals' registry.
+   */
+  const finalizeReferral = async (newUserId: string) => {
+    if (!supabase) return;
+    
+    // 1. Capture referral metadata from user account
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const refCode = currentUser?.user_metadata?.referral_code;
+    
+    if (!refCode) return;
+
+    try {
+      // 2. Resolve Referrer Node by Account ID suffix
+      const { data: referrer, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('account_number', `%${refCode}`)
+        .maybeSingle();
+
+      if (fetchErr || !referrer || referrer.id === newUserId) return;
+
+      // 3. Prevent duplicate handshakes
+      const { data: existing } = await supabase
+        .from('referrals')
+        .select('id')
+        .eq('referred_id', newUserId)
+        .maybeSingle();
+
+      if (existing) return;
+
+      // 4. Authorize 100 WNC Escrow Node
+      await supabase.from('referrals').insert({
+        referrer_id: referrer.id,
+        referred_id: newUserId,
+        status: 'pending',
+        reward_amount: 100
+      });
+
+      console.log("[REFERRAL_HANDSHAKE_SUCCESS]");
+    } catch (e) {
+      console.warn("[REFERRAL_HANDSHAKE_FAIL]", e);
+    }
+  };
+
   const finishOnboarding = async () => {
     if (!user || !supabase) {
         router.push('/');
@@ -71,6 +117,10 @@ export default function WalletSessionPage() {
     setStatus('Finalizing Node...');
     
     try {
+      // Step A: Link referral node if applicable
+      await finalizeReferral(user.id);
+
+      // Step B: Mark profile as active in registry
       const { error: dbError } = await supabase
         .from('profiles')
         .upsert({ 
