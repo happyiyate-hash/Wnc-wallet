@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -61,23 +62,19 @@ export default function CloudSyncCard() {
     exit: { y: -15, opacity: 0, transition: { duration: 0.2 } }
   };
 
-  /**
-   * DYNAMIC STATUS EYE
-   * Transforms based on the real-time audit engine state.
-   */
   const renderStatusIcon = () => {
     switch (status) {
       case 'checking':
-        return <Search className="w-5 h-5 text-white/80" />;
+        return <Search className="w-4 h-4 text-white/80" />;
       case 'mismatch':
-        return <AlertCircle className="w-5 h-5 text-red-500 animate-pulse" />;
+        return <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />;
       case 'syncing':
-        return <RefreshCw className="w-5 h-5 text-primary animate-spin" />;
+        return <RefreshCw className="w-4 h-4 text-primary animate-spin" />;
       case 'success':
       case 'completed':
-        return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
       default:
-        return <RefreshCw className="w-5 h-5 text-primary" />;
+        return <RefreshCw className="w-4 h-4 text-primary" />;
     }
   };
 
@@ -98,46 +95,48 @@ export default function CloudSyncCard() {
       )}
     >
       <div className={cn(
-        "backdrop-blur-2xl border rounded-[2.5rem] p-6 shadow-2xl relative overflow-visible transition-colors duration-500",
+        "backdrop-blur-2xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-500",
         isMismatch ? "bg-red-500/10 border-red-500/20" : "bg-[#0a0a0c]/95 border-white/10"
       )}>
         
         {/* HEADER SECTION (Top Side) */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
             <div className={cn(
-              "w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-500",
+              "w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-500",
               (status === 'success' || status === 'completed') ? "bg-green-500/10" : isMismatch ? "bg-red-500/20" : "bg-white/5"
             )}>
               {renderStatusIcon()}
             </div>
             <div className="flex flex-col">
-              <h3 className="text-sm font-black uppercase tracking-widest text-white leading-none">Cloud Sync Node</h3>
-              <div className="flex items-center gap-2 mt-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Hardware Identity Handshake</p>
+              <h3 className="text-xs font-black uppercase tracking-widest text-white leading-none">Cloud Sync Node</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="w-1 h-1 rounded-full bg-primary" />
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Hardware Identity Handshake</p>
               </div>
             </div>
           </div>
           
-          <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
-            <Zap className="w-3.5 h-3.5 text-primary fill-primary" />
-            <span className="text-[10px] font-black uppercase text-white tracking-widest">Vault</span>
+          <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
+            <Zap className="w-3 h-3 text-primary fill-primary" />
+            <span className="text-[9px] font-black uppercase text-white tracking-widest">
+              {chain || 'Vault'}
+            </span>
           </div>
         </div>
 
         {/* PROGRESS SECTION (Middle) */}
-        <div className="space-y-2 mb-8">
+        <div className="space-y-1.5 mb-4">
           <div className="flex justify-between items-center px-1">
             <span className={cn(
-              "text-[10px] font-black uppercase tracking-widest transition-colors duration-300",
+              "text-[9px] font-black uppercase tracking-widest transition-colors duration-300",
               isMismatch ? "text-red-500 animate-pulse" : "text-primary"
             )}>
               Scanning {chain || 'Vault Registry'}...
             </span>
-            <span className="text-[10px] font-black text-white/40 uppercase">{Math.round(progress)}%</span>
+            <span className="text-[9px] font-black text-white/40 uppercase">{Math.round(progress)}%</span>
           </div>
-          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+          <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ 
@@ -150,23 +149,23 @@ export default function CloudSyncCard() {
           </div>
         </div>
 
-        {/* DATA SLOTS (Bottom Cards) */}
+        {/* DATA SLOTS (Bottom Cards) - SLIM MODE (h-14) */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="relative h-20">
+          <div className="relative h-14">
             <AnimatePresence mode="popLayout">
               <motion.div 
                 key={`${chain}-cloud`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-4 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-1"
+                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5"
               >
-                <div className="flex items-center gap-2">
-                  <Database className="w-3 h-3 text-white/40" />
-                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Cloud Registry</span>
+                <div className="flex items-center gap-1.5">
+                  <Database className="w-2.5 h-2.5 text-white/40" />
+                  <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">Cloud Registry</span>
                 </div>
                 <div className="relative inline-block overflow-hidden">
                   <p className={cn(
-                    "text-xs font-mono font-bold transition-colors duration-300",
+                    "text-[10px] font-mono font-bold transition-colors duration-300",
                     isMismatch ? "text-red-400" : "text-white/60"
                   )}>
                     {truncateAddress(cloudValue)}
@@ -183,25 +182,25 @@ export default function CloudSyncCard() {
             </AnimatePresence>
           </div>
 
-          <div className="relative h-20">
+          <div className="relative h-14">
             <AnimatePresence mode="popLayout">
               <motion.div 
                 key={`${chain}-local`}
                 variants={verticalFadeVariants}
                 initial="initial" animate="animate" exit="exit"
-                className="h-full w-full p-4 rounded-2xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-1 relative overflow-visible"
+                className="h-full w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center gap-0.5 relative overflow-visible"
               >
-                <div className="flex items-center gap-2">
-                  <Cpu className="w-3 h-3 text-primary" />
-                  <span className="text-[8px] font-black text-primary uppercase tracking-widest">Local Node</span>
+                <div className="flex items-center gap-1.5">
+                  <Cpu className="w-2.5 h-2.5 text-primary" />
+                  <span className="text-[7px] font-black text-primary uppercase tracking-widest">Local Node</span>
                 </div>
-                <p className="text-xs font-mono font-bold text-white truncate">{truncateAddress(localValue)}</p>
+                <p className="text-[10px] font-mono font-bold text-white truncate">{truncateAddress(localValue)}</p>
 
                 {(status === 'success' || status === 'completed') && (
                   <motion.div 
                     initial={{ scale: 0, rotate: -45 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    className="absolute -top-1.5 -right-1.5 z-20"
+                    className="absolute -top-1 -right-1 z-20"
                   >
                     <div className="bg-black rounded-full p-0.5 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]">
                       <CheckCircle2 className="w-2.5 h-2.5 text-green-500 fill-black" />
