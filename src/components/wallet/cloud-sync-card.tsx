@@ -89,7 +89,7 @@ export default function CloudSyncCard() {
       exit={{ y: -100, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className={cn(
-        "fixed top-12 left-4 right-4 z-[100] max-w-md mx-auto transition-all duration-500",
+        "fixed top-12 left-4 right-4 z-[100] max-w-md mx-auto",
         isManuallyHidden ? "pointer-events-none" : "pointer-events-auto"
       )}
     >
@@ -151,10 +151,10 @@ export default function CloudSyncCard() {
                   <motion.div 
                     initial={{ scale: 0, rotate: -45 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    className="absolute -top-1.5 -right-1.5 z-20"
+                    className="absolute -top-1 -right-1 z-20"
                   >
                     <div className="bg-black rounded-full p-0.5 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 fill-black" />
+                      <CheckCircle2 className="w-2.5 h-2.5 text-green-500 fill-black" />
                     </div>
                   </motion.div>
                 )}

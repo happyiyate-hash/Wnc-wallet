@@ -267,7 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     ];
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
-    await wait(1000);
+    await wait(600);
 
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
@@ -278,7 +278,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = ((i + 1) / (chains.length + 1)) * 100;
 
-      // 1. SCANNING BEAT (Reduced for "Wait" animations)
+      // 1. SCANNING BEAT
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -287,12 +287,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(1200);
+      await wait(600);
 
       // 2. RECONCILIATION BEAT
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(800); 
+        await wait(400); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -300,14 +300,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(1000); 
+        await wait(600); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
       }
 
-      // 3. EXIT WINDOW: Wait for card to be confirmed before "wait" transition clears it
-      await wait(1500);
+      // 3. EXIT WINDOW
+      await wait(800);
     }
 
     setSyncDiagnostic(prev => ({ 
@@ -318,17 +318,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 98 
     }));
-    await wait(1500);
+    await wait(800);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(1500);
+      await wait(800);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 3500);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
   }, [wallets, profile, user, saveToVault]);
 
   const handleReferralHandshake = useCallback(async () => {
