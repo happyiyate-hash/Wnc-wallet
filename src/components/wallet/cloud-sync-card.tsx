@@ -7,6 +7,7 @@ import {
   RefreshCw, 
   Cpu,
   Search,
+  AlertCircle
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
@@ -68,7 +69,7 @@ export default function CloudSyncCard() {
       case 'checking':
         return <Search className="w-4 h-4 text-primary animate-pulse" />;
       case 'mismatch':
-        return <RefreshCw className="w-4 h-4 text-amber-500" />;
+        return <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />;
       case 'syncing':
         return <RefreshCw className="w-4 h-4 text-primary animate-spin" />;
       case 'success':
@@ -78,6 +79,8 @@ export default function CloudSyncCard() {
         return <RefreshCw className="w-4 h-4 text-primary" />;
     }
   };
+
+  const isMismatch = status === 'mismatch';
 
   return (
     <motion.div 
@@ -93,14 +96,17 @@ export default function CloudSyncCard() {
         isManuallyHidden ? "pointer-events-none" : "pointer-events-auto"
       )}
     >
-      <div className="bg-[#0a0a0c]/95 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible">
+      <div className={cn(
+        "backdrop-blur-2xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-500",
+        isMismatch ? "bg-red-500/10 border-red-500/20" : "bg-[#0a0a0c]/95 border-white/10"
+      )}>
         
         {/* Header Section */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className={cn(
               "w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-500",
-              (status === 'success' || status === 'completed') ? "bg-green-500/10" : "bg-primary/20"
+              (status === 'success' || status === 'completed') ? "bg-green-500/10" : isMismatch ? "bg-red-500/20" : "bg-primary/20"
             )}>
               {renderStatusIcon()}
             </div>
@@ -109,7 +115,10 @@ export default function CloudSyncCard() {
               <p className="text-[7px] font-black uppercase text-primary/40 mt-1">Double-tap to hide</p>
             </div>
           </div>
-          <div className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-bold text-primary">
+          <div className={cn(
+            "px-2 py-0.5 rounded-md border text-[9px] font-bold transition-colors duration-500",
+            isMismatch ? "bg-red-500/20 border-red-500/30 text-red-400" : "bg-white/5 border-white/10 text-primary"
+          )}>
             {chain || 'Network'}
           </div>
         </div>
@@ -128,7 +137,21 @@ export default function CloudSyncCard() {
                   <Database className="w-2.5 h-2.5 text-muted-foreground" />
                   <span className="text-[7px] font-bold text-muted-foreground uppercase">Cloud Registry</span>
                 </div>
-                <p className="text-[10px] font-mono text-white/60 truncate">{truncateAddress(cloudValue)}</p>
+                <div className="relative inline-block overflow-hidden">
+                  <p className={cn(
+                    "text-[10px] font-mono transition-colors duration-300",
+                    isMismatch ? "text-red-400" : "text-white/60"
+                  )}>
+                    {truncateAddress(cloudValue)}
+                  </p>
+                  {isMismatch && (
+                    <motion.div 
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-red-500 origin-left"
+                    />
+                  )}
+                </div>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -167,12 +190,18 @@ export default function CloudSyncCard() {
           <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              className="h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]"
+              animate={{ 
+                width: `${progress}%`,
+                backgroundColor: isMismatch ? '#ef4444' : '#8b5cf6' 
+              }}
+              transition={{ duration: 0.3 }}
+              className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
             />
           </div>
           <div className="flex justify-between items-center text-[8px] font-black uppercase text-muted-foreground tracking-tighter">
-            <span className="animate-pulse">{status}</span>
+            <span className={cn("transition-colors duration-300", isMismatch ? "text-red-500 animate-pulse" : "animate-pulse")}>
+              {status}
+            </span>
             <span>{Math.round(progress)}%</span>
           </div>
         </div>

@@ -292,7 +292,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // 2. RECONCILIATION BEAT
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(400); 
+        await wait(800); 
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
         await supabase.rpc('sync_user_wallets', {
@@ -321,6 +321,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await wait(800);
 
     if (!profile?.vault_phrase) {
+      setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
+      await wait(800);
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
       await wait(800);
