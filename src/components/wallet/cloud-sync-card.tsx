@@ -10,8 +10,7 @@ import {
   Cpu, 
   Zap, 
   ShieldCheck,
-  Search,
-  ArrowRight
+  Search
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
@@ -61,7 +60,6 @@ export default function CloudSyncCard() {
       className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto"
     >
       <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
-        {/* Background Animation Node (Scanning Pulse) */}
         <div className="absolute inset-0 pointer-events-none opacity-20">
             <motion.div 
                 animate={{ 
@@ -140,6 +138,7 @@ export default function CloudSyncCard() {
                 <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.8, ease: "easeInOut" }}
                     className={cn(
                         "h-full bg-gradient-to-r transition-colors duration-500",
                         status === 'mismatch' ? "from-red-500 to-orange-500" : "from-primary to-purple-500"
@@ -148,15 +147,16 @@ export default function CloudSyncCard() {
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
-            <motion.div 
-                key={chain}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="grid grid-cols-2 gap-2"
-            >
-                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative">
+          <div className="grid grid-cols-2 gap-2">
+            <AnimatePresence mode="wait">
+                <motion.div 
+                    key={`${chain}-cloud`}
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+                    className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative"
+                >
                     <div className="flex items-center gap-1.5">
                         <Database className="w-2.5 h-2.5 text-muted-foreground" />
                         <span className="text-[7px] font-black text-muted-foreground uppercase">Cloud Registry</span>
@@ -171,11 +171,22 @@ export default function CloudSyncCard() {
                         <motion.div 
                             initial={{ width: 0 }}
                             animate={{ width: '100%' }}
+                            transition={{ duration: 1.5, ease: "linear" }}
                             className="absolute bottom-0 left-0 h-[1px] bg-primary"
                         />
                     )}
-                </div>
-                <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative">
+                </motion.div>
+            </AnimatePresence>
+
+            <AnimatePresence mode="wait">
+                <motion.div 
+                    key={`${chain}-local`}
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+                    className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative"
+                >
                     <div className="flex items-center gap-1.5">
                         <Cpu className="w-2.5 h-2.5 text-primary" />
                         <span className="text-[7px] font-black text-primary uppercase">Local Node</span>
@@ -187,14 +198,15 @@ export default function CloudSyncCard() {
                         <motion.div 
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
+                            transition={{ type: 'spring', bounce: 0.5 }}
                             className="absolute -top-1 -right-1"
                         >
                             <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
                         </motion.div>
                     )}
-                </div>
-            </motion.div>
-          </AnimatePresence>
+                </motion.div>
+            </AnimatePresence>
+          </div>
 
           {status === 'mismatch' && (
             <motion.div 

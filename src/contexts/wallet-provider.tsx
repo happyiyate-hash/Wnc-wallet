@@ -167,10 +167,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
-  /**
-   * ATOMIC REGISTRY SYNC
-   * Ensures Account ID and Derived Addresses are perfectly matched in the Master Cloud.
-   */
   const syncAllAddresses = useCallback(async (providedWallets?: WalletWithMetadata[]) => {
     const currentWallets = providedWallets || wallets;
     if (!user || !supabase) return;
@@ -184,7 +180,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // 1. ATOMIC PROFILE UPDATE: Push Account ID first
       await supabase
         .from('profiles')
         .update({ 
@@ -196,7 +191,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         })
         .eq('id', user.id);
 
-      // 2. WALLET REGISTRY SYNC: Map all derived chains
       if (currentWallets && currentWallets.length > 0) {
         const walletPayload = currentWallets.map(w => ({ type: w.type, address: w.address }));
         await supabase.rpc('sync_user_wallets', {
@@ -249,17 +243,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   /**
-   * THREAD-STABILIZED DIAGNOSTIC ENGINE
-   * Optimized to be non-blocking and flicker-free.
+   * INSTITUTIONAL DIAGNOSTIC SENTINEL
+   * Re-engineered for deliberate, smooth verification steps.
    */
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
-    // SESSION GUARD: Trigger only on new sessions or identity changes
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     if (!options?.forceUI && hasAuditedInThisTabSession && isSynced) return;
 
+    // Slowed down 'wait' utility for smoother visual processing
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
     const chains: { label: string; type: string }[] = [
@@ -274,7 +268,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'checking', progress: 0 }));
 
-    // Fetch cloud state once to prevent repetitive network blocking
     const { data: cloudWallets } = await supabase.from('wallets').select('blockchain_id, address').eq('user_id', user.id);
     const getCloudAddr = (type: string) => cloudWallets?.find(w => w.blockchain_id === type)?.address || null;
 
@@ -284,7 +277,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let cloud = getCloudAddr(chainInfo.type);
       const progress = (i / chains.length) * 100;
 
-      // Update state without blocking
       setSyncDiagnostic(prev => ({ 
         ...prev, 
         chain: chainInfo.label, 
@@ -293,29 +285,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cloudValue: cloud || 'None', 
         progress 
       }));
-      await wait(400); // UI Breathing space
+      
+      // Deliberate pause for user to read/verify
+      await wait(800); 
 
       if (local && local !== cloud) {
         setSyncDiagnostic(prev => ({ ...prev, status: 'mismatch' }));
-        await wait(300);
+        await wait(600);
         setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
         
-        // Push actual update asynchronously
-        supabase.rpc('sync_user_wallets', {
+        await supabase.rpc('sync_user_wallets', {
             p_user_id: user.id,
             p_wallets: [{ type: chainInfo.type, address: local }]
         });
         
-        await wait(500);
+        await wait(1000); // Institutional verification time
         setSyncDiagnostic(prev => ({ ...prev, status: 'success', cloudValue: local }));
-        await wait(300);
+        await wait(600);
       } else {
         setSyncDiagnostic(prev => ({ ...prev, status: 'success' }));
-        await wait(200);
+        await wait(400);
       }
     }
 
-    // Vault Finalization
     setSyncDiagnostic(prev => ({ 
       ...prev, 
       chain: 'Vault', 
@@ -324,20 +316,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       cloudValue: profile?.vault_phrase ? 'Stored' : 'Missing', 
       progress: 95 
     }));
-    await wait(600);
+    await wait(1200);
 
     if (!profile?.vault_phrase) {
       setSyncDiagnostic(prev => ({ ...prev, status: 'syncing' }));
       await saveToVault();
-      await wait(800);
+      await wait(1500);
     }
 
     setSyncDiagnostic(prev => ({ ...prev, status: 'completed', progress: 100 }));
     
-    // Lock session state
     sessionStorage.setItem(`identity_audit_${user.id}`, 'verified');
     setIsSynced(true);
-    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 1500);
+    setTimeout(() => setSyncDiagnostic(prev => ({ ...prev, status: 'idle' })), 2500);
   }, [wallets, profile, user, saveToVault, isSynced]);
 
   const generateWallet = async (): Promise<string> => {
@@ -352,11 +343,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAccountNumber(newId);
         localStorage.setItem(`account_number_${user.id}`, newId);
 
-        // Immediate reactive save
         await saveToVault();
         await syncAllAddresses(derived);
         
-        // Clear session audit to trigger visual re-verification on dashboard
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false); 
     }
@@ -379,7 +368,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await saveToVault();
         await syncAllAddresses(derived);
         
-        // Clear session audit
         sessionStorage.removeItem(`identity_audit_${user.id}`);
         setIsSynced(false);
     }
@@ -631,7 +619,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!hasAuditedInThisTabSession || !isSynced) {
         const timer = setTimeout(() => {
           runCloudDiagnostic();
-        }, 2000); 
+        }, 3000); // 3 second initial delay for dashboard settling
         return () => clearTimeout(timer);
     }
   }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced, pathname]);
