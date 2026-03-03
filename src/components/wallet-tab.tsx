@@ -9,7 +9,7 @@ import {
   Loader2,
   Repeat,
   Sparkles,
-  MoreHorizontal,
+  History,
   AlertCircle,
   ChevronRight,
   Wallet as WalletIcon,
@@ -29,13 +29,12 @@ import { useUser } from '@/contexts/user-provider';
 import { useCurrency } from '@/contexts/currency-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
-import MoreActionsSheet from './wallet/more-actions-sheet';
 import ApiKeyRequestSheet from './wallet/api-key-request-sheet';
 import QuickSwapPanel from './wallet/quick-swap-panel';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import SyncAlertCard from './wallet/sync-alert-card';
-import { motion, useSpring, useTransform, animate } from 'framer-motion';
+import { motion, animate } from 'framer-motion';
 
 const AnimatedNumber = ({ value }: { value: number }) => {
   const [displayValue, setDisplayValue] = useState(value);
@@ -44,7 +43,7 @@ const AnimatedNumber = ({ value }: { value: number }) => {
   useEffect(() => {
     const controls = animate(displayValue, value, {
       duration: 1.2,
-      ease: [0.16, 1, 0.3, 1], // Custom professional cubic-bezier
+      ease: [0.16, 1, 0.3, 1],
       onUpdate: (latest) => setDisplayValue(latest),
     });
     return () => controls.stop();
@@ -131,7 +130,6 @@ export default function WalletTab() {
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const [isQuickSwapOpen, setIsQuickSwapOpen] = useState(false);
   
@@ -194,7 +192,7 @@ export default function WalletTab() {
     return 'text-4xl';
   };
 
-  const openAction = (type: 'send' | 'receive' | 'swap' | 'request') => {
+  const openAction = (type: 'send' | 'receive' | 'swap' | 'request' | 'my-requests') => {
     if (type === 'swap') {
         setIsQuickSwapOpen(true);
         return;
@@ -271,7 +269,7 @@ export default function WalletTab() {
           <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
           <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
           <ActionButton icon={HandCoins} label="Request" onClick={() => openAction('request')} />
-          <ActionButton icon={MoreHorizontal} label="More" onClick={() => setIsMoreActionsOpen(true)} />
+          <ActionButton icon={History} label="My Requests" onClick={() => openAction('my-requests')} />
         </div>
 
         <div className="w-full">
@@ -334,8 +332,6 @@ export default function WalletTab() {
 
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />
       <ApiKeyRequestSheet isOpen={isApiKeySheetOpen} onOpenChange={setIsApiKeySheetOpen} />
-      {user && <NotificationCenter isOpen={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} userId={user.id}/>}
-      <MoreActionsSheet isOpen={isMoreActionsOpen} onOpenChange={setIsMoreActionsOpen} />
       <QuickSwapPanel isOpen={isQuickSwapOpen} onOpenChange={setIsQuickSwapOpen} />
     </div>
   );

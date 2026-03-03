@@ -276,12 +276,11 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       const amountStr = request.amount.toString();
 
       if (request.token_symbol === 'WNC') {
-        // Universal Ledger Migration: Use transfer_wnc_universal for P2P fulfillment
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', {
-            p_receiver_id: requester.id,
-            p_destination_type: 'user',
-            p_amount: Math.floor(request.amount),
-            p_reference: `Request Fulfillment: ${request.id}`
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
+          p_receiver_id: requester.id, 
+          p_destination_type: 'user',
+          p_amount: Math.floor(request.amount),
+          p_reference: `Request Fulfillment: ${request.id}`
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
@@ -347,13 +346,11 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const activeToken = allAssets.find(a => a.symbol === request.token_symbol);
   const userBalance = parseFloat(activeToken?.balance || '0');
   
-  // WNC Specific Fee Calculation
   const isWnc = request.token_symbol === 'WNC';
   const adminFee = isWnc ? 50 : 0;
   const totalDebit = request.amount + adminFee;
   const hasInsufficientFunds = totalDebit > userBalance;
 
-  // Live price lookup for fulfillment display
   const livePrice = useMemo(() => {
     if (!activeToken) return 0;
     const priceId = (activeToken.priceId || activeToken.coingeckoId || activeToken.address || '').toLowerCase();
