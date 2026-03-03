@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -38,7 +39,7 @@
         "id": { "type": "string" },
         "referrer_id": { "type": "string" },
         "referred_id": { "type": "string" },
-        "status": { "enum": ["pending", "credited"], "type": "string" },
+        "status": { "enum": ["pending", "approved", "credited"], "type": "string" },
         "reward_amount": { "type": "number", "default": 100 }
       }
     }

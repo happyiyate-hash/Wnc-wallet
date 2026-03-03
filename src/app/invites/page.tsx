@@ -19,7 +19,8 @@ import {
   User as UserIcon,
   HandCoins,
   AlertCircle,
-  Lock
+  Lock,
+  Activity
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/user-provider';
@@ -50,13 +51,13 @@ export default function InvitesPage() {
      * DUAL WALLET CALCULATION
      * Dynamically computes balances from the referrals registry.
      */
-    const { escrowBalance, completedBalance } = useMemo(() => {
+    const { escrowBalance, authorizedBalance } = useMemo(() => {
         const escrow = referrals.reduce((sum, r) => sum + (r.status === 'pending' ? r.reward_amount : 0), 0);
-        const done = referrals.reduce((sum, r) => sum + (r.status === 'credited' ? r.reward_amount : 0), 0);
-        return { escrowBalance: escrow, completedBalance: done };
+        const approved = referrals.reduce((sum, r) => sum + (r.status === 'approved' ? r.reward_amount : 0), 0);
+        return { escrowBalance: escrow, authorizedBalance: approved };
     }, [referrals]);
 
-    const isEligible = escrowBalance >= MIN_WITHDRAWAL;
+    const isEligible = authorizedBalance >= MIN_WITHDRAWAL;
 
     const referralCode = useMemo(() => {
         if (!accountNumber) return null;
@@ -68,43 +69,43 @@ export default function InvitesPage() {
         return `${window.location.origin}/auth/signup?ref=${referralCode}`;
     }, [referralCode]);
 
-    useEffect(() => {
+    const fetchReferrals = async () => {
         if (!user?.id || !supabase) return;
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase!
+                .from('referrals')
+                .select(`
+                    *,
+                    profile:referred_id (
+                        name,
+                        photo_url,
+                        account_number
+                    )
+                `)
+                .eq('referrer_id', user!.id)
+                .order('created_at', { ascending: false });
 
-        async function fetchReferrals() {
-            setIsLoading(true);
-            try {
-                const { data, error } = await supabase!
-                    .from('referrals')
-                    .select(`
-                        *,
-                        profile:referred_id (
-                            name,
-                            photo_url,
-                            account_number
-                        )
-                    `)
-                    .eq('referrer_id', user!.id)
-                    .order('created_at', { ascending: false });
-
-                if (!error && data) {
-                    setReferrals(data);
-                }
-            } catch (e) {
-                console.error("Referral fetch error:", e);
-            } finally {
-                setIsLoading(false);
+            if (!error && data) {
+                setReferrals(data);
             }
+        } catch (e) {
+            console.error("Referral fetch error:", e);
+        } finally {
+            setIsLoading(false);
         }
+    };
 
+    useEffect(() => {
         fetchReferrals();
     }, [user?.id]);
 
     const handleWithdraw = async () => {
-        if (!isEligible || isWithdrawing) return;
+        if (isWithdrawing) return;
         
         setIsWithdrawing(true);
         try {
+            // This now runs the activity-gated SQL logic
             const { data, error } = await supabase!.rpc('withdraw_referral_bonus', {
                 p_user_id: user?.id
             });
@@ -114,11 +115,13 @@ export default function InvitesPage() {
             if (data.success) {
                 toast({ title: "Settlement Authorized", description: `Transferred ${data.amount} WNC to your main vault.` });
                 await refreshProfile();
-                // Refresh local referral list to reflect updated statuses
-                const { data: refreshed } = await supabase!.from('referrals').select('*, profile:referred_id(name, photo_url, account_number)').eq('referrer_id', user?.id);
-                if (refreshed) setReferrals(refreshed);
+                await fetchReferrals();
             } else {
-                toast({ variant: "destructive", title: "Withdrawal Denied", description: data.message });
+                toast({ 
+                    variant: "destructive", 
+                    title: "Settlement Denied", 
+                    description: data.message 
+                });
             }
         } catch (e: any) {
             toast({ variant: "destructive", title: "Protocol Error", description: e.message });
@@ -136,9 +139,9 @@ export default function InvitesPage() {
 
     const scenes = [
         { title: "Broadcast Identity", desc: "Share your unique Node Invitation with prospective registry members.", icon: Share2, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-        { title: "Registry Handshake", desc: "New nodes join the Wevina Cloud using your cryptographic signature.", icon: Fingerprint, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
-        { title: "Escrow Protocol", desc: "Earnings are held in a secure growth escrow until registry verification.", icon: Clock, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
-        { title: "Registry Settlement", desc: "Claim your 100 WNC rewards once you reach the 1,000 WNC threshold.", icon: Zap, color: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" }
+        { title: "Registry Activity", desc: "Referred users must complete 4 WNC transfers to authorize rewards.", icon: Activity, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
+        { title: "Escrow Protocol", desc: "Earnings are held in a secure growth escrow until activity verification.", icon: Clock, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+        { title: "Registry Settlement", desc: "Claim your 100 WNC rewards once you reach the 1,000 WNC authorized threshold.", icon: Zap, color: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" }
     ];
 
     return (
@@ -175,21 +178,21 @@ export default function InvitesPage() {
                         <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/20" />
                         <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Growth Escrow</p>
                         <p className="text-2xl font-black text-white tabular-nums">{escrowBalance.toLocaleString()}</p>
-                        <p className="text-[7px] font-black text-amber-500 uppercase tracking-tighter">Handshake Pool</p>
+                        <p className="text-[7px] font-black text-amber-500 uppercase tracking-tighter">Waiting for Activity</p>
                     </div>
                     <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/20 space-y-1 relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 blur-2xl -mr-8 -mt-8" />
                         <p className="text-[9px] font-black text-primary uppercase tracking-widest">Authorized</p>
-                        <p className={cn("text-2xl font-black tabular-nums", completedBalance > 0 ? "text-green-400" : "text-white/40")}>{completedBalance.toLocaleString()}</p>
+                        <p className={cn("text-2xl font-black tabular-nums", authorizedBalance > 0 ? "text-green-400" : "text-white/40")}>{authorizedBalance.toLocaleString()}</p>
                         <div className="flex items-center gap-1"><span className="text-[7px] font-black text-primary uppercase tracking-tighter">Threshold: 1,000 WNC</span>{!isEligible && <Lock className="w-2 h-2 text-white/20" />}</div>
                     </div>
                 </div>
 
                 <section className="px-2">
-                    <Button onClick={handleWithdraw} disabled={!isEligible || isWithdrawing} className={cn("w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all shadow-2xl group", isEligible ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-zinc-900 border-zinc-950 opacity-50 cursor-not-allowed")}>
-                        {isWithdrawing ? <Loader2 className="animate-spin w-5 h-5" /> : ( <div className="flex items-center gap-3">{isEligible ? <HandCoins className="w-5 h-5 animate-pulse" /> : <Lock className="w-4 h-4 opacity-40" />}<span>{isEligible ? "Authorize Settlement to Vault" : `Reach ${MIN_WITHDRAWAL} WNC to Withdraw`}</span></div> )}
+                    <Button onClick={handleWithdraw} disabled={isWithdrawing} className={cn("w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all shadow-2xl group", isEligible ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-zinc-900 border-zinc-950 hover:bg-zinc-800")}>
+                        {isWithdrawing ? <Loader2 className="animate-spin w-5 h-5" /> : ( <div className="flex items-center gap-3">{isEligible ? <HandCoins className="w-5 h-5 animate-pulse" /> : <Lock className="w-4 h-4 opacity-40" />}<span>{isEligible ? "Authorize Settlement to Vault" : "Analyze Registry for Rewards"}</span></div> )}
                     </Button>
-                    {!isEligible && ( <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start"><AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" /><p className="text-[10px] text-muted-foreground leading-relaxed">Institutional rewards are held in the **Growth Escrow**. Once the registry totals 1,000 WNC, you can authorize settlement to your main node balance.</p></div> )}
+                    {!isEligible && ( <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start"><AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" /><p className="text-[10px] text-muted-foreground leading-relaxed">Institutional rewards are only authorized after your referred users complete <span className="text-white font-bold">4 WNC transfers</span>. Once authorized nodes total 1,000 WNC, settlement is unlocked.</p></div> )}
                 </section>
 
                 <section className="space-y-4 shrink-0">
@@ -208,18 +211,18 @@ export default function InvitesPage() {
                 </section>
 
                 <section className="space-y-4">
-                    <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p><span className="text-[8px] font-black text-white/20 uppercase">Registry v3.2</span></div>
+                    <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p><span className="text-[8px] font-black text-white/20 uppercase">Registry v4.0</span></div>
                     <div className="space-y-2">
                         {isLoading ? ( <div className="flex flex-col items-center py-10 gap-3 opacity-20"><Loader2 className="w-6 h-6 animate-spin" /><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Nodes...</p></div> ) : referrals.length > 0 ? ( referrals.map((ref, i) => (
                                 <motion.div key={ref.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all shadow-2xl">
                                     <div className="flex items-center gap-4">
                                         <div className="relative">
                                             <Avatar className="w-12 h-12 rounded-2xl border border-white/10"><AvatarImage src={ref.profile?.photo_url} /><AvatarFallback className="bg-zinc-900 text-primary"><UserIcon className="w-5 h-5" /></AvatarFallback></Avatar>
-                                            <div className={cn("absolute -bottom-1 -right-1 rounded-full p-0.5 border-2 border-[#050505] shadow-lg", ref.status === 'credited' ? "bg-green-500" : "bg-amber-500")}>{ref.status === 'credited' ? <CheckCircle2 className="w-2.5 h-2.5 text-white" /> : <Clock className="w-2.5 h-2.5 text-white" />}</div>
+                                            <div className={cn("absolute -bottom-1 -right-1 rounded-full p-0.5 border-2 border-[#050505] shadow-lg", ref.status === 'credited' ? "bg-green-500" : ref.status === 'approved' ? "bg-primary" : "bg-amber-500")}>{ref.status === 'credited' || ref.status === 'approved' ? <CheckCircle2 className="w-2.5 h-2.5 text-white" /> : <Clock className="w-2.5 h-2.5 text-white" />}</div>
                                         </div>
                                         <div className="text-left"><p className="font-black text-sm text-white tracking-tight">@{ref.profile?.name || 'Anonymous Node'}</p><div className="flex items-center gap-1.5 mt-0.5"><span className="text-[8px] font-mono text-muted-foreground uppercase opacity-60">ID: {ref.profile?.account_number?.slice(-6) || '---'}</span><div className="w-1 h-1 rounded-full bg-white/10" /><span className="text-[8px] font-black uppercase text-white/30">{new Date(ref.created_at).toLocaleDateString()}</span></div></div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-1"><div className={cn("px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest", ref.status === 'credited' ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500")}>{ref.status === 'credited' ? 'verified' : 'escrow'}</div><p className="text-[10px] font-black text-white tabular-nums">+{ref.reward_amount} WNC</p></div>
+                                    <div className="flex flex-col items-end gap-1"><div className={cn("px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest", ref.status === 'credited' ? "bg-green-500/10 text-green-500" : ref.status === 'approved' ? "bg-primary/10 text-primary" : "bg-amber-500/10 text-amber-500")}>{ref.status}</div><p className="text-[10px] font-black text-white tabular-nums">+{ref.reward_amount} WNC</p></div>
                                 </motion.div> )) ) : ( <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 opacity-30"><div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center"><Users className="w-8 h-8 text-white" /></div><div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p><p className="text-[9px] font-medium leading-relaxed max-w-[180px]">Broadcast your invitation to expand your institutional registry.</p></div></div> )}
                     </div>
                 </section>
