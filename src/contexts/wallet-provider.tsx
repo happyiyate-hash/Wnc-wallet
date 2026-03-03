@@ -131,7 +131,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initialFetchTriggeredRef = useRef(false);
   const justLoggedInRef = useRef(false);
 
-  // 1. CORE ACTIONS
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
   }, []);
@@ -244,12 +243,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, wallets, syncAllAddresses, refreshProfile]);
 
-  // 2. DIAGNOSTIC NODE
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!wallets || !profile || !user || !supabase) return;
     if (wallets.length === 0) return;
 
     const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
+    
+    // We only show the UI if it's forced (profile button) or if it's the first time in this session
     let isUIMode = options?.forceUI || !hasAuditedInThisTabSession;
 
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -283,6 +283,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       if (local && local !== cloud) {
+        // If mismatch found, we ALWAYS show the UI to notify the user
         if (!isUIMode) {
           isUIMode = true;
           setSyncDiagnostic(prev => ({ ...prev, chain: chainInfo.label, status: 'checking', localValue: local, cloudValue: cloud, progress }));
@@ -330,7 +331,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsSynced(true);
   }, [wallets, profile, user, syncAllAddresses, saveToVault]);
 
-  // 3. PROTOCOL INTERFACES
   const generateWallet = async (): Promise<string> => {
     const mnemonic = (await import('bip39')).generateMnemonic();
     const derived = await deriveAllWallets(mnemonic, profile);
@@ -580,13 +580,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!profile || !user || !wallets || !isInitialized || isWalletLoading) return;
     
-    // INSTITUTIONAL DELAY: Allow the dashboard to settle before starting diagnostic animations
-    const timer = setTimeout(() => {
-      runCloudDiagnostic();
-    }, 2500); 
+    // INSTITUTIONAL LOGIC: Automatic verification triggers ONLY IF:
+    // 1. Audit never run in this tab session (Initial load check)
+    // 2. OR the wallet was just changed/unsynced (Secret phrase update)
+    const hasAuditedInThisTabSession = sessionStorage.getItem(`identity_audit_${user.id}`);
     
-    return () => clearTimeout(timer);
-  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic]);
+    if (!hasAuditedInThisTabSession || !isSynced) {
+        const timer = setTimeout(() => {
+          runCloudDiagnostic();
+        }, 2500); 
+        return () => clearTimeout(timer);
+    }
+  }, [profile, user, wallets, isInitialized, isWalletLoading, runCloudDiagnostic, isSynced]);
 
   useEffect(() => {
     if (!supabase) return;

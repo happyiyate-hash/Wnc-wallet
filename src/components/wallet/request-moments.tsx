@@ -218,8 +218,8 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
             </AnimatePresence>
           </div>
         </motion.div>
-        <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
       </motion.div>
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(t) => setSelectedToken(t)} />
     </>
   );
 }
