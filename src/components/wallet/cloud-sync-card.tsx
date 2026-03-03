@@ -18,17 +18,14 @@ export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
   
-  // PEEK STATE: Allows user to hide/show the banner during scan
   const [isManuallyHidden, setIsManuallyHidden] = useState(false);
   const lastTapRef = useRef<number>(0);
 
   useEffect(() => {
-    // 1. DESKTOP HANDSHAKE (Double Click)
     const handleDblClick = () => {
       setIsManuallyHidden(prev => !prev);
     };
 
-    // 2. MOBILE HANDSHAKE (Double Tap)
     const handleTouchStart = () => {
       const now = Date.now();
       const DOUBLE_TAP_DELAY = 300;
@@ -55,10 +52,11 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+  // SMOTHED TRANSITIONS: Increased spring damping and slightly longer durations
   const verticalFadeVariants = {
     initial: { y: 15, opacity: 0 },
-    animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 20, stiffness: 200 } },
-    exit: { y: -15, opacity: 0, transition: { duration: 0.2 } }
+    animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 150 } },
+    exit: { y: -15, opacity: 0, transition: { duration: 0.4 } }
   };
 
   const renderStatusIcon = () => {
@@ -87,22 +85,21 @@ export default function CloudSyncCard() {
         opacity: isManuallyHidden ? 0 : 1 
       }}
       exit={{ y: -100, opacity: 0 }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      transition={{ type: 'spring', damping: 30, stiffness: 150 }}
       className={cn(
         "fixed top-4 left-4 right-4 z-[100] max-w-lg mx-auto",
         isManuallyHidden ? "pointer-events-none" : "pointer-events-auto"
       )}
     >
       <div className={cn(
-        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-500",
+        "backdrop-blur-3xl border rounded-[1.5rem] p-4 shadow-2xl relative overflow-visible transition-colors duration-700",
         isMismatch ? "bg-red-500/10 border-red-500/20" : "bg-[#0a0a0c]/95 border-white/10"
       )}>
         
-        {/* SLIM HEADER SECTION */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-500",
+              "w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-700",
               (status === 'success' || status === 'completed') ? "bg-green-500/10" : isMismatch ? "bg-red-500/20" : "bg-white/5"
             )}>
               {renderStatusIcon()}
@@ -121,7 +118,6 @@ export default function CloudSyncCard() {
           </div>
         </div>
 
-        {/* DATA SLOTS: SIDE-BY-SIDE SLIM CARDS */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="relative h-14">
             <AnimatePresence mode="wait">
@@ -137,20 +133,19 @@ export default function CloudSyncCard() {
                 </div>
                 <div className="relative inline-block">
                   <p className={cn(
-                    "text-[10px] font-mono font-bold transition-colors duration-300",
+                    "text-[10px] font-mono font-bold transition-colors duration-500",
                     isMismatch ? "text-red-400" : "text-white/60"
                   )}>
                     {truncateAddress(cloudValue)}
                   </p>
                   
-                  {/* RED STRIKETHROUGH LINE */}
                   <AnimatePresence>
                     {isMismatch && (
                       <motion.div 
                         initial={{ scaleX: 0 }}
                         animate={{ scaleX: 1 }}
                         exit={{ scaleX: 0 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        transition={{ duration: 0.5, ease: "easeInOut" }}
                         className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-red-500 origin-left z-10"
                       />
                     )}
@@ -174,11 +169,11 @@ export default function CloudSyncCard() {
                 </div>
                 <p className="text-[10px] font-mono font-bold text-white truncate">{truncateAddress(localValue)}</p>
 
-                {/* PREMIUM CORNER BADGE */}
                 {(status === 'success' || status === 'completed') && (
                   <motion.div 
                     initial={{ scale: 0, rotate: -45 }}
                     animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                     className="absolute -top-1 -right-1 z-20"
                   >
                     <div className="bg-black rounded-full p-0.5 border border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]">
@@ -191,7 +186,6 @@ export default function CloudSyncCard() {
           </div>
         </div>
 
-        {/* PROGRESS SYSTEM */}
         <div className="space-y-1.5">
           <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div 
@@ -200,13 +194,13 @@ export default function CloudSyncCard() {
                 width: `${progress}%`,
                 backgroundColor: isMismatch ? '#ef4444' : '#8b5cf6' 
               }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.6 }} // Slower, smoother progress bar
               className="h-full shadow-[0_0_8px_rgba(var(--primary),0.5)]"
             />
           </div>
           <div className="flex justify-between items-center px-1">
             <span className={cn(
-              "text-[8px] font-black uppercase tracking-widest transition-colors duration-300",
+              "text-[8px] font-black uppercase tracking-widest transition-colors duration-500",
               isMismatch ? "text-red-500" : "text-muted-foreground"
             )}>
               {isMismatch ? 'REGISTRY MISMATCH DETECTED' : status}
