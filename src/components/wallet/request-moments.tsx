@@ -270,10 +270,12 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       const amountStr = request.amount.toString();
 
       if (request.token_symbol === 'WNC') {
-        // FIX: Integer casting for WNC settlement to resolve ambiguity
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', {
-            p_recipient_id: requester.id,
-            p_amount: Math.floor(request.amount)
+        // Universal Ledger Migration: Use transfer_wnc_universal for P2P fulfillment
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', {
+            p_receiver_id: requester.id,
+            p_destination_type: 'user',
+            p_amount: Math.floor(request.amount),
+            p_reference: `Request Fulfillment: ${request.id}`
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");

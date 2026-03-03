@@ -376,11 +376,13 @@ function SendClient() {
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
-        // REGISTRY AMBIGUITY RESOLUTION: Explicit integer settlement
+        // Universal Ledger Migration: Use transfer_wnc_universal protocol
         const transferAmount = Math.floor(parseFloat(amount));
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc', { 
-          p_recipient_id: recipientProfile!.id, 
-          p_amount: transferAmount 
+        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
+          p_receiver_id: recipientProfile!.id, 
+          p_destination_type: 'user',
+          p_amount: transferAmount,
+          p_reference: `Institutional P2P Transfer: ${transferAmount} WNC`
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
