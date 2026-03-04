@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -78,7 +79,20 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  useEffect(() => { if (!selectedToken && allAssets.length > 0) setSelectedToken(allAssets[0]); }, [allAssets, selectedToken]);
+  // FIX: Hooks must always be called in the same order. 
+  // Calculating price before early returns.
+  const livePrice = useMemo(() => {
+    if (!selectedToken || !prices) return 0;
+    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
+    if (selectedToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
+    return prices[priceId]?.price || selectedToken.priceUsd || 0;
+  }, [selectedToken, prices]);
+
+  const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
+
+  useEffect(() => { 
+    if (!selectedToken && allAssets.length > 0) setSelectedToken(allAssets[0]); 
+  }, [allAssets, selectedToken]);
 
   const handleGenerate = async () => {
     if (!user || !selectedToken || !accountNumber || !supabase) {
@@ -119,22 +133,6 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
     }
   };
 
-  const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
-
-  const livePrice = useMemo(() => {
-    if (!selectedToken || !prices) return 0;
-    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
-    // Special handling for internal assets if they aren't in the global prices object yet
-    if (selectedToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
-    return prices[priceId]?.price || selectedToken.priceUsd || 0;
-  }, [selectedToken, prices]);
-
-  const cardVariants = {
-    initial: { y: "100%", opacity: 0 },
-    animate: { y: 0, opacity: 1 },
-    exit: { y: "100%", opacity: 0 }
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -144,7 +142,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
         className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4 md:items-center"
       >
         <motion.div 
-          variants={cardVariants} initial="initial" animate="animate" exit="exit" transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl relative"
         >
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
@@ -213,7 +211,8 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
 
                   <div className="w-full space-y-3">
                     <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
-                      <div className="flex items-center gap-3 overflow-hidden">                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
                         <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
                       </div>
                       <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
@@ -250,6 +249,19 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [receiptError, setReceiptError] = useState('');
+
+  // FIX: Hooks must be at the top level. Move useMemo before early returns.
+  const activeToken = useMemo(() => {
+    if (!request) return null;
+    return allAssets.find(a => a.symbol === request.token_symbol) || null;
+  }, [request, allAssets]);
+
+  const livePrice = useMemo(() => {
+    if (!activeToken || !prices) return 0;
+    const priceId = (activeToken.priceId || activeToken.coingeckoId || activeToken.address || '').toLowerCase();
+    if (activeToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
+    return prices[priceId]?.price || activeToken.priceUsd || 0;
+  }, [activeToken, prices]);
 
   useEffect(() => {
     async function fetchRequest() {
@@ -344,20 +356,12 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   if (!request || !requester) return null;
 
   const isAlreadyPaid = request.status === 'paid';
-  const activeToken = allAssets.find(a => a.symbol === request.token_symbol);
   const userBalance = parseFloat(activeToken?.balance || '0');
   
   const isWnc = request.token_symbol === 'WNC';
   const adminFee = isWnc ? 50 : 0;
   const totalDebit = request.amount + adminFee;
   const hasInsufficientFunds = totalDebit > userBalance;
-
-  const livePrice = useMemo(() => {
-    if (!activeToken || !prices) return 0;
-    const priceId = (activeToken.priceId || activeToken.coingeckoId || activeToken.address || '').toLowerCase();
-    if (activeToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
-    return prices[priceId]?.price || activeToken.priceUsd || 0;
-  }, [activeToken, prices]);
 
   return (
     <>
