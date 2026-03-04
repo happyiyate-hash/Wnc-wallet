@@ -8,7 +8,8 @@ import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE
- * Orchestrates periodic market and balance synchronization without circular dependencies.
+ * Orchestrates periodic market and balance synchronization.
+ * Triggers on initial load, network switch, and every 30s interval.
  */
 export function useWalletEngine({
   wallets,
@@ -39,13 +40,15 @@ export function useWalletEngine({
   const isRunningRef = useRef(false);
 
   const startEngine = useCallback(async () => {
-    if (!wallets || !viewingNetwork || !user || isRunningRef.current) return;
+    // PRE-FLIGHT GUARD
+    if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRunningRef.current) return;
     
     isRunningRef.current = true;
     setIsRefreshing(true);
     
     try {
       // 1. Fetch Market Prices (Global)
+      // This includes the deterministic WNC price lookup
       const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, {});
       setPrices(newPrices);
       
@@ -62,25 +65,33 @@ export function useWalletEngine({
         [viewingNetwork.chainId]: currentBalances 
       }));
       
+      // 3. Mark Initial Synchronization as Complete
+      // This signals the GlobalLoadingBarrier to drop
       setHasFetchedInitialData(true);
     } catch (e) {
-      console.warn("Market Sync Advisory:", e);
+      console.warn("[ENGINE_ADVISORY] Market synchronization interrupted:", e);
     } finally { 
       setIsRefreshing(false); 
       isRunningRef.current = false;
     }
   }, [wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, infuraApiKey, setPrices, setBalances, setIsRefreshing, setHasFetchedInitialData]);
 
-  // Initial and Network Switch Trigger
+  /**
+   * INITIAL & REACTIVE TRIGGER
+   * Fires on: Network Switch, Wallet Derivation, or User Session Re-init.
+   */
   useEffect(() => {
-    if (wallets && viewingNetwork && user) {
+    if (wallets && wallets.length > 0 && viewingNetwork && user) {
       startEngine();
     }
-  }, [viewingNetwork?.chainId, wallets === null, user?.id]);
+  }, [viewingNetwork?.chainId, wallets === null, user?.id, startEngine]);
 
-  // Periodic Refresh Loop (30s)
+  /**
+   * PERIODIC REFRESH LOOP (30s)
+   * Ensures terminal registry stays synchronized with live chain data.
+   */
   useEffect(() => {
-    if (wallets && viewingNetwork && user) {
+    if (wallets && wallets.length > 0 && viewingNetwork && user) {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
       refreshIntervalRef.current = setInterval(startEngine, 30000);
     }

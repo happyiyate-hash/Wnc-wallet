@@ -7,11 +7,12 @@ import { useWallet } from '@/contexts/wallet-provider';
 
 /**
  * GLOBAL LOADING BARRIER (Institutional Gate)
- * Hardened to ensure the UI remains blocked until all cryptographic nodes are ready.
+ * Hardened to ensure the UI remains blocked until all cryptographic
+ * AND data nodes (balances/prices) are fully synchronized.
  */
 export default function GlobalLoadingBarrier() {
-  const { loading: authLoading } = useUser();
-  const { isInitialized, isWalletLoading } = useWallet();
+  const { user, loading: authLoading } = useUser();
+  const { isInitialized, wallets, hasFetchedInitialData } = useWallet();
   const [hasMounted, setHasMounted] = useState(false);
   
   useEffect(() => {
@@ -19,9 +20,20 @@ export default function GlobalLoadingBarrier() {
   }, []);
 
   // BLOCKING LOGIC:
-  // We wait until the component has mounted AND the wallet provider signals completion.
-  // This prevents the "empty UI" flicker and hydration mismatches.
-  const isAppReady = hasMounted && isInitialized && !authLoading;
+  // 1. Wait for component mounting
+  // 2. Wait for Auth Session resolution
+  // 3. Wait for Wallet Provider internal initialization (derivation)
+  // 4. If logged in + has wallet: Wait for initial balance/price handshake
+  
+  const isAuthResolved = !authLoading;
+  const isWalletResolved = isInitialized;
+  const hasWallet = wallets && wallets.length > 0;
+  
+  // Data Resolve Rule: If user has a wallet, we MUST wait for the first data burst.
+  // Otherwise (login or setup screen), we don't wait for balances.
+  const isDataResolved = !user || !hasWallet || hasFetchedInitialData;
+
+  const isAppReady = hasMounted && isAuthResolved && isWalletResolved && isDataResolved;
 
   if (!isAppReady) {
     return (
@@ -45,7 +57,9 @@ export default function GlobalLoadingBarrier() {
               <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
             </div>
             <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] animate-pulse">
-              Deriving Secure Nodes...
+              {!isAuthResolved ? 'Verifying Identity...' : 
+               !isWalletResolved ? 'Deriving Secure Nodes...' : 
+               'Synchronizing Registry...'}
             </p>
           </div>
         </div>
