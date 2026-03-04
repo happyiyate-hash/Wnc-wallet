@@ -18,6 +18,7 @@ import {
 import { backgroundSyncWorker, type SyncDiagnostic } from '@/lib/wallets/background-sync-worker';
 import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -66,6 +67,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { toast } = useToast();
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
   const { user, loading: authLoading, profile, refreshProfile, signOut: authSignOut } = useUser();
   const { rates } = useCurrency();
@@ -94,16 +96,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
-  // 1. Initial State Hydration (Safe for SSR)
+  // 1. Initial State Hydration
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     const cachedPrices = localStorage.getItem('cache_prices_global');
     if (cachedPrices) setPrices(JSON.parse(cachedPrices));
-
     const cachedBalances = localStorage.getItem('cache_balances_all');
     if (cachedBalances) setBalances(JSON.parse(cachedBalances));
-
     const lastNetwork = localStorage.getItem('last_viewing_network');
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
@@ -119,7 +118,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // 3. SECURE BLOCKING INITIALIZATION
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
-    
     if (!user) {
       setWallets(null);
       setIsWalletLoading(false);
@@ -236,25 +234,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
-    if (!user || !profile?.vault_phrase) throw new Error("No cloud backup found");
-    onStatusUpdate?.('Restoring Vault...');
+    if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) {
+      throw new Error("No cloud backup detected.");
+    }
+
     const { data: { session } } = await supabase!.auth.getSession();
-    const res = await fetch('/api/wallet/decrypt-phrase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
-    });
-    const { phrase } = await res.json();
-    if (phrase) {
-      localStorage.setItem(`wallet_mnemonic_${user.id}`, phrase);
-      const derived = await deriveAllWallets(phrase, profile);
-      setWallets(derived);
-      if (profile.account_number) {
-          setAccountNumber(profile.account_number);
-          localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+    if (!session) throw new Error("Authentication session missing.");
+
+    // 1. RESTORE MNEMONIC
+    if (profile?.vault_phrase && profile?.iv) {
+      onStatusUpdate?.('Restoring Vault Registry...');
+      const res = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+      });
+      const data = await res.json();
+      if (data.phrase) {
+        localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
+        const derived = await deriveAllWallets(data.phrase, profile);
+        setWallets(derived);
       }
     }
-  }, [user, profile]);
+
+    // 2. RESTORE API KEY (RPC NODE)
+    if (profile?.vault_infura_key && profile?.infura_iv) {
+      onStatusUpdate?.('Synchronizing RPC Nodes...');
+      const res = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+      });
+      const data = await res.json();
+      if (data.phrase) {
+        setInfuraApiKey(data.phrase);
+        localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
+      }
+    }
+
+    await refreshProfile();
+    toast({ title: "Node Synchronized", description: "Successfully restored all encrypted vault credentials." });
+  }, [user, profile, refreshProfile, toast]);
 
   const deleteWallet = useCallback(async () => {
     if (user) {
@@ -271,8 +291,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
+    
     try {
-        await supabase.from('profiles').update({
+        // PHASE 1: Destroy Cloud Registry
+        const { error: dbError } = await supabase.from('profiles').update({
             vault_phrase: null,
             iv: null,
             vault_infura_key: null,
@@ -282,15 +304,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             polkadot_address: null,
             near_address: null,
             solana_address: null,
+            btc_address: null,
+            ltc_address: null,
+            doge_address: null,
+            cosmos_address: null,
+            osmosis_address: null,
+            secret_address: null,
+            injective_address: null,
+            celestia_address: null,
+            cardano_address: null,
+            tron_address: null,
+            algorand_address: null,
+            hedera_address: null,
+            tezos_address: null,
+            aptos_address: null,
+            sui_address: null,
             account_number: null,
             onboarding_completed: false
         }).eq('id', user.id);
+
+        if (dbError) throw dbError;
+
+        // PHASE 2: Purge Local Node
+        setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
+        purgeLocalWalletCache(user.id);
+        setWallets(null);
+        setAccountNumber(null);
+        setBalances({});
+        setInfuraApiKey(null);
+        setPrices({});
+        setHasFetchedInitialData(true);
+        
         await refreshProfile();
-        await deleteWallet();
-    } catch (e) {
+        router.replace('/wallet-session');
+        
+        toast({ title: "Vault Destroyed", description: "All local and cloud registry data has been permanently purged." });
+    } catch (e: any) {
         console.error("PERMANENT_DELETE_FAIL:", e);
+        toast({ variant: "destructive", title: "Destruction Error", description: e.message });
     }
-  }, [user, deleteWallet, refreshProfile]);
+  }, [user, refreshProfile, router, toast]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
