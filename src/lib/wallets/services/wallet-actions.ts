@@ -1,3 +1,4 @@
+
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -78,28 +79,39 @@ export async function saveVaultToCloud(userId: string, mnemonic: string) {
   }
 }
 
+/**
+ * ENCRYPTED RPC NODE SYNC
+ * Secures the Infura API key in the cloud registry using the institutional encryption protocol.
+ */
 export async function saveInfuraToCloud(userId: string, apiKey: string) {
   if (!supabase) return;
   try {
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
     const res = await fetch('/api/wallet/encrypt-phrase', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${session?.access_token}` 
+        'Authorization': `Bearer ${session.access_token}` 
       },
       body: JSON.stringify({ text: apiKey })
     });
     
     if (res.ok) {
       const data = await res.json();
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         vault_infura_key: data.encrypted,
         infura_iv: data.iv
       }).eq('id', userId);
+      
+      if (error) throw error;
+    } else {
+      throw new Error("ENCRYPTION_SERVICE_REJECTED");
     }
   } catch (e) {
     console.error("Infura Backup Advisory:", e);
+    throw e;
   }
 }
 
@@ -115,7 +127,6 @@ export function purgeLocalWalletCache(userId: string) {
   ];
   keys.forEach(key => {
     localStorage.removeItem(`${key}_${userId}`);
-    // Also remove global keys to prevent any leakage
     localStorage.removeItem(key);
   });
 }

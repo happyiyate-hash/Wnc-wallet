@@ -110,8 +110,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * STAGE-ISOLATED INITIALIZATION
-   * Hardened to run exactly once per login session.
-   * Includes a fail-fast timeout for crypto derivation.
    */
   useEffect(() => {
     if (authLoading) return;
@@ -125,11 +123,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const runInit = async () => {
       try {
-        console.log("[WALLET_INIT] Establishing secure nodes...");
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         
         if (savedMnemonic) {
-          // 8-second fail-fast for derivation (protects against chunk loading hangs)
           const derived = await Promise.race([
             deriveAllWallets(savedMnemonic),
             new Promise<WalletWithMetadata[]>((_, reject) => 
@@ -151,7 +147,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setIsInitialized(true);
       } catch (e: any) {
         console.warn("[WALLET_INIT_ADVISORY]", e.message);
-        setIsInitialized(true); // Always flip to true to prevent infinite loading screen
+        setIsInitialized(true);
       } finally {
         setIsWalletLoading(false);
       }
@@ -194,26 +190,37 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  /**
-   * FORCE REFRESH PROTOCOL
-   * Ensures that the first data handshake triggers immediately after wallets are set.
-   */
   useEffect(() => {
     if (wallets && wallets.length > 0 && isInitialized && !isWalletLoading) {
       refresh();
     }
   }, [wallets, isInitialized, isWalletLoading, refresh]);
 
+  /**
+   * ATOMIC RPC REGISTRY UPDATE
+   * Encrypts and synchronizes Infura keys to the cloud before initializing local session.
+   */
   const updateInfuraKey = useCallback(async (key: string | null) => {
     if (!user) return;
+    
+    // 1. Instant UI Reflection
     setInfuraApiKey(key);
+    
     if (key) {
-      localStorage.setItem(`infura_api_key_${user.id}`, key);
-      await saveInfuraToCloud(user.id, key);
+      // 2. Encryption Handshake & Cloud Commit (Registry Node Update)
+      try {
+        await saveInfuraToCloud(user.id, key);
+        // 3. Hardware Persistence
+        localStorage.setItem(`infura_api_key_${user.id}`, key);
+        toast({ title: "RPC Registry Secured", description: "Node keys synchronized with encrypted vault." });
+      } catch (e) {
+        console.error("RPC_SYNC_FAIL:", e);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not synchronize RPC keys to cloud." });
+      }
     } else {
       localStorage.removeItem(`infura_api_key_${user.id}`);
     }
-  }, [user?.id]);
+  }, [user?.id, toast]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const { getInitialAssets } = require('@/lib/wallets/balances');
@@ -267,6 +274,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (mnemonic) await saveVaultToCloud(user.id, mnemonic);
   }, [user?.id]);
 
+  /**
+   * UNIFIED CLOUD RECOVERY
+   * Synchronizes both the Secret Phrase and RPC Nodes from the encrypted cloud vault.
+   */
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) {
       throw new Error("No cloud backup detected.");
@@ -275,6 +286,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication session missing.");
 
+    // NODE A: Mnemonic Discovery
     if (profile?.vault_phrase && profile?.iv) {
       onStatusUpdate?.('Restoring Vault Registry...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -290,6 +302,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // NODE B: RPC Discovery (Infura)
     if (profile?.vault_infura_key && profile?.infura_iv) {
       onStatusUpdate?.('Synchronizing RPC Nodes...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -304,7 +317,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    toast({ title: "Node Synchronized", description: "Vault credentials restored." });
+    toast({ title: "Node Synchronized", description: "All vault and RPC credentials restored." });
   }, [user?.id, profile, toast]);
 
   const deleteWallet = useCallback(async () => {
