@@ -119,7 +119,13 @@ export default function ProfilePage() {
             }
         } catch (e: any) {
             console.error("REDEMPTION_FAIL:", e);
-            setRedeemResult({ success: false, message: "Registry connection failed. Try again." });
+            // SURFACE THE REAL ERROR FROM THE REGISTRY
+            setRedeemResult({ 
+                success: false, 
+                message: e.message?.includes('not exist') 
+                    ? "Registry Error: Redemption Protocol not installed in Supabase." 
+                    : (e.message || "Registry connection failed. Try again.")
+            });
         } finally {
             setIsRedeeming(false);
         }
