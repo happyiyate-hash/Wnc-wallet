@@ -15,9 +15,9 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL SYNC OVERLAY
- * Re-engineered for Decoupled Horizontal Swipe architecture.
- * Features standalone hardware cards for the status header and registry nodes.
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL
+ * Implements Physical Card Swiping: The entire card container moves, not just the text.
+ * Decoupled Architecture: Independent slots for Cloud and Local nodes with zero-clipping overlays.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -52,21 +52,21 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // SNAP-SWIPE CONFIG: Horizontal entry from right, exit to left
+  // PHYSICAL SWIPE CONFIG: The entire card container slides horizontally
   const swipeVariants = {
-    initial: { x: '100%', opacity: 0 },
+    initial: { x: '110%', opacity: 0 },
     animate: { x: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 150 } },
-    exit: { x: '-100%', opacity: 0, transition: { duration: 0.3, ease: "easeIn" } }
+    exit: { x: '-110%', opacity: 0, transition: { duration: 0.3, ease: "easeInOut" } }
   };
 
   return (
     <div className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto flex flex-col gap-3 pointer-events-none">
       
-      {/* 1. STATUS HEADER CARD (MISSION CONTROL) */}
+      {/* 1. MASTER ANALYSIS CARD (MISSION CONTROL) */}
       <motion.div 
-        initial={{ y: -50, opacity: 0 }}
+        initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: -50, opacity: 0 }}
+        exit={{ y: -100, opacity: 0 }}
         className="bg-[#0a0a0c]/95 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl relative overflow-hidden pointer-events-auto"
       >
         <div className="absolute inset-0 pointer-events-none opacity-10">
@@ -96,7 +96,7 @@ export default function CloudSyncCard() {
             </div>
             
             {chain && (
-                <div className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-inner">
+                <div className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full flex items-center gap-2">
                     <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
                     <span className="text-[10px] font-black text-white">{chain}</span>
                 </div>
@@ -106,15 +106,15 @@ export default function CloudSyncCard() {
           <div className="space-y-3">
             <div className="flex justify-between items-center px-1">
                 <span className={cn("text-[10px] font-black uppercase tracking-widest", getStatusColor())}>
-                    {status === 'checking' && `Scanning Registry...`}
+                    {status === 'checking' && `Scanning ${chain} Registry...`}
                     {status === 'mismatch' && 'Registry mismatch'}
                     {status === 'syncing' && 'Reconciling Nodes...'}
                     {status === 'success' && 'Integrity Verified'}
-                    {status === 'completed' && 'Institutional handshake complete'}
+                    {status === 'completed' && 'Handshake complete'}
                 </span>
                 <span className="text-[10px] font-mono text-muted-foreground">{Math.round(progress)}%</span>
             </div>
-            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
+            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                 <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
@@ -129,11 +129,11 @@ export default function CloudSyncCard() {
         </div>
       </motion.div>
 
-      {/* 2. DECOUPLED REGISTRY CARDS (HORIZONTAL SWIPE) */}
+      {/* 2. PHYSICAL REGISTRY CARDS (DECOUPLED HORIZONTAL SWIPE) */}
       <div className="grid grid-cols-2 gap-3 h-24">
         
-        {/* CLOUD REGISTRY CARD */}
-        <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0a0c]/90 backdrop-blur-3xl shadow-2xl pointer-events-auto">
+        {/* CLOUD REGISTRY SLOT */}
+        <div className="relative overflow-visible pointer-events-auto">
             <AnimatePresence mode="popLayout">
                 <motion.div 
                     key={`${chain}-cloud`}
@@ -141,7 +141,7 @@ export default function CloudSyncCard() {
                     initial="initial"
                     animate="animate"
                     exit="exit"
-                    className="p-5 h-full flex flex-col justify-center space-y-1.5"
+                    className="absolute inset-0 p-5 rounded-[2rem] border border-white/10 bg-[#0a0a0c]/90 backdrop-blur-3xl shadow-2xl flex flex-col justify-center space-y-1.5"
                 >
                     <div className="flex items-center gap-2">
                         <Database className="w-3.5 h-3.5 text-muted-foreground" />
@@ -157,11 +157,8 @@ export default function CloudSyncCard() {
             </AnimatePresence>
         </div>
 
-        {/* LOCAL NODE CARD */}
-        <div className={cn(
-            "relative overflow-hidden rounded-[2rem] border backdrop-blur-3xl shadow-2xl pointer-events-auto transition-colors duration-500 bg-[#0a0a0c]/90",
-            status === 'success' || status === 'completed' ? "border-green-500/40 shadow-green-500/5" : "border-primary/20"
-        )}>
+        {/* LOCAL NODE SLOT */}
+        <div className="relative overflow-visible pointer-events-auto">
             <AnimatePresence mode="popLayout">
                 <motion.div 
                     key={`${chain}-local`}
@@ -169,7 +166,10 @@ export default function CloudSyncCard() {
                     initial="initial"
                     animate="animate"
                     exit="exit"
-                    className="p-5 h-full flex flex-col justify-center space-y-1.5 relative"
+                    className={cn(
+                        "absolute inset-0 p-5 rounded-[2rem] border backdrop-blur-3xl shadow-2xl transition-colors duration-500 bg-[#0a0a0c]/90 flex flex-col justify-center space-y-1.5",
+                        status === 'success' || status === 'completed' ? "border-green-500/40 shadow-green-500/5" : "border-primary/20"
+                    )}
                 >
                     <div className="flex items-center gap-2">
                         <Cpu className="w-3.5 h-3.5 text-primary" />
@@ -179,14 +179,14 @@ export default function CloudSyncCard() {
                         {truncateAddress(localValue)}
                     </p>
                     
-                    {/* Floating Success Indicator */}
+                    {/* PHYSICAL CHECKMARK OVERLAY (OUTSIDE POSITIONING) */}
                     {status === 'success' && (
                         <motion.div 
                             initial={{ scale: 0, rotate: -45 }}
                             animate={{ scale: 1, rotate: 0 }}
-                            className="absolute -top-1 -right-1"
+                            className="absolute -top-2 -right-2 z-[110]"
                         >
-                            <CheckCircle2 className="w-5 h-5 text-green-500 fill-black" />
+                            <CheckCircle2 className="w-6 h-6 text-green-500 fill-black shadow-2xl" />
                         </motion.div>
                     )}
                 </motion.div>
