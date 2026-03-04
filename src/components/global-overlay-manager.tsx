@@ -25,11 +25,15 @@ export default function GlobalOverlayManager() {
   useEffect(() => {
     // STAGE 0: HYDRATION BARRIER
     // Wait for all cryptographic and auth nodes to be stable before evaluating guards
-    if (userLoading || !isInitialized || isWalletLoading) return;
+    if (userLoading || !isInitialized || isWalletLoading) {
+      console.log("[SENTINEL] Hydration in progress... Blocking evaluation.");
+      return;
+    }
 
     // STAGE 1: ATOMIC SESSION GUARD
     if (!user) {
       if (!isAuthRoute) {
+        console.log("[SENTINEL] No session detected. Redirecting to terminal login.");
         router.replace('/auth/login');
       }
       return;
@@ -45,21 +49,32 @@ export default function GlobalOverlayManager() {
     }
 
     // STAGE 3: VAULT MANDATORY GATE (CRITICAL PRIORITY)
+    // We only evaluate this once isInitialized is true and isWalletLoading is false.
     const hasLocalWallet = wallets && wallets.length > 0;
+    
+    // REDIRECT TO SETUP: If we are not on setup and have no wallet
     if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
+      console.log("[SENTINEL] No hardware nodes found. Navigating to vault establishment.");
       router.replace('/wallet-session');
       return;
     }
 
+    // REDIRECT FROM SETUP: If we HAVE a wallet but are still on the setup page
+    if (hasLocalWallet && isWalletSessionRoute) {
+      console.log("[SENTINEL] Vault detected. Redirecting to dashboard.");
+      router.replace('/');
+      return;
+    }
+
     // STAGE 4: IDENTITY COMPLETION GATE
+    // Only redirect if NOT on settings, as settings is where they complete identity.
     if (!profile?.name && !isSettingsRoute && !isAuthRoute && !isWalletSessionRoute) {
+      console.log("[SENTINEL] Identity node incomplete. Navigating to settings.");
       router.replace('/settings');
       return;
     }
 
-    // STAGE 5: DASHBOARD CONVERGENCE (EXCLUDING SETTINGS)
-    // BUG FIX: Removed isSettingsRoute from the "get out" check. 
-    // Users should be allowed to go to settings even if profile is complete.
+    // STAGE 5: DASHBOARD CONVERGENCE
     const isSetupTerminal = isAuthRoute || isWalletSessionRoute;
     if (isSetupTerminal && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       if (pathname !== '/') router.replace('/');

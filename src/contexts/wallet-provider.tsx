@@ -99,13 +99,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
 
   /**
-   * STAGE-ISOLATED INITIALIZATION
+   * INSTITUTIONAL INITIALIZATION SEQUENCE
+   * Hardened to ensure local hardware node is derived before terminal flips to "Initialized".
    */
   useEffect(() => {
     if (authLoading) return;
     
     if (!user) {
       setWallets(null);
+      setAccountNumber(null);
       setIsWalletLoading(false);
       setIsInitialized(true);
       return;
@@ -113,6 +115,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const run = async () => {
       try {
+        console.log("[VAULT_HANDSHAKE] Booting terminal for identity:", user.id);
+        
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         const savedInfura = localStorage.getItem(`infura_api_key_${user.id}`);
         const savedAcc = localStorage.getItem(`account_number_${user.id}`);
@@ -121,11 +125,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedAcc) setAccountNumber(savedAcc);
 
         if (savedMnemonic) {
+          console.log("[VAULT_HANDSHAKE] Local mnemonic detected. Deriving 33-chain nodes...");
           const derived = await Promise.race([
             deriveAllWallets(savedMnemonic),
-            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("HANDSHAKE_TIMEOUT")), 8000))
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("HANDSHAKE_TIMEOUT")), 10000))
           ]);
           setWallets(derived);
+          console.log("[VAULT_HANDSHAKE] Hardware nodes derived successfully.");
+        } else {
+          console.log("[VAULT_HANDSHAKE] No local keys detected on this device.");
         }
 
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
@@ -134,8 +142,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
         if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
+        // Registry completion flip
         setIsInitialized(true);
       } catch (e: any) {
+        console.error("[VAULT_HANDSHAKE_ERROR]", e);
         setIsInitialized(true);
       } finally {
         setIsWalletLoading(false);
@@ -327,6 +337,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      if (profile.account_number) {
+        localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+        setAccountNumber(profile.account_number);
+      }
+
       if (profile.vault_infura_key) {
         onStatusUpdate?.('Restoring RPC Infrastructure...');
         const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -345,12 +360,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       throw new Error("Handshake failed during decryption.");
     }
-  }, [user?.id, profile, toast]);
+  }, [user, profile, toast]);
 
   const deleteWallet = useCallback(() => {
     if (user) {
       purgeLocalWalletCache(user.id);
       setWallets(null);
+      setAccountNumber(null);
       router.replace('/wallet-session');
     }
   }, [user, router]);
