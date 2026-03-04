@@ -7,6 +7,7 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 /**
  * INSTITUTIONAL BALANCE SERVICE
  * Pure logic node for fetching account balances across multiple ecosystems.
+ * Hardened to prevent Substrate/WS errors from crashing the discovery engine.
  */
 export async function fetchBalancesForChain(
   chain: ChainConfig,
@@ -37,6 +38,8 @@ export async function fetchBalancesForChain(
     const { solanaAdapterFactory } = await import('@/lib/wallets/adapters/solana');
 
     let adapter = null;
+    
+    // LOGIC GATE: Use specific ecosystem adapters with built-in error resilience
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else if (chain.type === 'kusama') adapter = kusamaAdapterFactory(chain);
@@ -45,11 +48,15 @@ export async function fetchBalancesForChain(
     else adapter = evmAdapterFactory(chain, infuraApiKey);
 
     if (adapter) {
-      const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
+      // Execute fetch with a safety catch to prevent bubbling to the sequential queue
+      const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList).catch(err => {
+          console.warn(`[BALANCE_SERVICE] Adapter failed for ${chain.name}:`, err.message);
+          return combinedAssetsList; 
+      });
       return results.map(r => ({ ...r, updatedAt: Date.now() }));
     }
-  } catch (e) {
-    console.warn(`Balance Fetch Advisory for ${chain.name}:`, e);
+  } catch (e: any) {
+    console.warn(`[BALANCE_SERVICE_CRITICAL] ${chain.name} Discovery Interrupted:`, e.message);
   }
   
   return combinedAssetsList;

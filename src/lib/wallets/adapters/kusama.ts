@@ -5,54 +5,76 @@ import { ApiPromise, WsProvider } from '@polkadot/api';
 import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
- * Kusama (KSM) Adapter
- * Optimized for Substrate-based balance discovery via WebSocket.
+ * KUSAMA (KSM) ADAPTER - HARDENED VERSION
+ * Implements Fallback RPCs and strict socket lifecycle management.
  */
+
+const KSM_ENDPOINTS = [
+    "wss://kusama-rpc.polkadot.io",
+    "wss://kusama.api.onfinality.io/public-ws",
+    "wss://rpc.ibp.network/kusama",
+    "wss://ksm-rpc.polkadot.io"
+];
+
 class KusamaAdapter implements IWalletAdapter {
-    private rpcUrl: string;
+    private chain: ChainConfig;
 
     constructor(chain: ChainConfig) {
-        this.rpcUrl = chain.rpcUrl;
+        this.chain = chain;
     }
 
     async fetchBalances(
         ownerAddress: string,
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
-        let api: ApiPromise | null = null;
-        let provider: WsProvider | null = null;
+        const endpoints = [this.chain.rpcUrl, ...KSM_ENDPOINTS.filter(e => e !== this.chain.rpcUrl)];
 
-        try {
-            provider = new WsProvider(this.rpcUrl, 10000);
-            
-            api = await Promise.race([
-                ApiPromise.create({ provider }),
-                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 12000))
-            ]) as ApiPromise;
+        for (const url of endpoints) {
+            let api: ApiPromise | null = null;
+            let provider: WsProvider | null = null;
 
-            if (!api) throw new Error("API_INIT_FAILED");
+            try {
+                console.log(`[KSM_ADAPTER] Attempting connection to ${url}`);
+                provider = new WsProvider(url, 5000); 
+                
+                api = await Promise.race([
+                    ApiPromise.create({ 
+                        provider,
+                        throwOnConnect: true,
+                        noInitWarn: true 
+                    }),
+                    new Promise<null>((_, reject) => 
+                        setTimeout(() => reject(new Error('KUSAMA_INIT_TIMEOUT')), 15000)
+                    )
+                ]) as ApiPromise;
 
-            await api.isReadyOrError;
+                if (!api) throw new Error("INIT_FAILED");
 
-            const { data: balance } = await api.query.system.account(ownerAddress) as any;
-            
-            // 1 KSM = 10^12 planck
-            const freeBalance = balance.free.toBigInt();
-            const balanceKsm = Number(freeBalance) / 1_000_000_000_000;
+                await api.isReadyOrError;
 
-            return assets.map(asset => {
-                if (asset.symbol === 'KSM') {
-                    return { ...asset, balance: balanceKsm.toString() } as AssetRow;
-                }
-                return { ...asset, balance: '0' } as AssetRow;
-            });
-        } catch (error: any) {
-            console.warn(`Kusama Balance Fetch Failure (${this.rpcUrl}):`, error.message);
-            return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
-        } finally {
-            if (api) await api.disconnect();
-            if (provider) await provider.disconnect();
+                const { data: balance } = await api.query.system.account(ownerAddress) as any;
+                
+                // 1 KSM = 10^12 planck
+                const freeBalance = balance.free.toBigInt();
+                const balanceKsm = Number(freeBalance) / 1_000_000_000_000;
+
+                return assets.map(asset => {
+                    if (asset.symbol === 'KSM') {
+                        return { ...asset, balance: balanceKsm.toString() } as AssetRow;
+                    }
+                    return { ...asset, balance: '0' } as AssetRow;
+                });
+
+            } catch (error: any) {
+                console.warn(`[KSM_ADAPTER_FAIL] Endpoint ${url} rejected:`, error.message);
+                continue;
+            } finally {
+                if (api) await api.disconnect().catch(() => {});
+                if (provider) await provider.disconnect().catch(() => {});
+            }
         }
+
+        return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
     }
 }
 
