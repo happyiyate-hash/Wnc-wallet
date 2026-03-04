@@ -15,7 +15,8 @@ import {
   ArrowLeft,
   Info,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarketStats from "./market-stats";
@@ -76,15 +77,18 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 
 export default function TokenDetailsClientPage() {
-  const { allAssets, viewingNetwork, isInitialized } = useWallet();
+  const { allAssets, viewingNetwork, isInitialized, hasFetchedInitialData } = useWallet();
   const { formatFiat, selectedCurrency } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const tokenSymbol = searchParams.get('symbol');
-
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
+  /**
+   * ATOMIC TOKEN RESOLUTION
+   * Scans the central allAssets registry for the requested symbol.
+   */
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
     return allAssets.find(a => a.symbol === tokenSymbol);
@@ -93,12 +97,29 @@ export default function TokenDetailsClientPage() {
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
+  // Loading state while registry synchronizes
+  if (!isInitialized || !hasFetchedInitialData) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-transparent gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Resolving Registry...</p>
+      </div>
+    );
+  }
+
   if (!token) {
      return (
         <div className="flex flex-col h-screen bg-transparent">
-            <div className="p-4"><Skeleton className="w-8 h-8 rounded-full" /></div>
-            <div className="flex-1 flex items-center justify-center">
-                <p>Token not found.</p>
+            <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={{ symbol: 'ERR', name: 'Unknown' } as any} network={viewingNetwork} />
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-10 gap-4">
+                <div className="w-16 h-16 rounded-[2rem] bg-white/5 flex items-center justify-center">
+                  <ArrowLeftRight className="w-8 h-8 opacity-20" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-black uppercase tracking-widest text-white">Token Not Found</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">We could not locate this asset in your current registry node.</p>
+                </div>
+                <Button variant="outline" className="rounded-xl mt-4" onClick={() => router.back()}>Back to Terminal</Button>
             </div>
         </div>
      );
