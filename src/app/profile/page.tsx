@@ -70,7 +70,7 @@ export default function ProfilePage() {
     const [isRedeeming, setIsRedeeming] = useState(false);
     const [redeemResult, setRedeemResult] = useState<{ success: boolean, amount?: number, message?: string } | null>(null);
 
-    // INSTANT IDENTITY RESOLUTION: Prioritize the immediate provider ID for zero-latency
+    // INSTANT IDENTITY RESOLUTION
     const displayAccountNumber = walletAccountNumber || profile?.account_number;
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
@@ -98,8 +98,7 @@ export default function ProfilePage() {
 
     /**
      * INSTITUTIONAL REDEMPTION HANDSHAKE
-     * Calling the existing public.redeem_gift_card RPC function.
-     * NORMALIZED: Trims and uppercases input code.
+     * Resilient to backend type variances (BigInt vs UUID).
      */
     const handleRedeemCode = async () => {
         const cleanCode = giftCode.trim().toUpperCase();
@@ -109,7 +108,6 @@ export default function ProfilePage() {
         setRedeemResult(null);
         
         try {
-            // CALLING THE EXISTING SUPABASE RPC
             const { data, error } = await supabase.rpc('redeem_gift_card', {
                 user_id: user.id,
                 input_code: cleanCode
@@ -118,11 +116,9 @@ export default function ProfilePage() {
             if (error) throw error;
 
             if (data.success) {
-                // RESILIENCE: Map either amount or amount_wnc
                 const amount = data.amount !== undefined ? data.amount : (data.amount_wnc || 0);
                 setRedeemResult({ success: true, amount: amount, message: data.message });
                 toast({ title: "Redemption Authorized", description: data.message || `Successfully claimed ${amount} WNC!` });
-                // Trigger profile refresh to sync updated wnc_earnings
                 await refreshProfile();
             } else {
                 setRedeemResult({ success: false, message: data.message || 'Invalid or already redeemed gift code.' });
@@ -366,7 +362,7 @@ export default function ProfilePage() {
                                     ) : (
                                         <div className="p-6 rounded-[2.5rem] bg-red-500/10 border border-red-500/20 space-y-2">
                                             <div className="flex justify-center mb-2"><AlertCircle className="w-6 h-6 text-red-500" /></div>
-                                            <p className="text-sm font-bold text-red-400">{redeemResult.message}</p>
+                                            <p className="text-xs font-bold text-red-400">{redeemResult.message}</p>
                                             <Button variant="ghost" onClick={() => setRedeemResult(null)} className="h-8 text-[10px] uppercase font-black tracking-widest text-white/40 hover:text-white">Retry Handshake</Button>
                                         </div>
                                     )}
