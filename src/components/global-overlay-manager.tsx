@@ -10,7 +10,7 @@ import { usePathname, useRouter } from 'next/navigation';
 /**
  * GLOBAL IDENTITY SENTINEL
  * Hardened authority node for routing authenticated sessions.
- * Prioritizes Vault Setup over Profile settings if cryptographic keys are missing.
+ * Implements Stage-Aware Routing to prevent premature redirects during hydration.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -23,10 +23,11 @@ export default function GlobalOverlayManager() {
   const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
-    // Wait for all cryptographic and auth nodes to be primed
+    // STAGE 0: HYDRATION BARRIER
+    // Wait for all cryptographic and auth nodes to be stable before evaluating guards
     if (userLoading || !isInitialized || isWalletLoading) return;
 
-    // 1. ATOMIC SESSION GUARD: Redirect instantly if credentials missing
+    // STAGE 1: ATOMIC SESSION GUARD
     if (!user) {
       if (!isAuthRoute) {
         router.replace('/auth/login');
@@ -34,7 +35,7 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 2. EMAIL VERIFICATION NODE
+    // STAGE 2: EMAIL VERIFICATION NODE
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
@@ -43,25 +44,24 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 3. VAULT MANDATORY GATE (CRITICAL PRIORITY)
-    // If no local wallets are derived, the user MUST be redirected to the setup screen.
-    // This takes priority over profile settings.
+    // STAGE 3: VAULT MANDATORY GATE (CRITICAL PRIORITY)
     const hasLocalWallet = wallets && wallets.length > 0;
     if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
       router.replace('/wallet-session');
       return;
     }
 
-    // 4. IDENTITY COMPLETION GATE
-    // If the profile node is unnamed, redirect to settings only if vault is established
+    // STAGE 4: IDENTITY COMPLETION GATE
     if (!profile?.name && !isSettingsRoute && !isAuthRoute && !isWalletSessionRoute) {
       router.replace('/settings');
       return;
     }
 
-    // 5. DASHBOARD CONVERGENCE
-    // Redirect home only if they are on a setup route but already have a valid vault and identity
-    if ((isAuthRoute || isWalletSessionRoute || isSettingsRoute) && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
+    // STAGE 5: DASHBOARD CONVERGENCE (EXCLUDING SETTINGS)
+    // BUG FIX: Removed isSettingsRoute from the "get out" check. 
+    // Users should be allowed to go to settings even if profile is complete.
+    const isSetupTerminal = isAuthRoute || isWalletSessionRoute;
+    if (isSetupTerminal && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       if (pathname !== '/') router.replace('/');
     }
 

@@ -27,19 +27,20 @@ function HomeContent() {
   } = useWallet();
 
   // ATOMIC GATE: Monitor wallet and data readiness
-  const isReady = isInitialized && !isWalletLoading && wallets && wallets.length > 0;
+  // Dashboard should only render once cryptography and initial data node are synchronized
+  const isReady = isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData;
 
   /**
    * INSTITUTIONAL SYNC CONTROLLER
    */
   useEffect(() => {
-    if (isReady && hasFetchedInitialData) {
+    if (isReady) {
       const timer = setTimeout(() => {
         runCloudDiagnostic();
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isReady, hasFetchedInitialData, runCloudDiagnostic]);
+  }, [isReady, runCloudDiagnostic]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
