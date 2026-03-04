@@ -20,7 +20,7 @@
   },
   "8453": {
     "name": "Base",
-    "symbol": "BASE",
+    "symbol": "ETH",
     "chainId": 8453,
     "rpcUrl": "https://base-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -29,7 +29,7 @@
   },
   "59144": {
     "name": "Linea",
-    "symbol": "LINEA",
+    "symbol": "ETH",
     "chainId": 59144,
     "rpcUrl": "https://linea-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -38,7 +38,7 @@
   },
   "10": {
     "name": "Optimism",
-    "symbol": "OP",
+    "symbol": "ETH",
     "chainId": 10,
     "rpcUrl": "https://optimism-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -47,7 +47,7 @@
   },
   "42161": {
     "name": "Arbitrum",
-    "symbol": "ARB",
+    "symbol": "ETH",
     "chainId": 42161,
     "rpcUrl": "https://arbitrum-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -56,7 +56,7 @@
   },
   "81457": {
     "name": "Blast",
-    "symbol": "BLAST",
+    "symbol": "ETH",
     "chainId": 81457,
     "rpcUrl": "https://blast-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -92,7 +92,7 @@
   },
   "324": {
     "name": "zkSync",
-    "symbol": "ZKS",
+    "symbol": "ETH",
     "chainId": 324,
     "rpcUrl": "https://zksync-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -101,7 +101,7 @@
   },
   "534352": {
     "name": "Scroll",
-    "symbol": "SCR",
+    "symbol": "ETH",
     "chainId": 534352,
     "rpcUrl": "https://scroll-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "ethereum",
@@ -146,7 +146,7 @@
   },
   "43111": {
     "name": "Hemi",
-    "symbol": "HEMI",
+    "symbol": "ETH",
     "chainId": 43111,
     "rpcUrl": "https://hemi-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "hemi",
@@ -155,7 +155,7 @@
   },
   "1923": {
     "name": "Swellchain",
-    "symbol": "SWELL",
+    "symbol": "ETH",
     "chainId": 1923,
     "rpcUrl": "https://swellchain-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "swell-network",
@@ -164,7 +164,7 @@
   },
   "130": {
     "name": "Unichain",
-    "symbol": "UNI",
+    "symbol": "ETH",
     "chainId": 130,
     "rpcUrl": "https://unichain-mainnet.infura.io/v3/{API_KEY}",
     "coingeckoId": "uniswap",

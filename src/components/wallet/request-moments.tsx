@@ -79,8 +79,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  // FIX: Hooks must always be called in the same order. 
-  // Calculating price before early returns.
+  // RULES OF HOOKS: Declare memoized values before early returns
   const livePrice = useMemo(() => {
     if (!selectedToken || !prices) return 0;
     const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
@@ -249,8 +248,9 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [receiptError, setReceiptError] = useState('');
+  const [isCardVisible, setIsCardVisible] = useState(true);
 
-  // FIX: Hooks must be at the top level. Move useMemo before early returns.
+  // RULES OF HOOKS: Declare memoized values before early returns
   const activeToken = useMemo(() => {
     if (!request) return null;
     return allAssets.find(a => a.symbol === request.token_symbol) || null;
@@ -280,7 +280,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
   const handlePay = async () => {
     if (!wallets || !request || !requester) return;
-    setIsStatusVisible(true);
+    setIsStatusVisible(true); // Status Card appears at z-500
     setTxStatus('pending');
     setIsSubmitting(true);
 
@@ -343,17 +343,27 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       await supabase?.from('payment_requests').update({ status: 'paid' }).eq('id', requestId);
       setTxStatus('success');
       await refreshProfile(); refresh();
+
+      // AUTOMATIC TRANSITION: Once successful, hide the status and show receipt
+      setTimeout(() => {
+        setIsStatusVisible(false);
+        setIsReceiptOpen(true);
+        setIsCardVisible(false); // Hide the main fulfillment card
+      }, 3000);
+
     } catch (e: any) {
       setTxStatus('error');
       setReceiptError(mapTechnicalError(e));
+      setTimeout(() => {
+        setIsStatusVisible(false);
+        setIsReceiptOpen(true);
+      }, 3000);
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000);
     }
   };
 
-  if (loading) return null;
-  if (!request || !requester) return null;
+  if (loading || !request || !requester) return null;
 
   const isAlreadyPaid = request.status === 'paid';
   const userBalance = parseFloat(activeToken?.balance || '0');
@@ -365,94 +375,132 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <motion.div initial={{ y: 100, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 100, opacity: 0, scale: 0.95 }} transition={{ type: 'spring', damping: 25 }} className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 blur-[100px] -mr-24 -mt-24 rounded-full" />
+      <AnimatePresence>
+        {isCardVisible && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ y: "100%", opacity: 0, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ y: 100, opacity: 0, scale: 0.95 }} 
+              animate={{ y: 0, opacity: 1, scale: 1 }} 
+              className="w-full max-w-lg bg-[#0a0a0c] border border-white/10 rounded-[3rem] p-8 shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 blur-[100px] -mr-24 -mt-24 rounded-full" />
 
-          <div className="flex items-center justify-between mb-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/20"><Zap className="w-5 h-5" /></div>
-              <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Payment Request</h3><p className="text-[8px] font-black uppercase text-primary opacity-60">Verified Identity Node</p></div>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
-          </div>
-
-          <div className="flex flex-col items-center text-center space-y-8 mb-10">
-            <div className="flex items-center justify-between w-full px-4">
-              <div className="flex flex-col items-center gap-2">
-                <div className="relative">
-                  <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/20"><Zap className="w-5 h-5" /></div>
+                  <div><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Payment Request</h3><p className="text-[8px] font-black uppercase text-primary opacity-60">Verified Identity Node</p></div>
                 </div>
-                <span className="text-[8px] font-black text-white/40 uppercase">From You</span>
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-white/5 transition-colors"><X className="w-5 h-5 text-muted-foreground" /></button>
               </div>
-              <div className="flex-1 px-6 relative">
-                <div className="w-full h-[1px] bg-primary/20 relative"><motion.div animate={{ x: [-20, 20], opacity: [0, 1, 0] }} transition={{ duration: 2, repeat: Infinity }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-primary"><ArrowRight className="w-4 h-4" /></motion.div></div>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="relative">
-                  <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={requester.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{requester.name?.[0]}</AvatarFallback></Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
-                </div>
-                <span className="text-[8px] font-black text-white/40 uppercase">To @{requester.name}</span>
-              </div>
-            </div>
 
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
-              <h2 className={cn("text-5xl font-black tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")}>
-                {request.amount} {request.token_symbol}
-              </h2>
-              <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * livePrice)}</p>
-
-              {isWnc && !isAlreadyPaid && (
-                <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 space-y-2 w-full max-w-[280px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-black text-white/40 uppercase">Registry Fee</span>
-                    <span className="text-xs font-bold text-primary">50 WNC</span>
+              <div className="flex flex-col items-center text-center space-y-8 mb-10">
+                <div className="flex items-center justify-between w-full px-4">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative">
+                      <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={currentUserProfile?.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{currentUserProfile?.name?.[0]}</AvatarFallback></Avatar>
+                      <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
+                    </div>
+                    <span className="text-[8px] font-black text-white/40 uppercase">From You</span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-white/5 pt-2">
-                    <span className="text-[9px] font-black text-white uppercase">Total Debit</span>
-                    <span className="text-sm font-black text-white">{totalDebit} WNC</span>
+                  <div className="flex-1 px-6 relative">
+                    <div className="w-full h-[1px] bg-primary/20 relative"><motion.div animate={{ x: [-20, 20], opacity: [0, 1, 0] }} transition={{ duration: 2, repeat: Infinity }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-primary"><ArrowRight className="w-4 h-4" /></motion.div></div>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="relative">
+                      <Avatar className="w-16 h-16 rounded-2xl border-2 border-primary/20 shadow-xl"><AvatarImage src={requester.photo_url} /><AvatarFallback className="bg-zinc-900 font-black">{requester.name?.[0]}</AvatarFallback></Avatar>
+                      <div className="absolute -bottom-2 -right-2 bg-black rounded-lg p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={activeToken?.iconUrl} alt="T" size={24} chainId={activeToken?.chainId} symbol={activeToken?.symbol} name={activeToken?.name} /></div>
+                    </div>
+                    <span className="text-[8px] font-black text-white/40 uppercase">To @{requester.name}</span>
                   </div>
                 </div>
-              )}
 
-              {hasInsufficientFunds && (
-                <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 animate-pulse">
-                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
-                    Insufficient Balance ({userBalance.toFixed(2)})
-                  </span>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
+                  <h2 className={cn("text-5xl font-black tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")}>
+                    {request.amount} {request.token_symbol}
+                  </h2>
+                  <p className="text-xs font-bold text-primary">≈ {formatFiat(request.amount * livePrice)}</p>
+
+                  {isWnc && !isAlreadyPaid && (
+                    <div className="mt-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 space-y-2 w-full max-w-[280px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-white/40 uppercase">Registry Fee</span>
+                        <span className="text-xs font-bold text-primary">50 WNC</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-white/5 pt-2">
+                        <span className="text-[9px] font-black text-white uppercase">Total Debit</span>
+                        <span className="text-sm font-black text-white">{totalDebit} WNC</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {hasInsufficientFunds && (
+                    <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-2 animate-pulse">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                      <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">
+                        Insufficient Balance ({userBalance.toFixed(2)})
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {request.note && <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-muted-foreground italic w-full">"{request.note}"</div>}
-          </div>
+                {request.note && <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-muted-foreground italic w-full">"{request.note}"</div>}
+              </div>
 
-          <div className="space-y-3">
-            {!isAlreadyPaid ? (
-              <Button 
-                onClick={handlePay} 
-                disabled={isSubmitting || hasInsufficientFunds} 
-                className={cn(
-                  "w-full h-16 rounded-[2rem] font-black text-lg shadow-2xl transition-all duration-300",
-                  hasInsufficientFunds ? "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed" : "bg-primary hover:bg-primary/90 shadow-primary/20"
+              <div className="space-y-3">
+                {!isAlreadyPaid ? (
+                  <Button 
+                    onClick={handlePay} 
+                    disabled={isSubmitting || hasInsufficientFunds} 
+                    className={cn(
+                      "w-full h-16 rounded-[2rem] font-black text-lg shadow-2xl transition-all duration-300",
+                      hasInsufficientFunds ? "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed" : "bg-primary hover:bg-primary/90 shadow-primary/20"
+                    )}
+                  >
+                    {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize & Send"}
+                  </Button>
+                ) : (
+                  <div className="p-5 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-4"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /><div className="text-left"><p className="text-xs font-black text-green-500 uppercase">Paid & Locked</p><p className="text-[10px] text-green-400 opacity-80 leading-relaxed">This request has already been fulfilled.</p></div></div>
                 )}
-              >
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Authorize & Send"}
-              </Button>
-            ) : (
-              <div className="p-5 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-4"><CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" /><div className="text-left"><p className="text-xs font-black text-green-500 uppercase">Paid & Locked</p><p className="text-[10px] text-green-400 opacity-80 leading-relaxed">This request has already been fulfilled.</p></div></div>
-            )}
-            <Button variant="ghost" className="w-full h-12 rounded-2xl font-bold text-muted-foreground" onClick={onClose}>Dismiss</Button>
-          </div>
-        </motion.div>
-      </motion.div>
+                <Button variant="ghost" className="w-full h-12 rounded-2xl font-bold text-muted-foreground" onClick={onClose}>Dismiss</Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={currentUserProfile?.photo_url} recipientName={requester.name} recipientAvatar={requester.photo_url} token={{ symbol: request.token_symbol, iconUrl: activeToken?.iconUrl, chainId: activeToken?.chainId || 1, name: activeToken?.name }} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={request.amount.toString()} token={activeToken} recipientName={requester.name} recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} txHash={txHash} errorReason={receiptError} fee={isWnc ? "50 WNC" : "Standard"} networkName={request.chain_type.toUpperCase()} />
+      <TransactionStatusCard 
+        isVisible={isStatusVisible} 
+        status={txStatus} 
+        senderName="You" 
+        senderAvatar={currentUserProfile?.photo_url} 
+        recipientName={requester.name} 
+        recipientAvatar={requester.photo_url} 
+        token={{ symbol: request.token_symbol, iconUrl: activeToken?.iconUrl, chainId: activeToken?.chainId || 1, name: activeToken?.name }} 
+      />
+      
+      <TransactionReceiptSheet 
+        isOpen={isReceiptOpen} 
+        onOpenChange={(open) => {
+          setIsReceiptOpen(open);
+          if (!open) onClose(); // Final cleanup: clear fulfillment state
+        }} 
+        status={txStatus === 'error' ? 'error' : 'success'} 
+        amount={request.amount.toString()} 
+        token={activeToken} 
+        recipientName={requester.name} 
+        recipientAddress={request.chain_type === 'evm' ? requester.evm_address! : request.chain_type === 'xrp' ? requester.xrp_address! : requester.polkadot_address!} 
+        txHash={txHash} 
+        errorReason={receiptError} 
+        fee={isWnc ? "50 WNC" : "Standard"} 
+        networkName={request.chain_type.toUpperCase()} 
+      />
     </>
   );
 }

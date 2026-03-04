@@ -16,7 +16,7 @@ export interface CurrencyInfo {
 }
 
 export const CURRENCY_REGISTRY: CurrencyInfo[] = [
-  // Core Global
+  // Core Global Currencies
   { name: "United States Dollar", code: "USD", symbol: "$", country: "United States", flag: "🇺🇸" },
   { name: "Euro", code: "EUR", symbol: "€", country: "European Union", flag: "🇪🇺" },
   { name: "Japanese Yen", code: "JPY", symbol: "¥", country: "Japan", flag: "🇯🇵" },
@@ -51,7 +51,7 @@ export const CURRENCY_REGISTRY: CurrencyInfo[] = [
   { name: "Malaysian Ringgit", code: "MYR", symbol: "RM", country: "Malaysia", flag: "🇲🇾" },
   
   // Middle East
-  { name: "UAE Dirham", code: "AED", symbol: "د.إ", country: "United Arab Emirates", flag: "🇦🇪" },
+  { name: "United Arab Emirates Dirham", code: "AED", symbol: "د.إ", country: "United Arab Emirates", flag: "🇦🇪" },
   { name: "Saudi Riyal", code: "SAR", symbol: "﷼", country: "Saudi Arabia", flag: "🇸🇦" },
   { name: "Qatari Riyal", code: "QAR", symbol: "﷼", country: "Qatar", flag: "🇶🇦" },
   { name: "Israeli New Shekel", code: "ILS", symbol: "₪", country: "Israel", flag: "🇮🇱" },
@@ -60,7 +60,10 @@ export const CURRENCY_REGISTRY: CurrencyInfo[] = [
   { name: "South African Rand", code: "ZAR", symbol: "R", country: "South Africa", flag: "🇿🇦" },
   { name: "Nigerian Naira", code: "NGN", symbol: "₦", country: "Nigeria", flag: "🇳🇬" },
   { name: "Egyptian Pound", code: "EGP", symbol: "E£", country: "Egypt", flag: "🇪🇬" },
-  { name: "Kenyan Shilling", code: "KES", symbol: "KSh", country: "Kenya", flag: "🇰🇪" }
+  { name: "Kenyan Shilling", code: "KES", symbol: "KSh", country: "Kenya", flag: "🇰🇪" },
+
+  // Approved Decentralized Assets
+  { name: "Bitcoin", code: "BTC", symbol: "₿", country: "Bitcoin Node", flag: "🪙" }
 ];
 
 interface CurrencyContextType {

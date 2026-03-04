@@ -23,6 +23,11 @@ interface TransactionStatusCardProps {
   isRawAddress?: boolean;
 }
 
+/**
+ * TRANSACTION STATUS CARD
+ * Positioned fixed at the top with a high-priority z-index (z-[500]) 
+ * to ensure money-sending animations are always visible during handshakes.
+ */
 export default function TransactionStatusCard({
   isVisible,
   status,
@@ -41,7 +46,7 @@ export default function TransactionStatusCard({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -100, opacity: 0 }}
           transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-          className="fixed top-4 left-4 right-4 z-[100] max-w-lg mx-auto"
+          className="fixed top-4 left-4 right-4 z-[500] max-w-lg mx-auto"
         >
           <div className="bg-[#0a0a0c]/90 backdrop-blur-2xl border border-primary/20 rounded-[2rem] p-4 shadow-2xl overflow-hidden relative">
             {/* Background Glows */}
