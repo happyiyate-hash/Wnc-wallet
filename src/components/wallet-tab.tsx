@@ -1,31 +1,25 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   RefreshCw,
   ArrowUpFromLine,
   ArrowDownToLine,
   Loader2,
   Repeat,
-  Sparkles,
-  History,
-  AlertCircle,
-  ChevronRight,
   ChevronDown,
-  Wallet as WalletIcon,
-  Copy,
-  CheckCircle2,
   Timer,
-  HandCoins
+  HandCoins,
+  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/wallet-provider';
-import type { AssetRow, ChainConfig } from '@/lib/types';
+import { useMarket } from '@/contexts/market-provider';
+import type { AssetRow } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import TokenManager from '@/components/wallet/tokens/token-manager';
-import { useUser } from '@/contexts/user-provider';
 import { useCurrency } from '@/contexts/currency-provider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TokenLogoDynamic from './shared/TokenLogoDynamic';
@@ -57,13 +51,13 @@ const AnimatedNumber = ({ value }: { value: number }) => {
   );
 };
 
-const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean }) => {
+// ATOMIC MEMOIZED ROW
+const TokenRow = React.memo(({ token }: { token: AssetRow }) => {
   const router = useRouter();
   const { formatFiat } = useCurrency();
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
 
   const handleRowClick = () => {
-    // INSTITUTIONAL RESOLUTION: Pass chainId to detail terminal
     router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}&chainId=${token.chainId}`);
   };
 
@@ -109,51 +103,26 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.token.balance === next.token.balance && 
+         prev.token.priceUsd === next.token.priceUsd &&
+         prev.token.pctChange24h === next.token.pctChange24h;
+});
+
+TokenRow.displayName = 'TokenRow';
 
 export default function WalletTab({ computedAssets }: { computedAssets: AssetRow[] }) {
-  const { wallets, isInitialized, isWalletLoading, isRefreshing, refresh, viewingNetwork, fetchError, infuraApiKey, setIsRequestOverlayOpen, hasFetchedInitialData } = useWallet();
+  const { isRefreshing, refresh, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
   const { formatFiat } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
   const [isQuickSwapOpen, setIsQuickSwapOpen] = useState(false);
   
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
-
   const router = useRouter();
 
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  /**
-   * RPC HANDSHAKE SENTINEL
-   * Monitors the infuraApiKey state. If missing after terminal initialization,
-   * triggers the Connection Cockpit.
-   */
-  useEffect(() => {
-    if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
-      const timer = setTimeout(() => {
-        setIsApiKeySheetOpen(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isInitialized, isWalletLoading, wallets, infuraApiKey]);
-
-  useEffect(() => {
-    if (isRefreshing) {
-      setElapsedSeconds(0);
-      timerRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => +(prev + 0.1).toFixed(1));
-      }, 100);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isRefreshing]);
+  useEffect(() => { setHasMounted(true); }, []);
 
   const { totalFiatValue, total24hChange } = useMemo(() => {
     const totalValue = computedAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
@@ -174,144 +143,58 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
     return { totalFiatValue: totalValue, total24hChange: delta };
   }, [computedAssets]);
 
-  const openAction = (type: 'send' | 'receive' | 'swap' | 'request' | 'my-requests') => {
-    if (type === 'swap') {
-        setIsQuickSwapOpen(true);
-        return;
-    }
-    if (type === 'request') {
-        setIsRequestOverlayOpen(true);
-        return;
-    }
+  const openAction = (type: string) => {
+    if (type === 'swap') { setIsQuickSwapOpen(true); return; }
+    if (type === 'request') { setIsRequestOverlayOpen(true); return; }
     router.push(`/${type}`);
   };
 
-  const ActionButton = ({ icon: Icon, label, onClick, disabled }: { icon: React.ElementType, label: string, onClick: () => void, disabled?: boolean }) => (
-    <div className="flex flex-col items-center gap-2">
-      <Button
-        variant="default"
-        size="icon"
-        disabled={disabled}
-        className={cn(
-            "bg-primary hover:bg-primary/90 w-14 h-14 rounded-2xl shadow-lg transition-transform active:scale-90",
-            disabled && "opacity-50 grayscale"
-        )}
-        onClick={onClick}
-      >
-        <Icon className="w-6 h-6 text-primary-foreground" />
-      </Button>
-      <span className="text-[9px] uppercase font-bold tracking-widest text-muted-foreground">{label}</span>
-    </div>
-  );
-
-  if (!hasMounted) {
-    return <div className="flex-1 bg-transparent" />;
-  }
+  if (!hasMounted) return <div className="flex-1 bg-transparent" />;
 
   return (
     <div className="flex flex-col h-full bg-transparent">
       <div className="pt-8">
         <div className="flex items-center justify-between px-6">
             <div className="relative group">
-                <h2 className={cn(
-                  'font-black tracking-tighter text-white transition-opacity text-4xl',
-                  isRefreshing && "opacity-80"
-                )}>
+                <h2 className="font-black tracking-tighter text-white text-4xl">
                   <AnimatedNumber value={totalFiatValue || 0} />
                 </h2>
-                
                 <div className="flex items-center gap-3 mt-1.5">
-                  <p
-                    className={cn(
-                      'text-sm font-bold flex items-center gap-2',
-                      total24hChange >= 0 ? 'text-green-400' : 'text-red-400'
-                    )}
-                  >
+                  <p className={cn('text-sm font-bold flex items-center gap-2', total24hChange >= 0 ? 'text-green-400' : 'text-red-400')}>
                     {total24hChange >= 0 ? '+' : '-'}{formatFiat(Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))))}
-                    <span className="text-gray-500 font-medium text-xs">
-                      ({total24hChange >= 0 ? '+' : ''}
-                      {total24hChange.toFixed(2)}%)
-                    </span>
+                    <span className="text-gray-500 font-medium text-xs">({total24hChange.toFixed(2)}%)</span>
                   </p>
-
-                  {isRefreshing && (
-                    <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-left-2 duration-500">
-                        <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-[10px] font-black text-green-500/80 uppercase tracking-widest flex items-center gap-1">
-                            Updating... 
-                            <span className="font-mono opacity-60">({elapsedSeconds}s)</span>
-                        </span>
-                    </div>
-                  )}
+                  {isRefreshing && <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                 </div>
             </div>
         </div>
 
         <div className="flex justify-center gap-2.5 my-10 px-4">
-          <ActionButton icon={ArrowUpFromLine} label="Send" onClick={() => openAction('send')} />
-          <ActionButton icon={ArrowDownToLine} label="Receive" onClick={() => openAction('receive')} />
-          <ActionButton icon={Repeat} label="Swap" onClick={() => openAction('swap')} />
-          <ActionButton icon={HandCoins} label="Request" onClick={() => openAction('request')} />
-          <ActionButton icon={History} label="My Requests" onClick={() => openAction('my-requests')} />
+          <Button size="icon" className="w-14 h-14 rounded-2xl bg-primary shadow-lg" onClick={() => openAction('send')}><ArrowUpFromLine /></Button>
+          <Button size="icon" className="w-14 h-14 rounded-2xl bg-primary shadow-lg" onClick={() => openAction('receive')}><ArrowDownToLine /></Button>
+          <Button size="icon" className="w-14 h-14 rounded-2xl bg-primary shadow-lg" onClick={() => openAction('swap')}><Repeat /></Button>
+          <Button size="icon" className="w-14 h-14 rounded-2xl bg-primary shadow-lg" onClick={() => openAction('request')}><HandCoins /></Button>
+          <Button size="icon" className="w-14 h-14 rounded-2xl bg-primary shadow-lg" onClick={() => openAction('my-requests')}><History /></Button>
         </div>
 
-        <div className="w-full">
-            <Tabs defaultValue="tokens" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 px-6 border-b border-white/5">
-                <TabsTrigger
-                  value="tokens"
-                  className="p-0 pb-3 text-xs uppercase tracking-[0.2em] font-black data-[state=active]:text-primary data-[state=active]:bg-transparent rounded-none flex-1 data-[state=active]:border-b-4 data-[state=active]:border-primary transition-all"
-                >
-                  Tokens
-                </TabsTrigger>
-                <TabsTrigger value="defi" disabled className="p-0 pb-3 text-[10px] uppercase tracking-[0.2em] font-black text-muted-foreground/30 flex-1">DeFi</TabsTrigger>
-                <TabsTrigger value="nfts" disabled className="p-0 pb-3 text-[10px] uppercase tracking-[0.2em] font-black text-muted-foreground/30 flex-1">NFTs</TabsTrigger>
-              </TabsList>
-              <TabsContent value="tokens" className="px-0 pt-2">
-                <div className="flex items-center justify-between py-6 px-6">
-                    <Button
-                        variant="ghost"
-                        className="h-9 px-4 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 transition-all flex items-center gap-2"
-                        onClick={() => setIsTokenManagerOpen(true)}
-                    >
-                        <span className="font-black text-[10px] uppercase tracking-widest text-primary">Manage Assets</span>
-                        <ChevronDown className="w-3.5 h-3.5 text-primary" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 bg-white/5 rounded-full hover:bg-white/10"
-                        onClick={() => refresh()}
-                        disabled={isRefreshing}
-                    >
-                      {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-primary"/> : <RefreshCw className="h-4 w-4 text-primary"/>}
-                    </Button>
-                </div>
-
-                <div className="flex-1 pb-32">
-                  {fetchError && (
-                    <div 
-                      className="mx-6 mb-4 p-4 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-3 border border-destructive/20 cursor-pointer"
-                      onClick={() => setIsApiKeySheetOpen(true)}
-                    >
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <p className="font-medium">Connection limited. Check Infura key.</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-0">
-                    {computedAssets.map((token) => (
-                      <TokenRow
-                        key={`${token.chainId}-${token.address || token.symbol}`}
-                        token={token}
-                        isLoading={isRefreshing}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-        </div>
+        <Tabs defaultValue="tokens" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 bg-transparent px-6 border-b border-white/5">
+            <TabsTrigger value="tokens" className="pb-3 text-xs font-black uppercase tracking-widest data-[state=active]:border-b-4 data-[state=active]:border-primary">Tokens</TabsTrigger>
+            <TabsTrigger value="defi" disabled className="pb-3 text-[10px] opacity-20">DeFi</TabsTrigger>
+            <TabsTrigger value="nfts" disabled className="pb-3 text-[10px] opacity-20">NFTs</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tokens" className="pt-2">
+            <div className="flex items-center justify-between py-6 px-6">
+                <Button variant="ghost" className="h-9 px-4 bg-white/5 rounded-full" onClick={() => setIsTokenManagerOpen(true)}>Manage Assets <ChevronDown className="ml-2 w-3.5" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => refresh()} disabled={isRefreshing}>{isRefreshing ? <Loader2 className="animate-spin text-primary" /> : <RefreshCw className="text-primary" />}</Button>
+            </div>
+            <div className="pb-32">
+              {computedAssets.map((token) => (
+                <TokenRow key={`${token.chainId}-${token.address || token.symbol}`} token={token} />
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <TokenManager isOpen={isTokenManagerOpen} onOpenChange={setIsTokenManagerOpen} />

@@ -1,3 +1,4 @@
+
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Suspense } from 'react';
@@ -5,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { WalletProvider } from '@/contexts/wallet-provider';
 import { UserProvider } from '@/contexts/user-provider';
 import { CurrencyProvider } from '@/contexts/currency-provider';
+import { MarketProvider } from '@/contexts/market-provider';
 import DesktopSidebar from '@/components/wallet/desktop-sidebar';
 import { Web3Provider } from '@/components/providers/web3-provider';
 import PWARegister from '@/components/pwa-register';
@@ -53,29 +55,31 @@ export default function RootLayout({
         <Web3Provider>
           <UserProvider>
             <CurrencyProvider>
-              <WalletProvider>
-                <SidebarProvider defaultOpen={true}>
-                  <div className="flex min-h-screen w-full bg-transparent relative z-10">
-                    <NavGradient />
-                    <DesktopSidebar />
-                    <div className="flex flex-col flex-1 w-full min-w-0 relative">
-                      <PWARegister />
-                      <div className="flex-1 relative">
-                        {children}
+              <MarketProvider>
+                <WalletProvider>
+                  <SidebarProvider defaultOpen={true}>
+                    <div className="flex min-h-screen w-full bg-transparent relative z-10">
+                      <NavGradient />
+                      <DesktopSidebar />
+                      <div className="flex flex-col flex-1 w-full min-w-0 relative">
+                        <PWARegister />
+                        <div className="flex-1 relative">
+                          {children}
+                        </div>
+                        <MobileNav />
                       </div>
-                      <MobileNav />
                     </div>
-                  </div>
-                  
-                  {/* CENTRAL SENTINELS, BARRIERS & OVERLAYS */}
-                  <Suspense fallback={null}>
-                    <GlobalLoadingBarrier />
-                    <GlobalOverlayManager />
-                    <NotificationCenter />
-                    <RealtimeNotificationListener />
-                  </Suspense>
-                </SidebarProvider>
-              </WalletProvider>
+                    
+                    {/* CENTRAL SENTINELS, BARRIERS & OVERLAYS */}
+                    <Suspense fallback={null}>
+                      <GlobalLoadingBarrier />
+                      <GlobalOverlayManager />
+                      <NotificationCenter />
+                      <RealtimeNotificationListener />
+                    </Suspense>
+                  </SidebarProvider>
+                </WalletProvider>
+              </MarketProvider>
             </CurrencyProvider>
           </UserProvider>
         </Web3Provider>
