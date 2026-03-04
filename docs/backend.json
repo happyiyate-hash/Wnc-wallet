@@ -3,19 +3,21 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Extended SmarterSeller identity with multi-chain registry nodes.",
+      "description": "Extended SmarterSeller identity with multi-chain registry nodes and referral escrow.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
         "wnc_earnings": { "type": "number" },
+        "wnc_referral_escrow": { "type": "number" },
         "account_number": { "type": "string" },
         "vault_phrase": { "type": "string" },
         "iv": { "type": "string" },
         "evm_address": { "type": "string" },
         "xrp_address": { "type": "string" },
         "near_address": { "type": "string" },
-        "referral_code": { "type": "string" }
+        "referral_code": { "type": "string" },
+        "onboarding_completed": { "type": "boolean" }
       }
     },
     "PaymentRequest": {

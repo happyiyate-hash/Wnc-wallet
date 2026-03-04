@@ -98,40 +98,36 @@ export default function ProfilePage() {
 
     /**
      * INSTITUTIONAL REDEMPTION HANDSHAKE
-     * Aligned with SmarterSeller Admin Gift Card Protocol.
+     * Calling the existing public.redeem_gift_card RPC function.
      */
     const handleRedeemCode = async () => {
-        if (!giftCode.trim() || !user || !supabase) return;
+        const cleanCode = giftCode.trim().toUpperCase();
+        if (!cleanCode || !user || !supabase) return;
         
         setIsRedeeming(true);
         setRedeemResult(null);
         
         try {
-            // AUTHENTICATED RPC CALL
+            // CALLING THE EXISTING SUPABASE RPC
             const { data, error } = await supabase.rpc('redeem_gift_card', {
                 user_id: user.id,
-                input_code: giftCode.trim().toUpperCase()
+                input_code: cleanCode
             });
 
             if (error) throw error;
 
             if (data.success) {
-                setRedeemResult({ success: true, amount: data.amount });
-                toast({ title: "Redemption Authorized", description: `Credited ${data.amount} WNC to your node.` });
+                setRedeemResult({ success: true, amount: data.amount, message: data.message });
+                toast({ title: "Redemption Authorized", description: data.message || `Successfully claimed ${data.amount} WNC!` });
+                // Trigger profile refresh to sync updated wnc_earnings
                 await refreshProfile();
             } else {
-                setRedeemResult({ success: false, message: data.message });
+                setRedeemResult({ success: false, message: data.message || 'Invalid or already redeemed gift code.' });
             }
         } catch (e: any) {
             console.error("REDEMPTION_FAIL:", e);
-            // SURFACE THE EXACT REGISTRY ERROR (Table missing, Permission, etc)
-            const errorMsg = e.message || e.details || "Registry connection failed. Check database logs.";
-            setRedeemResult({ 
-                success: false, 
-                message: e.message?.includes('not exist') 
-                    ? "Registry Error: The 'redeem_gift_card' protocol is not installed in your Supabase project." 
-                    : errorMsg
-            });
+            const errorMsg = e.message || "Registry connection failed. Handshake interrupted.";
+            setRedeemResult({ success: false, message: errorMsg });
         } finally {
             setIsRedeeming(false);
         }
@@ -197,7 +193,7 @@ export default function ProfilePage() {
                     <section className="flex flex-col items-center text-center space-y-6">
                         <div className="relative group">
                             <div className="absolute -inset-4 bg-primary/20 rounded-[3rem] blur-2xl opacity-50 transition-opacity" />
-                            <Avatar className="w-28 h-28 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10">
+                            <Avatar className="w-28 h-28 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl relative z-10 overflow-hidden">
                                 <AvatarImage src={profile?.photo_url} className="object-cover" />
                                 <AvatarFallback className="bg-gradient-to-br from-primary to-purple-600 text-white text-4xl font-black rounded-[2.5rem]">
                                     {displayName.slice(0, 1)}
@@ -361,7 +357,7 @@ export default function ProfilePage() {
                                             <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">Amount Authorized</p>
                                             <h3 className="text-4xl font-black text-white">+{redeemResult.amount} WNC</h3>
                                             <p className="text-[10px] text-green-400/60 leading-relaxed px-4">
-                                                Funds have been verified and added to your registry balance.
+                                                {redeemResult.message || 'Funds have been verified and added to your registry balance.'}
                                             </p>
                                         </div>
                                     ) : (
@@ -386,7 +382,7 @@ export default function ProfilePage() {
                                     </div>
                                     <Button 
                                         className="w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20"
-                                        disabled={!giftCode || isRedeeming}
+                                        disabled={!giftCode.trim() || isRedeeming}
                                         onClick={handleRedeemCode}
                                     >
                                         {isRedeeming ? <Loader2 className="w-6 h-6 animate-spin" /> : "Verify & Claim"}

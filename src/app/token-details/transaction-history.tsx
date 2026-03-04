@@ -22,23 +22,56 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
     const fetchTransactions = async () => {
       setLoading(true);
       try {
-        // Institutional Ledger Discovery
-        // Attempt to fetch detailed peer info for transfers
-        const { data, error } = await supabase
-          .from('transactions')
-          .select(`
-            *,
-            peer:peer_id (
-              name,
-              photo_url
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('timestamp', { ascending: false })
-          .limit(15);
-        
-        if (!error && data) {
-          setTransactions(data);
+        if (isWnc) {
+          /**
+           * UNIFIED WNC LEDGER DISCOVERY
+           * Fetching from public.wnc_transfers as the authoritative registry.
+           */
+          const { data, error } = await supabase
+            .from('wnc_transfers')
+            .select(`
+              *,
+              sender:sender_id (name, photo_url),
+              receiver:receiver_id (name, photo_url)
+            `)
+            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+          if (!error && data) {
+            const formatted = data.map(tx => {
+              const isOut = tx.sender_id === user.id;
+              const peer = isOut ? tx.receiver : tx.sender;
+              return {
+                id: tx.id,
+                amount: tx.amount,
+                type: tx.destination_type,
+                status: 'completed', // Ledger entries are atomic
+                timestamp: tx.created_at,
+                peer: peer,
+                isOut
+              };
+            });
+            setTransactions(formatted);
+          }
+        } else {
+          // Standard On-Chain History Discovery
+          const { data, error } = await supabase
+            .from('transactions')
+            .select(`
+              *,
+              peer:peer_id (name, photo_url)
+            `)
+            .eq('user_id', user.id)
+            .order('timestamp', { ascending: false })
+            .limit(15);
+          
+          if (!error && data) {
+            setTransactions(data.map(tx => ({
+              ...tx,
+              isOut: tx.type === 'withdrawal' || tx.type === 'transfer_out'
+            })));
+          }
         }
       } catch (e) {
         console.error("History fetch error:", e);
@@ -78,8 +111,8 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
   return (
     <div className="space-y-2">
       {transactions.map((tx, i) => {
-        const isOut = tx.type === 'withdrawal' || tx.type === 'transfer_out';
-        const isIn = tx.type === 'deposit' || tx.type === 'transfer_in' || tx.type === 'referral_reward';
+        const isOut = tx.isOut;
+        const isIn = !isOut;
         const peerName = tx.peer?.name || 'External Node';
         
         return (
@@ -98,7 +131,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
               <div className="text-left">
                 <div className="flex items-center gap-2">
                     <p className="font-black text-sm text-white uppercase tracking-tight">
-                        {tx.type === 'referral_reward' ? 'Growth Reward' : 
+                        {tx.type === 'reward' ? 'Growth Reward' : 
                          isOut ? `To @${peerName}` : 
                          isIn ? `From @${peerName}` : 
                          tx.type.replace('_', ' ')}
