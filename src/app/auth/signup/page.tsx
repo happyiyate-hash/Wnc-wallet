@@ -14,7 +14,7 @@ import Link from 'next/link';
 
 /**
  * SIGNUP INTERACTION NODE
- * Updated to bg-transparent to reveal institutional watermark.
+ * Updated to preserve referral code in localStorage for session resilience.
  */
 function SignupContent() {
   const router = useRouter();
@@ -34,8 +34,16 @@ function SignupContent() {
   const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
+    // CAPTURE PROTOCOL: Save to state AND localStorage immediately
     const ref = searchParams.get('ref');
-    if (ref) setReferralCode(ref.toUpperCase());
+    if (ref) {
+      const cleanRef = ref.toUpperCase();
+      setReferralCode(cleanRef);
+      localStorage.setItem('pending_referral', cleanRef);
+    } else {
+      const savedRef = localStorage.getItem('pending_referral');
+      if (savedRef) setReferralCode(savedRef);
+    }
     
     const verifyRequested = searchParams.get('verify');
     const existingEmail = searchParams.get('email');
@@ -56,6 +64,7 @@ function SignupContent() {
         password,
         options: {
           data: {
+            // METADATA INJECTION: Critical for backend trigger
             referral_code: referralCode.trim() || null,
           }
         }
@@ -91,7 +100,7 @@ function SignupContent() {
 
       toast({ title: "Identity Verified!", description: "Initializing profile node..." });
       setShowVerifyPanel(false);
-      router.replace('/');
+      router.replace('/wallet-session');
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
@@ -128,6 +137,10 @@ function SignupContent() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            // Attempt to pass ref code even via OAuth
+            referral_code: referralCode
+          }
         },
       });
       if (error) throw error;

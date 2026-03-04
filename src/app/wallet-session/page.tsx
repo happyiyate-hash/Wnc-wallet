@@ -62,19 +62,25 @@ export default function WalletSessionPage() {
   }, []);
 
   /**
-   * INSTITUTIONAL REFERRAL HANDSHAKE
-   * Finalizes the invitation link by creating a permanent entry in the 'referrals' registry.
+   * INSTITUTIONAL REFERRAL HANDSHAKE (Refined)
+   * Ensures the invitation is logged by checking JWT metadata AND localStorage fallback.
    */
   const finalizeReferral = async (newUserId: string) => {
     if (!supabase) return;
     
-    // 1. Capture referral metadata from user account
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    const refCode = currentUser?.user_metadata?.referral_code;
-    
-    if (!refCode) return;
-
     try {
+      // 1. Capture referral metadata from both sources
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const metadataRefCode = currentUser?.user_metadata?.referral_code;
+      const localStorageRefCode = localStorage.getItem('pending_referral');
+      
+      const refCode = metadataRefCode || localStorageRefCode;
+      
+      if (!refCode) {
+        console.log("[REFERRAL_NODE_MISSING]");
+        return;
+      }
+
       // 2. Resolve Referrer Node by Account ID suffix
       const { data: referrer, error: fetchErr } = await supabase
         .from('profiles')
@@ -84,7 +90,7 @@ export default function WalletSessionPage() {
 
       if (fetchErr || !referrer || referrer.id === newUserId) return;
 
-      // 3. Prevent duplicate handshakes
+      // 3. Check for existing record to prevent duplicates
       const { data: existing } = await supabase
         .from('referrals')
         .select('id')
@@ -93,15 +99,18 @@ export default function WalletSessionPage() {
 
       if (existing) return;
 
-      // 4. Authorize 100 WNC Escrow Node
-      await supabase.from('referrals').insert({
+      // 4. Commit 100 WNC Escrow Node to registry
+      const { error: insertErr } = await supabase.from('referrals').insert({
         referrer_id: referrer.id,
         referred_id: newUserId,
         status: 'pending',
         reward_amount: 100
       });
 
-      console.log("[REFERRAL_HANDSHAKE_SUCCESS]");
+      if (!insertErr) {
+        localStorage.removeItem('pending_referral');
+        console.log("[REFERRAL_HANDSHAKE_SUCCESS]");
+      }
     } catch (e) {
       console.warn("[REFERRAL_HANDSHAKE_FAIL]", e);
     }
@@ -117,7 +126,7 @@ export default function WalletSessionPage() {
     setStatus('Finalizing Node...');
     
     try {
-      // Step A: Link referral node if applicable
+      // Step A: Force referral handshake check
       await finalizeReferral(user.id);
 
       // Step B: Mark profile as active in registry
