@@ -25,7 +25,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
         if (isWnc) {
           /**
            * UNIFIED WNC LEDGER DISCOVERY
-           * Fetching from public.wnc_transfers as the authoritative registry.
+           * Resilient to both 'amount' and 'amount_wnc' column naming.
            */
           const { data, error } = await supabase
             .from('wnc_transfers')
@@ -42,11 +42,14 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
             const formatted = data.map(tx => {
               const isOut = tx.sender_id === user.id;
               const peer = isOut ? tx.receiver : tx.sender;
+              // REGISTRY RESILIENCE: Map either amount or amount_wnc
+              const displayAmount = tx.amount_wnc || tx.amount || 0;
+              
               return {
                 id: tx.id,
-                amount: tx.amount,
+                amount: displayAmount,
                 type: tx.destination_type,
-                status: 'completed', // Ledger entries are atomic
+                status: 'completed',
                 timestamp: tx.created_at,
                 peer: peer,
                 isOut
@@ -69,6 +72,8 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
           if (!error && data) {
             setTransactions(data.map(tx => ({
               ...tx,
+              // RESILIENCE: Use amount_wnc fallback if amount is missing
+              amount: tx.amount || tx.amount_wnc || 0,
               isOut: tx.type === 'withdrawal' || tx.type === 'transfer_out'
             })));
           }

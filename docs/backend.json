@@ -29,7 +29,7 @@
         "requester_id": { "type": "string" },
         "chain_type": { "type": "string" },
         "token_symbol": { "type": "string" },
-        "amount": { "type": "number" },
+        "amount_wnc": { "type": "number" },
         "status": { "enum": ["pending", "paid", "expired", "cancelled"], "type": "string" }
       }
     },
