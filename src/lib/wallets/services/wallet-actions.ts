@@ -123,10 +123,22 @@ export function purgeLocalWalletCache(userId: string) {
     'custom_tokens', 
     'hidden_tokens',
     'profile_cache',
-    'audit_done'
+    'wallet_addr_cache',
+    'wallet_fingerprint',
+    'balance_cache',
+    'registry_audit_v2' // Correct key pattern for the sentinel fingerprint
   ];
   keys.forEach(key => {
+    // Clear both direct and user-prefixed keys
     localStorage.removeItem(`${key}_${userId}`);
     localStorage.removeItem(key);
+    
+    // Specially clear the deterministic registry fingerprints
+    // We scan for v2 audit tokens to ensure fresh setup if user logs out
+    Object.keys(localStorage).forEach(lsKey => {
+        if (lsKey.includes('registry_audit_v2') && lsKey.includes(userId)) {
+            localStorage.removeItem(lsKey);
+        }
+    });
   });
 }

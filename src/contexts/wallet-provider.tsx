@@ -96,6 +96,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   });
 
   const isAuditRunningRef = useRef(false);
+  const hasTriggeredAuditInSessionRef = useRef(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -391,20 +392,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (isAuditRunningRef.current) return;
 
     // PERSISTENCE GATE: Create a deterministic fingerprint for the current node configuration
-    const fingerprint = `audit_v1_${user.id}_${wallets[0].address}`;
+    const fingerprint = `registry_audit_v2_${user.id}_${wallets[0].address}`;
     const hasAudited = localStorage.getItem(fingerprint);
 
-    // If we've already audited this specific node, skip the UI unless forced (e.g. manual refresh button)
-    if (!options?.forceUI && hasAudited === 'true') {
-        console.log("[SENTINEL] Registry already secured for this node. Skipping visible audit.");
+    // If we've already audited this specific node in this session OR permanently, skip the UI unless forced
+    if (!options?.forceUI && (hasAudited === 'true' || hasTriggeredAuditInSessionRef.current)) {
+        console.log("[SENTINEL] Registry already secured. Skipping visible audit.");
         return;
     }
 
     isAuditRunningRef.current = true;
+    hasTriggeredAuditInSessionRef.current = true;
+    
     try {
         await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => {
             setSyncDiagnostic(p => ({ ...p, ...u }));
-            // On completion, secure the fingerprint to prevent redundant animations
+            // On completion, secure the fingerprint permanently to prevent redundant animations on next reload
             if (u.status === 'completed') {
                 localStorage.setItem(fingerprint, 'true');
             }
@@ -413,6 +416,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isAuditRunningRef.current = false; 
     }
   }, [user?.id, wallets, accountNumber, profile, chainsWithLogos]);
+
+  // NEW: Autonomous Provider-Level Diagnostic Trigger
+  // This ensures the audit runs once when the wallet is ready, 
+  // but prevents re-triggering during internal navigation.
+  useEffect(() => {
+    if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData) {
+      const timer = setTimeout(() => {
+        runCloudDiagnostic();
+      }, 3000); // 3s delay to allow dashboard components to stabilize
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, isWalletLoading, !!wallets, hasFetchedInitialData, runCloudDiagnostic]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number) => {
     return getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));

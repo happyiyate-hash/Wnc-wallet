@@ -18,26 +18,8 @@ function HomeContent() {
     setIsRequestOverlayOpen, 
     activeFulfillmentId, 
     setActiveFulfillmentId,
-    runCloudDiagnostic,
-    isInitialized,
-    wallets,
-    hasFetchedInitialData,
-    allAssets,
-    isWalletLoading
+    allAssets
   } = useWallet();
-
-  /**
-   * INSTITUTIONAL SYNC CONTROLLER
-   */
-  useEffect(() => {
-    // Only run cloud audit once the terminal is stable
-    if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData) {
-      const timer = setTimeout(() => {
-        runCloudDiagnostic();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isInitialized, isWalletLoading, wallets, hasFetchedInitialData, runCloudDiagnostic]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
