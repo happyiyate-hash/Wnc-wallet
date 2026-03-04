@@ -6,10 +6,12 @@ import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
+import { ArrowDownLeft, Zap, ArrowUpRight } from 'lucide-react';
+import React from 'react';
 
 /**
- * INSTITUTIONAL REAL-TIME LISTENER
- * Monitors the 'notifications' table for new ledger events and deductions.
+ * INSTITUTIONAL REAL-TIME SENTINEL
+ * Monitors the 'notifications' node for verified ledger events.
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
@@ -19,26 +21,35 @@ export default function RealtimeNotificationListener() {
   useEffect(() => {
     if (!user || !supabase) return;
 
-    // Establishing the real-time tunnel
+    // Establishing the high-fidelity real-time tunnel
     const channel = supabase
-      .channel(`realtime-notifications-${user.id}`)
+      .channel(`registry-handshakes-${user.id}`)
       .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
       }, (payload) => {
-          // This runs instantly when the SQL trigger inserts a row
+          // 1. Alert the navigation node
           setHasNewNotifications(true);
           
-          // Institutional Alert Handshake
+          // 2. Map visual icon based on handshake type
+          const type = payload.new.type;
+          const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : ArrowUpRight;
+          
+          // 3. Dispatch Visual Toast
           toast({
               title: payload.new.title || "Registry Alert",
               description: payload.new.message,
-              variant: payload.new.type === 'BALANCE_DEDUCTION' ? 'destructive' : 'default'
+              action: (
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Icon className="w-5 h-5" />
+                </div>
+              )
           });
           
-          // Refresh balance silently to reflect deduction/credit
+          // 4. Force Silent Registry Refresh
+          // This ensures balances update instantly without a manual pull.
           refresh(); 
       })
       .subscribe();
