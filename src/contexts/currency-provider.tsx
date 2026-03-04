@@ -16,17 +16,33 @@ interface CurrencyContextType {
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 const SYMBOLS: { [key: string]: string } = {
-  USD: '$', NGN: '₦', EUR: '€', GBP: '£', KES: 'KSh', GHS: 'GH₵', ZAR: 'R', CAD: 'CA$', JPY: '¥', CNY: '¥', INR: '₹'
+  USD: '$', 
+  NGN: '₦', 
+  EUR: '€', 
+  GBP: '£', 
+  KES: 'KSh', 
+  GHS: 'GH₵', 
+  ZAR: 'R', 
+  CAD: 'CA$', 
+  JPY: '¥', 
+  CNY: '¥', 
+  INR: '₹',
+  AUD: 'A$',
+  CHF: 'Fr',
+  SGD: 'S$',
+  HKD: 'HK$',
+  BRL: 'R$',
+  MXN: 'Mex$'
 };
 
 /**
  * INSTITUTIONAL CURRENCY & FOREX ENGINE
- * Version: 3.1.0 (Live Math Transformation)
+ * Version: 3.2.0 (Global Registry Expansion)
  * Handles real-time exchange rate discovery and mathematical conversion.
  */
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
-  // Initial fallback rates based on 2024 baseline
+  // Institutional fallback rates (Baseline 2024/2025)
   const [rates, setRates] = useState<{ [key: string]: number }>({ 
     USD: 1, 
     NGN: 1650, 
@@ -34,7 +50,15 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     GBP: 0.77, 
     KES: 129, 
     GHS: 16, 
-    ZAR: 17.5 
+    ZAR: 17.5,
+    AUD: 1.52,
+    CAD: 1.38,
+    CHF: 0.88,
+    JPY: 154,
+    CNY: 7.24,
+    INR: 84.4,
+    SGD: 1.34,
+    HKD: 7.78
   });
   const [isLoadingRates, setIsLoadingRates] = useState(true);
 
