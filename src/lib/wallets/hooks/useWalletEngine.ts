@@ -7,11 +7,11 @@ import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-serv
 import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
- * INSTITUTIONAL DATA REFRESH ENGINE (REACTIVE VERSION)
+ * INSTITUTIONAL DATA REFRESH ENGINE (REACTIVE & SEQUENTIAL)
  * 
- * Decoupled logic nodes:
- * 1. Global Price Engine: Independent, runs on mount.
- * 2. Balance Engine: Reactive, runs when wallets exist.
+ * Optimized for logic-gated "Phase-Prioritized" rhythm:
+ * 1. Phase 1: Immediate fetch for Active Network + Global Prices.
+ * 2. Phase 2: Lazy sequential background sync for all other chains.
  */
 export function useWalletEngine({
   wallets,
@@ -38,103 +38,99 @@ export function useWalletEngine({
   setIsRefreshing: (val: boolean) => void;
   setHasFetchedInitialData: (val: boolean) => void;
 }) {
-  const isBalanceRefreshingRef = useRef(false);
-  const isPriceRefreshingRef = useRef(false);
+  const isRefreshingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   /**
-   * NODE A: GLOBAL PRICE ENGINE
-   * Fetches market valuations independently of wallet state.
+   * SEQUENTIAL DISCOVERY PROTOCOL
+   * Executes a prioritized handshake to unblock UI first, then sync registry.
    */
-  const refreshPrices = useCallback(async () => {
-    if (isPriceRefreshingRef.current || chainsWithLogos.length === 0) return;
+  const executeDataHandshake = useCallback(async () => {
+    if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRefreshingRef.current) return;
     
-    isPriceRefreshingRef.current = true;
-    try {
-      console.log("[PRICE_ENGINE] Discovery started...");
-      const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, {});
-      setPrices(newPrices);
-      console.log("[PRICE_ENGINE] Discovery complete.");
-    } catch (e) {
-      console.warn("[PRICE_ENGINE_ADVISORY]", e);
-    } finally {
-      isPriceRefreshingRef.current = false;
-    }
-  }, [chainsWithLogos, userAddedTokens, rates, setPrices]);
+    // Cleanup previous handshake if it's still running
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-  /**
-   * NODE B: BALANCE DISCOVERY ENGINE
-   * Reconciles on-chain assets for derived wallet identities.
-   */
-  const refreshBalances = useCallback(async () => {
-    if (!wallets || wallets.length === 0 || !viewingNetwork || isBalanceRefreshingRef.current) return;
-    
-    isBalanceRefreshingRef.current = true;
+    isRefreshingRef.current = true;
     setIsRefreshing(true);
     
     try {
-      console.log(`[BALANCE_ENGINE] Syncing ${viewingNetwork.name}...`);
+      console.log(`[ENGINE] Handshake Phase 1: Market & Active Network...`);
       
-      // PHASE 1: Active Network Handshake
-      const currentBalances = await fetchBalancesForChain(
+      // STEP 1: Global Price Discovery (Parallel to Balance)
+      const pricesPromise = fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates);
+      
+      // STEP 2: Active Network Balance
+      const activeBalancePromise = fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
         infuraApiKey, 
         userAddedTokens
       );
+
+      const [newPrices, activeBalances] = await Promise.all([pricesPromise, activeBalancePromise]);
       
-      setBalances(prev => ({ 
-        ...prev, 
-        [viewingNetwork.chainId]: currentBalances 
-      }));
+      if (signal.aborted) return;
 
-      // Dropping the loading barrier as soon as active data is ready
+      setPrices(newPrices);
+      setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
+
+      // HANDSHAKE VERIFIED: Drop the barrier now
       setHasFetchedInitialData(true);
+      console.log(`[ENGINE] Handshake Phase 1 Verified. Terminal Unblocked.`);
 
-      // PHASE 2: Background Registry Discovery
+      // STEP 3: Phase 2 - Lazy Sequential Discovery
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
+      
       for (const chain of otherChains) {
+        if (signal.aborted) break;
         if (!wallets) break;
+
+        console.log(`[ENGINE] Lazy Sync: ${chain.name}...`);
         const secondaryBalances = await fetchBalancesForChain(chain, wallets, infuraApiKey, userAddedTokens);
+        
+        if (signal.aborted) break;
         setBalances(prev => ({ ...prev, [chain.chainId]: secondaryBalances }));
-        await new Promise(r => setTimeout(r, 200)); // Breather for UI thread
+        
+        // Institutional Throttle: Prevent RPC congestion
+        await sleep(400); 
       }
       
+      console.log(`[ENGINE] Handshake Phase 2: Registry Fully Synchronized.`);
     } catch (e) {
-      console.warn("[BALANCE_ENGINE_ADVISORY]", e);
+      console.warn("[ENGINE_ADVISORY] Handshake Interrupted:", e);
       setHasFetchedInitialData(true); 
     } finally { 
       setIsRefreshing(false); 
-      isBalanceRefreshingRef.current = false;
+      isRefreshingRef.current = false;
     }
-  }, [wallets, viewingNetwork, infuraApiKey, userAddedTokens, chainsWithLogos, setBalances, setIsRefreshing, setHasFetchedInitialData]);
+  }, [wallets, viewingNetwork, infuraApiKey, userAddedTokens, chainsWithLogos, rates, setPrices, setBalances, setIsRefreshing, setHasFetchedInitialData]);
 
   /**
    * REACTIVE TRIGGERS
    */
 
-  // 1. Trigger Prices on metadata readiness
+  // 1. Full Handshake Trigger
   useEffect(() => {
-    if (chainsWithLogos.length > 0) {
-      refreshPrices();
-      const interval = setInterval(refreshPrices, 45000); // 45s price cycle
-      return () => clearInterval(interval);
+    if (wallets && wallets.length > 0 && viewingNetwork && user && chainsWithLogos.length > 0) {
+      executeDataHandshake();
     }
-  }, [chainsWithLogos.length, refreshPrices]);
+    return () => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, [!!wallets, viewingNetwork?.chainId, user?.id, chainsWithLogos.length, executeDataHandshake]);
 
-  // 2. Trigger Balances on wallet derivation
-  useEffect(() => {
-    if (wallets && wallets.length > 0 && viewingNetwork && user) {
-      refreshBalances();
-    }
-  }, [!!wallets, viewingNetwork?.chainId, user?.id, refreshBalances]);
-
-  // 3. Periodic Balance Audit
+  // 2. Periodic Maintenance (60s cycle)
   useEffect(() => {
     if (wallets && wallets.length > 0 && viewingNetwork && user) {
-      const interval = setInterval(refreshBalances, 60000); // 60s balance cycle
+      const interval = setInterval(executeDataHandshake, 60000);
       return () => clearInterval(interval);
     }
-  }, [!!wallets, viewingNetwork?.chainId, user?.id, refreshBalances]);
+  }, [!!wallets, viewingNetwork?.chainId, user?.id, executeDataHandshake]);
 
-  return { refresh: refreshBalances };
+  return { refresh: executeDataHandshake };
 }

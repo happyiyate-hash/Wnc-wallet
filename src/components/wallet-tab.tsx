@@ -63,7 +63,8 @@ const TokenRow = ({ token, isLoading }: { token: AssetRow, isLoading: boolean })
   const isPositiveChange = (token.pctChange24h ?? 0) >= 0;
 
   const handleRowClick = () => {
-    router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}`);
+    // INSTITUTIONAL RESOLUTION: Pass chainId to detail terminal
+    router.push(`/token-details?symbol=${encodeURIComponent(token.symbol ?? '')}&chainId=${token.chainId}`);
   };
 
   return (

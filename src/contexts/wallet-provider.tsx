@@ -100,7 +100,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * INSTITUTIONAL INITIALIZATION SEQUENCE
-   * Hardened to ensure local hardware node is derived before terminal flips to "Initialized".
+   * Hardened Stage-Isolated logic with 8s fail-fast sentinel.
    */
   useEffect(() => {
     if (authLoading) return;
@@ -115,25 +115,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const run = async () => {
       try {
-        console.log("[VAULT_HANDSHAKE] Booting terminal for identity:", user.id);
+        console.log("[VAULT_HANDSHAKE] Deriving hardware nodes for identity:", user.id);
         
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         const savedInfura = localStorage.getItem(`infura_api_key_${user.id}`);
         const savedAcc = localStorage.getItem(`account_number_${user.id}`);
         
         if (savedInfura) setInfuraApiKeyState(savedInfura);
+        else if (profile?.vault_infura_key) {
+            console.log("[VAULT_HANDSHAKE] Missing local RPC. Recovering from cloud...");
+            const { data: { session } } = await supabase!.auth.getSession();
+            if (session) {
+                const res = await fetch('/api/wallet/decrypt-phrase', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                  body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+                });
+                const data = await res.json();
+                if (data.phrase) {
+                    localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
+                    setInfuraApiKeyState(data.phrase);
+                }
+            }
+        }
+
         if (savedAcc) setAccountNumber(savedAcc);
+        else if (profile?.account_number) {
+            setAccountNumber(profile.account_number);
+            localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+        }
 
         if (savedMnemonic) {
-          console.log("[VAULT_HANDSHAKE] Local mnemonic detected. Deriving 33-chain nodes...");
+          // FAIL-FAST SENTINEL: 8s limit for crypto derivation
           const derived = await Promise.race([
             deriveAllWallets(savedMnemonic),
-            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("HANDSHAKE_TIMEOUT")), 10000))
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("HANDSHAKE_TIMEOUT")), 8000))
           ]);
           setWallets(derived);
-          console.log("[VAULT_HANDSHAKE] Hardware nodes derived successfully.");
+          console.log("[VAULT_HANDSHAKE] 33-chain nodes derived successfully.");
         } else {
-          console.log("[VAULT_HANDSHAKE] No local keys detected on this device.");
+          console.log("[VAULT_HANDSHAKE] No local keys found on device.");
         }
 
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
@@ -142,18 +163,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
         if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
-        // Registry completion flip
         setIsInitialized(true);
       } catch (e: any) {
-        console.error("[VAULT_HANDSHAKE_ERROR]", e);
-        setIsInitialized(true);
+        console.warn("[VAULT_HANDSHAKE_ADVISORY]", e.message);
+        setIsInitialized(true); 
       } finally {
         setIsWalletLoading(false);
       }
     };
 
     run();
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, profile?.vault_infura_key, profile?.account_number]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -181,17 +201,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  /**
-   * EXPLICIT ENGINE TRIGGER
-   */
-  useEffect(() => {
-    if (!isInitialized || isWalletLoading || !wallets || wallets.length === 0) return;
-    refresh();
-  }, [isInitialized, isWalletLoading, wallets, refresh]);
-
-  /**
-   * CENTRALIZED ASSET REGISTRY
-   */
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
 

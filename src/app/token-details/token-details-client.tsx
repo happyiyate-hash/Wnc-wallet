@@ -5,6 +5,7 @@ import React, { useState, useMemo } from "react";
 import "chartjs-adapter-date-fns";
 import type { AssetRow } from "@/lib/types";
 import { useWallet } from "@/contexts/wallet-provider";
+import { useUser } from "@/contexts/user-provider";
 import { useCurrency } from "@/contexts/currency-provider";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -77,22 +78,67 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 
 export default function TokenDetailsClientPage() {
-  const { allAssets, viewingNetwork, isInitialized, hasFetchedInitialData } = useWallet();
+  const { isInitialized, hasFetchedInitialData, balances, prices, getAvailableAssetsForChain, viewingNetwork, allChainsMap } = useWallet();
+  const { profile } = useUser();
   const { formatFiat, selectedCurrency } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const tokenSymbol = searchParams.get('symbol');
+  const chainIdStr = searchParams.get('chainId');
+  
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
   /**
-   * ATOMIC TOKEN RESOLUTION
-   * Scans the central allAssets registry for the requested symbol.
+   * ATOMIC TOKEN RESOLUTION (Resilient Resolver)
+   * Reconstructs the token object from raw state nodes to prevent "Not Found" flashes.
    */
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
-    return allAssets.find(a => a.symbol === tokenSymbol);
-  }, [tokenSymbol, allAssets, isInitialized]);
+    
+    const targetChainId = chainIdStr ? parseInt(chainIdStr) : viewingNetwork.chainId;
+
+    // 1. Handle Internal WNC separately (pinned to NGN)
+    if (tokenSymbol === 'WNC') {
+        const price = prices['internal:wnc']?.price || 0.0006;
+        const balance = profile?.wnc_earnings || 0;
+        return {
+            symbol: 'WNC',
+            name: 'Wevinacoin',
+            balance: balance.toString(),
+            priceUsd: price,
+            fiatValueUsd: balance * price,
+            pctChange24h: prices['internal:wnc']?.change || 0,
+            chainId: targetChainId,
+            address: 'internal:wnc',
+            iconUrl: '/api/cdn/logo/wevinacoin/wnc'
+        } as AssetRow;
+    }
+
+    // 2. Resolve from Chain Skeleton
+    const assetsForChain = getAvailableAssetsForChain(targetChainId);
+    const skeleton = assetsForChain.find(a => a.symbol === tokenSymbol);
+    
+    if (!skeleton) return null;
+
+    // 3. Hydrate with Live Registry Data
+    const chainBalances = balances[targetChainId] || [];
+    const balDoc = chainBalances.find(b => 
+        skeleton.isNative ? b.symbol === skeleton.symbol : b.address?.toLowerCase() === skeleton.address?.toLowerCase()
+    );
+    
+    const priceId = (skeleton.priceId || skeleton.coingeckoId || skeleton.address || '').toLowerCase();
+    const marketData = prices[priceId];
+    const balNum = parseFloat(balDoc?.balance || '0');
+
+    return {
+        ...skeleton,
+        balance: balDoc?.balance || '0',
+        priceUsd: marketData?.price || 0,
+        fiatValueUsd: balNum * (marketData?.price || 0),
+        pctChange24h: marketData?.change || 0
+    } as AssetRow;
+  }, [tokenSymbol, chainIdStr, isInitialized, balances, prices, profile, getAvailableAssetsForChain, viewingNetwork.chainId]);
 
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
@@ -130,6 +176,7 @@ export default function TokenDetailsClientPage() {
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
   const fiatValue = token.fiatValueUsd ?? (price * balance);
+  const activeNetwork = allChainsMap[token.chainId] || viewingNetwork;
 
   const handleAction = (path: string) => {
     router.push(`${path}?symbol=${token.symbol}&chainId=${token.chainId}`);
@@ -137,7 +184,7 @@ export default function TokenDetailsClientPage() {
 
   return (
     <div className="flex flex-col h-screen bg-transparent">
-      <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={viewingNetwork} />
+      <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={activeNetwork} />
       <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-8 pb-4">
           <div className="flex flex-col items-center justify-center gap-1">
@@ -198,7 +245,7 @@ export default function TokenDetailsClientPage() {
                     />
                     <div>
                         <p className="font-black text-sm text-white tracking-tight">{token.symbol} Balance</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{token.symbol === 'WNC' ? 'SmarterSeller Registry' : viewingNetwork.name}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{activeNetwork.name}</p>
                     </div>
                 </div>
                 <div className="text-right relative z-10">
