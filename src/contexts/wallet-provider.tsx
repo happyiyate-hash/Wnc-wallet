@@ -107,16 +107,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
 
-  // 2. Profile Sync
+  // 2. Profile Sync - Only update Account Number, not wallet state
   useEffect(() => {
     if (profile?.account_number) {
       setAccountNumber(profile.account_number);
       if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
     }
-  }, [profile?.account_number, user]);
+  }, [profile?.account_number, user?.id]);
 
-  // 3. SECURE DECOUPLED INITIALIZATION
-  // Only depends on user.id and hedera_address to prevent loops on name/photo changes
+  /**
+   * STABLE INITIALIZATION ENGINE
+   * Hardened to depend strictly on user.id to prevent loops on profile metadata updates.
+   */
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
     if (!user) {
@@ -129,8 +131,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        // Use hedera_address specifically rather than full profile object
-        const derived = await deriveAllWallets(savedMnemonic, profile?.hedera_address);
+        // Derive wallets using only the mnemonic. hedera_address is fetched inside derivation if needed
+        const derived = await deriveAllWallets(savedMnemonic);
         setWallets(derived);
       }
 
@@ -150,7 +152,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsWalletLoading(false);
     }
-  }, [user?.id, profile?.hedera_address, authLoading]);
+  }, [user?.id, authLoading]);
 
   useEffect(() => {
     initLocalSession();
@@ -201,7 +203,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-    const derived = await deriveAllWallets(mnemonic, profile?.hedera_address);
+    const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -211,14 +213,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
     return mnemonic;
-  }, [user?.id, profile?.account_number, profile?.hedera_address, accountNumber]);
+  }, [user?.id, profile?.account_number, accountNumber]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Authentication required");
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-    const derived = await deriveAllWallets(mnemonic, profile?.hedera_address);
+    const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -227,7 +229,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
-  }, [user?.id, profile?.account_number, profile?.hedera_address, accountNumber]);
+  }, [user?.id, profile?.account_number, accountNumber]);
 
   const saveToVault = useCallback(async () => {
     if (!user) return;
@@ -254,7 +256,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (data.phrase) {
         localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
-        const derived = await deriveAllWallets(data.phrase, profile?.hedera_address);
+        const derived = await deriveAllWallets(data.phrase);
         setWallets(derived);
       }
     }
@@ -274,9 +276,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    await refreshProfile();
-    toast({ title: "Node Synchronized", description: "Successfully restored all encrypted vault credentials." });
-  }, [user?.id, profile, refreshProfile, toast]);
+    toast({ title: "Node Synchronized", description: "Vault credentials restored." });
+  }, [user?.id, profile, toast]);
 
   const deleteWallet = useCallback(async () => {
     if (user) {
@@ -295,39 +296,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user || !supabase) return;
     
     try {
-        // PHASE 1: Destroy Cloud Registry
         const { error: dbError } = await supabase.from('profiles').update({
             vault_phrase: null,
             iv: null,
             vault_infura_key: null,
             infura_iv: null,
-            evm_address: null,
-            xrp_address: null,
-            polkadot_address: null,
-            near_address: null,
-            solana_address: null,
-            btc_address: null,
-            ltc_address: null,
-            doge_address: null,
-            cosmos_address: null,
-            osmosis_address: null,
-            secret_address: null,
-            injective_address: null,
-            celestia_address: null,
-            cardano_address: null,
-            tron_address: null,
-            algorand_address: null,
-            hedera_address: null,
-            tezos_address: null,
-            aptos_address: null,
-            sui_address: null,
             account_number: null,
             onboarding_completed: false
         }).eq('id', user.id);
 
         if (dbError) throw dbError;
 
-        // PHASE 2: Purge Local Node
         setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
         purgeLocalWalletCache(user.id);
         setWallets(null);
@@ -337,21 +316,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setPrices({});
         setHasFetchedInitialData(true);
         
-        await refreshProfile();
         router.replace('/wallet-session');
-        
-        toast({ title: "Vault Destroyed", description: "All local and cloud registry data has been permanently purged." });
+        toast({ title: "Vault Destroyed", description: "Global registry data purged." });
     } catch (e: any) {
-        console.error("PERMANENT_DELETE_FAIL:", e);
         toast({ variant: "destructive", title: "Destruction Error", description: e.message });
     }
-  }, [user?.id, refreshProfile, router, toast]);
+  }, [user?.id, router, toast]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
     if (prevId) purgeLocalWalletCache(prevId);
     
-    // Clear all in-memory states
     setWallets(null); 
     setBalances({}); 
     setAccountNumber(null);

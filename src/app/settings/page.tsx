@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
@@ -53,7 +53,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function SettingsPage() {
     const { deleteWallet, deleteWalletPermanently, logout } = useWallet();
-    const { user, profile, refreshProfile } = useUser();
+    const { user, profile } = useUser();
     const { selectedCurrency, setCurrency, rates, currentSymbol } = useCurrency();
     const { toast } = useToast();
     const router = useRouter();
@@ -68,12 +68,11 @@ export default function SettingsPage() {
     const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
 
     // SECURITY PROTOCOL STATE
-    const [showPhrase, setShowPhrase] = useState(false);
     const [mnemonic, setMnemonic] = useState<string | null>(null);
     const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState(false);
     const [currencySearch, setCurrencySearch] = useState('');
     const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy' | 'set-password'>('idle');
+    const [securityMode, setSecurityMode] = useState<'idle' | 'reveal' | 'destroy'>('idle');
     const [passwordInput, setPasswordInput] = useState('');
     const [confirmInput, setConfirmInput] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
@@ -87,13 +86,6 @@ export default function SettingsPage() {
             setIsAvailable(true);
         }
     }, [profile]);
-
-    useEffect(() => {
-        if (user) {
-            const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-            setMnemonic(saved);
-        }
-    }, [user]);
 
     const checkUsername = async (val: string) => {
         if (!val || val.length < 3) {
@@ -143,25 +135,26 @@ export default function SettingsPage() {
                 .getPublicUrl(uploadData.path);
 
             setPhotoUrl(publicUrl);
-            toast({ title: "Avatar Uplinked", description: "Visual node ready for authorization." });
+            toast({ title: "Avatar Uplinked", description: "Identity node ready for authorization." });
         } catch (error: any) {
-            console.error("[UPLOAD_ERROR]", error);
             toast({ 
                 variant: "destructive", 
                 title: "Upload Failed", 
-                description: error.message || "Institutional storage rejected the asset." 
+                description: error.message || "Registry rejected the asset." 
             });
         } finally {
             setIsUploading(false);
         }
     };
 
+    /**
+     * DIRECT WRITE ARCHITECTURE
+     * Decoupled from provider refresh loops to prevent infinite wallet loading.
+     */
     const handleSaveProfile = async () => {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // 1. Update Public Profile Node ONLY
-            // We skip auth metadata update to prevent unnecessary session refreshes
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -173,8 +166,8 @@ export default function SettingsPage() {
 
             if (dbError) throw dbError;
 
-            await refreshProfile();
-            toast({ title: "Profile Secured", description: "Identity node fully synchronized with ecosystem." });
+            // SUCCESS: Only update local UI, do not trigger global context refreshes
+            toast({ title: "Profile Secured", description: "Identity node synchronized." });
         } catch (error: any) {
             console.error("[SAVE_PROFILE_FAIL]", error);
             toast({ 
@@ -191,8 +184,7 @@ export default function SettingsPage() {
         if (!user?.email || !passwordInput) return;
         setIsVerifying(true);
         try {
-            // Note: In a production app, we would use a specialized edge function
-            // to verify password without re-signing in to prevent onAuthStateChange resets.
+            // Internal verification check
             const { error } = await supabase!.auth.signInWithPassword({
                 email: user.email,
                 password: passwordInput
@@ -202,13 +194,11 @@ export default function SettingsPage() {
 
             const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
             setMnemonic(saved);
-            
             setIsVerified(true);
-            if (securityMode === 'reveal') setShowPhrase(true);
         } catch (e: any) {
             toast({ 
                 title: "Verification Failed", 
-                description: e.message || "Invalid password standard.",
+                description: "Invalid password standard.",
                 variant: "destructive" 
             });
             setPasswordInput('');
@@ -234,7 +224,6 @@ export default function SettingsPage() {
         setPasswordInput(''); 
         setIsVerified(false); 
         setConfirmInput(''); 
-        setShowPhrase(false);
         setIsVerifying(false);
     };
 
@@ -249,12 +238,7 @@ export default function SettingsPage() {
         }
     };
 
-    const sortedCurrencies = useMemo(() => {
-        const codes = Object.keys(rates).sort();
-        const popular = ['USD', 'NGN', 'EUR', 'GBP', 'KES', 'GHS', 'ZAR'];
-        const filtered = codes.filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
-        return [...new Set([...popular.filter(p => filtered.includes(p)), ...filtered])];
-    }, [rates, currencySearch]);
+    const sortedCurrencies = (Object.keys(rates).sort()).filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
 
     const SettingItem = ({ icon: Icon, label, value, onClick, href, destructive, iconBg = "bg-primary/10", iconColor = "text-primary" }: any) => {
         const Content = (
