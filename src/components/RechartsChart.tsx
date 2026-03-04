@@ -114,7 +114,7 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
 
     return (
         <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 5, right: 16, left: 16, bottom: 5 }}>
+            <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                 <defs>
                     <linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={fillcolor} stopOpacity={0.2} />

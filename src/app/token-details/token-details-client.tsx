@@ -197,7 +197,7 @@ export default function TokenDetailsClientPage() {
           </div>
         </div>
 
-        <div className="h-64 relative w-full overflow-hidden mt-4">
+        <div className="h-[350px] relative w-full overflow-hidden mt-4">
           <RechartsChart 
             key={`${token.symbol}-${token.chainId}`} // Fixed key per asset to prevent re-mounts on price ticks
             coingeckoId={coingeckoId} 
