@@ -14,7 +14,7 @@ import Link from 'next/link';
 
 /**
  * SIGNUP INTERACTION NODE
- * Updated to preserve referral code in localStorage for session resilience.
+ * Captures referral links and injects them into the identity metadata.
  */
 function SignupContent() {
   const router = useRouter();
@@ -34,7 +34,7 @@ function SignupContent() {
   const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
-    // CAPTURE PROTOCOL: Save to state AND localStorage immediately
+    // REGISTRY CAPTURE: Save to state AND localStorage immediately
     const ref = searchParams.get('ref');
     if (ref) {
       const cleanRef = ref.toUpperCase();
@@ -64,7 +64,7 @@ function SignupContent() {
         password,
         options: {
           data: {
-            // METADATA INJECTION: Critical for backend trigger
+            // INSTITUTIONAL METADATA: Critical for the referral trigger
             referral_code: referralCode.trim() || null,
           }
         }
@@ -100,6 +100,7 @@ function SignupContent() {
 
       toast({ title: "Identity Verified!", description: "Initializing profile node..." });
       setShowVerifyPanel(false);
+      // Proceed to vault establishment
       router.replace('/wallet-session');
     } catch (error: any) {
       toast({ 
@@ -138,7 +139,6 @@ function SignupContent() {
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
-            // Attempt to pass ref code even via OAuth
             referral_code: referralCode
           }
         },

@@ -62,14 +62,14 @@ export default function WalletSessionPage() {
   }, []);
 
   /**
-   * INSTITUTIONAL REFERRAL HANDSHAKE (Refined)
-   * Ensures the invitation is logged by checking JWT metadata AND localStorage fallback.
+   * INSTITUTIONAL REFERRAL HANDSHAKE
+   * Establishes the P2P growth link in the registry.
    */
   const finalizeReferral = async (newUserId: string) => {
     if (!supabase) return;
     
     try {
-      // 1. Capture referral metadata from both sources
+      // 1. Capture referral metadata from both sources (Hydration Resilience)
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       const metadataRefCode = currentUser?.user_metadata?.referral_code;
       const localStorageRefCode = localStorage.getItem('pending_referral');
@@ -77,7 +77,7 @@ export default function WalletSessionPage() {
       const refCode = metadataRefCode || localStorageRefCode;
       
       if (!refCode) {
-        console.log("[REFERRAL_NODE_MISSING]");
+        console.log("[REFERRAL_NODE_MISSING] No invitation detected.");
         return;
       }
 
@@ -109,7 +109,7 @@ export default function WalletSessionPage() {
 
       if (!insertErr) {
         localStorage.removeItem('pending_referral');
-        console.log("[REFERRAL_HANDSHAKE_SUCCESS]");
+        console.log("[REFERRAL_HANDSHAKE_SUCCESS] Handshake locked.");
       }
     } catch (e) {
       console.warn("[REFERRAL_HANDSHAKE_FAIL]", e);
@@ -126,10 +126,10 @@ export default function WalletSessionPage() {
     setStatus('Finalizing Node...');
     
     try {
-      // Step A: Force referral handshake check
+      // CRITICAL TRIGGER: Execute the referral handshake
       await finalizeReferral(user.id);
 
-      // Step B: Mark profile as active in registry
+      // Finalize profile node
       const { error: dbError } = await supabase
         .from('profiles')
         .upsert({ 
@@ -139,7 +139,7 @@ export default function WalletSessionPage() {
         }, { onConflict: 'id' });
         
       if (dbError) {
-          console.warn("Onboarding flag advisory:", dbError.message);
+          console.warn("Profile sync advisory:", dbError.message);
       }
 
       await refreshProfile();
@@ -162,7 +162,6 @@ export default function WalletSessionPage() {
       setStatus('Complete!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
-      console.error("GEN_ERROR:", e);
       setError(e.message || "Generation failed.");
       setIsProcessing(false);
       stopTimer();
@@ -180,7 +179,6 @@ export default function WalletSessionPage() {
       setStatus('Complete!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
-      console.error("IMPORT_ERROR:", e);
       setStatus('Invalid Node');
       setError("Please verify your 12 or 24 word recovery phrase.");
       setIsProcessing(false);
@@ -198,7 +196,6 @@ export default function WalletSessionPage() {
       setStatus('Access Restored!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
-      console.error("RESTORE_ERROR:", e);
       setStatus('No Backup Found');
       setError(e.message || "Failed to locate cloud credentials.");
       setIsProcessing(false);
