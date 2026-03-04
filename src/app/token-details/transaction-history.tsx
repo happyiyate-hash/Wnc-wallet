@@ -42,8 +42,11 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
             const formatted = data.map(tx => {
               const isOut = tx.sender_id === user.id;
               const peer = isOut ? tx.receiver : tx.sender;
-              // REGISTRY RESILIENCE: Prioritize 'amount' then fallback to 'amount_wnc'
-              const displayAmount = tx.amount !== undefined ? tx.amount : (tx.amount_wnc || 0);
+              
+              // REGISTRY RESILIENCE: Map either amount or amount_wnc
+              const displayAmount = tx.amount !== undefined && tx.amount !== null 
+                ? tx.amount 
+                : (tx.amount_wnc || 0);
               
               return {
                 id: tx.id,
@@ -73,7 +76,9 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
             setTransactions(data.map(tx => ({
               ...tx,
               // RESILIENCE: Map either amount or amount_wnc
-              amount: tx.amount !== undefined ? tx.amount : (tx.amount_wnc || 0),
+              amount: tx.amount !== undefined && tx.amount !== null 
+                ? tx.amount 
+                : (tx.amount_wnc || 0),
               isOut: tx.type === 'withdrawal' || tx.type === 'transfer_out'
             })));
           }
@@ -144,7 +149,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
                     <ShieldCheck className="w-3 h-3 text-primary opacity-40" />
                 </div>
                 <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">
-                  {tx.timestamp ? formatDistanceToNow(new Date(tx.timestamp), { addSuffix: true }) : 'Processing...'}
+                  {tx.timestamp || tx.created_at ? formatDistanceToNow(new Date(tx.timestamp || tx.created_at), { addSuffix: true }) : 'Processing...'}
                 </p>
               </div>
             </div>

@@ -50,11 +50,19 @@ export default function InvitesPage() {
     /**
      * DUAL WALLET CALCULATION
      * Dynamically computes balances from the referrals registry.
+     * RESILIENT: Checks both reward_amount and amount_wnc.
      */
     const { escrowBalance, authorizedBalance } = useMemo(() => {
-        // RESILIENCE: Check both reward_amount and amount_wnc
-        const escrow = referrals.reduce((sum, r) => sum + (r.status === 'pending' ? (r.reward_amount || r.amount_wnc || 0) : 0), 0);
-        const approved = referrals.reduce((sum, r) => sum + (r.status === 'approved' ? (r.reward_amount || r.amount_wnc || 0) : 0), 0);
+        const escrow = referrals.reduce((sum, r) => {
+            const amount = r.reward_amount !== undefined && r.reward_amount !== null ? r.reward_amount : (r.amount_wnc || 0);
+            return sum + (r.status === 'pending' ? amount : 0);
+        }, 0);
+        
+        const approved = referrals.reduce((sum, r) => {
+            const amount = r.reward_amount !== undefined && r.reward_amount !== null ? r.reward_amount : (r.amount_wnc || 0);
+            return sum + (r.status === 'approved' ? amount : 0);
+        }, 0);
+        
         return { escrowBalance: escrow, authorizedBalance: approved };
     }, [referrals]);
 
@@ -114,8 +122,7 @@ export default function InvitesPage() {
             if (error) throw error;
             
             if (data.success) {
-                // RESILIENCE: Map amount or amount_wnc from the RPC response
-                const settledAmount = data.amount || data.amount_wnc || 0;
+                const settledAmount = data.amount !== undefined ? data.amount : (data.amount_wnc || 0);
                 toast({ title: "Settlement Authorized", description: `Transferred ${settledAmount} WNC to your main vault.` });
                 await refreshProfile();
                 await fetchReferrals();
@@ -231,8 +238,7 @@ export default function InvitesPage() {
                     <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p><span className="text-[8px] font-black text-white/20 uppercase">Registry v4.0</span></div>
                     <div className="space-y-2">
                         {isLoading ? ( <div className="flex flex-col items-center py-10 gap-3 opacity-20"><Loader2 className="w-6 h-6 animate-spin" /><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Nodes...</p></div> ) : referrals.length > 0 ? ( referrals.map((ref, i) => {
-                                // RESILIENCE: Map reward_amount or amount_wnc
-                                const amount = ref.reward_amount || ref.amount_wnc || 0;
+                                const amount = ref.reward_amount !== undefined && ref.reward_amount !== null ? ref.reward_amount : (ref.amount_wnc || 0);
                                 return (
                                 <motion.div key={ref.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all shadow-2xl">
                                     <div className="flex items-center gap-4">

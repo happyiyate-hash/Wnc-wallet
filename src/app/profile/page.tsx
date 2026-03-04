@@ -99,6 +99,7 @@ export default function ProfilePage() {
     /**
      * INSTITUTIONAL REDEMPTION HANDSHAKE
      * Calling the existing public.redeem_gift_card RPC function.
+     * NORMALIZED: Trims and uppercases input code.
      */
     const handleRedeemCode = async () => {
         const cleanCode = giftCode.trim().toUpperCase();
@@ -117,8 +118,10 @@ export default function ProfilePage() {
             if (error) throw error;
 
             if (data.success) {
-                setRedeemResult({ success: true, amount: data.amount, message: data.message });
-                toast({ title: "Redemption Authorized", description: data.message || `Successfully claimed ${data.amount} WNC!` });
+                // RESILIENCE: Map either amount or amount_wnc
+                const amount = data.amount !== undefined ? data.amount : (data.amount_wnc || 0);
+                setRedeemResult({ success: true, amount: amount, message: data.message });
+                toast({ title: "Redemption Authorized", description: data.message || `Successfully claimed ${amount} WNC!` });
                 // Trigger profile refresh to sync updated wnc_earnings
                 await refreshProfile();
             } else {
