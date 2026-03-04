@@ -109,6 +109,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
 
+  // 1. ATOMIC INITIALIZATION EFFECT
+  // Strictly offline derivation and registry loading
   useEffect(() => {
     if (authLoading) return;
 
@@ -169,7 +171,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     runInit();
-  }, [authLoading, user?.id, profile?.vault_infura_key]);
+  }, [authLoading, user?.id]); // Removed profile fields from dependency to prevent infinite loops
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -204,6 +206,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing, 
     setHasFetchedInitialData
   });
+
+  // 2. EXPLICIT ENGINE TRIGGER
+  // Guarantees the refresh() fires once derivation is complete
+  useEffect(() => {
+    if (!isInitialized || isWalletLoading || !wallets || wallets.length === 0) return;
+    
+    console.log("[ENGINE_TRIGGER] Starting initial data handshake...");
+    refresh();
+  }, [isInitialized, isWalletLoading, wallets === null, refresh]);
 
   const allAssets = useMemo(() => {
     if (!isInitialized || isWalletLoading || !wallets || wallets.length === 0) return [];

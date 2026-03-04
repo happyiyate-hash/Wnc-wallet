@@ -39,7 +39,6 @@ export function useWalletEngine({
   setHasFetchedInitialData: (val: boolean) => void;
 }) {
   const isRunningRef = useRef(false);
-  const queueRef = useRef<number[]>([]);
 
   const startEngine = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRunningRef.current) return;
@@ -48,6 +47,7 @@ export function useWalletEngine({
     setIsRefreshing(true);
     
     try {
+      console.log("[ENGINE] Starting global market audit...");
       // PHASE 1: ATOMIC REGISTRY HYDRATION (Prices + Active Network)
       const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, {});
       setPrices(newPrices);
@@ -101,12 +101,13 @@ export function useWalletEngine({
 
   /**
    * INITIAL & REACTIVE TRIGGER
+   * Fixed dependency array to correctly watch for the presence of wallets
    */
   useEffect(() => {
     if (wallets && wallets.length > 0 && viewingNetwork?.chainId && user) {
       startEngine();
     }
-  }, [viewingNetwork?.chainId, wallets === null, user?.id, startEngine]);
+  }, [viewingNetwork?.chainId, !!wallets, user?.id, startEngine]);
 
   /**
    * PERIODIC REFRESH LOOP (60s for full registry audit)
@@ -116,7 +117,7 @@ export function useWalletEngine({
       const interval = setInterval(startEngine, 60000);
       return () => clearInterval(interval);
     }
-  }, [viewingNetwork?.chainId, wallets === null, user?.id, startEngine]);
+  }, [viewingNetwork?.chainId, !!wallets, user?.id, startEngine]);
 
   return { refresh: startEngine };
 }
