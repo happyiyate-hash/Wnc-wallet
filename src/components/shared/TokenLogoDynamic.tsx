@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
@@ -20,6 +20,10 @@ interface TokenLogoDynamicProps {
 
 const CDN_BASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';
 
+/**
+ * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
+ * Features Synchronous Cache Hydration to eliminate UI flickering.
+ */
 export default function TokenLogoDynamic({
   logoUrl,
   alt,
@@ -29,47 +33,66 @@ export default function TokenLogoDynamic({
   symbol,
   name,
 }: TokenLogoDynamicProps) {
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // 1. DETERMINISTIC CACHE KEY
+  const cacheKey = useMemo(() => {
+    const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
+    return `logo_v3_${slug}_${symbol?.toLowerCase() || 'native'}`;
+  }, [name, symbol, alt]);
+
+  // 2. SYNCHRONOUS HYDRATION (Client-Only)
+  // We initialize state from localStorage if available to prevent the 1st-render flicker
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(cacheKey);
+    }
+    return null;
+  });
+
+  const [isLoading, setIsLoading] = useState(!resolvedUrl);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     async function resolve() {
-      setIsLoading(true);
-      setHasError(false);
-
-      // 1. SMART CACHE: Check persistent cache first
-      const cacheKey = `logo_url_${name?.replace(/\s+/g, '_')}_${symbol}`;
+      // If we already have a cached URL, don't trigger a loading state
       const cached = localStorage.getItem(cacheKey);
-      if (cached) {
+      if (!cached) {
+        setIsLoading(true);
+      } else {
         setResolvedUrl(cached);
         setIsLoading(false);
-        return;
       }
+      
+      setHasError(false);
 
-      // 2. Perform direct Supabase lookup using Name-first priority
+      // A. If already cached, we can skip the heavy Supabase lookup
+      if (cached) return;
+
+      // B. Perform direct Supabase registry lookup
       if (symbol || name) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
-            localStorage.setItem(cacheKey, direct); // Save to cache for next render
+            localStorage.setItem(cacheKey, direct); 
             setIsLoading(false);
             return;
           }
         } catch (e) {
-          console.warn("Direct logo lookup failed:", e);
+          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup failed:", e);
         }
       }
 
-      // 3. Fallback logic for provided URLs
+      // C. Fallback to provided URL nodes
       if (logoUrl) {
+        let finalUrl = logoUrl;
         if (logoUrl.startsWith('http')) {
-          setResolvedUrl(logoUrl);
+          finalUrl = logoUrl;
         } else if (logoUrl.startsWith('/')) {
-          // Prepend CDN base for relative paths
-          setResolvedUrl(`${CDN_BASE_URL}${logoUrl}`);
+          finalUrl = `${CDN_BASE_URL}${logoUrl}`;
         }
+        
+        setResolvedUrl(finalUrl);
+        localStorage.setItem(cacheKey, finalUrl);
         setIsLoading(false);
         return;
       }
@@ -78,9 +101,9 @@ export default function TokenLogoDynamic({
     }
 
     resolve();
-  }, [logoUrl, symbol, name]);
+  }, [logoUrl, symbol, name, cacheKey]);
 
-  if (isLoading) {
+  if (isLoading && !resolvedUrl) {
     return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
   }
 

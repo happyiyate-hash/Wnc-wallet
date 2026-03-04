@@ -5,8 +5,8 @@ import { logoSupabase } from './supabase/logo-client';
 
 /**
  * WEVINA TOKEN LOGO RESOLUTION SYSTEM
+ * Version: 3.0.0 (High-Efficiency Cache Layer)
  * Direct lookup via the dedicated metadata project (gcghriodmljkusdduhzl).
- * Priority: Exact Name -> Exact Symbol -> Cleaned Name.
  */
 
 /**
@@ -18,14 +18,14 @@ function cleanTokenName(name: string): string {
     .replace(/Network/gi, '')
     .replace(/Chain/gi, '')
     .replace(/Ecosystem Token/gi, '')
-    .replace(/ETH/gi, '') // Remove redundant ETH suffix for L2s
+    .replace(/ETH/gi, '') 
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
  * Fetches a token's direct logo URL from Supabase storage.
- * Lookup priorities: Full Exact Name (provided in list) -> Symbol -> Clean Name.
+ * Results should be cached by the consuming component to prevent redundant API calls.
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
@@ -73,7 +73,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
 
     return null;
   } catch (error) {
-    console.warn("Logo lookup error:", error);
+    console.warn("[LOGO_RESOLVER_FAIL]:", error);
     return null;
   }
 }
