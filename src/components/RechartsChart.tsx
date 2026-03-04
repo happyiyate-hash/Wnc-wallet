@@ -1,10 +1,9 @@
 'use client';
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchChartData } from '@/lib/coingecko';
 import { Skeleton } from './ui/skeleton';
 import { AlertCircle } from 'lucide-react';
-import { useWallet } from '@/contexts/wallet-provider';
 
 interface RechartsChartProps {
     coingeckoId?: string | null;
@@ -12,16 +11,16 @@ interface RechartsChartProps {
     isNegative: boolean;
     chainId?: number;
     contractAddress?: string;
+    currentPrice?: number;
 }
 
 /**
  * RECHART TERMINAL COMPONENT
+ * Optimized for "Binary Style" live updates where the leading edge wiggles in real-time.
  * Wrapped in memo to prevent high-frequency re-renders from the live price ticker.
  */
-const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAddress }: RechartsChartProps) => {
-    // We only access these to get initial values, not as reactive dependencies for the graph path
-    const { prices, allAssets } = useWallet();
-    const [data, setData] = React.useState<any[]>([]);
+const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAddress, currentPrice }: RechartsChartProps) => {
+    const [historicalData, setHistoricalData] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(false);
 
@@ -35,33 +34,23 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
             const currentSignature = `${coingeckoId}:${contractAddress}:${days}`;
             
             // If range hasn't changed, perform a silent background update instead of showing Skeleton
-            if (data.length === 0 || lastSignatureRef.current !== currentSignature) {
+            if (historicalData.length === 0 || lastSignatureRef.current !== currentSignature) {
                 setLoading(true);
             }
             
             setError(false);
-            
-            // Resolve current reference price for synthetic delta validation
-            let currentPrice = 0;
-            if (coingeckoId === 'internal:wnc') {
-                const wnc = allAssets.find(a => a.symbol === 'WNC');
-                currentPrice = wnc?.priceUsd || 0.000606;
-            } else if (coingeckoId) {
-                currentPrice = prices[coingeckoId.toLowerCase()]?.price || 0;
-            } else if (contractAddress) {
-                currentPrice = prices[contractAddress.toLowerCase()]?.price || 0;
-            }
 
             try {
+                // We fetch the historical baseline. We pass the currentPrice to help generate synthetic data if needed.
                 const res = await fetchChartData(coingeckoId || '', days, currentPrice, chainId, contractAddress);
                 if (!res || res.length === 0) {
-                    if (data.length === 0) setError(true);
+                    if (historicalData.length === 0) setError(true);
                 } else {
-                    setData(res);
+                    setHistoricalData(res);
                     lastSignatureRef.current = currentSignature;
                 }
             } catch (e) {
-                if (data.length === 0) setError(true);
+                if (historicalData.length === 0) setError(true);
             } finally {
                 setLoading(false);
             }
@@ -69,15 +58,35 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
 
         resolveAndFetch();
         
-        // Refresh chart data every 5 minutes (standard institutional interval)
+        // Refresh historical baseline every 5 minutes
         const interval = setInterval(resolveAndFetch, 300000);
         return () => clearInterval(interval);
-        
-        // CRITICAL FIX: Removed 'prices' and 'allAssets' from dependencies.
-        // This prevents the chart from re-fetching and blinking on every live price tick.
     }, [coingeckoId, days, chainId, contractAddress]);
 
-    if (loading && data.length === 0) {
+    /**
+     * LIVE EDGE MERGER
+     * Injects the high-frequency currentPrice into the data array for a "live" feel.
+     * This creates the wiggle effect at the end of the line.
+     */
+    const chartData = useMemo(() => {
+        if (!historicalData || historicalData.length === 0) return [];
+        if (!currentPrice) return historicalData;
+
+        const lastPoint = historicalData[historicalData.length - 1];
+        const now = Date.now();
+
+        // If the update is within 60 seconds of the last point, replace it to simulate live movement.
+        // Otherwise, append a new point to make the chart "grow" until the next historical refresh.
+        if (now - lastPoint.time < 60000) {
+            const newData = [...historicalData];
+            newData[newData.length - 1] = { ...lastPoint, price: currentPrice, time: now };
+            return newData;
+        } else {
+            return [...historicalData, { time: now, price: currentPrice }];
+        }
+    }, [historicalData, currentPrice]);
+
+    if (loading && historicalData.length === 0) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-white/[0.02]">
                 <Skeleton className="w-3/4 h-32 rounded-[2.5rem] bg-white/5 animate-pulse" />
@@ -89,7 +98,7 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
         );
     }
 
-    if (error && data.length === 0) {
+    if (error && historicalData.length === 0) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 bg-white/[0.02]">
                 <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
@@ -105,7 +114,7 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
 
     return (
         <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+            <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                 <defs>
                     <linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={fillcolor} stopOpacity={0.2} />
@@ -132,11 +141,10 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
                     fill="url(#chart-fill)"
                     strokeWidth={2.5}
                     dot={false}
-                    isAnimationActive={data.length < 500} // Disable animation for very dense datasets to prevent lag
-                    animationDuration={1000}
+                    isAnimationActive={false} // IMPORTANT: Prevents entrance flickering on every price update
                 />
                 <XAxis dataKey="time" hide />
-                <YAxis domain={['dataMin', 'dataMax']} hide />
+                <YAxis domain={['auto', 'auto']} hide />
             </AreaChart>
         </ResponsiveContainer>
     );

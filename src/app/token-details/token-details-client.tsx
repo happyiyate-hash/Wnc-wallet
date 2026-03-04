@@ -205,6 +205,7 @@ export default function TokenDetailsClientPage() {
             isNegative={isNegativeChange}
             chainId={token.chainId}
             contractAddress={token.address}
+            currentPrice={price} // Pass live price for the "Binary" wiggle effect
           />
         </div>
 
