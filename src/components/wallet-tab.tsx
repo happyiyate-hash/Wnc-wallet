@@ -29,7 +29,7 @@ import { motion, animate } from 'framer-motion';
 
 const AnimatedNumber = ({ value }: { value: number }) => {
   const [displayValue, setDisplayValue] = useState(value);
-  const { currentSymbol } = useCurrency();
+  const { formatFiat } = useCurrency();
 
   useEffect(() => {
     const controls = animate(displayValue, value, {
@@ -42,11 +42,7 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 
   return (
     <span>
-      {currentSymbol}
-      {displayValue.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}
+      {formatFiat(displayValue)}
     </span>
   );
 };
@@ -113,7 +109,7 @@ TokenRow.displayName = 'TokenRow';
 
 export default function WalletTab({ computedAssets }: { computedAssets: AssetRow[] }) {
   const { isRefreshing, refresh, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
-  const { formatFiat } = useCurrency();
+  const { formatFiat, convertFromUsd } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
@@ -133,6 +129,7 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
       const change = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
       if (!price || !balance) continue;
+      // Reverse percentage to get yesterday's USD price
       const denom = 1 + change / 100;
       if (denom === 0) continue;
       const priceYesterday = price / denom;
@@ -151,6 +148,8 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
 
   if (!hasMounted) return <div className="flex-1 bg-transparent" />;
 
+  const changeAbsolute = Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1)));
+
   return (
     <div className="flex flex-col h-full bg-transparent">
       <div className="pt-8">
@@ -160,10 +159,10 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
                   <AnimatedNumber value={totalFiatValue || 0} />
                 </h2>
                 <div className="flex items-center gap-3 mt-1.5">
-                  <p className={cn('text-sm font-bold flex items-center gap-2', total24hChange >= 0 ? 'text-green-400' : 'text-red-400')}>
-                    {total24hChange >= 0 ? '+' : '-'}{formatFiat(Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1))))}
+                  <div className={cn('text-sm font-bold flex items-center gap-2', total24hChange >= 0 ? 'text-green-400' : 'text-red-400')}>
+                    {total24hChange >= 0 ? '+' : '-'}{formatFiat(changeAbsolute)}
                     <span className="text-gray-500 font-medium text-xs">({total24hChange.toFixed(2)}%)</span>
-                  </p>
+                  </div>
                   {isRefreshing && <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                 </div>
             </div>

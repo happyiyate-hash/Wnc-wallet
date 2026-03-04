@@ -9,6 +9,7 @@ interface CurrencyContextType {
   rates: { [key: string]: number };
   currentSymbol: string;
   formatFiat: (val: number, decimals?: number) => string;
+  convertFromUsd: (val: number) => number;
   isLoadingRates: boolean;
 }
 
@@ -29,15 +30,20 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       
       if (data && data.rates) {
+        // BTC is the base for CoinGecko rates
         const btcToUsd = data.rates.usd.value;
         const normalizedRates: { [key: string]: number } = {};
         
-        // Normalize all rates to USD base
+        // Normalize all rates to USD base (USD = 1)
         Object.keys(data.rates).forEach(key => {
           const rateData = data.rates[key];
           const code = key.toUpperCase();
+          // Rate = (BTC/Target) / (BTC/USD)
           normalizedRates[code] = rateData.value / btcToUsd;
         });
+
+        // Ensure fallback for standard currencies if missing
+        if (!normalizedRates['USD']) normalizedRates['USD'] = 1;
 
         setRates(prev => ({ ...prev, ...normalizedRates }));
         setIsLoadingRates(false);
@@ -62,20 +68,25 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('selected_currency', code);
   }, []);
 
+  const convertFromUsd = useCallback((val: number) => {
+    const rate = rates[selectedCurrency] || 1;
+    return val * rate;
+  }, [selectedCurrency, rates]);
+
   const currentSymbol = SYMBOLS[selectedCurrency] || selectedCurrency;
 
   const formatFiat = useCallback((val: number, decimals?: number) => {
-    const rate = rates[selectedCurrency] || 1;
-    const converted = val * rate;
+    const converted = convertFromUsd(val);
     
     // Auto-detect precision for micro-assets like WNC/USD
+    // WNC is ~0.0006 USD. In NGN it's 1.00.
     const precision = decimals !== undefined ? decimals : (converted < 0.01 && converted > 0 ? 6 : 2);
     
     return `${currentSymbol}${converted.toLocaleString('en-US', { 
       minimumFractionDigits: precision, 
       maximumFractionDigits: precision 
     })}`;
-  }, [selectedCurrency, rates, currentSymbol]);
+  }, [selectedCurrency, rates, currentSymbol, convertFromUsd]);
 
   const value = useMemo(() => ({
     selectedCurrency,
@@ -83,8 +94,9 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     rates,
     currentSymbol,
     formatFiat,
+    convertFromUsd,
     isLoadingRates
-  }), [selectedCurrency, setCurrency, rates, currentSymbol, formatFiat, isLoadingRates]);
+  }), [selectedCurrency, setCurrency, rates, currentSymbol, formatFiat, convertFromUsd, isLoadingRates]);
 
   return (
     <CurrencyContext.Provider value={value}>

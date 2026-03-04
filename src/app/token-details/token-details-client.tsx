@@ -81,7 +81,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 /**
  * TOKEN DETAILS CLIENT PAGE
  * Optimized for Read-Only Instant Rendering.
- * Does not trigger reloads or splashes during navigation.
+ * All valuations are passed through the conversion engine.
  */
 export default function TokenDetailsClientPage() {
   const { isInitialized, hasFetchedInitialData, balances, prices, viewingNetwork, allChainsMap, userAddedTokens } = useWallet();
@@ -97,14 +97,12 @@ export default function TokenDetailsClientPage() {
 
   /**
    * ATOMIC TOKEN RESOLUTION (Unified Registry Resolver)
-   * Scans both initial assets and user-provisioned custom nodes.
    */
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
     
     const targetChainId = chainIdStr ? parseInt(chainIdStr) : viewingNetwork.chainId;
 
-    // 1. Handle Internal WNC separately (pinned to NGN)
     if (tokenSymbol === 'WNC') {
         const price = prices['internal:wnc']?.price || 0.0006;
         const balance = profile?.wnc_earnings || 0;
@@ -121,16 +119,13 @@ export default function TokenDetailsClientPage() {
         } as AssetRow;
     }
 
-    // 2. UNIFIED SEARCH: Skeleton + Custom
     const baseAssets = getInitialAssets(targetChainId);
     const customAssets = userAddedTokens.filter(t => t.chainId === targetChainId);
     const fullRegistry = [...baseAssets, ...customAssets];
 
     const skeleton = fullRegistry.find(a => a.symbol === tokenSymbol);
-    
     if (!skeleton) return null;
 
-    // 3. Hydrate with Live Registry Data
     const chainBalances = balances[targetChainId] || [];
     const balDoc = chainBalances.find(b => 
         skeleton.isNative ? b.symbol === skeleton.symbol : b.address?.toLowerCase() === skeleton.address?.toLowerCase()
@@ -152,7 +147,6 @@ export default function TokenDetailsClientPage() {
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
-  // BARRIER GUARD: Only show if data hasn't arrived at the context level
   if (!isInitialized || !hasFetchedInitialData) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#050505] gap-4">
