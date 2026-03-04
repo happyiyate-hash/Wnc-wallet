@@ -63,7 +63,6 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     fetchMetadata();
   }, [isOpen, viewingNetwork]);
 
-  // 2. Merge Hardcoded + Database tokens
   const mergedTokens = useMemo(() => {
     if (!viewingNetwork) return [];
     const hardcoded = getInitialAssets(viewingNetwork.chainId).map(a => ({
@@ -72,7 +71,6 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     } as AssetRow));
 
     const combined = [...hardcoded, ...dbTokens];
-    // Remove duplicates by identifier (address or symbol)
     return combined.reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
         if (!acc.find(t => (t.isNative ? t.symbol : t.address?.toLowerCase()) === identifier)) {
@@ -93,17 +91,19 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
     const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
 
     if (checked) {
-        // ACTIVATE: Add to wallet if not present and ensure not hidden
         if (!token.isNative && !isAdded) {
-            addUserToken(token);
+            // PROVISIONING HANDSHAKE: Ensure full asset row is passed
+            addUserToken({
+                ...token,
+                balance: '0',
+                updatedAt: Date.now()
+            });
         }
         if (hiddenTokenKeys.has(key)) {
             toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
         }
-        // Trigger a background refresh to fetch the balance for the newly visible token
         refresh();
     } else {
-        // DEACTIVATE: Move to hidden state
         if (!hiddenTokenKeys.has(key)) {
             toggleTokenVisibility(viewingNetwork.chainId, token.symbol);
         }
@@ -152,8 +152,6 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                         const key = `${viewingNetwork.chainId}:${token.symbol}`;
                         const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
                         const isHidden = hiddenTokenKeys.has(key);
-                        
-                        // LOGIC FIX: Token is 'On' if it's Native or explicitly Added AND not hidden.
                         const isOn = (token.isNative || isAdded) && !isHidden;
 
                         return (

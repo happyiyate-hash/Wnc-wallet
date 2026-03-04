@@ -98,6 +98,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
   const hasTriggeredAuditInSessionRef = useRef(false);
 
+  // HYDRATION ENGINE
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -148,7 +149,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedCustom) {
             const tokens = JSON.parse(savedCustom);
             setUserAddedTokens(tokens);
-            // Synchronize with Market Engine
             registerCustomTokens(tokens);
         }
 
@@ -162,6 +162,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     hydrate();
   }, [authLoading, user?.id, registerCustomTokens]);
+
+  // NETWORK PERSISTENCE HANDLER
+  useEffect(() => {
+    if (isInitialized && chainsWithLogos.length > 0 && user) {
+      const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
+      if (savedNetworkId && !viewingNetwork) {
+        const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
+        if (found) setViewingNetwork(found);
+      }
+    }
+  }, [isInitialized, chainsWithLogos, user, viewingNetwork]);
+
+  const updateNetwork = useCallback((network: ChainConfig) => {
+    setViewingNetwork(network);
+    if (user) {
+      localStorage.setItem(`active_network_id_${user.id}`, network.chainId.toString());
+    }
+  }, [user]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -431,7 +449,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: effectiveViewingNetwork,
-    setNetwork: setViewingNetwork,
+    setNetwork: updateNetwork,
     allAssets, 
     allChains: chainsWithLogos,
     allChainsMap,
@@ -453,7 +471,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setUserAddedTokens(prev => {
             const n = [...prev, t];
             if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(n));
-            registerCustomTokens(n); // Update market engine
+            registerCustomTokens(n);
             return n;
         });
     },
@@ -467,7 +485,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, 
-    updateInfuraKey, user, getAvailableAssetsForChain
+    updateNetwork, user, getAvailableAssetsForChain, updateInfuraKey
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

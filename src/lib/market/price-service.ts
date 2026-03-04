@@ -9,7 +9,6 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 /**
  * INSTITUTIONAL MARKET DYNAMICS SERVICE
  * Handles price discovery, delta calculations, and internal asset valuation.
- * Version 5.0: Universal ERC-20 Privacy Handshake
  */
 
 export interface PriceResult {
@@ -50,9 +49,6 @@ function getWncOpeningPrice(currentPrice: number): number {
 /**
  * STAGED PRICE DISCOVERY HANDSHAKE (UNIVERSAL)
  * Fetches market data for all known assets across all chains.
- * Stage 1: Native CoinGecko Index (By ID)
- * Stage 2: Contract-Based Platform API (By Address - Universal ERC-20)
- * Stage 3: Institutional Metadata Project Fallback (CDN)
  */
 export async function fetchGlobalMarketData(
   chains: ChainConfig[],
@@ -63,20 +59,18 @@ export async function fetchGlobalMarketData(
   const platformTokens: { [platform: string]: Set<string> } = {};
   const allKnownAssets: AssetRow[] = [];
 
-  // 1. REGISTRY MAPPING: Unified discovery list
+  // 1. REGISTRY MAPPING
   chains.forEach(chain => {
     const base = getInitialAssets(chain.chainId);
     allKnownAssets.push(...base.map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
   });
   
-  // Add user-added custom tokens to the discovery pool
   allKnownAssets.push(...customTokens);
 
   allKnownAssets.forEach(a => {
     if (a.coingeckoId) {
       coingeckoIds.add(a.coingeckoId.toLowerCase());
     } else if (!a.isNative && a.address?.startsWith('0x')) {
-      // UNIVERSAL ERC-20 DISCOVERY: Handle any token by its contract address
       const platform = COINGECKO_PLATFORM_MAP[a.chainId];
       if (platform) {
         if (!platformTokens[platform]) platformTokens[platform] = new Set();
@@ -90,12 +84,10 @@ export async function fetchGlobalMarketData(
   try {
     const fetchPromises: Promise<any>[] = [];
     
-    // STAGE 1: Standard IDs (BTC, ETH, established tokens)
     if (coingeckoIds.size > 0) {
         fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
     }
     
-    // STAGE 2: Contract Addresses (New tokens, User-added tokens)
     Object.entries(platformTokens).forEach(([platform, addresses]) => {
       fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
     });
@@ -108,7 +100,6 @@ export async function fetchGlobalMarketData(
           const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
           const change = data.usd_24h_change || 0;
           if (price > 0) {
-            // Keys are always lowercased IDs or 0x addresses for consistent lookup
             newPrices[key.toLowerCase()] = { price, change };
           }
         });
@@ -116,7 +107,6 @@ export async function fetchGlobalMarketData(
     });
 
     // STAGE 3: INSTITUTIONAL FALLBACK (CDN/Metadata Project)
-    // For tokens still missing prices, check our internal metadata registry (gcghriodmljkusdduhzl)
     const missingTokens = allKnownAssets.filter(a => {
         const id = (a.priceId || a.coingeckoId || a.address || '').toLowerCase();
         return !newPrices[id];
@@ -124,10 +114,11 @@ export async function fetchGlobalMarketData(
 
     if (missingTokens.length > 0 && logoSupabase) {
         try {
+            const contractList = missingTokens.map(t => (t.address || '').toLowerCase()).filter(Boolean);
             const { data: metadataPrices } = await logoSupabase
                 .from('token_metadata')
                 .select('contract_address, token_details')
-                .in('contract_address', missingTokens.map(t => (t.address || '').toLowerCase()).filter(Boolean));
+                .in('contract_address', contractList);
 
             if (metadataPrices) {
                 metadataPrices.forEach(m => {
@@ -141,7 +132,7 @@ export async function fetchGlobalMarketData(
                 });
             }
         } catch (e) {
-            console.warn("[CDN_FALLBACK_ADVISORY] Registry lookup deferred.");
+            console.warn("[CDN_FALLBACK_ADVISORY] Metadata sync deferred.");
         }
     }
 
@@ -157,7 +148,7 @@ export async function fetchGlobalMarketData(
     };
 
   } catch (e) {
-    console.warn("[MARKET_SERVICE_ERROR] Market sync interrupted:", e);
+    console.warn("[MARKET_SERVICE_ERROR] Handshake interrupted:", e);
   }
 
   return newPrices;
