@@ -1,13 +1,13 @@
 'use client';
 
-import type { WalletWithMetadata, UserProfile } from '@/lib/types';
+import type { WalletWithMetadata } from '@/lib/types';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Build-Safe & Smooth Version)
  * All heavy crypto libraries are dynamically imported inside the function.
  * Implements a "Yielding Handshake" to prevent UI thread blocking.
  */
-export async function deriveAllWallets(mnemonic: string, profile?: UserProfile | null): Promise<WalletWithMetadata[]> {
+export async function deriveAllWallets(mnemonic: string, hederaAddress?: string): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
 
   // Helper to yield the main thread and keep animations smooth
@@ -168,7 +168,7 @@ export async function deriveAllWallets(mnemonic: string, profile?: UserProfile |
       { address: adaAddress, type: 'cardano' },
       { address: tronAddress, privateKey: tronPrivateKey, type: 'tron' },
       { address: algoAddress, privateKey: algoRoot.privateKey!.toString('hex'), type: 'algorand' },
-      { address: profile?.hedera_address || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
+      { address: hederaAddress || '0.0.0', privateKey: hbarPrivateKey.toString(), type: 'hedera' },
       { address: xtzAddress, type: 'tezos' },
       { address: aptosAccount.address().toString(), privateKey: Buffer.from(aptosAccount.signingKey.secretKey).toString('hex'), type: 'aptos' },
       { address: suiAddress, type: 'sui' }

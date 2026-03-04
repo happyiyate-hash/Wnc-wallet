@@ -129,10 +129,6 @@ export default function SettingsPage() {
 
         setIsUploading(true);
         try {
-            // VERIFY SESSION BEFORE UPLOAD
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) throw new Error("Auth session missing! Please refresh.");
-
             const timestamp = Date.now();
             const fileName = `profiles/${user.id}/${timestamp}-${file.name.replace(/\s+/g, '_')}`;
 
@@ -164,27 +160,8 @@ export default function SettingsPage() {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // PRIMING HANDSHAKE: Ensure session is alive and tokens are refreshed
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError || !session) {
-                // If session is missing, try a quick refresh before failing
-                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-                if (refreshError || !refreshData.session) {
-                    throw new Error("Auth session missing! Please sign in again.");
-                }
-            }
-
-            // 1. Update Auth Metadata
-            const { error: authError } = await supabase.auth.updateUser({
-                data: { 
-                    name: username,
-                    photo_url: photoUrl || undefined
-                }
-            });
-            if (authError) throw authError;
-
-            // 2. Update Public Profile Node
+            // 1. Update Public Profile Node ONLY
+            // We skip auth metadata update to prevent unnecessary session refreshes
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -214,6 +191,8 @@ export default function SettingsPage() {
         if (!user?.email || !passwordInput) return;
         setIsVerifying(true);
         try {
+            // Note: In a production app, we would use a specialized edge function
+            // to verify password without re-signing in to prevent onAuthStateChange resets.
             const { error } = await supabase!.auth.signInWithPassword({
                 email: user.email,
                 password: passwordInput

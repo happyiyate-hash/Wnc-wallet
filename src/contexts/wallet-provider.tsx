@@ -113,9 +113,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setAccountNumber(profile.account_number);
       if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
     }
-  }, [profile, user]);
+  }, [profile?.account_number, user]);
 
-  // 3. SECURE BLOCKING INITIALIZATION
+  // 3. SECURE DECOUPLED INITIALIZATION
+  // Only depends on user.id and hedera_address to prevent loops on name/photo changes
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
     if (!user) {
@@ -128,7 +129,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        const derived = await deriveAllWallets(savedMnemonic, profile);
+        // Use hedera_address specifically rather than full profile object
+        const derived = await deriveAllWallets(savedMnemonic, profile?.hedera_address);
         setWallets(derived);
       }
 
@@ -148,7 +150,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsWalletLoading(false);
     }
-  }, [user, profile, authLoading]);
+  }, [user?.id, profile?.hedera_address, authLoading]);
 
   useEffect(() => {
     initLocalSession();
@@ -179,7 +181,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem(`infura_api_key_${user.id}`);
     }
-  }, [user]);
+  }, [user?.id]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const { getInitialAssets } = require('@/lib/wallets/balances');
@@ -199,7 +201,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-    const derived = await deriveAllWallets(mnemonic, profile);
+    const derived = await deriveAllWallets(mnemonic, profile?.hedera_address);
     setWallets(derived);
     
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -209,14 +211,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
     return mnemonic;
-  }, [user, profile, accountNumber]);
+  }, [user?.id, profile?.account_number, profile?.hedera_address, accountNumber]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Authentication required");
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
-    const derived = await deriveAllWallets(mnemonic, profile);
+    const derived = await deriveAllWallets(mnemonic, profile?.hedera_address);
     setWallets(derived);
     
     let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -225,13 +227,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
-  }, [user, profile, accountNumber]);
+  }, [user?.id, profile?.account_number, profile?.hedera_address, accountNumber]);
 
   const saveToVault = useCallback(async () => {
     if (!user) return;
     const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
     if (mnemonic) await saveVaultToCloud(user.id, mnemonic);
-  }, [user]);
+  }, [user?.id]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) {
@@ -252,7 +254,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (data.phrase) {
         localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
-        const derived = await deriveAllWallets(data.phrase, profile);
+        const derived = await deriveAllWallets(data.phrase, profile?.hedera_address);
         setWallets(derived);
       }
     }
@@ -274,7 +276,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     await refreshProfile();
     toast({ title: "Node Synchronized", description: "Successfully restored all encrypted vault credentials." });
-  }, [user, profile, refreshProfile, toast]);
+  }, [user?.id, profile, refreshProfile, toast]);
 
   const deleteWallet = useCallback(async () => {
     if (user) {
@@ -287,7 +289,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setHasFetchedInitialData(true);
         router.replace('/wallet-session');
     }
-  }, [user, router]);
+  }, [user?.id, router]);
 
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
@@ -343,7 +345,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.error("PERMANENT_DELETE_FAIL:", e);
         toast({ variant: "destructive", title: "Destruction Error", description: e.message });
     }
-  }, [user, refreshProfile, router, toast]);
+  }, [user?.id, refreshProfile, router, toast]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
@@ -361,7 +363,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     await authSignOut();
     window.location.href = '/auth/login';
-  }, [authSignOut, user]);
+  }, [authSignOut, user?.id]);
 
   const getAddressForChain = useCallback((chain: ChainConfig, wallets: WalletWithMetadata[]) => {
     return getAddressForChainUtil(chain, wallets);
@@ -398,7 +400,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
         isAuditRunningRef.current = false;
     }
-  }, [user, wallets, accountNumber, profile, chainsWithLogos]);
+  }, [user?.id, wallets, accountNumber, profile, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
