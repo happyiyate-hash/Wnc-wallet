@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
 import type { UserProfile } from '@/lib/types';
@@ -19,6 +19,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasInitializedRef = useRef(false);
 
   const fetchProfile = async (userId: string) => {
     if (!supabase) return null;
@@ -37,71 +38,103 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return data as UserProfile;
       }
     } catch (e) {
-        console.warn("Profile fetch error:", e);
+        console.warn("[REGISTRY_PROFILE_ADVISORY]", e);
     }
     return null;
   };
 
   /**
-   * HYDRATION & REVALIDATION
+   * INSTITUTIONAL AUTH BOOT SEQUENCE
+   * Hardened with a fail-fast safety timeout to prevent permanent hangs.
    */
   useEffect(() => {
-    // 1. Initial Cache Hydration (Browser only)
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('profile_cache_')) {
-        try {
-          const cached = JSON.parse(localStorage.getItem(key)!);
-          setProfile(cached);
-          break;
-        } catch (e) { /* silent skip */ }
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    // 1. SAFETY SENTINEL: Fail-fast if session takes too long
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("[AUTH_SENTINEL] Fail-safe triggered. Releasing terminal lock.");
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+
+    // 2. Initial Cache Hydration (Zero-Latency UI)
+    if (typeof window !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('profile_cache_')) {
+          try {
+            const cached = JSON.parse(localStorage.getItem(key)!);
+            setProfile(cached);
+            break;
+          } catch (e) { /* silent skip */ }
+        }
       }
     }
 
     if (!supabase) {
       setLoading(false);
+      clearTimeout(safetyTimeout);
       return;
     }
 
-    // 2. Session Revalidation
+    // 3. CORE SESSION HANDSHAKE
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log("[AUTH_TERMINAL] Verifying identity session...");
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) throw sessionError;
+
         const currentUser = session?.user ?? null;
         setUser(currentUser);
+        
         if (currentUser) {
-            await fetchProfile(currentUser.id);
+            // FIRE AND FORGET: Start profile fetch but don't block the auth loading flag
+            // This prevents "Verifying Identity" from hanging on profiles table latency.
+            fetchProfile(currentUser.id).finally(() => {
+              setLoading(false);
+              clearTimeout(safetyTimeout);
+            });
+        } else {
+          setLoading(false);
+          clearTimeout(safetyTimeout);
         }
       } catch (e) {
-        console.error("[INIT_SESSION_FAIL]", e);
-      } finally {
+        console.error("[AUTH_TERMINAL_FAIL]", e);
         setLoading(false);
+        clearTimeout(safetyTimeout);
       }
     };
 
     checkSession();
 
+    // 4. REAL-TIME SESSION LISTENER
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AUTH_EVENT] ${event}`);
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
       if (currentUser) {
-        await fetchProfile(currentUser.id);
+        fetchProfile(currentUser.id);
       } else if (event === 'SIGNED_OUT') {
         setProfile(null);
         setUser(null);
       }
       
       setLoading(false);
+      clearTimeout(safetyTimeout);
     });
 
     return () => {
       subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
     };
   }, []);
 
   /**
-   * ECOSYSTEM REAL-TIME SYNC
+   * REAL-TIME REGISTRY SYNC
    */
   useEffect(() => {
     if (!supabase || !user) return;

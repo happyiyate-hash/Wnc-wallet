@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -36,6 +35,12 @@ export default function GlobalLoadingBarrier() {
   const isAppReady = hasMounted && isAuthResolved && isWalletResolved && isDataResolved;
 
   if (!isAppReady) {
+    // Determine the most accurate feedback for the user
+    let statusText = 'Establishing Terminal...';
+    if (!isAuthResolved) statusText = 'Verifying Identity...';
+    else if (!isWalletResolved) statusText = 'Deriving Secure Nodes...';
+    else if (!isDataResolved) statusText = 'Synchronizing Registry...';
+
     return (
       <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white">
         <div className="relative mb-12 flex items-center justify-center">
@@ -57,9 +62,7 @@ export default function GlobalLoadingBarrier() {
               <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
             </div>
             <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] animate-pulse">
-              {!isAuthResolved ? 'Verifying Identity...' : 
-               !isWalletResolved ? 'Deriving Secure Nodes...' : 
-               'Synchronizing Registry...'}
+              {statusText}
             </p>
           </div>
         </div>
