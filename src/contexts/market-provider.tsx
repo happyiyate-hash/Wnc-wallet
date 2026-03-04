@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-service';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -12,6 +12,7 @@ interface MarketContextType {
   prices: PriceResult;
   isMarketLoading: boolean;
   refreshPrices: (chains: ChainConfig[], customTokens: AssetRow[]) => Promise<void>;
+  registerCustomTokens: (tokens: AssetRow[]) => void;
 }
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
@@ -23,6 +24,13 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
   const [prices, setPrices] = useState<PriceResult>({});
   const [isMarketLoading, setIsMarketLoading] = useState(true);
+  
+  // High-performance custom token registry for background polling
+  const customTokensRef = useRef<AssetRow[]>([]);
+
+  const registerCustomTokens = useCallback((tokens: AssetRow[]) => {
+    customTokensRef.current = tokens;
+  }, []);
 
   // STABLE PRICE MERGER
   const updatePrices = useCallback((newPrices: PriceResult) => {
@@ -67,20 +75,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // AUTONOMOUS POLLING
+  // AUTONOMOUS POLLING LOOP
   useEffect(() => {
     const allChains = Object.values(evmNetworks) as ChainConfig[];
-    refreshPrices(allChains, []); // Initial boot refresh
+    
+    const execute = () => {
+        refreshPrices(allChains, customTokensRef.current);
+    };
 
-    const interval = setInterval(() => {
-      refreshPrices(allChains, []);
-    }, PRICE_REFRESH_INTERVAL);
+    execute(); // Initial boot refresh
 
+    const interval = setInterval(execute, PRICE_REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [refreshPrices]);
 
   return (
-    <MarketContext.Provider value={{ prices, isMarketLoading, refreshPrices }}>
+    <MarketContext.Provider value={{ prices, isMarketLoading, refreshPrices, registerCustomTokens }}>
       {children}
     </MarketContext.Provider>
   );

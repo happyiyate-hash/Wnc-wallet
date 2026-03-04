@@ -3,6 +3,7 @@ const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
 /**
  * CoinGecko Platform IDs mapped from Chain IDs
+ * Optimized for universal ERC-20 contract-based price discovery.
  */
 export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
     1: 'ethereum',
@@ -40,6 +41,7 @@ async function fetcher(url: string, retries = 2) {
             clearTimeout(timeoutId);
 
             if (res.status === 429) {
+                // Rate limited: Exponential backoff
                 await new Promise(r => setTimeout(r, 2000 * (i + 1)));
                 continue;
             }
@@ -103,15 +105,24 @@ export async function fetchPriceMap(ids: string[]): Promise<{ [id: string]: { us
 
 export async function fetchPricesByContract(platformId: string, addresses: string[]): Promise<{ [address: string]: { usd: number, usd_24h_change: number } }> {
     if (!platformId || addresses.length === 0) return {};
-    const cleanAddresses = addresses.filter(addr => addr && addr.startsWith('0x')).map(addr => addr.toLowerCase().trim()).join(',');
+    const cleanAddresses = addresses
+        .filter(addr => addr && addr.startsWith('0x'))
+        .map(addr => addr.toLowerCase().trim())
+        .join(',');
+    
     if (!cleanAddresses) return {};
+    
     try {
         const url = `${COINGECKO_API_URL}/simple/token_price/${platformId}?contract_addresses=${cleanAddresses}&vs_currencies=usd&include_24hr_change=true`;
         const data = await fetcher(url);
         if (!data) return {};
+        
         const result: any = {};
         Object.entries(data).forEach(([addr, info]: [string, any]) => {
-            result[addr.toLowerCase()] = { usd: info.usd || 0, usd_24h_change: info.usd_24h_change || 0 };
+            result[addr.toLowerCase()] = { 
+                usd: info.usd || 0, 
+                usd_24h_change: info.usd_24h_change || 0 
+            };
         });
         return result;
     } catch (e) {
@@ -127,6 +138,7 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
     let url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
 
+    // UNIVERSAL FALLBACK: If ID is missing, try contract-based chart
     if ((!coingeckoId || coingeckoId === 'undefined') && chainId && contractAddress && contractAddress.startsWith('0x')) {
         const platform = COINGECKO_PLATFORM_MAP[chainId];
         if (platform) {

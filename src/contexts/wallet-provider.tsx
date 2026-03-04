@@ -72,7 +72,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
   const { user, loading: authLoading, profile, signOut } = useUser();
-  const { prices } = useMarket();
+  const { prices, registerCustomTokens } = useMarket();
   
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
   const [accountNumber, setAccountNumber] = useState<string | null>(null);
@@ -108,8 +108,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async () => {
       try {
-        console.log("[VAULT_HANDSHAKE] Restoring identity nodes...");
-        
         const savedInfura = localStorage.getItem(`infura_api_key_${user.id}`);
         if (savedInfura) setInfuraApiKeyState(savedInfura);
 
@@ -147,7 +145,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
 
         const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
-        if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
+        if (savedCustom) {
+            const tokens = JSON.parse(savedCustom);
+            setUserAddedTokens(tokens);
+            // Synchronize with Market Engine
+            registerCustomTokens(tokens);
+        }
 
         setIsInitialized(true);
       } catch (e) {
@@ -158,7 +161,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     hydrate();
-  }, [authLoading, user?.id]);
+  }, [authLoading, user?.id, registerCustomTokens]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -188,7 +191,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && !hasFetchedInitialData) {
-      console.log("[ENGINE_TRIGGER] Starting first data handshake...");
       refresh();
     }
   }, [isInitialized, isWalletLoading, !!wallets, hasFetchedInitialData, refresh]);
@@ -391,13 +393,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user || !wallets || wallets.length === 0 || !accountNumber || chainsWithLogos.length === 0) return;
     if (isAuditRunningRef.current) return;
 
-    // PERSISTENCE GATE: Create a deterministic fingerprint for the current node configuration
     const fingerprint = `registry_audit_v2_${user.id}_${wallets[0].address}`;
     const hasAudited = localStorage.getItem(fingerprint);
 
-    // If we've already audited this specific node in this session OR permanently, skip the UI unless forced
     if (!options?.forceUI && (hasAudited === 'true' || hasTriggeredAuditInSessionRef.current)) {
-        console.log("[SENTINEL] Registry already secured. Skipping visible audit.");
         return;
     }
 
@@ -407,7 +406,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
         await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => {
             setSyncDiagnostic(p => ({ ...p, ...u }));
-            // On completion, secure the fingerprint permanently to prevent redundant animations on next reload
             if (u.status === 'completed') {
                 localStorage.setItem(fingerprint, 'true');
             }
@@ -417,14 +415,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, wallets, accountNumber, profile, chainsWithLogos]);
 
-  // NEW: Autonomous Provider-Level Diagnostic Trigger
-  // This ensures the audit runs once when the wallet is ready, 
-  // but prevents re-triggering during internal navigation.
   useEffect(() => {
     if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData) {
       const timer = setTimeout(() => {
         runCloudDiagnostic();
-      }, 3000); // 3s delay to allow dashboard components to stabilize
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [isInitialized, isWalletLoading, !!wallets, hasFetchedInitialData, runCloudDiagnostic]);
@@ -458,6 +453,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setUserAddedTokens(prev => {
             const n = [...prev, t];
             if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(n));
+            registerCustomTokens(n); // Update market engine
             return n;
         });
     },
@@ -467,7 +463,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }), [
     isInitialized, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey,
-    prices,
+    prices, registerCustomTokens,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, 
