@@ -3,7 +3,6 @@ const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3';
 
 /**
  * CoinGecko Platform IDs mapped from Chain IDs
- * Comprehensive mapping for institutional asset discovery.
  */
 export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
     1: 'ethereum',
@@ -29,22 +28,27 @@ export const COINGECKO_PLATFORM_MAP: { [chainId: number]: string } = {
 };
 
 /**
- * A generic fetcher function for CoinGecko API with automatic retries.
+ * A generic fetcher function for CoinGecko API with automatic retries and timeouts.
  */
 async function fetcher(url: string, retries = 2) {
     for (let i = 0; i <= retries; i++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
             if (res.status === 429) {
-                // Rate limit hit, wait and retry
                 await new Promise(r => setTimeout(r, 2000 * (i + 1)));
                 continue;
             }
             if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
             return await res.json();
-        } catch (e) {
+        } catch (e: any) {
+            clearTimeout(timeoutId);
             if (i === retries) {
-                console.warn(`[COINGECKO_FAIL] Final attempt for ${url}:`, e);
+                console.warn(`[COINGECKO_FAIL] Final attempt for ${url}:`, e.message);
                 return null;
             }
             await new Promise(r => setTimeout(r, 1000));
@@ -115,10 +119,6 @@ export async function fetchPricesByContract(platformId: string, addresses: strin
     }
 }
 
-/**
- * Unified Chart Fetcher
- * Supports Coin ID, Internal Handshake, and Contract-based discovery.
- */
 export async function fetchChartData(coingeckoId: string, days: string, currentPrice?: number, chainId?: number, contractAddress?: string) {
     if (coingeckoId === 'internal:wnc') {
         return generateInternalChartData(currentPrice || 0.000606, days);
@@ -127,7 +127,6 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
     let url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
 
-    // If ID is missing or undefined, attempt platform discovery using contract address
     if ((!coingeckoId || coingeckoId === 'undefined') && chainId && contractAddress && contractAddress.startsWith('0x')) {
         const platform = COINGECKO_PLATFORM_MAP[chainId];
         if (platform) {

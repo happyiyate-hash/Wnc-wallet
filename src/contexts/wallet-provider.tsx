@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -107,7 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
 
-  // 2. Profile Sync - Only update Account Number, not wallet state
+  // 2. Profile Sync
   useEffect(() => {
     if (profile?.account_number) {
       setAccountNumber(profile.account_number);
@@ -117,7 +118,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * STABLE INITIALIZATION ENGINE
-   * Hardened to depend strictly on user.id to prevent loops on profile metadata updates.
+   * Hardened to depend strictly on user.id to prevent loops.
    */
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
@@ -131,7 +132,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        // Derive wallets using only the mnemonic. hedera_address is fetched inside derivation if needed
         const derived = await deriveAllWallets(savedMnemonic);
         setWallets(derived);
       }
@@ -158,8 +158,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [initLocalSession]);
 
+  /**
+   * RESOLVED NETWORK HANDSHAKE
+   * Ensures the engine always has a valid target node.
+   */
+  const effectiveViewingNetwork = useMemo(() => {
+    return viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig);
+  }, [viewingNetwork, chainsWithLogos]);
+
   const { refresh } = useWalletEngine({
-    wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, infuraApiKey,
+    wallets, 
+    viewingNetwork: effectiveViewingNetwork, 
+    user, 
+    chainsWithLogos, 
+    userAddedTokens, 
+    rates, 
+    infuraApiKey,
     setPrices: (newPrices) => {
       setPrices(newPrices);
       localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
@@ -171,7 +185,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    setIsRefreshing, setHasFetchedInitialData
+    setIsRefreshing, 
+    setHasFetchedInitialData
   });
 
   const updateInfuraKey = useCallback(async (key: string | null) => {
@@ -245,7 +260,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication session missing.");
 
-    // 1. RESTORE MNEMONIC
     if (profile?.vault_phrase && profile?.iv) {
       onStatusUpdate?.('Restoring Vault Registry...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -261,7 +275,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 2. RESTORE API KEY (RPC NODE)
     if (profile?.vault_infura_key && profile?.infura_iv) {
       onStatusUpdate?.('Synchronizing RPC Nodes...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -379,7 +392,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const contextValue = useMemo(() => ({
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
-    viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
+    viewingNetwork: effectiveViewingNetwork,
     setNetwork: setViewingNetwork,
     allAssets: [], 
     allChains: chainsWithLogos,
@@ -407,7 +420,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData,
     syncDiagnostic, runCloudDiagnostic
   }), [
-    isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, viewingNetwork,
+    isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, effectiveViewingNetwork,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 

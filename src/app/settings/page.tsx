@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -184,7 +185,6 @@ export default function SettingsPage() {
         if (!user?.email || !passwordInput) return;
         setIsVerifying(true);
         try {
-            // Internal verification check
             const { error } = await supabase!.auth.signInWithPassword({
                 email: user.email,
                 password: passwordInput

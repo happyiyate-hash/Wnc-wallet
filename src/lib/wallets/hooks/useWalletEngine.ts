@@ -8,8 +8,6 @@ import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE
- * Orchestrates periodic market and balance synchronization.
- * Triggers on initial load, network switch, and every 30s interval.
  */
 export function useWalletEngine({
   wallets,
@@ -48,7 +46,6 @@ export function useWalletEngine({
     
     try {
       // 1. Fetch Market Prices (Global)
-      // This includes the deterministic WNC price lookup
       const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates, {});
       setPrices(newPrices);
       
@@ -65,12 +62,12 @@ export function useWalletEngine({
         [viewingNetwork.chainId]: currentBalances 
       }));
       
-      // 3. Mark Initial Synchronization as Complete
-      // This signals the GlobalLoadingBarrier to drop
-      setHasFetchedInitialData(true);
     } catch (e) {
       console.warn("[ENGINE_ADVISORY] Market synchronization interrupted:", e);
     } finally { 
+      // ALWAYS mark initial data as fetched once the first run completes (even if partial)
+      // to allow the Loading Barrier to drop.
+      setHasFetchedInitialData(true);
       setIsRefreshing(false); 
       isRunningRef.current = false;
     }
@@ -78,20 +75,18 @@ export function useWalletEngine({
 
   /**
    * INITIAL & REACTIVE TRIGGER
-   * Fires on: Network Switch, Wallet Derivation, or User Session Re-init.
    */
   useEffect(() => {
-    if (wallets && wallets.length > 0 && viewingNetwork && user) {
+    if (wallets && wallets.length > 0 && viewingNetwork?.chainId && user) {
       startEngine();
     }
   }, [viewingNetwork?.chainId, wallets === null, user?.id, startEngine]);
 
   /**
    * PERIODIC REFRESH LOOP (30s)
-   * Ensures terminal registry stays synchronized with live chain data.
    */
   useEffect(() => {
-    if (wallets && wallets.length > 0 && viewingNetwork && user) {
+    if (wallets && wallets.length > 0 && viewingNetwork?.chainId && user) {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
       refreshIntervalRef.current = setInterval(startEngine, 30000);
     }
