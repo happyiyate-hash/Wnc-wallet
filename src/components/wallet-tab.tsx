@@ -109,7 +109,7 @@ TokenRow.displayName = 'TokenRow';
 
 export default function WalletTab({ computedAssets }: { computedAssets: AssetRow[] }) {
   const { isRefreshing, refresh, infuraApiKey, setIsRequestOverlayOpen } = useWallet();
-  const { formatFiat, convertFromUsd } = useCurrency();
+  const { formatFiat } = useCurrency();
   
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isApiKeySheetOpen, setIsApiKeySheetOpen] = useState(false);
@@ -120,24 +120,34 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
 
   useEffect(() => { setHasMounted(true); }, []);
 
-  const { totalFiatValue, total24hChange } = useMemo(() => {
-    const totalValue = computedAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
-    let totalValueYesterday = 0;
+  const { totalFiatValue, total24hChange, changeAbsolute } = useMemo(() => {
+    // 1. Current Valuation (Sum of all assets in USD)
+    const currentTotalUsd = computedAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
     
+    // 2. Yesterday's Valuation
+    let yesterdayTotalUsd = 0;
     for (const asset of computedAssets) {
-      const price = asset.priceUsd ?? 0;
-      const change = asset.pctChange24h ?? 0;
+      const currentPriceUsd = asset.priceUsd ?? 0;
+      const changePercent = asset.pctChange24h ?? 0;
       const balance = parseFloat(asset.balance || '0') || 0;
-      if (!price || !balance) continue;
-      // Reverse percentage to get yesterday's USD price
-      const denom = 1 + change / 100;
+      if (!currentPriceUsd || !balance) continue;
+      
+      // Math: OldPrice = CurrentPrice / (1 + %Change/100)
+      const denom = 1 + (changePercent / 100);
       if (denom === 0) continue;
-      const priceYesterday = price / denom;
-      totalValueYesterday += priceYesterday * balance;
+      const yesterdayPriceUsd = currentPriceUsd / denom;
+      yesterdayTotalUsd += yesterdayPriceUsd * balance;
     }
     
-    const delta = totalValueYesterday === 0 ? 0 : ((totalValue - totalValueYesterday) / totalValueYesterday) * 100;
-    return { totalFiatValue: totalValue, total24hChange: delta };
+    // 3. Delta Calculation
+    const deltaPercent = yesterdayTotalUsd === 0 ? 0 : ((currentTotalUsd - yesterdayTotalUsd) / yesterdayTotalUsd) * 100;
+    const deltaAbsoluteUsd = Math.abs(currentTotalUsd - yesterdayTotalUsd);
+
+    return { 
+      totalFiatValue: currentTotalUsd, 
+      total24hChange: deltaPercent,
+      changeAbsolute: deltaAbsoluteUsd
+    };
   }, [computedAssets]);
 
   const openAction = (type: string) => {
@@ -147,8 +157,6 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
   };
 
   if (!hasMounted) return <div className="flex-1 bg-transparent" />;
-
-  const changeAbsolute = Math.abs(totalFiatValue - (totalFiatValue / (1 + total24hChange / 100 || 1)));
 
   return (
     <div className="flex flex-col h-full bg-transparent">

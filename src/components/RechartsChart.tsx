@@ -18,7 +18,7 @@ interface RechartsChartProps {
 
 /**
  * RECHART TERMINAL COMPONENT
- * Optimized for "Binary Style" live updates where the leading edge wiggles in real-time.
+ * Version: 3.2.0 (Forex-Aware Analytics)
  */
 const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAddress, currentPrice }: RechartsChartProps) => {
     const [historicalData, setHistoricalData] = React.useState<any[]>([]);
@@ -123,6 +123,7 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
                     labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: '900' }}
                     labelFormatter={(label) => new Date(label).toLocaleString()}
+                    // INSTITUTIONAL CONVERSION NODE
                     formatter={(value: any) => [formatFiat(value), 'Price']}
                 />
                 <Area

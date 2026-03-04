@@ -19,34 +19,49 @@ const SYMBOLS: { [key: string]: string } = {
   USD: '$', NGN: '₦', EUR: '€', GBP: '£', KES: 'KSh', GHS: 'GH₵', ZAR: 'R', CAD: 'CA$', JPY: '¥', CNY: '¥', INR: '₹'
 };
 
+/**
+ * INSTITUTIONAL CURRENCY & FOREX ENGINE
+ * Version: 3.1.0 (Live Math Transformation)
+ * Handles real-time exchange rate discovery and mathematical conversion.
+ */
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
-  const [rates, setRates] = useState<{ [key: string]: number }>({ USD: 1, NGN: 1650, EUR: 0.92, GBP: 0.77, KES: 129, GHS: 16, ZAR: 17.5 });
+  // Initial fallback rates based on 2024 baseline
+  const [rates, setRates] = useState<{ [key: string]: number }>({ 
+    USD: 1, 
+    NGN: 1650, 
+    EUR: 0.92, 
+    GBP: 0.77, 
+    KES: 129, 
+    GHS: 16, 
+    ZAR: 17.5 
+  });
   const [isLoadingRates, setIsLoadingRates] = useState(true);
 
   const fetchLiveRates = useCallback(async () => {
     try {
+      // CoinGecko /exchange_rates returns data relative to BTC
       const res = await fetch('https://api.coingecko.com/api/v3/exchange_rates');
       const data = await res.json();
       
       if (data && data.rates) {
-        // BTC is the base for CoinGecko rates
-        const btcToUsd = data.rates.usd.value;
+        const btcToUsdRate = data.rates.usd.value;
         const normalizedRates: { [key: string]: number } = {};
         
         // Normalize all rates to USD base (USD = 1)
+        // Math: (BTC/Target) / (BTC/USD) = USD/Target
         Object.keys(data.rates).forEach(key => {
           const rateData = data.rates[key];
           const code = key.toUpperCase();
-          // Rate = (BTC/Target) / (BTC/USD)
-          normalizedRates[code] = rateData.value / btcToUsd;
+          normalizedRates[code] = rateData.value / btcToUsdRate;
         });
 
-        // Ensure fallback for standard currencies if missing
+        // Ensure absolute fallback for USD
         if (!normalizedRates['USD']) normalizedRates['USD'] = 1;
 
         setRates(prev => ({ ...prev, ...normalizedRates }));
         setIsLoadingRates(false);
+        console.log(`[FOREX_SYNC] Registry updated. USD/NGN: ${normalizedRates['NGN']?.toFixed(2)}`);
       }
     } catch (e) {
       console.warn("[CURRENCY_ENGINE_ADVISORY] Live forex handshake failed. Using cached baseline.");
@@ -55,21 +70,25 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('selected_currency');
-    if (saved) setSelectedCurrency(saved);
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('selected_currency');
+      if (saved) setSelectedCurrency(saved);
+    }
     
     fetchLiveRates();
-    const interval = setInterval(fetchLiveRates, 15 * 60 * 1000); // 15 min refresh
+    const interval = setInterval(fetchLiveRates, 15 * 60 * 1000); // 15 min institutional refresh
     return () => clearInterval(interval);
   }, [fetchLiveRates]);
 
   const setCurrency = useCallback((code: string) => {
     setSelectedCurrency(code);
-    localStorage.setItem('selected_currency', code);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selected_currency', code);
+    }
   }, []);
 
   const convertFromUsd = useCallback((val: number) => {
-    const rate = rates[selectedCurrency] || 1;
+    const rate = rates[selectedCurrency] || rates['USD'] || 1;
     return val * rate;
   }, [selectedCurrency, rates]);
 
@@ -78,15 +97,17 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const formatFiat = useCallback((val: number, decimals?: number) => {
     const converted = convertFromUsd(val);
     
-    // Auto-detect precision for micro-assets like WNC/USD
-    // WNC is ~0.0006 USD. In NGN it's 1.00.
-    const precision = decimals !== undefined ? decimals : (converted < 0.01 && converted > 0 ? 6 : 2);
+    // AUTO-PRECISION SENTINEL
+    // Standard assets get 2 decimals. Micro-assets (like WNC in USD) get 6.
+    const precision = decimals !== undefined 
+      ? decimals 
+      : (converted < 0.01 && converted > 0 ? 6 : 2);
     
     return `${currentSymbol}${converted.toLocaleString('en-US', { 
       minimumFractionDigits: precision, 
       maximumFractionDigits: precision 
     })}`;
-  }, [selectedCurrency, rates, currentSymbol, convertFromUsd]);
+  }, [currentSymbol, convertFromUsd]);
 
   const value = useMemo(() => ({
     selectedCurrency,

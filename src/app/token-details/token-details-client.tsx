@@ -80,8 +80,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 /**
  * TOKEN DETAILS CLIENT PAGE
- * Optimized for Read-Only Instant Rendering.
- * All valuations are passed through the conversion engine.
+ * Version: 3.2.0 (Zero-Latency Math)
  */
 export default function TokenDetailsClientPage() {
   const { isInitialized, hasFetchedInitialData, balances, prices, viewingNetwork, allChainsMap, userAddedTokens } = useWallet();
@@ -96,7 +95,7 @@ export default function TokenDetailsClientPage() {
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
   /**
-   * ATOMIC TOKEN RESOLUTION (Unified Registry Resolver)
+   * ATOMIC TOKEN RESOLUTION
    */
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
@@ -177,11 +176,11 @@ export default function TokenDetailsClientPage() {
      );
   }
 
-  const price = token?.priceUsd ?? 0;
+  const priceUsd = token?.priceUsd ?? 0;
   const priceChange24h = token?.pctChange24h ?? 0;
   const isNegativeChange = priceChange24h < 0;
   const balance = Number(token.balance || '0');
-  const fiatValue = token.fiatValueUsd ?? (price * balance);
+  const fiatValueUsd = token.fiatValueUsd ?? (priceUsd * balance);
   const activeNetwork = allChainsMap[token.chainId] || viewingNetwork;
 
   const handleAction = (path: string) => {
@@ -196,7 +195,7 @@ export default function TokenDetailsClientPage() {
           <div className="flex flex-col items-center justify-center gap-1">
             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">Market Evaluation ({selectedCurrency})</p>
             <h2 className="text-5xl font-black tracking-tighter text-white transition-all duration-500">
-              {formatFiat(price)}
+              {formatFiat(priceUsd)}
             </h2>
           </div>
           <div className={cn("mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest transition-all duration-500", isNegativeChange ? "bg-red-500/10 text-red-400" : "bg-green-500/10 text-green-400")}>
@@ -213,7 +212,7 @@ export default function TokenDetailsClientPage() {
             isNegative={isNegativeChange}
             chainId={token.chainId}
             contractAddress={token.address}
-            currentPrice={price} 
+            currentPrice={priceUsd} 
           />
         </div>
 
@@ -258,7 +257,7 @@ export default function TokenDetailsClientPage() {
                 </div>
                 <div className="text-right relative z-10">
                     <p className="font-black text-lg text-white">{balance.toLocaleString('en-US', { maximumFractionDigits: 6 })}</p>
-                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">≈ {formatFiat(fiatValue)}</p>
+                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">≈ {formatFiat(fiatValueUsd)}</p>
                 </div>
             </div>
             
