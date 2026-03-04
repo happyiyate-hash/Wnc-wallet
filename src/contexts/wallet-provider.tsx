@@ -98,7 +98,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
   const hasTriggeredAuditInSessionRef = useRef(false);
 
-  // HYDRATION ENGINE
+  // HYDRATION ENGINE (Includes Immediate Network Restoration)
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -114,6 +114,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         const savedAcc = localStorage.getItem(`account_number_${user.id}`);
         if (savedAcc) setAccountNumber(savedAcc);
+
+        // PRE-INIT NETWORK LOCK: Load the saved network ID immediately
+        const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
+        if (savedNetworkId && chainsWithLogos.length > 0) {
+          const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
+          if (found) setViewingNetwork(found);
+        }
 
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         if (savedMnemonic) {
@@ -161,18 +168,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     hydrate();
-  }, [authLoading, user?.id, registerCustomTokens]);
-
-  // NETWORK PERSISTENCE HANDLER
-  useEffect(() => {
-    if (isInitialized && chainsWithLogos.length > 0 && user) {
-      const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
-      if (savedNetworkId && !viewingNetwork) {
-        const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
-        if (found) setViewingNetwork(found);
-      }
-    }
-  }, [isInitialized, chainsWithLogos, user, viewingNetwork]);
+  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]); // Added chainsWithLogos.length to re-trigger if logos arrive after first hydration
 
   const updateNetwork = useCallback((network: ChainConfig) => {
     setViewingNetwork(network);

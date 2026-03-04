@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from "react";
@@ -77,6 +78,11 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 );
 
 
+/**
+ * TOKEN DETAILS CLIENT PAGE
+ * Optimized for Read-Only Instant Rendering.
+ * Does not trigger reloads or splashes during navigation.
+ */
 export default function TokenDetailsClientPage() {
   const { isInitialized, hasFetchedInitialData, balances, prices, viewingNetwork, allChainsMap, userAddedTokens } = useWallet();
   const { profile } = useUser();
@@ -146,6 +152,7 @@ export default function TokenDetailsClientPage() {
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
+  // BARRIER GUARD: Only show if data hasn't arrived at the context level
   if (!isInitialized || !hasFetchedInitialData) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#050505] gap-4">
