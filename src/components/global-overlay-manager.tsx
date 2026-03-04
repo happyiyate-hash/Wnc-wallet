@@ -10,7 +10,7 @@ import { usePathname, useRouter } from 'next/navigation';
 /**
  * GLOBAL IDENTITY SENTINEL
  * Hardened authority node for routing authenticated sessions.
- * Enforces the Onboarding -> Identity -> Vault sequence.
+ * Prioritizes Vault Setup over Profile settings if cryptographic keys are missing.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -34,9 +34,7 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 2. AUTHENTICATED VALIDATION NODES
-    
-    // Verify Email (Bypass for Google Authority)
+    // 2. EMAIL VERIFICATION NODE
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
@@ -45,31 +43,31 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 3. IDENTITY COMPLETION GATE
-    // If the profile node is unnamed, redirect to settings to complete registration
-    if (!profile?.name && !isSettingsRoute && !isAuthRoute) {
-      router.replace('/settings');
-      return;
-    }
-
-    // 4. VAULT MANDATORY GATE
+    // 3. VAULT MANDATORY GATE (CRITICAL PRIORITY)
     // If no local wallets are derived, the user MUST be redirected to the setup screen.
-    // This prevents empty dashboard states on new devices.
+    // This takes priority over profile settings.
     const hasLocalWallet = wallets && wallets.length > 0;
-    if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute && !isSettingsRoute) {
+    if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
       router.replace('/wallet-session');
       return;
     }
 
+    // 4. IDENTITY COMPLETION GATE
+    // If the profile node is unnamed, redirect to settings only if vault is established
+    if (!profile?.name && !isSettingsRoute && !isAuthRoute && !isWalletSessionRoute) {
+      router.replace('/settings');
+      return;
+    }
+
     // 5. DASHBOARD CONVERGENCE
-    // Redirect home only if they are stuck on setup screens but already have a valid vault
-    if ((isAuthRoute || isWalletSessionRoute) && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
-      router.replace('/');
+    // Redirect home only if they are on a setup route but already have a valid vault and identity
+    if ((isAuthRoute || isWalletSessionRoute || isSettingsRoute) && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
+      if (pathname !== '/') router.replace('/');
     }
 
   }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 
-  // ZERO-FLICKER SENTINEL: If user just logged out, return null immediately
+  // ZERO-FLICKER SENTINEL
   if (!user && !isAuthRoute) return null;
 
   return (
