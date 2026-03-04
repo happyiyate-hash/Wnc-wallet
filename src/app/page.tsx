@@ -26,21 +26,18 @@ function HomeContent() {
     isWalletLoading
   } = useWallet();
 
-  // ATOMIC GATE: Monitor wallet and data readiness
-  // Dashboard should only render once cryptography and initial data node are synchronized
-  const isReady = isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData;
-
   /**
    * INSTITUTIONAL SYNC CONTROLLER
    */
   useEffect(() => {
-    if (isReady) {
+    // Only run cloud audit once the terminal is stable
+    if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && hasFetchedInitialData) {
       const timer = setTimeout(() => {
         runCloudDiagnostic();
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isReady, runCloudDiagnostic]);
+  }, [isInitialized, isWalletLoading, wallets, hasFetchedInitialData, runCloudDiagnostic]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -56,8 +53,6 @@ function HomeContent() {
     window.addEventListener('scroll', handle);
     return () => window.removeEventListener('scroll', handle);
   }, []);
-
-  if (!isReady) return null;
 
   return (
     <div className="flex-1 bg-transparent pb-32 relative">
