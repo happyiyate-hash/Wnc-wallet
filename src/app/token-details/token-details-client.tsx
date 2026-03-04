@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import TransactionHistory from "./transaction-history";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getInitialAssets } from "@/lib/wallets/balances";
 
 const ActionButton = ({
   icon,
@@ -65,9 +66,9 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
                     name={token.name}
                     symbol={token.symbol}
                 />
-                <span className="font-semibold text-white">{token.symbol}</span>
+                <span className="font-black uppercase tracking-tight text-white">{token.symbol}</span>
             </div>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">{token.symbol === 'WNC' ? 'Internal Cloud Node' : network?.name}</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">{token.symbol === 'WNC' ? 'Internal Cloud Node' : network?.name}</span>
         </div>
         <Button onClick={onInfo} variant="ghost" size="icon" className="rounded-xl">
             <Info className="w-5 h-5 text-muted-foreground" />
@@ -77,7 +78,7 @@ const TokenDetailHeader = ({ onBack, onInfo, token, network }: { onBack: () => v
 
 
 export default function TokenDetailsClientPage() {
-  const { isInitialized, hasFetchedInitialData, balances, prices, getAvailableAssetsForChain, viewingNetwork, allChainsMap } = useWallet();
+  const { isInitialized, hasFetchedInitialData, balances, prices, viewingNetwork, allChainsMap, userAddedTokens } = useWallet();
   const { profile } = useUser();
   const { formatFiat, selectedCurrency } = useCurrency();
   const router = useRouter();
@@ -89,8 +90,8 @@ export default function TokenDetailsClientPage() {
   const [chartRange, setChartRange] = useState<"1D" | "1W" | "1M" | "3M" | "1Y" | "All">("1D");
 
   /**
-   * ATOMIC TOKEN RESOLUTION (Resilient Resolver)
-   * Reconstructs the token object from raw state nodes to prevent "Not Found" flashes.
+   * ATOMIC TOKEN RESOLUTION (Unified Registry Resolver)
+   * Scans both initial assets and user-provisioned custom nodes.
    */
   const token = useMemo(() => {
     if (!tokenSymbol || !isInitialized) return null;
@@ -114,9 +115,12 @@ export default function TokenDetailsClientPage() {
         } as AssetRow;
     }
 
-    // 2. Resolve from Chain Skeleton
-    const assetsForChain = getAvailableAssetsForChain(targetChainId);
-    const skeleton = assetsForChain.find(a => a.symbol === tokenSymbol);
+    // 2. UNIFIED SEARCH: Skeleton + Custom
+    const baseAssets = getInitialAssets(targetChainId);
+    const customAssets = userAddedTokens.filter(t => t.chainId === targetChainId);
+    const fullRegistry = [...baseAssets, ...customAssets];
+
+    const skeleton = fullRegistry.find(a => a.symbol === tokenSymbol);
     
     if (!skeleton) return null;
 
@@ -137,24 +141,27 @@ export default function TokenDetailsClientPage() {
         fiatValueUsd: balNum * (marketData?.price || 0),
         pctChange24h: marketData?.change || 0
     } as AssetRow;
-  }, [tokenSymbol, chainIdStr, isInitialized, balances, prices, profile, getAvailableAssetsForChain, viewingNetwork.chainId]);
+  }, [tokenSymbol, chainIdStr, isInitialized, balances, prices, profile, userAddedTokens, viewingNetwork.chainId]);
 
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
   if (!isInitialized || !hasFetchedInitialData) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-transparent gap-4">
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#050505] gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Resolving Registry...</p>
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Resolving Identity...</p>
       </div>
     );
   }
 
   if (!token) {
      return (
-        <div className="flex flex-col h-screen bg-transparent">
-            <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={{ symbol: 'ERR', name: 'Unknown' } as any} network={viewingNetwork} />
+        <div className="flex flex-col h-screen bg-[#050505]">
+            <div className="p-4 border-b border-white/5 bg-black/20 flex items-center justify-between">
+                <Button onClick={() => router.back()} variant="ghost" size="icon" className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
+                <div className="w-10" />
+            </div>
             <div className="flex-1 flex flex-col items-center justify-center text-center p-10 gap-4">
                 <div className="w-16 h-16 rounded-[2rem] bg-white/5 flex items-center justify-center">
                   <ArrowLeftRight className="w-8 h-8 opacity-20" />
@@ -181,7 +188,7 @@ export default function TokenDetailsClientPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-transparent">
+    <div className="flex flex-col h-screen bg-[#050505]">
       <TokenDetailHeader onBack={() => router.back()} onInfo={() => {}} token={token} network={activeNetwork} />
       <div className="flex-1 overflow-y-auto thin-scrollbar">
         <div className="text-center pt-8 pb-4">
@@ -199,13 +206,13 @@ export default function TokenDetailsClientPage() {
 
         <div className="h-[350px] relative w-full overflow-hidden mt-4">
           <RechartsChart 
-            key={`${token.symbol}-${token.chainId}`} // Fixed key per asset to prevent re-mounts on price ticks
+            key={`${token.symbol}-${token.chainId}`} 
             coingeckoId={coingeckoId} 
             days={chartRange} 
             isNegative={isNegativeChange}
             chainId={token.chainId}
             contractAddress={token.address}
-            currentPrice={price} // Pass live price for the "Binary" wiggle effect
+            currentPrice={price} 
           />
         </div>
 
