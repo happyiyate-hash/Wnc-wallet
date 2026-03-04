@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
-import { useCurrency } from "@/contexts/currency-provider";
+import { useCurrency, CURRENCY_REGISTRY } from "@/contexts/currency-provider";
 import { supabase } from "@/lib/supabase/client";
 import { 
   AlertDialog,
@@ -234,7 +234,13 @@ export default function SettingsPage() {
         }
     };
 
-    const sortedCurrencies = (Object.keys(rates).sort()).filter(c => c.toLowerCase().includes(currencySearch.toLowerCase()));
+    const filteredCurrencies = useMemo(() => {
+        return CURRENCY_REGISTRY.filter(c => 
+            c.code.toLowerCase().includes(currencySearch.toLowerCase()) || 
+            c.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+            c.country.toLowerCase().includes(currencySearch.toLowerCase())
+        );
+    }, [currencySearch]);
 
     const SettingItem = ({ icon: Icon, label, value, onClick, href, destructive, iconBg = "bg-primary/10", iconColor = "text-primary" }: any) => {
         const Content = (
@@ -435,12 +441,15 @@ export default function SettingsPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {/* NEW GLOBAL CURRENCY SELECTOR */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
                 <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[85vh] p-0 overflow-hidden shadow-2xl flex flex-col">
                     <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
                     <SheetHeader className="px-6 mb-4 shrink-0">
                         <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center text-white">Select Currency</SheetTitle>
-                        <SheetDescription className="sr-only">Switch your display currency for all valuations.</SheetDescription>
+                        <SheetDescription className="text-center text-[10px] font-black uppercase text-primary/60 tracking-widest">
+                            Regional Valuation Protocol
+                        </SheetDescription>
                     </SheetHeader>
 
                     {/* SEARCH NODE */}
@@ -460,30 +469,52 @@ export default function SettingsPage() {
                     </div>
 
                     <ScrollArea className="flex-1 px-6">
-                        <div className="space-y-1 pb-32">
-                            {sortedCurrencies.map(code => (
+                        <div className="space-y-2 pb-32">
+                            {filteredCurrencies.map(currency => (
                                 <button 
-                                    key={code} 
-                                    onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }} 
+                                    key={currency.code} 
+                                    onClick={() => { setCurrency(currency.code); setIsCurrencySheetOpen(false); }} 
                                     className={cn(
-                                        "w-full py-4 px-4 text-left font-bold transition-all flex items-center justify-between group rounded-2xl border border-transparent",
-                                        selectedCurrency === code ? "bg-primary/10 border-primary/20 text-primary" : "text-white/80 hover:bg-white/5"
+                                        "w-full p-5 text-left font-bold transition-all flex items-center justify-between group rounded-[2rem] border transition-all active:scale-[0.98]",
+                                        selectedCurrency === currency.code 
+                                            ? "bg-primary/10 border-primary/40 shadow-[0_0_30px_rgba(139,92,246,0.1)]" 
+                                            : "bg-white/[0.02] border-white/5 hover:bg-white/[0.05]"
                                     )}
                                 >
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-black uppercase tracking-widest leading-none">{code}</span>
-                                        <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter mt-1 opacity-40">Regional Registry Node</span>
+                                    <div className="flex items-center gap-4">
+                                        {/* SYMBOL NODE */}
+                                        <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                            <span className="text-xl font-black text-primary">{currency.symbol}</span>
+                                        </div>
+                                        
+                                        {/* FLAG & NAME NODE */}
+                                        <div className="flex flex-col">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xl leading-none">{currency.flag}</span>
+                                                <span className="text-sm font-black text-white/90 uppercase tracking-tight">
+                                                    {currency.name}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1 opacity-40">
+                                                {currency.code} • {currency.country}
+                                            </span>
+                                        </div>
                                     </div>
-                                    {selectedCurrency === code && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                                    
+                                    {selectedCurrency === currency.code && (
+                                        <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+                                            <CheckCircle2 className="w-4 h-4 text-primary" />
+                                        </div>
+                                    )}
                                 </button>
                             ))}
                             
-                            {sortedCurrencies.length === 0 && (
+                            {filteredCurrencies.length === 0 && (
                                 <div className="py-24 flex flex-col items-center justify-center text-center space-y-4 opacity-20">
                                     <Globe className="w-12 h-12 text-white" />
                                     <div className="space-y-1">
                                         <p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p>
-                                        <p className="text-[9px] font-medium leading-relaxed">The search term did not match any currency in the global registry.</p>
+                                        <p className="text-[9px] font-medium leading-relaxed">Try searching for a different regional code.</p>
                                     </div>
                                 </div>
                             )}
