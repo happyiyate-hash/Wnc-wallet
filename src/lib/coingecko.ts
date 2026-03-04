@@ -136,10 +136,12 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
     }
 
     const daysParam = days === '1D' ? '1' : days.slice(0, -1);
+    
+    // 1. ATOMIC RESOLUTION: ID-based lookup
     let url = `${COINGECKO_API_URL}/coins/${coingeckoId.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
 
-    // UNIVERSAL FALLBACK: If ID is missing, try contract-based chart
-    if ((!coingeckoId || coingeckoId === 'undefined') && chainId && contractAddress && contractAddress.startsWith('0x')) {
+    // 2. UNIVERSAL FALLBACK: If ID is missing, try contract-based historical discovery
+    if ((!coingeckoId || coingeckoId === 'undefined' || coingeckoId === 'null') && chainId && contractAddress && contractAddress.startsWith('0x')) {
         const platform = COINGECKO_PLATFORM_MAP[chainId];
         if (platform) {
             url = `${COINGECKO_API_URL}/coins/${platform}/contract/${contractAddress.toLowerCase()}/market_chart?vs_currency=usd&days=${daysParam}`;
@@ -154,7 +156,7 @@ export async function fetchChartData(coingeckoId: string, days: string, currentP
             price: price,
         }));
     } catch (error) {
-        console.error(`Failed to fetch chart data for ${coingeckoId}`, error);
+        console.error(`[CHART_DISCOVERY_FAIL] for ${coingeckoId || contractAddress}:`, error);
         return [];
     }
 }

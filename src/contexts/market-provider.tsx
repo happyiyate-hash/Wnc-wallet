@@ -17,7 +17,11 @@ interface MarketContextType {
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
 
-const PRICE_REFRESH_INTERVAL = 60000; // 1 minute
+/**
+ * HIGH-FREQUENCY MARKET UPDATE INTERVAL
+ * 15 seconds ensures live UI feel without redundant network pressure.
+ */
+const PRICE_UPDATE_INTERVAL = 15000;
 
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { user } = useUser();
@@ -85,7 +89,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
     execute(); // Initial boot refresh
 
-    const interval = setInterval(execute, PRICE_REFRESH_INTERVAL);
+    const interval = setInterval(execute, PRICE_UPDATE_INTERVAL);
     return () => clearInterval(interval);
   }, [refreshPrices]);
 

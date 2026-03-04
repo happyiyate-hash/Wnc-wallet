@@ -1,4 +1,3 @@
-
 'use client';
 
 import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
@@ -17,6 +16,8 @@ export interface PriceResult {
     change: number;
   };
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Calculates percentage change between two values.
@@ -49,6 +50,7 @@ function getWncOpeningPrice(currentPrice: number): number {
 /**
  * STAGED PRICE DISCOVERY HANDSHAKE (UNIVERSAL)
  * Fetches market data for all known assets across all chains.
+ * Implements Batch Rate-Limit Protection.
  */
 export async function fetchGlobalMarketData(
   chains: ChainConfig[],
@@ -82,29 +84,30 @@ export async function fetchGlobalMarketData(
   const newPrices: PriceResult = {};
 
   try {
-    const fetchPromises: Promise<any>[] = [];
-    
+    // STAGE 1: Standard ID Batch
     if (coingeckoIds.size > 0) {
-        fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
-    }
-    
-    Object.entries(platformTokens).forEach(([platform, addresses]) => {
-      fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
-    });
-
-    const results = await Promise.allSettled(fetchPromises);
-
-    results.forEach(res => {
-      if (res.status === 'fulfilled' && res.value) {
-        Object.entries(res.value).forEach(([key, data]: [string, any]) => {
-          const price = typeof data === 'number' ? data : (data.usd || data.price || 0);
-          const change = data.usd_24h_change || 0;
-          if (price > 0) {
-            newPrices[key.toLowerCase()] = { price, change };
-          }
+        const idPrices = await fetchPriceMap(Array.from(coingeckoIds));
+        Object.entries(idPrices).forEach(([key, data]: [string, any]) => {
+            newPrices[key.toLowerCase()] = { 
+                price: typeof data === 'number' ? data : (data.usd || 0), 
+                change: data.usd_24h_change || 0 
+            };
         });
-      }
-    });
+    }
+
+    // STAGE 2: SEQUENTIAL CONTRACT BATCHING (Rate-Limit Sentinel)
+    const platforms = Object.entries(platformTokens);
+    for (const [platform, addresses] of platforms) {
+        const contractPrices = await fetchPricesByContract(platform, Array.from(addresses));
+        Object.entries(contractPrices).forEach(([key, data]: [string, any]) => {
+            newPrices[key.toLowerCase()] = { 
+                price: data.usd || 0, 
+                change: data.usd_24h_change || 0 
+            };
+        });
+        // Institutional Breather between chain nodes
+        await sleep(200);
+    }
 
     // STAGE 3: INSTITUTIONAL FALLBACK (CDN/Metadata Project)
     const missingTokens = allKnownAssets.filter(a => {
