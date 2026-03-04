@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -21,6 +20,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { getInitialAssets } from '@/lib/wallets/balances';
+import type { PriceResult } from '@/lib/market/price-service';
 
 interface WalletContextType {
   isInitialized: boolean;
@@ -35,6 +35,7 @@ interface WalletContextType {
   isRefreshing: boolean;
   wallets: WalletWithMetadata[] | null;
   balances: { [key: string]: AssetRow[] };
+  prices: PriceResult;
   accountNumber: string | null;
   refresh: () => Promise<void>;
   importWallet: (mnemonic: string) => Promise<void>;
@@ -95,7 +96,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
-  // INITIAL HYDRATION
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -184,7 +184,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  // EXPLICIT REFRESH TRIGGER
   useEffect(() => {
     if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && !hasFetchedInitialData) {
       console.log("[ENGINE_TRIGGER] Starting first data handshake...");
@@ -229,14 +228,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
       
       const priceId = (asset.priceId || asset.coingeckoId || asset.address || '').toLowerCase();
-      const marketData = prices[priceId];
+      const marketData = prices[key];
+      const livePrice = marketData?.price || 0;
       const balNum = parseFloat(balDoc?.balance || '0');
 
       return {
         ...asset,
         balance: balDoc?.balance || '0',
-        priceUsd: marketData?.price || 0,
-        fiatValueUsd: balNum * (marketData?.price || 0),
+        priceUsd: livePrice,
+        fiatValueUsd: balNum * livePrice,
         pctChange24h: marketData?.change || 0
       };
     });
@@ -405,6 +405,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing, wallets, balances, accountNumber,
+    prices,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud,
     deleteWallet, deleteWalletPermanently, logout, 
     getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), 
@@ -430,6 +431,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }), [
     isInitialized, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey,
+    prices,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, 

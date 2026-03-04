@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -123,8 +122,10 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
   const shareUrl = useMemo(() => requestId ? `${window.location.origin}/request/${requestId}` : '', [requestId]);
 
   const livePrice = useMemo(() => {
-    if (!selectedToken) return 0;
+    if (!selectedToken || !prices) return 0;
     const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
+    // Special handling for internal assets if they aren't in the global prices object yet
+    if (selectedToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
     return prices[priceId]?.price || selectedToken.priceUsd || 0;
   }, [selectedToken, prices]);
 
@@ -352,8 +353,9 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   const hasInsufficientFunds = totalDebit > userBalance;
 
   const livePrice = useMemo(() => {
-    if (!activeToken) return 0;
+    if (!activeToken || !prices) return 0;
     const priceId = (activeToken.priceId || activeToken.coingeckoId || activeToken.address || '').toLowerCase();
+    if (activeToken.symbol === 'WNC') return prices['internal:wnc']?.price || 0.0006;
     return prices[priceId]?.price || activeToken.priceUsd || 0;
   }, [activeToken, prices]);
 

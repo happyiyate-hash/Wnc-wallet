@@ -1,9 +1,7 @@
-
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useRef, useCallback } from 'react';
 import type { ChainConfig, WalletWithMetadata, AssetRow } from '@/lib/types';
-import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-service';
 import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
@@ -32,12 +30,6 @@ const CHAIN_SPEED_SCORE: { [type: string]: number } = {
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (PHASE-PRIORITIZED)
- * 
- * Performance Strategy:
- * 1. Immediate Price Engine mount (independent).
- * 2. Phase 1: Active Network Discovery (Critical Path).
- * 3. Phase 2: Sequential Discovery based on Speed Tiers (Slow chains last).
- * 4. Tiered TTL Caching: Slow chains updated less frequently.
  */
 export function useWalletEngine({
   wallets,
@@ -45,9 +37,7 @@ export function useWalletEngine({
   user,
   chainsWithLogos,
   userAddedTokens,
-  rates,
   infuraApiKey,
-  setPrices,
   setBalances,
   setIsRefreshing,
   setHasFetchedInitialData
@@ -57,9 +47,7 @@ export function useWalletEngine({
   user: any;
   chainsWithLogos: ChainConfig[];
   userAddedTokens: AssetRow[];
-  rates: { [key: string]: number };
   infuraApiKey: string | null;
-  setPrices: (val: PriceResult) => void;
   setBalances: (update: (prev: any) => any) => void;
   setIsRefreshing: (val: boolean) => void;
   setHasFetchedInitialData: (val: boolean) => void;
@@ -86,7 +74,6 @@ export function useWalletEngine({
     try {
       // PHASE 1: Active Handshake
       console.log(`[ENGINE] Syncing Active Node: ${viewingNetwork.name}...`);
-      const startTime = Date.now();
       
       const activeBalances = await fetchBalancesForChain(
         viewingNetwork, 
@@ -102,7 +89,6 @@ export function useWalletEngine({
       
       // ACTIVE NODE VERIFIED: Drop the barrier
       setHasFetchedInitialData(true);
-      console.log(`[ENGINE] Active Node Verified in ${Date.now() - startTime}ms.`);
 
       // PHASE 2: Background Sequence (Sorted by speed)
       const otherChains = chainsWithLogos
@@ -116,15 +102,11 @@ export function useWalletEngine({
         const speedScore = CHAIN_SPEED_SCORE[chain.type || 'evm'] || 1;
         const lastSync = lastSyncTimestampRef.current[chain.chainId] || 0;
         const isSlowTier = speedScore >= 10;
-        const ttl = isSlowTier ? 300000 : 0; // 5 mins for slow tier
+        const ttl = isSlowTier ? 300000 : 0; 
 
-        if (Date.now() - lastSync < ttl) {
-            console.log(`[ENGINE] Skipping cached node: ${chain.symbol}`);
-            continue;
-        }
+        if (Date.now() - lastSync < ttl) continue;
 
-        console.log(`[ENGINE] Reconciling ${chain.symbol} (${chain.type})...`);
-        const chainStartTime = Date.now();
+        console.log(`[ENGINE] Reconciling ${chain.symbol}...`);
         
         const secondaryBalances = await fetchBalancesForChain(chain, wallets, infuraApiKey, userAddedTokens);
         
@@ -132,13 +114,8 @@ export function useWalletEngine({
         setBalances(prev => ({ ...prev, [chain.chainId]: secondaryBalances }));
         lastSyncTimestampRef.current[chain.chainId] = Date.now();
         
-        console.log(`[ENGINE_PERF] ${chain.symbol} Discovery: ${Date.now() - chainStartTime}ms`);
-        
-        // Throttled breather based on speed tier
         await sleep(isSlowTier ? 800 : 400); 
       }
-      
-      console.log(`[ENGINE] Background Reconciliation Complete.`);
     } catch (e) {
       console.warn("[ENGINE_ADVISORY] Handshake Interrupted:", e);
       setHasFetchedInitialData(true); 
@@ -147,39 +124,6 @@ export function useWalletEngine({
       isRefreshingRef.current = false;
     }
   }, [wallets, viewingNetwork, infuraApiKey, userAddedTokens, chainsWithLogos, setBalances, setIsRefreshing, setHasFetchedInitialData]);
-
-  /**
-   * INDEPENDENT PRICE ENGINE
-   * Mounts once and polls market data globally.
-   */
-  useEffect(() => {
-    if (chainsWithLogos.length === 0) return;
-
-    let isPolling = true;
-    const fetchPrices = async () => {
-        try {
-            const newPrices = await fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates);
-            if (isPolling) setPrices(newPrices);
-        } catch (e) { console.warn("[MARKET_ENGINE_FAIL]", e); }
-    };
-
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 60000); // 60s Global Market Refresh
-
-    return () => { isPolling = false; clearInterval(interval); };
-  }, [chainsWithLogos.length, userAddedTokens, rates, setPrices]);
-
-  /**
-   * REACTIVE TRIGGERS
-   */
-  useEffect(() => {
-    if (wallets && wallets.length > 0 && viewingNetwork && user && chainsWithLogos.length > 0) {
-      executeRevalidation();
-    }
-    return () => {
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-    };
-  }, [!!wallets, viewingNetwork?.chainId, user?.id, chainsWithLogos.length, executeRevalidation]);
 
   return { refresh: executeRevalidation };
 }
