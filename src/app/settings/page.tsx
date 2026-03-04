@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/wallet-provider";
 import { useUser } from "@/contexts/user-provider";
@@ -51,6 +50,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import Link from "next/link";
 
 export default function SettingsPage() {
     const { deleteWallet, deleteWalletPermanently, logout } = useWallet();
@@ -151,6 +151,7 @@ export default function SettingsPage() {
     /**
      * DIRECT WRITE ARCHITECTURE
      * Decoupled from provider refresh loops to prevent infinite wallet loading.
+     * Only updates the profiles table directly.
      */
     const handleSaveProfile = async () => {
         if (!user || isAvailable === false || !supabase) return;
@@ -167,7 +168,8 @@ export default function SettingsPage() {
 
             if (dbError) throw dbError;
 
-            // SUCCESS: Only update local UI, do not trigger global context refreshes
+            // SUCCESS: Explicitly NOT calling refreshProfile() or auth.updateUser()
+            // to prevent triggering the Wallet derivation loop.
             toast({ title: "Profile Secured", description: "Identity node synchronized." });
         } catch (error: any) {
             console.error("[SAVE_PROFILE_FAIL]", error);

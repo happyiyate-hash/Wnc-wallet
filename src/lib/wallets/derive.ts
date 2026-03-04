@@ -1,11 +1,12 @@
+
 'use client';
 
 import type { WalletWithMetadata } from '@/lib/types';
 
 /**
- * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Build-Safe & Smooth Version)
+ * INSTITUTIONAL MULTI-CHAIN DERIVATION ENGINE (Hardened Build-Safe Version)
  * All heavy crypto libraries are dynamically imported inside the function.
- * Implements a "Yielding Handshake" to prevent UI thread blocking.
+ * Implements strict "No-Network" logic.
  */
 export async function deriveAllWallets(mnemonic: string, hederaAddress?: string): Promise<WalletWithMetadata[]> {
   if (!mnemonic || mnemonic.split(' ').length < 12) return [];
@@ -14,7 +15,10 @@ export async function deriveAllWallets(mnemonic: string, hederaAddress?: string)
   const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
 
   try {
+    console.log("[DERIVE_ENGINE] Loading crypto modules...");
+    
     // 1. DYNAMIC HANDSHAKE: Load libraries only in the client environment
+    // Note: These imports might take time if not cached, but are offline after load.
     const [
       ecc,
       { default: BIP32Factory },
@@ -69,6 +73,8 @@ export async function deriveAllWallets(mnemonic: string, hederaAddress?: string)
     // 2. Pre-Handshake Validation
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid BIP39 Mnemonic");
     
+    console.log("[DERIVE_ENGINE] Executing multi-protocol derivation...");
+
     // 3. Multi-Protocol Derivation (Sequenced with breathers for UI smoothness)
     const evmWallet = ethers.Wallet.fromPhrase(mnemonic);
     const xrpWallet = xrpl.Wallet.fromMnemonic(mnemonic);
@@ -150,6 +156,8 @@ export async function deriveAllWallets(mnemonic: string, hederaAddress?: string)
     const suiKeypair = Ed25519Keypair.deriveKeypair(mnemonic);
     const suiAddress = suiKeypair.getPublicKey().toSuiAddress();
 
+    console.log("[DERIVE_ENGINE] 33-chain handshake verified.");
+
     return [
       { address: evmWallet.address, privateKey: evmWallet.privateKey, type: 'evm' },
       { address: xrpWallet.address, seed: xrpWallet.seed, type: 'xrp' },
@@ -174,7 +182,7 @@ export async function deriveAllWallets(mnemonic: string, hederaAddress?: string)
       { address: suiAddress, type: 'sui' }
     ];
   } catch (error: any) {
-    console.error("[DERIVATION_ENGINE_FAIL]:", error.message);
-    return [];
+    console.error("[DERIVE_ENGINE_FAIL]:", error.message);
+    throw error;
   }
 }

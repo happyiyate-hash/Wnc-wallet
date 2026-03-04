@@ -97,7 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
-  // 1. Initial State Hydration
+  // 1. Initial Hydration
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const cachedPrices = localStorage.getItem('cache_prices_global');
@@ -108,20 +108,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
 
-  // 2. Profile Sync
-  useEffect(() => {
-    if (profile?.account_number) {
-      setAccountNumber(profile.account_number);
-      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
-    }
-  }, [profile?.account_number, user?.id]);
-
   /**
-   * STABLE INITIALIZATION ENGINE
-   * Hardened to depend strictly on user.id to prevent loops.
+   * STAGE-ISOLATED INITIALIZATION
+   * Hardened to run exactly once per login session.
+   * Includes a fail-fast timeout for crypto derivation.
    */
-  const initLocalSession = useCallback(async () => {
+  useEffect(() => {
     if (authLoading) return;
+
     if (!user) {
       setWallets(null);
       setIsWalletLoading(false);
@@ -129,39 +123,50 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    try {
-      const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-      if (savedMnemonic) {
-        const derived = await deriveAllWallets(savedMnemonic);
-        setWallets(derived);
+    const runInit = async () => {
+      try {
+        console.log("[WALLET_INIT] Establishing secure nodes...");
+        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        
+        if (savedMnemonic) {
+          // 8-second fail-fast for derivation (protects against chunk loading hangs)
+          const derived = await Promise.race([
+            deriveAllWallets(savedMnemonic),
+            new Promise<WalletWithMetadata[]>((_, reject) => 
+              setTimeout(() => reject(new Error("DERIVATION_TIMEOUT")), 8000)
+            )
+          ]);
+          setWallets(derived);
+        }
+
+        const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
+        if (localKey) setInfuraApiKey(localKey);
+        
+        const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
+        if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
+
+        const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
+        if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
+
+        setIsInitialized(true);
+      } catch (e: any) {
+        console.warn("[WALLET_INIT_ADVISORY]", e.message);
+        setIsInitialized(true); // Always flip to true to prevent infinite loading screen
+      } finally {
+        setIsWalletLoading(false);
       }
+    };
 
-      const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
-      if (localKey) setInfuraApiKey(localKey);
-      
-      const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
-      if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
-
-      const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
-      if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
-
-      setIsInitialized(true);
-    } catch (e) {
-      console.error("Initialization Failed:", e);
-      setIsInitialized(true); 
-    } finally {
-      setIsWalletLoading(false);
-    }
-  }, [user?.id, authLoading]);
+    runInit();
+  }, [authLoading, user?.id]);
 
   useEffect(() => {
-    initLocalSession();
-  }, [initLocalSession]);
+    if (profile?.account_number) {
+      setAccountNumber(profile.account_number);
+      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+    }
+  }, [profile?.account_number, user?.id]);
 
-  /**
-   * RESOLVED NETWORK HANDSHAKE
-   * Ensures the engine always has a valid target node.
-   */
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
@@ -188,6 +193,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing, 
     setHasFetchedInitialData
   });
+
+  /**
+   * FORCE REFRESH PROTOCOL
+   * Ensures that the first data handshake triggers immediately after wallets are set.
+   */
+  useEffect(() => {
+    if (wallets && wallets.length > 0 && isInitialized && !isWalletLoading) {
+      refresh();
+    }
+  }, [wallets, isInitialized, isWalletLoading, refresh]);
 
   const updateInfuraKey = useCallback(async (key: string | null) => {
     if (!user) return;
