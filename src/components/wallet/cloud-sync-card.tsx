@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,9 +16,9 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL MODULAR SYNC SENTINEL
- * Refactored into independent status cards for maximum hierarchy and clarity.
- * Uses vertical independent slots for a professional ripple effect.
+ * INSTITUTIONAL UNIFIED SYNC SENTINEL
+ * Re-engineered into a single robust hardware card matching the Quick Swap dimensions.
+ * Features vertical independent transition slots for Cloud vs. Local registry nodes.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -54,7 +55,7 @@ export default function CloudSyncCard() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  // VERTICAL RIPPLE CONFIG: Fade in from bottom, out to top
+  // VERTICAL HANDSHAKE CONFIG: Nodes fade in from bottom and snap out to top
   const nodeVariants = {
     initial: { y: 20, opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } },
@@ -66,38 +67,37 @@ export default function CloudSyncCard() {
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: -100, opacity: 0 }}
-      className="fixed top-20 left-2 right-2 z-[100] max-w-lg mx-auto space-y-2"
+      className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto"
     >
-      {/* 1. MASTER STATUS HEADER */}
-      <div className="bg-[#0a0a0c]/95 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-3.5 shadow-2xl overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 opacity-50" />
+      <div className="bg-[#0a0a0c]/95 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 opacity-30 pointer-events-none" />
         
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center transition-colors duration-500",
-              status === 'mismatch' ? "bg-red-500/20" : "bg-primary/10"
-            )}>
-              {getStatusIcon()}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className={cn("w-1.5 h-1.5 rounded-full", status === 'completed' ? "bg-green-500" : "bg-primary animate-pulse")} />
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", status === 'completed' ? "text-green-400" : "text-white")}>
-                  {status === 'completed' ? 'Registry Verified' : 'Audit Active'}
-                </span>
+        <div className="relative z-10 space-y-5">
+          {/* HEADER COCKPIT */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-10 h-10 rounded-2xl flex items-center justify-center transition-colors duration-500",
+                status === 'mismatch' ? "bg-red-500/20" : "bg-primary/10"
+              )}>
+                {getStatusIcon()}
               </div>
-              <p className={cn("text-[8px] font-black uppercase tracking-[0.2em] mt-0.5", getStatusColor())}>
-                {status === 'checking' && `Scanning ${chain}...`}
-                {status === 'mismatch' && 'Registry mismatch'}
-                {status === 'syncing' && 'Reconciling...'}
-                {status === 'success' && 'Integrity Nominal'}
-                {status === 'completed' && 'Handshake Locked'}
-              </p>
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  {status === 'completed' ? 'Registry Verified' : 'Diagnostic Audit'}
+                </h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className={cn(
+                    "w-1 h-1 rounded-full animate-pulse",
+                    status === 'completed' ? "bg-green-500" : "bg-primary"
+                  )} />
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">
+                    {status === 'completed' ? 'Verified Active' : 'Sequential Handshake'}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2.5">
             <AnimatePresence mode="wait">
               {chain && (
                 <motion.div 
@@ -112,74 +112,112 @@ export default function CloudSyncCard() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">{Math.round(progress)}%</span>
           </div>
-        </div>
 
-        {/* INTEGRATED PROGRESS BAR */}
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/5">
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            className={cn(
-              "h-full transition-colors duration-500",
-              status === 'mismatch' ? "bg-red-500" : "bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-            )}
-          />
-        </div>
-      </div>
-
-      {/* 2. INDEPENDENT REGISTRY CARDS */}
-      <div className="grid grid-cols-2 gap-2">
-        <AnimatePresence mode="popLayout">
-          <motion.div 
-            key={`${chain}-cloud`}
-            variants={nodeVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="p-3 rounded-2xl bg-[#0a0a0c]/80 backdrop-blur-xl border border-white/5 space-y-1.5 shadow-xl"
-          >
-            <div className="flex items-center gap-2 opacity-40">
-              <Database className="w-3 h-3" />
-              <span className="text-[7px] font-black uppercase tracking-widest">Cloud Vault</span>
+          {/* PROGRESS BAR */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center px-1">
+              <span className={cn("text-[9px] font-black uppercase tracking-widest", getStatusColor())}>
+                {status === 'checking' && `Scanning ${chain} Registry...`}
+                {status === 'mismatch' && 'Registry mismatch'}
+                {status === 'syncing' && 'Reconciling Node...'}
+                {status === 'success' && 'Integrity Nominal'}
+                {status === 'completed' && 'Institutional Handshake Complete'}
+              </span>
+              <span className="text-[9px] font-mono text-muted-foreground tabular-nums">{Math.round(progress)}%</span>
             </div>
-            <p className={cn(
-              "text-[10px] font-mono truncate px-1",
-              status === 'mismatch' ? "text-red-400 line-through opacity-50" : "text-white/80"
-            )}>
-              {truncateAddress(cloudValue)}
-            </p>
-          </motion.div>
-        </AnimatePresence>
-
-        <AnimatePresence mode="popLayout">
-          <motion.div 
-            key={`${chain}-local`}
-            variants={nodeVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="p-3 rounded-2xl bg-[#0a0a0c]/80 backdrop-blur-xl border border-primary/20 space-y-1.5 shadow-xl relative"
-          >
-            <div className="flex items-center gap-2 text-primary">
-              <Cpu className="w-3 h-3" />
-              <span className="text-[7px] font-black uppercase tracking-widest">Local Node</span>
-            </div>
-            <p className="text-[10px] font-mono text-white truncate px-1">
-              {truncateAddress(localValue)}
-            </p>
-            {status === 'success' && (
+            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
               <motion.div 
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="absolute -top-1 -right-1"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                className={cn(
+                  "h-full transition-colors duration-500",
+                  status === 'mismatch' ? "bg-red-500" : "bg-primary"
+                )}
+              />
+            </div>
+          </div>
+
+          {/* HANDSHAKE REGISTRY NODES */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-0 h-16 relative bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
+            {/* SLOT 1: CLOUD REGISTRY */}
+            <div className="relative h-full overflow-hidden flex flex-col justify-center px-4">
+              <AnimatePresence mode="popLayout">
+                <motion.div 
+                  key={`${chain}-cloud`}
+                  variants={nodeVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="space-y-1"
+                >
+                  <div className="flex items-center gap-1.5 opacity-40">
+                    <Database className="w-2.5 h-2.5" />
+                    <span className="text-[7px] font-black uppercase tracking-widest">Cloud Vault</span>
+                  </div>
+                  <p className={cn(
+                    "text-[10px] font-mono truncate",
+                    status === 'mismatch' ? "text-red-400 line-through opacity-50" : "text-white/80"
+                  )}>
+                    {truncateAddress(cloudValue)}
+                  </p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* VERTICAL DIVIDER */}
+            <div className="w-[1px] h-8 bg-white/10 relative">
+              <div className="absolute inset-0 bg-primary/20 blur-[2px]" />
+            </div>
+
+            {/* SLOT 2: LOCAL NODE */}
+            <div className="relative h-full overflow-hidden flex flex-col justify-center px-4">
+              <AnimatePresence mode="popLayout">
+                <motion.div 
+                  key={`${chain}-local`}
+                  variants={nodeVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="space-y-1 relative"
+                >
+                  <div className="flex items-center gap-1.5 text-primary">
+                    <Cpu className="w-2.5 h-2.5" />
+                    <span className="text-[7px] font-black uppercase tracking-widest">Local Node</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-white truncate">
+                    {truncateAddress(localValue)}
+                  </p>
+                  {status === 'success' && (
+                    <motion.div 
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-1 -right-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 fill-black" />
+                    </motion.div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* BOTTOM STATUS ALERT */}
+          <AnimatePresence>
+            {status === 'completed' && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-green-500/10 border border-green-500/20"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 fill-black" />
+                <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
+                <span className="text-[8px] font-black text-green-500 uppercase tracking-[0.2em]">
+                  Registry Protocol Secured
+                </span>
               </motion.div>
             )}
-          </motion.div>
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>
       </div>
     </motion.div>
   );
