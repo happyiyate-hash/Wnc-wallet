@@ -28,10 +28,16 @@ function HomeContent() {
     prices,
     viewingNetwork,
     hiddenTokenKeys,
-    userAddedTokens
+    userAddedTokens,
+    isWalletLoading
   } = useWallet();
 
   const { profile } = useUser();
+
+  // ATOMIC GATE: Prevent rendering the dashboard if the wallet node is not ready.
+  // This ensures the GlobalOverlayManager has time to redirect to /wallet-session
+  // if no keys are detected, preventing the "Empty Dashboard" flash.
+  const isReady = isInitialized && !isWalletLoading && wallets && wallets.length > 0;
 
   /**
    * ASSET AGGREGATION PROTOCOL
@@ -39,7 +45,7 @@ function HomeContent() {
    * from balances, prices, and visibility rules.
    */
   const allAssets = useMemo(() => {
-    if (!isInitialized) return [];
+    if (!isReady) return [];
 
     const { getInitialAssets } = require('@/lib/wallets/balances');
     const base = getInitialAssets(viewingNetwork.chainId);
@@ -92,19 +98,19 @@ function HomeContent() {
     return [wncAsset, ...onChainAssets]
       .filter(a => !hiddenTokenKeys.has(`${viewingNetwork.chainId}:${a.symbol}`))
       .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
-  }, [isInitialized, viewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
+  }, [isReady, viewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
   /**
    * INSTITUTIONAL SYNC CONTROLLER
    */
   useEffect(() => {
-    if (isInitialized && wallets && wallets.length > 0 && hasFetchedInitialData) {
+    if (isReady && hasFetchedInitialData) {
       const timer = setTimeout(() => {
         runCloudDiagnostic();
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isInitialized, wallets, hasFetchedInitialData, runCloudDiagnostic]);
+  }, [isReady, hasFetchedInitialData, runCloudDiagnostic]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -120,6 +126,8 @@ function HomeContent() {
     window.addEventListener('scroll', handle);
     return () => window.removeEventListener('scroll', handle);
   }, []);
+
+  if (!isReady) return null;
 
   return (
     <div className="flex-1 bg-transparent pb-32 relative">

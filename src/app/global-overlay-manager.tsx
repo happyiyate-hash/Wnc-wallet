@@ -1,16 +1,15 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 import { usePathname, useRouter } from 'next/navigation';
 
 /**
- * GLOBAL IDENTITY SENTINEL
- * Hardened route protection and onboarding state management.
- * Decouples user session from wallet state.
+ * GLOBAL IDENTITY SENTINEL (Duplicate/Fallback Node)
+ * Synchronized with src/components/global-overlay-manager.tsx
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -18,15 +17,13 @@ export default function GlobalOverlayManager() {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Define route groups
   const isAuthRoute = pathname.startsWith('/auth');
   const isWalletSessionRoute = pathname === '/wallet-session';
-  const isCompleteProfileRoute = pathname === '/complete-profile';
+  const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
     if (userLoading || !isInitialized || isWalletLoading) return;
 
-    // 1. SESSION PROTECTION: Redirect to login if unauthenticated
     if (!user) {
       if (!isAuthRoute) {
         router.replace('/auth/login');
@@ -34,7 +31,6 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 2. ONBOARDING SEQUENCE: Verify Email (Skip for Google)
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
@@ -43,28 +39,25 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // 3. ONBOARDING SEQUENCE: Complete Profile
-    if (!profile?.name && !isCompleteProfileRoute) {
-      router.replace('/complete-profile');
+    if (!profile?.name && !isSettingsRoute && !isAuthRoute) {
+      router.replace('/settings');
       return;
     }
 
-    // 4. ONBOARDING SEQUENCE: Establish Wallet
-    // Only redirect if profile is ready but wallet is missing and user isn't on setup screen
-    const hasWallet = wallets && wallets.length > 0;
-    if (profile?.name && !hasWallet && !isWalletSessionRoute) {
+    const hasLocalWallet = wallets && wallets.length > 0;
+    if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute && !isSettingsRoute) {
       router.replace('/wallet-session');
       return;
     }
 
-    // 5. REDIRECT: If on onboarding/auth but everything is established, go home
-    if ((isAuthRoute || isWalletSessionRoute || isCompleteProfileRoute) && hasWallet && profile?.onboarding_completed) {
+    if ((isAuthRoute || isWalletSessionRoute) && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       router.replace('/');
     }
 
-  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isCompleteProfileRoute]);
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 
-  // If user purged wallet but session exists, the card will return null via its internal check
+  if (!user && !isAuthRoute) return null;
+
   return (
     <>
       <CloudSyncCard />

@@ -10,7 +10,7 @@ import { usePathname, useRouter } from 'next/navigation';
 /**
  * GLOBAL IDENTITY SENTINEL
  * Hardened authority node for routing authenticated sessions.
- * Implements strict zero-flicker policy by returning null immediately on sign-out.
+ * Enforces the Onboarding -> Identity -> Vault sequence.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -20,8 +20,10 @@ export default function GlobalOverlayManager() {
 
   const isAuthRoute = pathname.startsWith('/auth');
   const isWalletSessionRoute = pathname === '/wallet-session';
+  const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
+    // Wait for all cryptographic and auth nodes to be primed
     if (userLoading || !isInitialized || isWalletLoading) return;
 
     // 1. ATOMIC SESSION GUARD: Redirect instantly if credentials missing
@@ -43,21 +45,29 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // Vault Mandatory Gate
-    const hasLocalWallet = wallets && wallets.length > 0;
-    if (!profile?.onboarding_completed && !hasLocalWallet) {
-      if (!isWalletSessionRoute) {
-        router.replace('/wallet-session');
-      }
+    // 3. IDENTITY COMPLETION GATE
+    // If the profile node is unnamed, redirect to settings to complete registration
+    if (!profile?.name && !isSettingsRoute && !isAuthRoute) {
+      router.replace('/settings');
       return;
     }
 
-    // 3. DASHBOARD CONVERGENCE
-    if ((isAuthRoute || isWalletSessionRoute) && hasLocalWallet) {
+    // 4. VAULT MANDATORY GATE
+    // If no local wallets are derived, the user MUST be redirected to the setup screen.
+    // This prevents empty dashboard states on new devices.
+    const hasLocalWallet = wallets && wallets.length > 0;
+    if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute && !isSettingsRoute) {
+      router.replace('/wallet-session');
+      return;
+    }
+
+    // 5. DASHBOARD CONVERGENCE
+    // Redirect home only if they are stuck on setup screens but already have a valid vault
+    if ((isAuthRoute || isWalletSessionRoute) && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       router.replace('/');
     }
 
-  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute]);
+  }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 
   // ZERO-FLICKER SENTINEL: If user just logged out, return null immediately
   if (!user && !isAuthRoute) return null;
