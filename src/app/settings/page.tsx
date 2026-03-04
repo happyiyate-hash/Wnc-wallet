@@ -23,6 +23,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetDescription,
 } from "@/components/ui/sheet";
 import { 
   Trash2, 
@@ -442,9 +443,13 @@ export default function SettingsPage() {
             </AlertDialog>
 
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
-                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[80vh]">
-                    <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4" />
-                    <ScrollArea className="h-full px-6 pb-20">
+                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[80vh] p-0 overflow-hidden shadow-2xl">
+                    <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+                    <SheetHeader className="px-6 mb-2">
+                        <SheetTitle className="text-xl font-black uppercase tracking-widest text-center text-white">Select Currency</SheetTitle>
+                        <SheetDescription className="sr-only">Switch your display currency for all valuations.</SheetDescription>
+                    </SheetHeader>
+                    <ScrollArea className="flex-1 px-6 pb-20">
                         {sortedCurrencies.map(code => (
                             <button key={code} onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }} className="w-full py-4 text-left font-bold text-white border-b border-white/5">{code}</button>
                         ))}

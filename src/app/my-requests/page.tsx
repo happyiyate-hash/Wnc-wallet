@@ -201,6 +201,10 @@ export default function MyRequestsPage() {
 
             <Sheet open={!!selectedRequest} onOpenChange={(open) => !open && setSelectedRequest(null)}>
                 <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-8 h-auto overflow-hidden">
+                    <SheetHeader className="sr-only">
+                        <SheetTitle>Request Details</SheetTitle>
+                        <SheetDescription>View and share your payment request node.</SheetDescription>
+                    </SheetHeader>
                     <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
                     
                     {selectedRequest && (() => {
