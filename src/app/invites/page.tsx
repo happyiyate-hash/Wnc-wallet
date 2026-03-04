@@ -189,8 +189,22 @@ export default function InvitesPage() {
                 </div>
 
                 <section className="px-2">
-                    <Button onClick={handleWithdraw} disabled={isWithdrawing} className={cn("w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all shadow-2xl group", isEligible ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-zinc-900 border-zinc-950 hover:bg-zinc-800")}>
-                        {isWithdrawing ? <Loader2 className="animate-spin w-5 h-5" /> : ( <div className="flex items-center gap-3">{isEligible ? <HandCoins className="w-5 h-5 animate-pulse" /> : <Lock className="w-4 h-4 opacity-40" />}<span>{isEligible ? "Authorize Settlement to Vault" : "Analyze Registry for Rewards"}</span></div> )}
+                    <Button 
+                        onClick={handleWithdraw} 
+                        disabled={isWithdrawing} 
+                        className={cn(
+                            "w-full h-16 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all shadow-2xl group", 
+                            isEligible 
+                                ? "bg-gradient-to-r from-primary via-purple-600 to-primary/80 hover:brightness-110 shadow-primary/20 border-b-4 border-purple-800" 
+                                : "bg-zinc-900 border-zinc-950 hover:bg-zinc-800"
+                        )}
+                    >
+                        {isWithdrawing ? <Loader2 className="animate-spin w-5 h-5" /> : ( 
+                            <div className="flex items-center gap-3">
+                                {isEligible ? <HandCoins className="w-5 h-5 animate-pulse" /> : <Lock className="w-4 h-4 opacity-40" />}
+                                <span>{isEligible ? "Authorize Settlement" : "Analyze Registry"}</span>
+                            </div> 
+                        )}
                     </Button>
                     {!isEligible && ( <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start"><AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" /><p className="text-[10px] text-muted-foreground leading-relaxed">Institutional rewards are only authorized after your referred users complete <span className="text-white font-bold">4 WNC transfers</span>. Once authorized nodes total 1,000 WNC, settlement is unlocked.</p></div> )}
                 </section>
