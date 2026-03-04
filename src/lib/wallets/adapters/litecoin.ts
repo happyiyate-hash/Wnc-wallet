@@ -33,9 +33,9 @@ class LitecoinAdapter implements IWalletAdapter {
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
         try {
-            // Fetch UTXOs to determine balance
+            // Institutional Timeout Node: 15s hard limit
             const url = `${this.apiUrl}/api/address/${ownerAddress}/utxo`;
-            const { data } = await axios.get(url);
+            const { data } = await axios.get(url, { timeout: 15000 });
             
             if (!Array.isArray(data)) throw new Error("INVALID_UTXO_RESPONSE");
 
@@ -49,7 +49,7 @@ class LitecoinAdapter implements IWalletAdapter {
                 return { ...asset, balance: '0' } as AssetRow;
             });
         } catch (error: any) {
-            console.warn(`[LTC_ADAPTER_ERROR] ${ownerAddress}:`, error.message);
+            console.warn(`[LTC_ADAPTER_FAIL] ${ownerAddress} (Timeout/RPC):`, error.message);
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         }
     }

@@ -6,8 +6,7 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 
 /**
  * INSTITUTIONAL BALANCE SERVICE
- * Pure logic node for fetching account balances across multiple ecosystems.
- * Hardened to prevent Substrate/WS errors from crashing the discovery engine.
+ * Handles data node routing with Speed-Tiered timeouts.
  */
 export async function fetchBalancesForChain(
   chain: ChainConfig,
@@ -18,7 +17,6 @@ export async function fetchBalancesForChain(
   const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
   if (!walletForChain) return [];
 
-  // Get available assets for this specific chain
   const base = getInitialAssets(chain.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
   const custom = userAddedTokens.filter(t => t.chainId === chain.chainId);
   const combinedAssetsList = [...base, ...custom].reduce((acc, curr) => {
@@ -36,27 +34,29 @@ export async function fetchBalancesForChain(
     const { kusamaAdapterFactory } = await import('@/lib/wallets/adapters/kusama');
     const { nearAdapterFactory } = await import('@/lib/wallets/adapters/near');
     const { solanaAdapterFactory } = await import('@/lib/wallets/adapters/solana');
+    const { bitcoinAdapterFactory } = await import('@/lib/wallets/adapters/bitcoin');
+    const { litecoinAdapterFactory } = await import('@/lib/wallets/adapters/litecoin');
+    const { dogecoinAdapterFactory } = await import('@/lib/wallets/adapters/dogecoin');
 
     let adapter = null;
     
-    // LOGIC GATE: Use specific ecosystem adapters with built-in error resilience
     if (chain.type === 'xrp') adapter = xrpAdapterFactory(chain);
     else if (chain.type === 'polkadot') adapter = polkadotAdapterFactory(chain);
     else if (chain.type === 'kusama') adapter = kusamaAdapterFactory(chain);
     else if (chain.type === 'near') adapter = nearAdapterFactory(chain);
     else if (chain.type === 'solana') adapter = solanaAdapterFactory(chain);
+    else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
+    else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
+    else if (chain.type === 'doge') adapter = dogecoinAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
 
     if (adapter) {
-      // Execute fetch with a safety catch to prevent bubbling to the sequential queue
-      const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList).catch(err => {
-          console.warn(`[BALANCE_SERVICE] Adapter failed for ${chain.name}:`, err.message);
-          return combinedAssetsList; 
-      });
+      // Execute fetch with adapter-level timeouts (15s average)
+      const results = await adapter.fetchBalances(walletForChain.address, combinedAssetsList);
       return results.map(r => ({ ...r, updatedAt: Date.now() }));
     }
   } catch (e: any) {
-    console.warn(`[BALANCE_SERVICE_CRITICAL] ${chain.name} Discovery Interrupted:`, e.message);
+    console.warn(`[BALANCE_SERVICE_FAIL] ${chain.symbol} Node Unreachable:`, e.message);
   }
   
   return combinedAssetsList;

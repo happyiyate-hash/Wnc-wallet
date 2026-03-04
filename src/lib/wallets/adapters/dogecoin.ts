@@ -33,9 +33,9 @@ class DogecoinAdapter implements IWalletAdapter {
         assets: Omit<AssetRow, 'balance'>[]
     ): Promise<AssetRow[]> {
         try {
-            // Fetch UTXOs to determine balance
+            // Institutional Timeout Node: 15s hard limit
             const url = `${this.apiUrl}/address/${ownerAddress}/utxo`;
-            const { data } = await axios.get(url);
+            const { data } = await axios.get(url, { timeout: 15000 });
             
             if (!Array.isArray(data)) throw new Error("INVALID_UTXO_RESPONSE");
 
@@ -49,7 +49,7 @@ class DogecoinAdapter implements IWalletAdapter {
                 return { ...asset, balance: '0' } as AssetRow;
             });
         } catch (error: any) {
-            console.warn(`[DOGE_ADAPTER_ERROR] ${ownerAddress}:`, error.message);
+            console.warn(`[DOGE_ADAPTER_FAIL] ${ownerAddress} (Timeout/RPC):`, error.message);
             return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
         }
     }
