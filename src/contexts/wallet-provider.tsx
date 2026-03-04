@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -228,7 +229,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
       
       const priceId = (asset.priceId || asset.coingeckoId || asset.address || '').toLowerCase();
-      const marketData = prices[key];
+      const marketData = prices[priceId]; // FIX: Corrected typo from prices[key]
       const livePrice = marketData?.price || 0;
       const balNum = parseFloat(balDoc?.balance || '0');
 
@@ -360,10 +361,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, router]);
 
   const logout = useCallback(async () => {
+    if (user) {
+      purgeLocalWalletCache(user.id);
+    }
     setWallets(null); setBalances({}); setAccountNumber(null);
     if (signOut) await signOut();
     window.location.href = '/auth/login';
-  }, [signOut]);
+  }, [signOut, user]);
 
   const updateInfuraKey = useCallback(async (key: string | null) => {
     if (!user) return;
