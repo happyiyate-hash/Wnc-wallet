@@ -96,6 +96,10 @@ export default function ProfilePage() {
         }
     };
 
+    /**
+     * INSTITUTIONAL REDEMPTION HANDSHAKE
+     * Aligned with SmarterSeller Admin Gift Card Protocol.
+     */
     const handleRedeemCode = async () => {
         if (!giftCode.trim() || !user || !supabase) return;
         
@@ -103,6 +107,7 @@ export default function ProfilePage() {
         setRedeemResult(null);
         
         try {
+            // AUTHENTICATED RPC CALL
             const { data, error } = await supabase.rpc('redeem_gift_card', {
                 user_id: user.id,
                 input_code: giftCode.trim().toUpperCase()
@@ -119,12 +124,13 @@ export default function ProfilePage() {
             }
         } catch (e: any) {
             console.error("REDEMPTION_FAIL:", e);
-            // SURFACE THE REAL ERROR FROM THE REGISTRY
+            // SURFACE THE EXACT REGISTRY ERROR (Table missing, Permission, etc)
+            const errorMsg = e.message || e.details || "Registry connection failed. Check database logs.";
             setRedeemResult({ 
                 success: false, 
                 message: e.message?.includes('not exist') 
-                    ? "Registry Error: Redemption Protocol not installed in Supabase." 
-                    : (e.message || "Registry connection failed. Try again.")
+                    ? "Registry Error: The 'redeem_gift_card' protocol is not installed in your Supabase project." 
+                    : errorMsg
             });
         } finally {
             setIsRedeeming(false);
