@@ -7,11 +7,12 @@ import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-serv
 import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
- * INSTITUTIONAL DATA REFRESH ENGINE (REACTIVE & SEQUENTIAL)
+ * INSTITUTIONAL DATA REFRESH ENGINE (SWR & PHASED)
  * 
- * Optimized for logic-gated "Phase-Prioritized" rhythm:
- * 1. Phase 1: Immediate fetch for Active Network + Global Prices.
- * 2. Phase 2: Lazy sequential background sync for all other chains.
+ * Implements Stale-While-Revalidate pattern:
+ * 1. UI hydrates immediately from WalletProvider cache.
+ * 2. Phase 1: Silent revalidation of Active Network + Global Prices.
+ * 3. Phase 2: Sequential background reconciliation for all secondary chains.
  */
 export function useWalletEngine({
   wallets,
@@ -44,13 +45,12 @@ export function useWalletEngine({
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   /**
-   * SEQUENTIAL DISCOVERY PROTOCOL
-   * Executes a prioritized handshake to unblock UI first, then sync registry.
+   * REVALIDATION HANDSHAKE
+   * Updates the registry without blocking the terminal UI.
    */
-  const executeDataHandshake = useCallback(async () => {
+  const executeRevalidation = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRefreshingRef.current) return;
     
-    // Cleanup previous handshake if it's still running
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
@@ -59,12 +59,12 @@ export function useWalletEngine({
     setIsRefreshing(true);
     
     try {
-      console.log(`[ENGINE] Handshake Phase 1: Market & Active Network...`);
+      console.log(`[ENGINE] Revalidating Registry Phase 1: Market & Active Network...`);
       
-      // STEP 1: Global Price Discovery (Parallel to Balance)
+      // STEP 1: Global Price Discovery
       const pricesPromise = fetchGlobalMarketData(chainsWithLogos, userAddedTokens, rates);
       
-      // STEP 2: Active Network Balance
+      // STEP 2: Active Network Balance Discovery
       const activeBalancePromise = fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
@@ -79,30 +79,26 @@ export function useWalletEngine({
       setPrices(newPrices);
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
 
-      // HANDSHAKE VERIFIED: Drop the barrier now
+      // PRIMARY HANDSHAKE VERIFIED
       setHasFetchedInitialData(true);
-      console.log(`[ENGINE] Handshake Phase 1 Verified. Terminal Unblocked.`);
 
-      // STEP 3: Phase 2 - Lazy Sequential Discovery
+      // STEP 3: Phase 2 - Lazy Background Reconciliation
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
       
       for (const chain of otherChains) {
-        if (signal.aborted) break;
-        if (!wallets) break;
+        if (signal.aborted || !wallets) break;
 
-        console.log(`[ENGINE] Lazy Sync: ${chain.name}...`);
         const secondaryBalances = await fetchBalancesForChain(chain, wallets, infuraApiKey, userAddedTokens);
         
         if (signal.aborted) break;
         setBalances(prev => ({ ...prev, [chain.chainId]: secondaryBalances }));
         
-        // Institutional Throttle: Prevent RPC congestion
-        await sleep(400); 
+        await sleep(400); // Throttled breather
       }
       
-      console.log(`[ENGINE] Handshake Phase 2: Registry Fully Synchronized.`);
+      console.log(`[ENGINE] Revalidation Complete. Registry in Sync.`);
     } catch (e) {
-      console.warn("[ENGINE_ADVISORY] Handshake Interrupted:", e);
+      console.warn("[ENGINE_ADVISORY] Revalidation Interrupted:", e);
       setHasFetchedInitialData(true); 
     } finally { 
       setIsRefreshing(false); 
@@ -113,24 +109,21 @@ export function useWalletEngine({
   /**
    * REACTIVE TRIGGERS
    */
-
-  // 1. Full Handshake Trigger
   useEffect(() => {
     if (wallets && wallets.length > 0 && viewingNetwork && user && chainsWithLogos.length > 0) {
-      executeDataHandshake();
+      executeRevalidation();
     }
     return () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [!!wallets, viewingNetwork?.chainId, user?.id, chainsWithLogos.length, executeDataHandshake]);
+  }, [!!wallets, viewingNetwork?.chainId, user?.id, chainsWithLogos.length, executeRevalidation]);
 
-  // 2. Periodic Maintenance (60s cycle)
   useEffect(() => {
     if (wallets && wallets.length > 0 && viewingNetwork && user) {
-      const interval = setInterval(executeDataHandshake, 60000);
+      const interval = setInterval(executeRevalidation, 60000); // 60s Revalidation Cycle
       return () => clearInterval(interval);
     }
-  }, [!!wallets, viewingNetwork?.chainId, user?.id, executeDataHandshake]);
+  }, [!!wallets, viewingNetwork?.chainId, user?.id, executeRevalidation]);
 
-  return { refresh: executeDataHandshake };
+  return { refresh: executeRevalidation };
 }

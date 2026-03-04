@@ -67,11 +67,14 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
+const BALANCE_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const PRICE_CACHE_TTL = 1 * 60 * 1000; // 1 minute
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
-  const { user, loading: authLoading, profile, refreshProfile, signOut } = useUser();
+  const { user, loading: authLoading, profile, signOut } = useUser();
   const { rates } = useCurrency();
   
   const [prices, setPrices] = useState<PriceResult>({});
@@ -99,64 +102,71 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
 
   /**
-   * INSTITUTIONAL INITIALIZATION SEQUENCE
-   * Hardened Stage-Isolated logic with 8s fail-fast sentinel.
+   * CACHE HYDRATION SENTINEL
    */
   useEffect(() => {
     if (authLoading) return;
-    
     if (!user) {
-      setWallets(null);
-      setAccountNumber(null);
       setIsWalletLoading(false);
       setIsInitialized(true);
       return;
     }
 
-    const run = async () => {
+    const hydrate = async () => {
       try {
-        console.log("[VAULT_HANDSHAKE] Deriving hardware nodes for identity:", user.id);
+        console.log("[HYDRATION] Initializing institutional cache nodes...");
         
-        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        // 1. Recover RPC Node
         const savedInfura = localStorage.getItem(`infura_api_key_${user.id}`);
-        const savedAcc = localStorage.getItem(`account_number_${user.id}`);
-        
         if (savedInfura) setInfuraApiKeyState(savedInfura);
-        else if (profile?.vault_infura_key) {
-            console.log("[VAULT_HANDSHAKE] Missing local RPC. Recovering from cloud...");
-            const { data: { session } } = await supabase!.auth.getSession();
-            if (session) {
-                const res = await fetch('/api/wallet/decrypt-phrase', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-                  body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
-                });
-                const data = await res.json();
-                if (data.phrase) {
-                    localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
-                    setInfuraApiKeyState(data.phrase);
-                }
-            }
-        }
 
+        // 2. Recover Identity Node
+        const savedAcc = localStorage.getItem(`account_number_${user.id}`);
         if (savedAcc) setAccountNumber(savedAcc);
-        else if (profile?.account_number) {
-            setAccountNumber(profile.account_number);
-            localStorage.setItem(`account_number_${user.id}`, profile.account_number);
-        }
 
+        // 3. SECURE WALLET HYDRATION (SWR Pattern)
+        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         if (savedMnemonic) {
-          // FAIL-FAST SENTINEL: 8s limit for crypto derivation
-          const derived = await Promise.race([
-            deriveAllWallets(savedMnemonic),
-            new Promise<any>((_, reject) => setTimeout(() => reject(new Error("HANDSHAKE_TIMEOUT")), 8000))
-          ]);
-          setWallets(derived);
-          console.log("[VAULT_HANDSHAKE] 33-chain nodes derived successfully.");
-        } else {
-          console.log("[VAULT_HANDSHAKE] No local keys found on device.");
+          const cacheKey = `wallet_addr_cache_${user.id}`;
+          const fingerprintKey = `wallet_fingerprint_${user.id}`;
+          const currentFingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 10)}`;
+          
+          const cachedWallets = localStorage.getItem(cacheKey);
+          const cachedFingerprint = localStorage.getItem(fingerprintKey);
+
+          if (cachedWallets && cachedFingerprint === currentFingerprint) {
+            console.log("[HYDRATION] Cache match. Bypassing CPU derivation.");
+            setWallets(JSON.parse(cachedWallets));
+          } else {
+            console.log("[HYDRATION] Cache mismatch. Executing derivation...");
+            const derived = await deriveAllWallets(savedMnemonic);
+            setWallets(derived);
+            localStorage.setItem(cacheKey, JSON.stringify(derived));
+            localStorage.setItem(fingerprintKey, currentFingerprint);
+          }
         }
 
+        // 4. PRICE CACHE HYDRATION
+        const cachedPrices = localStorage.getItem(`price_cache_global`);
+        if (cachedPrices) {
+          const { data, timestamp } = JSON.parse(cachedPrices);
+          if (Date.now() - timestamp < PRICE_CACHE_TTL) {
+            setPrices(data);
+          }
+        }
+
+        // 5. BALANCE CACHE HYDRATION
+        const cachedBalances = localStorage.getItem(`balance_cache_${user.id}`);
+        if (cachedBalances) {
+          const { data, timestamp } = JSON.parse(cachedBalances);
+          setBalances(data);
+          // If we have cached balances, we can drop the barrier immediately for better UX
+          if (Date.now() - timestamp < BALANCE_CACHE_TTL) {
+            setHasFetchedInitialData(true);
+          }
+        }
+
+        // 6. UI METADATA HYDRATION
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
         if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
 
@@ -164,28 +174,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
         setIsInitialized(true);
-      } catch (e: any) {
-        console.warn("[VAULT_HANDSHAKE_ADVISORY]", e.message);
-        setIsInitialized(true); 
+      } catch (e) {
+        console.warn("[HYDRATION_FAIL]", e);
+        setIsInitialized(true);
       } finally {
         setIsWalletLoading(false);
       }
     };
 
-    run();
-  }, [authLoading, user?.id, profile?.vault_infura_key, profile?.account_number]);
+    hydrate();
+  }, [authLoading, user?.id]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
   const handleSetPrices = useCallback((newPrices: PriceResult) => {
-    setPrices(prev => ({ ...prev, ...newPrices }));
+    setPrices(prev => {
+      const merged = { ...prev, ...newPrices };
+      localStorage.setItem('price_cache_global', JSON.stringify({ data: merged, timestamp: Date.now() }));
+      return merged;
+    });
   }, []);
 
   const handleSetBalances = useCallback((update: (prev: any) => any) => {
-    setBalances(prev => update(prev));
-  }, []);
+    setBalances(prev => {
+      const next = update(prev);
+      if (user) {
+        localStorage.setItem(`balance_cache_${user.id}`, JSON.stringify({ data: next, timestamp: Date.now() }));
+      }
+      return next;
+    });
+  }, [user]);
 
   const { refresh } = useWalletEngine({
     wallets, 
@@ -469,7 +489,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized, areLogosLoading, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
-    activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 
+    activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 
     importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, updateInfuraKey, user, getAvailableAssetsForChain
   ]);
 
