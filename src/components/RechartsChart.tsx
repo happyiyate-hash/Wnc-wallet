@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { memo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchChartData } from '@/lib/coingecko';
 import { Skeleton } from './ui/skeleton';
@@ -14,20 +14,34 @@ interface RechartsChartProps {
     contractAddress?: string;
 }
 
-const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress }: RechartsChartProps) => {
+/**
+ * RECHART TERMINAL COMPONENT
+ * Wrapped in memo to prevent high-frequency re-renders from the live price ticker.
+ */
+const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAddress }: RechartsChartProps) => {
+    // We only access these to get initial values, not as reactive dependencies for the graph path
     const { prices, allAssets } = useWallet();
     const [data, setData] = React.useState<any[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(false);
 
+    // Track the last successfully loaded ID/Range to prevent redundant Skeletons
+    const lastSignatureRef = React.useRef<string>('');
+
     React.useEffect(() => {
         const resolveAndFetch = async () => {
-            // Need at least an ID or a contract to attempt a fetch
             if (!coingeckoId && !contractAddress) return;
 
-            setLoading(true);
+            const currentSignature = `${coingeckoId}:${contractAddress}:${days}`;
+            
+            // If range hasn't changed, perform a silent background update instead of showing Skeleton
+            if (data.length === 0 || lastSignatureRef.current !== currentSignature) {
+                setLoading(true);
+            }
+            
             setError(false);
             
+            // Resolve current reference price for synthetic delta validation
             let currentPrice = 0;
             if (coingeckoId === 'internal:wnc') {
                 const wnc = allAssets.find(a => a.symbol === 'WNC');
@@ -41,24 +55,32 @@ const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress
             try {
                 const res = await fetchChartData(coingeckoId || '', days, currentPrice, chainId, contractAddress);
                 if (!res || res.length === 0) {
-                    setError(true);
+                    if (data.length === 0) setError(true);
                 } else {
                     setData(res);
+                    lastSignatureRef.current = currentSignature;
                 }
             } catch (e) {
-                setError(true);
+                if (data.length === 0) setError(true);
             } finally {
                 setLoading(false);
             }
         };
 
         resolveAndFetch();
-    }, [coingeckoId, days, prices, allAssets, chainId, contractAddress]);
+        
+        // Refresh chart data every 5 minutes (standard institutional interval)
+        const interval = setInterval(resolveAndFetch, 300000);
+        return () => clearInterval(interval);
+        
+        // CRITICAL FIX: Removed 'prices' and 'allAssets' from dependencies.
+        // This prevents the chart from re-fetching and blinking on every live price tick.
+    }, [coingeckoId, days, chainId, contractAddress]);
 
-    if (loading) {
+    if (loading && data.length === 0) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-white/[0.02]">
-                <Skeleton className="w-3/4 h-32 rounded-3xl bg-white/5 animate-pulse" />
+                <Skeleton className="w-3/4 h-32 rounded-[2.5rem] bg-white/5 animate-pulse" />
                 <div className="flex gap-2">
                     <Skeleton className="w-12 h-2 rounded bg-white/5" />
                     <Skeleton className="w-12 h-2 rounded bg-white/5" />
@@ -67,7 +89,7 @@ const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress
         );
     }
 
-    if (error || !data.length) {
+    if (error && data.length === 0) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 bg-white/[0.02]">
                 <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
@@ -94,7 +116,7 @@ const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress
                     contentStyle={{ 
                         backgroundColor: 'rgba(5, 5, 5, 0.9)', 
                         border: '1px solid rgba(255,255,255,0.1)', 
-                        borderRadius: '1rem',
+                        borderRadius: '1.5rem',
                         backdropFilter: 'blur(10px)',
                         padding: '12px'
                     }}
@@ -110,13 +132,16 @@ const RechartsChart = ({ coingeckoId, days, isNegative, chainId, contractAddress
                     fill="url(#chart-fill)"
                     strokeWidth={2.5}
                     dot={false}
-                    animationDuration={1500}
+                    isAnimationActive={data.length < 500} // Disable animation for very dense datasets to prevent lag
+                    animationDuration={1000}
                 />
                 <XAxis dataKey="time" hide />
                 <YAxis domain={['dataMin', 'dataMax']} hide />
             </AreaChart>
         </ResponsiveContainer>
     );
-};
+});
+
+RechartsChart.displayName = 'RechartsChart';
 
 export default RechartsChart;

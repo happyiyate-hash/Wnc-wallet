@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo } from "react";
@@ -143,7 +142,6 @@ export default function TokenDetailsClientPage() {
   const coingeckoId = token?.symbol === 'WNC' ? 'internal:wnc' : token?.coingeckoId;
   const { data: marketStats } = useSingleTokenDetails(coingeckoId);
 
-  // Loading state while registry synchronizes
   if (!isInitialized || !hasFetchedInitialData) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-transparent gap-4">
@@ -201,6 +199,7 @@ export default function TokenDetailsClientPage() {
 
         <div className="h-64 relative w-full overflow-hidden mt-4">
           <RechartsChart 
+            key={`${token.symbol}-${token.chainId}`} // Fixed key per asset to prevent re-mounts on price ticks
             coingeckoId={coingeckoId} 
             days={chartRange} 
             isNegative={isNegativeChange}
