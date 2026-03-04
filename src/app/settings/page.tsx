@@ -42,7 +42,8 @@ import {
   Camera,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Search
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -149,11 +150,6 @@ export default function SettingsPage() {
         }
     };
 
-    /**
-     * DIRECT WRITE ARCHITECTURE
-     * Decoupled from provider refresh loops to prevent infinite wallet loading.
-     * Only updates the profiles table directly.
-     */
     const handleSaveProfile = async () => {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
@@ -168,9 +164,6 @@ export default function SettingsPage() {
                 }, { onConflict: 'id' });
 
             if (dbError) throw dbError;
-
-            // SUCCESS: Explicitly NOT calling refreshProfile() or auth.updateUser()
-            // to prevent triggering the Wallet derivation loop.
             toast({ title: "Profile Secured", description: "Identity node synchronized." });
         } catch (error: any) {
             console.error("[SAVE_PROFILE_FAIL]", error);
@@ -443,16 +436,58 @@ export default function SettingsPage() {
             </AlertDialog>
 
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
-                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[80vh] p-0 overflow-hidden shadow-2xl">
-                    <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
-                    <SheetHeader className="px-6 mb-2">
-                        <SheetTitle className="text-xl font-black uppercase tracking-widest text-center text-white">Select Currency</SheetTitle>
+                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[85vh] p-0 overflow-hidden shadow-2xl flex flex-col">
+                    <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
+                    <SheetHeader className="px-6 mb-4 shrink-0">
+                        <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center text-white">Select Currency</SheetTitle>
                         <SheetDescription className="sr-only">Switch your display currency for all valuations.</SheetDescription>
                     </SheetHeader>
-                    <ScrollArea className="flex-1 px-6 pb-20">
-                        {sortedCurrencies.map(code => (
-                            <button key={code} onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }} className="w-full py-4 text-left font-bold text-white border-b border-white/5">{code}</button>
-                        ))}
+
+                    {/* SEARCH NODE */}
+                    <div className="px-6 mb-6 shrink-0">
+                        <div className="relative group">
+                            <div className="absolute -inset-0.5 bg-primary/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                            <div className="relative bg-zinc-950 border border-white/10 rounded-2xl">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+                                <Input 
+                                    placeholder="Search currencies..."
+                                    className="bg-transparent border-none pl-11 h-14 rounded-2xl focus-visible:ring-0 text-base text-white placeholder:text-white/20"
+                                    value={currencySearch}
+                                    onChange={(e) => setCurrencySearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <ScrollArea className="flex-1 px-6">
+                        <div className="space-y-1 pb-32">
+                            {sortedCurrencies.map(code => (
+                                <button 
+                                    key={code} 
+                                    onClick={() => { setCurrency(code); setIsCurrencySheetOpen(false); }} 
+                                    className={cn(
+                                        "w-full py-4 px-4 text-left font-bold transition-all flex items-center justify-between group rounded-2xl border border-transparent",
+                                        selectedCurrency === code ? "bg-primary/10 border-primary/20 text-primary" : "text-white/80 hover:bg-white/5"
+                                    )}
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-black uppercase tracking-widest leading-none">{code}</span>
+                                        <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-tighter mt-1 opacity-40">Regional Registry Node</span>
+                                    </div>
+                                    {selectedCurrency === code && <CheckCircle2 className="w-4 h-4 text-primary" />}
+                                </button>
+                            ))}
+                            
+                            {sortedCurrencies.length === 0 && (
+                                <div className="py-24 flex flex-col items-center justify-center text-center space-y-4 opacity-20">
+                                    <Globe className="w-12 h-12 text-white" />
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p>
+                                        <p className="text-[9px] font-medium leading-relaxed">The search term did not match any currency in the global registry.</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </ScrollArea>
                 </SheetContent>
             </Sheet>
