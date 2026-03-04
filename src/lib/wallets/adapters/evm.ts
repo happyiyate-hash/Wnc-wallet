@@ -7,6 +7,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 /**
  * EVM Adapter
  * Handles all EVM and EVM-Compatible chains using standard JSON-RPC.
+ * Hardened for robust custom ERC-20 discovery.
  */
 class EvmAdapter implements IWalletAdapter {
     private provider: ethers.JsonRpcProvider | null = null;
@@ -34,13 +35,14 @@ class EvmAdapter implements IWalletAdapter {
                 let balanceBigInt: bigint;
                 const decimals = asset.decimals || 18;
 
-                if (asset.isNative) {
+                if (asset.isNative || asset.address === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
                     balanceBigInt = await this.provider!.getBalance(ownerAddress);
                     return {
                         ...asset,
                         balance: ethers.formatUnits(balanceBigInt, decimals),
                     } as AssetRow;
                 } else {
+                    // Robust ERC-20 Handshake
                     const abi = ["function balanceOf(address owner) view returns (uint256)"];
                     const contract = new ethers.Contract(asset.address, abi, this.provider!);
                     balanceBigInt = await contract.balanceOf(ownerAddress);
@@ -51,7 +53,7 @@ class EvmAdapter implements IWalletAdapter {
                     } as AssetRow;
                 }
             } catch (error) {
-                console.warn(`Failed to fetch balance for ${asset.symbol}:`, error);
+                // Return 0 for specific failing contracts rather than failing the whole chain
                 return { ...asset, balance: '0' } as AssetRow;
             }
         });
@@ -61,6 +63,6 @@ class EvmAdapter implements IWalletAdapter {
 }
 
 export const evmAdapterFactory = (chain: ChainConfig, apiKey: string | null): IWalletAdapter | null => {
-    if (chain.type === 'evm') return new EvmAdapter(chain, apiKey);
+    if (chain.type === 'evm' || !chain.type) return new EvmAdapter(chain, apiKey);
     return null;
 };

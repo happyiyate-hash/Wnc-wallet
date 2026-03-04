@@ -7,6 +7,7 @@ import { getInitialAssets } from '@/lib/wallets/balances';
 /**
  * INSTITUTIONAL BALANCE SERVICE
  * Handles data node routing with Speed-Tiered timeouts.
+ * Supports automated custom ERC-20 discovery.
  */
 export async function fetchBalancesForChain(
   chain: ChainConfig,
@@ -17,8 +18,10 @@ export async function fetchBalancesForChain(
   const walletForChain = wallets.find(w => w.type === (chain.type || 'evm'));
   if (!walletForChain) return [];
 
+  // Combine Hardcoded Registry + User Provisioned Nodes
   const base = getInitialAssets(chain.chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
   const custom = userAddedTokens.filter(t => t.chainId === chain.chainId);
+  
   const combinedAssetsList = [...base, ...custom].reduce((acc, curr) => {
     const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
     if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === identifier)) {
@@ -37,6 +40,8 @@ export async function fetchBalancesForChain(
     const { bitcoinAdapterFactory } = await import('@/lib/wallets/adapters/bitcoin');
     const { litecoinAdapterFactory } = await import('@/lib/wallets/adapters/litecoin');
     const { dogecoinAdapterFactory } = await import('@/lib/wallets/adapters/dogecoin');
+    const { aptosAdapterFactory } = await import('@/lib/wallets/adapters/aptos');
+    const { suiAdapterFactory } = await import('@/lib/wallets/adapters/sui');
 
     let adapter = null;
     
@@ -48,6 +53,8 @@ export async function fetchBalancesForChain(
     else if (chain.type === 'btc') adapter = bitcoinAdapterFactory(chain);
     else if (chain.type === 'ltc') adapter = litecoinAdapterFactory(chain);
     else if (chain.type === 'doge') adapter = dogecoinAdapterFactory(chain);
+    else if (chain.type === 'aptos') adapter = aptosAdapterFactory(chain);
+    else if (chain.type === 'sui') adapter = suiAdapterFactory(chain);
     else adapter = evmAdapterFactory(chain, infuraApiKey);
 
     if (adapter) {

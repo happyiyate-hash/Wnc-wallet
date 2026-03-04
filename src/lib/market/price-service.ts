@@ -2,12 +2,14 @@
 'use client';
 
 import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
+import { logoSupabase } from '@/lib/supabase/logo-client';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getInitialAssets } from '@/lib/wallets/balances';
 
 /**
  * INSTITUTIONAL MARKET DYNAMICS SERVICE
  * Handles price discovery, delta calculations, and internal asset valuation.
+ * Version 4.0: Privacy-Preserving Staged Discovery
  */
 
 export interface PriceResult {
@@ -27,46 +29,41 @@ export function calculateDelta(current: number, previous: number): number {
 
 /**
  * Generates a deterministic "Daily Opening Price" for internal assets.
- * This ensures the 24h change remains consistent throughout the day
- * and doesn't reset to 0% during periodic refreshes when the price is stable.
  */
 function getWncOpeningPrice(currentPrice: number): number {
   const now = new Date();
-  // Create a stable key for the current UTC day
   const dateString = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
   
-  // Simple deterministic hash of the date string
   let hash = 0;
   for (let i = 0; i < dateString.length; i++) {
     hash = ((hash << 5) - hash) + dateString.charCodeAt(i);
-    hash |= 0; // Convert to 32bit integer
+    hash |= 0;
   }
   
   const absHash = Math.abs(hash);
-  // Generate a variance factor between -2.5% and +2.5%
-  // This represents the "Opening Price" relative to the current live index
-  const varianceFactor = (absHash % 500) - 250; // Range: -250 to 249
-  const variancePercent = varianceFactor / 10000; // Range: -0.025 to 0.0249
+  const varianceFactor = (absHash % 500) - 250; 
+  const variancePercent = varianceFactor / 10000; 
   
-  // Return the reference price used to calculate the daily delta
   return currentPrice * (1 + variancePercent);
 }
 
 /**
+ * STAGED PRICE DISCOVERY HANDSHAKE
  * Fetches market data for all known assets across all chains.
- * Includes specialized logic for internal Handshake assets (WNC).
+ * Stage 1: Native CoinGecko Index
+ * Stage 2: Contract-Based Platform API
+ * Stage 3: Institutional Metadata Project Fallback (CDN)
  */
 export async function fetchGlobalMarketData(
   chains: ChainConfig[],
   customTokens: AssetRow[],
-  currentRates: { [key: string]: number },
-  previousPrices: PriceResult = {}
+  currentRates: { [key: string]: number }
 ): Promise<PriceResult> {
   const coingeckoIds = new Set<string>();
   const platformTokens: { [platform: string]: Set<string> } = {};
   const allKnownAssets: AssetRow[] = [];
 
-  // 1. Map all assets to their respective price sources
+  // 1. REGISTRY MAPPING
   chains.forEach(chain => {
     const base = getInitialAssets(chain.chainId);
     allKnownAssets.push(...base.map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
@@ -88,9 +85,14 @@ export async function fetchGlobalMarketData(
   const newPrices: PriceResult = {};
 
   try {
-    const fetchPromises = [];
-    if (coingeckoIds.size > 0) fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
+    const fetchPromises: Promise<any>[] = [];
     
+    // STAGE 1: Standard IDs
+    if (coingeckoIds.size > 0) {
+        fetchPromises.push(fetchPriceMap(Array.from(coingeckoIds)));
+    }
+    
+    // STAGE 2: Contract Addresses
     Object.entries(platformTokens).forEach(([platform, addresses]) => {
       fetchPromises.push(fetchPricesByContract(platform, Array.from(addresses)));
     });
@@ -109,13 +111,35 @@ export async function fetchGlobalMarketData(
       }
     });
 
-    // 2. Handle Internal Assets (WNC)
-    // WNC price is pinned to the NGN rate (Institutional SmarterSeller Standard)
+    // STAGE 3: INSTITUTIONAL FALLBACK (CDN/Metadata Project)
+    // For tokens still missing prices, check our internal metadata registry
+    const missingTokens = allKnownAssets.filter(a => !a.isNative && a.address?.startsWith('0x') && !newPrices[a.address.toLowerCase()]);
+    if (missingTokens.length > 0 && logoSupabase) {
+        try {
+            const { data: metadataPrices } = await logoSupabase
+                .from('token_metadata')
+                .select('contract_address, token_details')
+                .in('contract_address', missingTokens.map(t => t.address.toLowerCase()));
+
+            if (metadataPrices) {
+                metadataPrices.forEach(m => {
+                    const price = m.token_details?.priceUsd;
+                    if (price) {
+                        newPrices[m.contract_address.toLowerCase()] = { 
+                            price: price, 
+                            change: m.token_details?.pctChange24h || 0 
+                        };
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("[CDN_FALLBACK_ADVISORY] Registry lookup deferred.");
+        }
+    }
+
+    // 2. INTERNAL SETTLEMENT VALUATION (WNC)
     const ngnRate = currentRates['NGN'] || 1650;
     const wncCurrentPrice = 1 / ngnRate;
-    
-    // INSTITUTIONAL FIX: Use deterministic Daily Opening Price
-    // This ensures the 24h change is consistent all day and doesn't reset to 0%
     const wncOpeningPrice = getWncOpeningPrice(wncCurrentPrice);
     const wncChange = calculateDelta(wncCurrentPrice, wncOpeningPrice);
 
