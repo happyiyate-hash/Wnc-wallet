@@ -109,8 +109,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (lastNetwork) setViewingNetwork(JSON.parse(lastNetwork));
   }, []);
 
-  // 1. ATOMIC INITIALIZATION EFFECT
-  // Strictly offline derivation and registry loading
+  /**
+   * HARDWARE INITIALIZATION SENTINEL
+   * Strictly offline derivation. Runs exactly once after auth resolves.
+   */
   useEffect(() => {
     if (authLoading) return;
 
@@ -125,35 +127,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
         if (savedMnemonic) {
+          // Fail-fast timeout for crypto library chunks
           const derived = await Promise.race([
             deriveAllWallets(savedMnemonic),
-            new Promise<WalletWithMetadata[]>((_, reject) => 
-              setTimeout(() => reject(new Error("DERIVATION_TIMEOUT")), 8000)
-            )
+            new Promise<WalletWithMetadata[]>((_, reject) => setTimeout(() => reject(new Error("DERIVATION_TIMEOUT")), 8000))
           ]);
           setWallets(derived);
         }
 
         const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
-        if (localKey) {
-          setInfuraApiKey(localKey);
-        } else if (profile?.vault_infura_key && profile?.infura_iv) {
-          try {
-            const { data: { session } } = await supabase!.auth.getSession();
-            if (session) {
-              const res = await fetch('/api/wallet/decrypt-phrase', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-                body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
-              });
-              const data = await res.json();
-              if (data.phrase) {
-                setInfuraApiKey(data.phrase);
-                localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
-              }
-            }
-          } catch (e) { console.warn("[RPC_AUTO_RECOVERY_FAIL]", e); }
-        }
+        if (localKey) setInfuraApiKey(localKey);
         
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
         if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
@@ -171,7 +154,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     runInit();
-  }, [authLoading, user?.id]); // Removed profile fields from dependency to prevent infinite loops
+  }, [authLoading, user?.id]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -207,17 +190,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  // 2. EXPLICIT ENGINE TRIGGER
-  // Guarantees the refresh() fires once derivation is complete
-  useEffect(() => {
-    if (!isInitialized || isWalletLoading || !wallets || wallets.length === 0) return;
-    
-    console.log("[ENGINE_TRIGGER] Starting initial data handshake...");
-    refresh();
-  }, [isInitialized, isWalletLoading, wallets === null, refresh]);
-
   const allAssets = useMemo(() => {
-    if (!isInitialized || isWalletLoading || !wallets || wallets.length === 0) return [];
+    if (!isInitialized) return [];
 
     const base = getInitialAssets(effectiveViewingNetwork.chainId);
     const custom = userAddedTokens.filter(t => t.chainId === effectiveViewingNetwork.chainId);
@@ -265,7 +239,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return [wncAsset, ...onChainAssets]
       .filter(a => !hiddenTokenKeys.has(`${effectiveViewingNetwork.chainId}:${a.symbol}`))
       .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
-  }, [isInitialized, isWalletLoading, wallets, effectiveViewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
+  }, [isInitialized, effectiveViewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
   const updateInfuraKey = useCallback(async (key: string | null) => {
     if (!user) return;
@@ -334,45 +308,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, wallets, toast]);
 
-  const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
-    if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) throw new Error("No cloud backup detected.");
-    const { data: { session } } = await supabase!.auth.getSession();
-    if (!session) throw new Error("Authentication session missing.");
-    if (profile?.vault_phrase && profile?.iv) {
-      onStatusUpdate?.('Restoring Vault Registry...');
-      const res = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
-      });
-      const data = await res.json();
-      if (data.phrase) {
-        localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
-        const derived = await deriveAllWallets(data.phrase);
-        setWallets(derived);
-      }
-    }
-    if (profile?.vault_infura_key && profile?.infura_iv) {
-      onStatusUpdate?.('Synchronizing RPC Nodes...');
-      const res = await fetch('/api/wallet/decrypt-phrase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
-      });
-      const data = await res.json();
-      if (data.phrase) updateInfuraKey(data.phrase);
-    }
-    toast({ title: "Node Synchronized", description: "Vault and RPC credentials restored." });
-  }, [user?.id, profile, toast, updateInfuraKey]);
-
-  const deleteWallet = useCallback(() => {
-    if (user) {
-      purgeLocalWalletCache(user.id);
-      setWallets(null);
-      router.replace('/wallet-session');
-    }
-  }, [user, router]);
-
   const deleteWalletPermanently = useCallback(async () => {
     if (!user || !supabase) return;
     try {
@@ -419,6 +354,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({ variant: "destructive", title: "Destruction Error", description: e.message });
     }
   }, [user, router, toast]);
+
+  const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
+    if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) throw new Error("No cloud backup detected.");
+    const { data: { session } } = await supabase!.auth.getSession();
+    if (!session) throw new Error("Authentication session missing.");
+    if (profile?.vault_phrase && profile?.iv) {
+      onStatusUpdate?.('Restoring Vault Registry...');
+      const res = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
+      });
+      const data = await res.json();
+      if (data.phrase) {
+        localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
+        const derived = await deriveAllWallets(data.phrase);
+        setWallets(derived);
+      }
+    }
+    if (profile?.vault_infura_key && profile?.infura_iv) {
+      onStatusUpdate?.('Synchronizing RPC Nodes...');
+      const res = await fetch('/api/wallet/decrypt-phrase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+      });
+      const data = await res.json();
+      if (data.phrase) updateInfuraKey(data.phrase);
+    }
+    toast({ title: "Node Synchronized", description: "Vault and RPC credentials restored." });
+  }, [user?.id, profile, toast, updateInfuraKey]);
+
+  const deleteWallet = useCallback(() => {
+    if (user) {
+      purgeLocalWalletCache(user.id);
+      setWallets(null);
+      router.replace('/wallet-session');
+    }
+  }, [user, router]);
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
