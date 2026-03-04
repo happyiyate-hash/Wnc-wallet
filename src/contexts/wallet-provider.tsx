@@ -97,7 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const isAuditRunningRef = useRef(false);
 
-  // 1. Initial Hydration
+  // 1. Initial Hydration (General)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const cachedPrices = localStorage.getItem('cache_prices_global');
@@ -110,6 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * STAGE-ISOLATED INITIALIZATION
+   * Unified handshake for Mnemonic, RPC Nodes, and Custom Assets.
    */
   useEffect(() => {
     if (authLoading) return;
@@ -123,8 +124,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const runInit = async () => {
       try {
+        // A. CRYPTOGRAPHIC DERIVATION (Offline First)
         const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
-        
         if (savedMnemonic) {
           const derived = await Promise.race([
             deriveAllWallets(savedMnemonic),
@@ -135,9 +136,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setWallets(derived);
         }
 
+        // B. RPC REGISTRY HYDRATION
         const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
-        if (localKey) setInfuraApiKey(localKey);
+        if (localKey) {
+          setInfuraApiKey(localKey);
+        } else if (profile?.vault_infura_key && profile?.infura_iv) {
+          // SEAMLESS AUTO-RECOVERY: Silently decrypt and restore RPC node if missing locally
+          try {
+            const { data: { session } } = await supabase!.auth.getSession();
+            if (session) {
+              const res = await fetch('/api/wallet/decrypt-phrase', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+              });
+              const data = await res.json();
+              if (data.phrase) {
+                setInfuraApiKey(data.phrase);
+                localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
+              }
+            }
+          } catch (e) { console.warn("[RPC_AUTO_RECOVERY_FAIL]", e); }
+        }
         
+        // C. ASSET REGISTRY HYDRATION
         const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
         if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
 
@@ -146,7 +168,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         setIsInitialized(true);
       } catch (e: any) {
-        console.warn("[WALLET_INIT_ADVISORY]", e.message);
+        console.warn("[TERMINAL_INIT_ADVISORY]", e.message);
         setIsInitialized(true);
       } finally {
         setIsWalletLoading(false);
@@ -154,20 +176,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     runInit();
-  }, [authLoading, user?.id]);
-
-  useEffect(() => {
-    if (profile?.account_number) {
-      setAccountNumber(profile.account_number);
-      if (user) localStorage.setItem(`account_number_${user.id}`, profile.account_number);
-    }
-  }, [profile?.account_number, user?.id]);
+  }, [authLoading, user?.id, profile?.vault_infura_key]);
 
   const effectiveViewingNetwork = useMemo(() => {
-    return viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig);
+    return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
-  // Memoize setters to stabilize the Wallet Engine and prevent re-rendering loops
   const handleSetPrices = useCallback((newPrices: PriceResult) => {
     setPrices(newPrices);
     localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
@@ -195,6 +209,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
+  // GUARANTEED TRIGGER: Fire refresh protocol immediately upon derivation
   useEffect(() => {
     if (wallets && wallets.length > 0 && isInitialized && !isWalletLoading) {
       refresh();
@@ -243,14 +258,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
-    let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
     return mnemonic;
-  }, [user?.id, profile?.account_number, accountNumber]);
+  }, [user?.id, profile?.account_number]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Authentication required");
@@ -260,13 +275,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
-    let targetAcc = profile?.account_number || accountNumber || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
-  }, [user?.id, profile?.account_number, accountNumber]);
+  }, [user?.id, profile?.account_number]);
 
   const saveToVault = useCallback(async () => {
     if (!user) return;
@@ -282,6 +297,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication session missing.");
 
+    // Sequence restoration: Secret Phrase then RPC Keys
     if (profile?.vault_phrase && profile?.iv) {
       onStatusUpdate?.('Restoring Vault Registry...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -306,13 +322,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (data.phrase) {
-        setInfuraApiKey(data.phrase);
-        localStorage.setItem(`infura_api_key_${user.id}`, data.phrase);
+        updateInfuraKey(data.phrase);
       }
     }
 
-    toast({ title: "Node Synchronized", description: "All vault and RPC credentials restored." });
-  }, [user?.id, profile, toast]);
+    toast({ title: "Node Synchronized", description: "Vault and RPC credentials restored." });
+  }, [user?.id, profile, toast, updateInfuraKey]);
 
   const deleteWallet = useCallback(async () => {
     if (user) {
@@ -337,12 +352,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             vault_infura_key: null,
             infura_iv: null,
             account_number: null,
-            onboarding_completed: false
+            onboarding_completed: false,
+            evm_address: null, xrp_address: null, near_address: null, btc_address: null, 
+            solana_address: null, polkadot_address: null, kusama_address: null
         }).eq('id', user.id);
 
         if (dbError) throw dbError;
 
-        setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
         purgeLocalWalletCache(user.id);
         setWallets(null);
         setAccountNumber(null);
@@ -350,6 +366,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setInfuraApiKey(null);
         setPrices({});
         setHasFetchedInitialData(true);
+        setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
         
         router.replace('/wallet-session');
         toast({ title: "Vault Destroyed", description: "Global registry data purged." });

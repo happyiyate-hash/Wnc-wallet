@@ -128,11 +128,15 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
     setHasMounted(true);
   }, []);
 
+  /**
+   * RPC HANDSHAKE SENTINEL
+   * Monitors the infuraApiKey state. If missing after terminal initialization,
+   * triggers the Connection Cockpit.
+   */
   useEffect(() => {
     if (isInitialized && !isWalletLoading && !!wallets && !infuraApiKey) {
       const timer = setTimeout(() => {
-        const currentKey = localStorage.getItem('infura_api_key');
-        if (!currentKey) setIsApiKeySheetOpen(true);
+        setIsApiKeySheetOpen(true);
       }, 2000);
       return () => clearTimeout(timer);
     }
