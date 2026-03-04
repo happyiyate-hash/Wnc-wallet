@@ -167,6 +167,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
+  // Memoize setters to stabilize the Wallet Engine and prevent re-rendering loops
+  const handleSetPrices = useCallback((newPrices: PriceResult) => {
+    setPrices(newPrices);
+    localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
+  }, []);
+
+  const handleSetBalances = useCallback((update: (prev: any) => any) => {
+    setBalances(prev => {
+      const next = update(prev);
+      localStorage.setItem('cache_balances_all', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const { refresh } = useWalletEngine({
     wallets, 
     viewingNetwork: effectiveViewingNetwork, 
@@ -175,17 +189,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     userAddedTokens, 
     rates, 
     infuraApiKey,
-    setPrices: (newPrices) => {
-      setPrices(newPrices);
-      localStorage.setItem('cache_prices_global', JSON.stringify(newPrices));
-    },
-    setBalances: (update) => {
-      setBalances(prev => {
-        const next = update(prev);
-        localStorage.setItem('cache_balances_all', JSON.stringify(next));
-        return next;
-      });
-    },
+    setPrices: handleSetPrices,
+    setBalances: handleSetBalances,
     setIsRefreshing, 
     setHasFetchedInitialData
   });
@@ -198,19 +203,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   /**
    * ATOMIC RPC REGISTRY UPDATE
-   * Encrypts and synchronizes Infura keys to the cloud before initializing local session.
    */
   const updateInfuraKey = useCallback(async (key: string | null) => {
     if (!user) return;
-    
-    // 1. Instant UI Reflection
     setInfuraApiKey(key);
     
     if (key) {
-      // 2. Encryption Handshake & Cloud Commit (Registry Node Update)
       try {
         await saveInfuraToCloud(user.id, key);
-        // 3. Hardware Persistence
         localStorage.setItem(`infura_api_key_${user.id}`, key);
         toast({ title: "RPC Registry Secured", description: "Node keys synchronized with encrypted vault." });
       } catch (e) {
@@ -274,10 +274,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (mnemonic) await saveVaultToCloud(user.id, mnemonic);
   }, [user?.id]);
 
-  /**
-   * UNIFIED CLOUD RECOVERY
-   * Synchronizes both the Secret Phrase and RPC Nodes from the encrypted cloud vault.
-   */
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.vault_infura_key)) {
       throw new Error("No cloud backup detected.");
@@ -286,7 +282,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication session missing.");
 
-    // NODE A: Mnemonic Discovery
     if (profile?.vault_phrase && profile?.iv) {
       onStatusUpdate?.('Restoring Vault Registry...');
       const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -302,7 +297,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // NODE B: RPC Discovery (Infura)
     if (profile?.vault_infura_key && profile?.infura_iv) {
       onStatusUpdate?.('Synchronizing RPC Nodes...');
       const res = await fetch('/api/wallet/decrypt-phrase', {

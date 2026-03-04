@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 
 interface CurrencyContextType {
   selectedCurrency: string;
@@ -26,14 +26,14 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     if (saved) setSelectedCurrency(saved);
   }, []);
 
-  const setCurrency = (code: string) => {
+  const setCurrency = useCallback((code: string) => {
     setSelectedCurrency(code);
     localStorage.setItem('selected_currency', code);
-  };
+  }, []);
 
   const currentSymbol = SYMBOLS[selectedCurrency] || selectedCurrency;
 
-  const formatFiat = (val: number, decimals?: number) => {
+  const formatFiat = useCallback((val: number, decimals?: number) => {
     const rate = rates[selectedCurrency] || 1;
     const converted = val * rate;
     
@@ -45,10 +45,18 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       minimumFractionDigits: precision, 
       maximumFractionDigits: precision 
     })}`;
-  };
+  }, [selectedCurrency, rates, currentSymbol]);
+
+  const value = useMemo(() => ({
+    selectedCurrency,
+    setCurrency,
+    rates,
+    currentSymbol,
+    formatFiat
+  }), [selectedCurrency, setCurrency, rates, currentSymbol, formatFiat]);
 
   return (
-    <CurrencyContext.Provider value={{ selectedCurrency, setCurrency, rates, currentSymbol, formatFiat }}>
+    <CurrencyContext.Provider value={value}>
       {children}
     </CurrencyContext.Provider>
   );

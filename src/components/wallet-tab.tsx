@@ -12,6 +12,7 @@ import {
   History,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
   Wallet as WalletIcon,
   Copy,
   CheckCircle2,
@@ -265,10 +266,11 @@ export default function WalletTab({ computedAssets }: { computedAssets: AssetRow
                 <div className="flex items-center justify-between py-6 px-6">
                     <Button
                         variant="ghost"
-                        className="h-9 px-4 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 transition-all"
+                        className="h-9 px-4 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 transition-all flex items-center gap-2"
                         onClick={() => setIsTokenManagerOpen(true)}
                     >
                         <span className="font-black text-[10px] uppercase tracking-widest text-primary">Manage Assets</span>
+                        <ChevronDown className="w-3.5 h-3.5 text-primary" />
                     </Button>
                     <Button
                         variant="ghost"
