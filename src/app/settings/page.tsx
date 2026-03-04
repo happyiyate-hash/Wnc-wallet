@@ -129,6 +129,10 @@ export default function SettingsPage() {
 
         setIsUploading(true);
         try {
+            // VERIFY SESSION BEFORE UPLOAD
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Auth session missing! Please refresh.");
+
             const timestamp = Date.now();
             const fileName = `profiles/${user.id}/${timestamp}-${file.name.replace(/\s+/g, '_')}`;
 
@@ -145,6 +149,7 @@ export default function SettingsPage() {
             setPhotoUrl(publicUrl);
             toast({ title: "Avatar Uplinked", description: "Visual node ready for authorization." });
         } catch (error: any) {
+            console.error("[UPLOAD_ERROR]", error);
             toast({ 
                 variant: "destructive", 
                 title: "Upload Failed", 
@@ -159,6 +164,18 @@ export default function SettingsPage() {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
+            // PRIMING HANDSHAKE: Ensure session is alive and tokens are refreshed
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session) {
+                // If session is missing, try a quick refresh before failing
+                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+                if (refreshError || !refreshData.session) {
+                    throw new Error("Auth session missing! Please sign in again.");
+                }
+            }
+
+            // 1. Update Auth Metadata
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -167,6 +184,7 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
+            // 2. Update Public Profile Node
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -181,6 +199,7 @@ export default function SettingsPage() {
             await refreshProfile();
             toast({ title: "Profile Secured", description: "Identity node fully synchronized with ecosystem." });
         } catch (error: any) {
+            console.error("[SAVE_PROFILE_FAIL]", error);
             toast({ 
                 variant: "destructive", 
                 title: "Sync Failed", 

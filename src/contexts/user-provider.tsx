@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -74,6 +73,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             await fetchProfile(currentUser.id);
         }
       } catch (e) {
+        console.error("[INIT_SESSION_FAIL]", e);
       } finally {
         setLoading(false);
       }
