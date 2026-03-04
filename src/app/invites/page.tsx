@@ -52,8 +52,9 @@ export default function InvitesPage() {
      * Dynamically computes balances from the referrals registry.
      */
     const { escrowBalance, authorizedBalance } = useMemo(() => {
-        const escrow = referrals.reduce((sum, r) => sum + (r.status === 'pending' ? r.reward_amount : 0), 0);
-        const approved = referrals.reduce((sum, r) => sum + (r.status === 'approved' ? r.reward_amount : 0), 0);
+        // RESILIENCE: Check both reward_amount and amount_wnc
+        const escrow = referrals.reduce((sum, r) => sum + (r.status === 'pending' ? (r.reward_amount || r.amount_wnc || 0) : 0), 0);
+        const approved = referrals.reduce((sum, r) => sum + (r.status === 'approved' ? (r.reward_amount || r.amount_wnc || 0) : 0), 0);
         return { escrowBalance: escrow, authorizedBalance: approved };
     }, [referrals]);
 
@@ -105,7 +106,7 @@ export default function InvitesPage() {
         
         setIsWithdrawing(true);
         try {
-            // This now runs the activity-gated SQL logic
+            // Atomic settlement logic
             const { data, error } = await supabase!.rpc('withdraw_referral_bonus', {
                 p_user_id: user?.id
             });
@@ -113,7 +114,9 @@ export default function InvitesPage() {
             if (error) throw error;
             
             if (data.success) {
-                toast({ title: "Settlement Authorized", description: `Transferred ${data.amount} WNC to your main vault.` });
+                // RESILIENCE: Map amount or amount_wnc from the RPC response
+                const settledAmount = data.amount || data.amount_wnc || 0;
+                toast({ title: "Settlement Authorized", description: `Transferred ${settledAmount} WNC to your main vault.` });
                 await refreshProfile();
                 await fetchReferrals();
             } else {
@@ -227,7 +230,10 @@ export default function InvitesPage() {
                 <section className="space-y-4">
                     <div className="flex justify-between items-center px-2"><p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Referrals</p><span className="text-[8px] font-black text-white/20 uppercase">Registry v4.0</span></div>
                     <div className="space-y-2">
-                        {isLoading ? ( <div className="flex flex-col items-center py-10 gap-3 opacity-20"><Loader2 className="w-6 h-6 animate-spin" /><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Nodes...</p></div> ) : referrals.length > 0 ? ( referrals.map((ref, i) => (
+                        {isLoading ? ( <div className="flex flex-col items-center py-10 gap-3 opacity-20"><Loader2 className="w-6 h-6 animate-spin" /><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Nodes...</p></div> ) : referrals.length > 0 ? ( referrals.map((ref, i) => {
+                                // RESILIENCE: Map reward_amount or amount_wnc
+                                const amount = ref.reward_amount || ref.amount_wnc || 0;
+                                return (
                                 <motion.div key={ref.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all shadow-2xl">
                                     <div className="flex items-center gap-4">
                                         <div className="relative">
@@ -236,8 +242,8 @@ export default function InvitesPage() {
                                         </div>
                                         <div className="text-left"><p className="font-black text-sm text-white tracking-tight">@{ref.profile?.name || 'Anonymous Node'}</p><div className="flex items-center gap-1.5 mt-0.5"><span className="text-[8px] font-mono text-muted-foreground uppercase opacity-60">ID: {ref.profile?.account_number?.slice(-6) || '---'}</span><div className="w-1 h-1 rounded-full bg-white/10" /><span className="text-[8px] font-black uppercase text-white/30">{new Date(ref.created_at).toLocaleDateString()}</span></div></div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-1"><div className={cn("px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest", ref.status === 'credited' ? "bg-green-500/10 text-green-500" : ref.status === 'approved' ? "bg-primary/10 text-primary" : "bg-amber-500/10 text-amber-500")}>{ref.status}</div><p className="text-[10px] font-black text-white tabular-nums">+{ref.reward_amount} WNC</p></div>
-                                </motion.div> )) ) : ( <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 opacity-30"><div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center"><Users className="w-8 h-8 text-white" /></div><div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p><p className="text-[9px] font-medium leading-relaxed max-w-[180px]">Broadcast your invitation to expand your institutional registry.</p></div></div> )}
+                                    <div className="flex flex-col items-end gap-1"><div className={cn("px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest", ref.status === 'credited' ? "bg-green-500/10 text-green-500" : ref.status === 'approved' ? "bg-primary/10 text-primary" : "bg-amber-500/10 text-amber-500")}>{ref.status}</div><p className="text-[10px] font-black text-white tabular-nums">+{amount} WNC</p></div>
+                                </motion.div> )}) ) : ( <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 opacity-30"><div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center"><Users className="w-8 h-8 text-white" /></div><div className="space-y-1"><p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p><p className="text-[9px] font-medium leading-relaxed max-w-[180px]">Broadcast your invitation to expand your institutional registry.</p></div></div> )}
                     </div>
                 </section>
             </main>

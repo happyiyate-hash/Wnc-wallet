@@ -42,13 +42,13 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
             const formatted = data.map(tx => {
               const isOut = tx.sender_id === user.id;
               const peer = isOut ? tx.receiver : tx.sender;
-              // REGISTRY RESILIENCE: Map either amount or amount_wnc
-              const displayAmount = tx.amount_wnc || tx.amount || 0;
+              // REGISTRY RESILIENCE: Prioritize 'amount' then fallback to 'amount_wnc'
+              const displayAmount = tx.amount !== undefined ? tx.amount : (tx.amount_wnc || 0);
               
               return {
                 id: tx.id,
                 amount: displayAmount,
-                type: tx.destination_type,
+                type: tx.destination_type || 'transfer',
                 status: 'completed',
                 timestamp: tx.created_at,
                 peer: peer,
@@ -72,8 +72,8 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
           if (!error && data) {
             setTransactions(data.map(tx => ({
               ...tx,
-              // RESILIENCE: Use amount_wnc fallback if amount is missing
-              amount: tx.amount || tx.amount_wnc || 0,
+              // RESILIENCE: Map either amount or amount_wnc
+              amount: tx.amount !== undefined ? tx.amount : (tx.amount_wnc || 0),
               isOut: tx.type === 'withdrawal' || tx.type === 'transfer_out'
             })));
           }
@@ -139,7 +139,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
                         {tx.type === 'reward' ? 'Growth Reward' : 
                          isOut ? `To @${peerName}` : 
                          isIn ? `From @${peerName}` : 
-                         tx.type.replace('_', ' ')}
+                         tx.type?.replace('_', ' ') || 'Transfer'}
                     </p>
                     <ShieldCheck className="w-3 h-3 text-primary opacity-40" />
                 </div>
@@ -153,7 +153,7 @@ export default function TransactionHistory({ token }: { token: AssetRow }) {
                 "font-black text-base tabular-nums tracking-tight",
                 isOut ? 'text-red-400' : 'text-green-400'
               )}>
-                {isOut ? '-' : '+'}{parseFloat(tx.amount).toLocaleString()}
+                {isOut ? '-' : '+'}{parseFloat(tx.amount || 0).toLocaleString()}
               </p>
               <div className="flex items-center justify-end gap-1.5">
                 <div className={cn("w-1 h-1 rounded-full", tx.status === 'completed' ? 'bg-green-500' : 'bg-amber-500 animate-pulse')} />
