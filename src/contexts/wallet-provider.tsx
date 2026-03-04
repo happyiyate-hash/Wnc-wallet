@@ -229,7 +229,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
       
       const priceId = (asset.priceId || asset.coingeckoId || asset.address || '').toLowerCase();
-      const marketData = prices[priceId]; // FIX: Corrected typo from prices[key]
+      const marketData = prices[priceId];
       const livePrice = marketData?.price || 0;
       const balNum = parseFloat(balDoc?.balance || '0');
 
@@ -389,12 +389,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
     if (!user || !wallets || wallets.length === 0 || !accountNumber || chainsWithLogos.length === 0) return;
     if (isAuditRunningRef.current) return;
+
+    // PERSISTENCE GATE: Create a deterministic fingerprint for the current node configuration
+    const fingerprint = `audit_v1_${user.id}_${wallets[0].address}`;
+    const hasAudited = localStorage.getItem(fingerprint);
+
+    // If we've already audited this specific node, skip the UI unless forced (e.g. manual refresh button)
+    if (!options?.forceUI && hasAudited === 'true') {
+        console.log("[SENTINEL] Registry already secured for this node. Skipping visible audit.");
+        return;
+    }
+
     isAuditRunningRef.current = true;
     try {
         await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, accountNumber, chainsWithLogos, (u) => {
             setSyncDiagnostic(p => ({ ...p, ...u }));
+            // On completion, secure the fingerprint to prevent redundant animations
+            if (u.status === 'completed') {
+                localStorage.setItem(fingerprint, 'true');
+            }
         });
-    } finally { isAuditRunningRef.current = false; }
+    } finally { 
+        isAuditRunningRef.current = false; 
+    }
   }, [user?.id, wallets, accountNumber, profile, chainsWithLogos]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number) => {
