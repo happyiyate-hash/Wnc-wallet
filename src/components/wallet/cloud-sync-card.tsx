@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,13 +8,14 @@ import {
   Search, 
   CheckCircle2, 
   Zap, 
-  Loader2
+  Loader2,
+  ShieldCheck
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL DIAGNOSTIC SENTINEL (Hardware v4.0)
+ * INSTITUTIONAL DIAGNOSTIC SENTINEL (Hardware v5.0 - Robust)
  * Restored to a professional, robust form factor.
  * Stretches edge-to-edge while maintaining clear separation between Cloud and Local nodes.
  */
@@ -39,9 +39,9 @@ export default function CloudSyncCard() {
   const isSuccess = status === 'success' || status === 'completed';
 
   const StatusIcon = () => {
-    if (isSuccess) return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-    if (isMismatch) return <Loader2 className="w-5 h-5 text-primary animate-spin" />;
-    return <Search className="w-5 h-5 text-white/40" />;
+    if (isSuccess) return <CheckCircle2 className="w-6 h-6 text-green-500" />;
+    if (isMismatch) return <Loader2 className="w-6 h-6 text-primary animate-spin" />;
+    return <Search className="w-6 h-6 text-white/40" />;
   };
 
   return (
@@ -69,7 +69,7 @@ export default function CloudSyncCard() {
         {/* HEADER COCKPIT */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
               <StatusIcon />
             </div>
             <div>
@@ -81,7 +81,7 @@ export default function CloudSyncCard() {
                 )} />
               </div>
               <h3 className="text-[10px] font-black uppercase text-white tracking-widest flex items-center gap-2">
-                Verified Active Node
+                {isSuccess ? `${chain} VERIFIED ACTIVE` : `SCANNIG ${chain} NODE...`}
               </h3>
             </div>
           </div>
@@ -105,11 +105,11 @@ export default function CloudSyncCard() {
               className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col h-20 justify-center gap-1"
             >
               <div className="flex items-center gap-2 opacity-40">
-                <Database className="w-3 h-3" />
-                <span className="text-[7px] font-black uppercase tracking-widest">Cloud Registry</span>
+                <Database className="w-4 h-4" />
+                <span className="text-[8px] font-black uppercase tracking-widest">Cloud Registry</span>
               </div>
               <p className={cn(
-                "text-[10px] font-mono tracking-tighter truncate leading-none",
+                "text-[11px] font-mono tracking-tighter truncate leading-none",
                 status === 'mismatch' ? "text-red-400 line-through" : "text-white/80"
               )}>
                 {cloudValue ? truncateAddress(cloudValue) : 'Initializing...'}
@@ -129,10 +129,10 @@ export default function CloudSyncCard() {
               )}
             >
               <div className="flex items-center gap-2 text-primary">
-                <Cpu className="w-3 h-3" />
-                <span className="text-[7px] font-black uppercase tracking-widest">Local Node</span>
+                <Cpu className="w-4 h-4" />
+                <span className="text-[8px] font-black uppercase tracking-widest">Local Node</span>
               </div>
-              <p className="text-[10px] font-mono text-white tracking-tighter truncate leading-none">
+              <p className="text-[11px] font-mono text-white tracking-tighter truncate leading-none">
                 {localValue ? truncateAddress(localValue) : 'Deriving...'}
               </p>
             </motion.div>
@@ -142,7 +142,7 @@ export default function CloudSyncCard() {
         {/* STATUS FOOTER */}
         <div className="mt-4 flex items-center justify-center gap-2 opacity-20">
           <ShieldCheck className="w-3 h-3" />
-          <span className="text-[7px] font-black uppercase tracking-[0.3em]">Master Wevina Protocol v4.0</span>
+          <span className="text-[7px] font-black uppercase tracking-[0.3em]">Master Wevina Protocol v5.0</span>
         </div>
 
       </div>
