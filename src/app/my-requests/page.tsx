@@ -138,6 +138,7 @@ export default function MyRequestsPage() {
                             const priceId = (asset?.priceId || asset?.coingeckoId || asset?.address || '').toLowerCase();
                             const livePrice = prices[priceId]?.price || asset?.priceUsd || 0;
                             const isPaid = req.status === 'paid';
+                            const isPending = req.status === 'pending';
 
                             return (
                                 <motion.div 
@@ -158,11 +159,25 @@ export default function MyRequestsPage() {
                                                 name={asset?.name || req.token_symbol}
                                                 alt="token"
                                             />
-                                            {isPaid && (
-                                                <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5 border-2 border-[#050505] shadow-lg">
-                                                    <CheckCircle2 className="w-2.5 h-2.5 text-white" />
-                                                </div>
-                                            )}
+                                            <AnimatePresence mode="wait">
+                                                {isPaid ? (
+                                                    <motion.div 
+                                                        key="paid-badge"
+                                                        initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                                        className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5 border-2 border-[#050505] shadow-lg z-10"
+                                                    >
+                                                        <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                                                    </motion.div>
+                                                ) : isPending ? (
+                                                    <motion.div 
+                                                        key="pending-badge"
+                                                        initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                                        className="absolute -bottom-1 -right-1 bg-amber-500 rounded-full p-0.5 border-2 border-[#050505] shadow-lg z-10"
+                                                    >
+                                                        <Clock className="w-2.5 h-2.5 text-white" />
+                                                    </motion.div>
+                                                ) : null}
+                                            </AnimatePresence>
                                         </div>
                                         <div className="text-left">
                                             <p className="font-black text-sm text-white tracking-tight">{req.token_symbol}</p>
