@@ -6,6 +6,7 @@ import type { WalletWithMetadata } from '@/lib/types';
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
  * Handles data persistence, cloud synchronization, and cache management.
+ * Optimized for secure encryption-first storage.
  */
 
 export async function syncAddressesToCloud(
@@ -77,6 +78,31 @@ export async function saveVaultToCloud(userId: string, mnemonic: string) {
   }
 }
 
+export async function saveInfuraToCloud(userId: string, apiKey: string) {
+  if (!supabase) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/wallet/encrypt-phrase', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': `Bearer ${session?.access_token}` 
+      },
+      body: JSON.stringify({ text: apiKey })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      await supabase.from('profiles').update({
+        vault_infura_key: data.encrypted,
+        infura_iv: data.iv
+      }).eq('id', userId);
+    }
+  } catch (e) {
+    console.error("Infura Backup Advisory:", e);
+  }
+}
+
 export function purgeLocalWalletCache(userId: string) {
   const keys = [
     'wallet_mnemonic', 
@@ -87,5 +113,9 @@ export function purgeLocalWalletCache(userId: string) {
     'profile_cache',
     'audit_done'
   ];
-  keys.forEach(key => localStorage.removeItem(`${key}_${userId}`));
+  keys.forEach(key => {
+    localStorage.removeItem(`${key}_${userId}`);
+    // Also remove global keys to prevent any leakage
+    localStorage.removeItem(key);
+  });
 }

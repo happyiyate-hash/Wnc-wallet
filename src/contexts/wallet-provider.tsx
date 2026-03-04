@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -13,6 +12,7 @@ import type { PriceResult } from '@/lib/market/price-service';
 import { 
   syncAddressesToCloud, 
   saveVaultToCloud, 
+  saveInfuraToCloud,
   purgeLocalWalletCache 
 } from '@/lib/wallets/services/wallet-actions';
 import { backgroundSyncWorker, type SyncDiagnostic } from '@/lib/wallets/background-sync-worker';
@@ -120,7 +120,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const initLocalSession = useCallback(async () => {
     if (authLoading) return;
     
-    // If no user, we are initialized (at the login screen)
     if (!user) {
       setWallets(null);
       setIsWalletLoading(false);
@@ -129,15 +128,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Check for local keys
       const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
       if (savedMnemonic) {
-        // DERIVE ALL (BLOCKING)
         const derived = await deriveAllWallets(savedMnemonic, profile);
         setWallets(derived);
       }
 
-      // Load metadata
       const localKey = localStorage.getItem(`infura_api_key_${user.id}`);
       if (localKey) setInfuraApiKey(localKey);
       
@@ -147,11 +143,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
       if (savedCustom) setUserAddedTokens(JSON.parse(savedCustom));
 
-      // Mark as initialized so the barrier can yield
       setIsInitialized(true);
     } catch (e) {
       console.error("Initialization Failed:", e);
-      setIsInitialized(true); // Yield even on error to show error states
+      setIsInitialized(true); 
     } finally {
       setIsWalletLoading(false);
     }
@@ -161,7 +156,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     initLocalSession();
   }, [initLocalSession]);
 
-  // Use the engine for price/balance logic
   const { refresh } = useWalletEngine({
     wallets, viewingNetwork, user, chainsWithLogos, userAddedTokens, rates, infuraApiKey,
     setPrices: (newPrices) => {
@@ -177,6 +171,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     },
     setIsRefreshing, setHasFetchedInitialData
   });
+
+  const updateInfuraKey = useCallback(async (key: string | null) => {
+    if (!user) return;
+    setInfuraApiKey(key);
+    if (key) {
+      localStorage.setItem(`infura_api_key_${user.id}`, key);
+      await saveInfuraToCloud(user.id, key);
+    } else {
+      localStorage.removeItem(`infura_api_key_${user.id}`);
+    }
+  }, [user]);
 
   const getAvailableAssetsForChain = useCallback((chainId: number): AssetRow[] => {
     const { getInitialAssets } = require('@/lib/wallets/balances');
@@ -204,6 +209,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
+    await saveVaultToCloud(user.id, mnemonic);
     return mnemonic;
   }, [user, profile, accountNumber]);
 
@@ -220,6 +226,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
     await syncAddressesToCloud(user.id, derived, targetAcc);
+    await saveVaultToCloud(user.id, mnemonic);
   }, [user, profile, accountNumber]);
 
   const saveToVault = useCallback(async () => {
@@ -256,6 +263,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWallets(null);
         setAccountNumber(null);
         setBalances({});
+        setInfuraApiKey(null);
         setHasFetchedInitialData(true);
         router.replace('/wallet-session');
     }
@@ -267,6 +275,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         await supabase.from('profiles').update({
             vault_phrase: null,
             iv: null,
+            vault_infura_key: null,
+            infura_iv: null,
             evm_address: null,
             xrp_address: null,
             polkadot_address: null,
@@ -284,9 +294,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const prevId = user?.id;
-    await authSignOut();
     if (prevId) purgeLocalWalletCache(prevId);
-    setWallets(null); setBalances({}); setAccountNumber(null);
+    
+    // Clear all in-memory states
+    setWallets(null); 
+    setBalances({}); 
+    setAccountNumber(null);
+    setInfuraApiKey(null);
+    setPrices({});
+    setUserAddedTokens([]);
+    setHiddenTokenKeys(new Set());
+    setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
+
+    await authSignOut();
     window.location.href = '/auth/login';
   }, [authSignOut, user]);
 
@@ -331,13 +351,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     isInitialized, isAssetsLoading: areLogosLoading, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: viewingNetwork || (chainsWithLogos[0] || {} as ChainConfig),
     setNetwork: setViewingNetwork,
-    allAssets: [], // Computed elsewhere
+    allAssets: [], 
     allChains: chainsWithLogos,
     allChainsMap,
     isRefreshing, wallets, balances, prices, accountNumber,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud,
     deleteWallet, deleteWalletPermanently, logout, 
-    getAddressForChain, infuraApiKey, setInfuraApiKey,
+    getAddressForChain, infuraApiKey, setInfuraApiKey: updateInfuraKey,
     hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => {
         setHiddenTokenKeys(prev => {
             const n = new Set(prev); const k = `${cid}:${sym}`;
@@ -361,7 +381,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, prices, accountNumber, infuraApiKey,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, refresh, generateWallet, 
-    importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, getAddressForChain
+    importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, getAddressForChain, updateInfuraKey
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

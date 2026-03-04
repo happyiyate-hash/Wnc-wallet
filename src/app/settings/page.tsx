@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -81,8 +80,6 @@ export default function SettingsPage() {
     const [isVerified, setIsVerified] = useState(false);
     const [isDestroying, setIsDestroying] = useState(false);
 
-    const isGoogleUser = user?.app_metadata?.provider === 'google';
-
     useEffect(() => {
         if (profile) {
             setUsername(profile.name || '');
@@ -158,15 +155,10 @@ export default function SettingsPage() {
         }
     };
 
-    /**
-     * INSTITUTIONAL 3-STEP SAVE SEQUENCE
-     * Ensures session stability and data consistency across ecosystem.
-     */
     const handleSaveProfile = async () => {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
-            // STEP 1: Update Auth Metadata (For instant UI handshake)
             const { error: authError } = await supabase.auth.updateUser({
                 data: { 
                     name: username,
@@ -175,7 +167,6 @@ export default function SettingsPage() {
             });
             if (authError) throw authError;
 
-            // STEP 2: Upsert to Public Profiles (Persistence Node)
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -187,7 +178,6 @@ export default function SettingsPage() {
 
             if (dbError) throw dbError;
 
-            // STEP 3: Refresh Identity Session
             await refreshProfile();
             toast({ title: "Profile Secured", description: "Identity node fully synchronized with ecosystem." });
         } catch (error: any) {
@@ -205,7 +195,6 @@ export default function SettingsPage() {
         if (!user?.email || !passwordInput) return;
         setIsVerifying(true);
         try {
-            // Re-authenticate node
             const { error } = await supabase!.auth.signInWithPassword({
                 email: user.email,
                 password: passwordInput
@@ -213,14 +202,12 @@ export default function SettingsPage() {
             
             if (error) throw error;
 
-            // Retrieve identity standard from local registry
             const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
             setMnemonic(saved);
             
             setIsVerified(true);
             if (securityMode === 'reveal') setShowPhrase(true);
         } catch (e: any) {
-            console.error("VERIFICATION_ERROR:", e);
             toast({ 
                 title: "Verification Failed", 
                 description: e.message || "Invalid password standard.",
@@ -236,12 +223,7 @@ export default function SettingsPage() {
         if (confirmInput !== 'DELETE') return;
         setIsDestroying(true);
         try {
-            if (deleteWalletPermanently) {
-                await deleteWalletPermanently();
-            } else {
-                // Fallback if context not loaded correctly
-                await logout();
-            }
+            await deleteWalletPermanently();
             resetSecurityFlow();
             router.push('/');
         } finally {
@@ -262,7 +244,6 @@ export default function SettingsPage() {
         setIsLoggingOut(true);
         try {
             await logout();
-            router.push('/');
         } catch (e) {
             toast({ title: "Logout Error", variant: "destructive" });
         } finally {
@@ -310,7 +291,7 @@ export default function SettingsPage() {
                 <div className="max-w-2xl mx-auto p-6 space-y-8">
                     
                     <section className="space-y-4">
-                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Identity Node configuration</h2>
+                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Identity Node</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-6 space-y-8 shadow-2xl">
                             <div className="flex flex-col items-center gap-6">
                                 <div className="relative group">
@@ -378,14 +359,14 @@ export default function SettingsPage() {
                     </section>
 
                     <section className="space-y-3">
-                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Regional & Ecosystem</h2>
+                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Regional</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
                             <SettingItem icon={Globe} label="Display Currency" value={`${selectedCurrency} (${currentSymbol})`} iconBg="bg-blue-500/10" iconColor="text-blue-400" onClick={() => setIsCurrencySheetOpen(true)} />
                         </div>
                     </section>
 
                     <section className="space-y-3">
-                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Security & Privacy</h2>
+                        <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] px-2">Security</h2>
                         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-2 space-y-1">
                             <SettingItem icon={KeyRound} label="Manage API Keys" value="Infura / Network RPCs" iconBg="bg-orange-500/10" iconColor="text-orange-400" href="/settings/api-keys" />
                             <button onClick={() => setSecurityMode('reveal')} className="flex w-full py-4 px-3 hover:bg-white/5 transition-all rounded-2xl group">
@@ -401,7 +382,7 @@ export default function SettingsPage() {
                     </section>
 
                     <section className="space-y-3">
-                        <h2 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.2em] px-2">Session Control</h2>
+                        <h2 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.2em] px-2">Session</h2>
                         <div className="bg-red-500/[0.02] border border-red-500/10 rounded-[2.5rem] p-2 space-y-1">
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
