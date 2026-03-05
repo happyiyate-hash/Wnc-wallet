@@ -6,6 +6,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * KUSAMA (KSM) ADAPTER - HARDENED VERSION
+ * Version: 4.5.0 (Resilient Socket Lifecycle)
  * Implements Fallback RPCs and strict socket lifecycle management.
  */
 
@@ -34,8 +35,14 @@ class KusamaAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                console.log(`[KSM_ADAPTER] Attempting connection to ${url}`);
-                provider = new WsProvider(url, 5000); 
+                // Initialize provider with auto-connect disabled
+                provider = new WsProvider(url, false); 
+                
+                // Manual connection handshake
+                await Promise.race([
+                    provider.connect(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 5000))
+                ]);
                 
                 api = await Promise.race([
                     ApiPromise.create({ 
@@ -44,7 +51,7 @@ class KusamaAdapter implements IWalletAdapter {
                         noInitWarn: true 
                     }),
                     new Promise<null>((_, reject) => 
-                        setTimeout(() => reject(new Error('KUSAMA_INIT_TIMEOUT')), 15000)
+                        setTimeout(() => reject(new Error('KUSAMA_INIT_TIMEOUT')), 10000)
                     )
                 ]) as ApiPromise;
 
@@ -66,11 +73,15 @@ class KusamaAdapter implements IWalletAdapter {
                 });
 
             } catch (error: any) {
-                console.warn(`[KSM_ADAPTER_FAIL] Endpoint ${url} rejected:`, error.message);
+                if (!error.message?.includes('Normal Closure')) {
+                    console.warn(`[KSM_ADAPTER_ADVISORY] Endpoint ${url} deferred:`, error.message);
+                }
                 continue;
             } finally {
-                if (api) await api.disconnect().catch(() => {});
-                if (provider) await provider.disconnect().catch(() => {});
+                try {
+                    if (api) await api.disconnect();
+                    if (provider) await provider.disconnect();
+                } catch (e) {}
             }
         }
 

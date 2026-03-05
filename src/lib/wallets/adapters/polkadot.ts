@@ -6,14 +6,15 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * POLKADOT (DOT) ADAPTER - HARDENED VERSION
- * Implements Fallback RPCs and strict socket lifecycle management.
+ * Version: 4.5.0 (Resilient Socket Lifecycle)
+ * Implements Fallback RPCs and strict socket lifecycle management to prevent Normal Closure noise.
  */
 
 const DOT_ENDPOINTS = [
     "wss://rpc.polkadot.io",
-    "wss://polkadot-rpc.publicnode.com",
     "wss://polkadot.api.onfinality.io/public-ws",
-    "wss://dot.api.capy.node"
+    "wss://dot.api.capy.node",
+    "wss://polkadot-rpc.publicnode.com" // Moved to end due to observed instability
 ];
 
 class PolkadotAdapter implements IWalletAdapter {
@@ -35,9 +36,15 @@ class PolkadotAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                console.log(`[DOT_ADAPTER] Attempting connection to ${url}`);
-                provider = new WsProvider(url, 5000); // 5s connection timeout
+                // Initialize provider with auto-connect disabled to manage handshake manually
+                provider = new WsProvider(url, false); 
                 
+                // Trigger manual connection handshake
+                await Promise.race([
+                    provider.connect(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 5000))
+                ]);
+
                 // Hardened initialization with racing timeout
                 api = await Promise.race([
                     ApiPromise.create({ 
@@ -46,7 +53,7 @@ class PolkadotAdapter implements IWalletAdapter {
                         noInitWarn: true 
                     }),
                     new Promise<null>((_, reject) => 
-                        setTimeout(() => reject(new Error('POLKADOT_INIT_TIMEOUT')), 15000)
+                        setTimeout(() => reject(new Error('POLKADOT_INIT_TIMEOUT')), 10000)
                     )
                 ]) as ApiPromise;
 
@@ -69,13 +76,19 @@ class PolkadotAdapter implements IWalletAdapter {
                 });
 
             } catch (error: any) {
-                console.warn(`[DOT_ADAPTER_FAIL] Endpoint ${url} rejected:`, error.message);
-                // Cycle to next endpoint
+                // Suppress expected disconnection noise
+                if (!error.message?.includes('Normal Closure')) {
+                    console.warn(`[DOT_ADAPTER_ADVISORY] Endpoint ${url} deferred:`, error.message);
+                }
                 continue;
             } finally {
                 // CRITICAL: Always purge sockets to prevent 1006 Abnormal Closure on subsequent fetches
-                if (api) await api.disconnect().catch(() => {});
-                if (provider) await provider.disconnect().catch(() => {});
+                try {
+                    if (api) await api.disconnect();
+                    if (provider) await provider.disconnect();
+                } catch (e) {
+                    // Silent fail on purge
+                }
             }
         }
 
