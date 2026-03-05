@@ -17,6 +17,8 @@ import MobileNav from '@/components/wallet/mobile-nav';
 import NotificationCenter from '@/components/notifications/notification-center';
 import RealtimeNotificationListener from '@/components/notifications/realtime-listener';
 import GlobalLoadingBarrier from '@/components/global-loading-barrier';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { GlobalErrorListener } from '@/components/global-error-listener';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -58,17 +60,19 @@ export default function RootLayout({
               <MarketProvider>
                 <WalletProvider>
                   <SidebarProvider defaultOpen={true}>
-                    <div className="flex min-h-screen w-full bg-transparent relative z-10">
-                      <NavGradient />
-                      <DesktopSidebar />
-                      <div className="flex flex-col flex-1 w-full min-w-0 relative">
-                        <PWARegister />
-                        <div className="flex-1 relative">
-                          {children}
+                    <ErrorBoundary>
+                      <div className="flex min-h-screen w-full bg-transparent relative z-10">
+                        <NavGradient />
+                        <DesktopSidebar />
+                        <div className="flex flex-col flex-1 w-full min-w-0 relative">
+                          <PWARegister />
+                          <div className="flex-1 relative">
+                            {children}
+                          </div>
+                          <MobileNav />
                         </div>
-                        <MobileNav />
                       </div>
-                    </div>
+                    </ErrorBoundary>
                     
                     {/* CENTRAL SENTINELS, BARRIERS & OVERLAYS */}
                     <Suspense fallback={null}>
@@ -76,6 +80,7 @@ export default function RootLayout({
                       <GlobalOverlayManager />
                       <NotificationCenter />
                       <RealtimeNotificationListener />
+                      <GlobalErrorListener />
                     </Suspense>
                   </SidebarProvider>
                 </WalletProvider>
