@@ -44,6 +44,27 @@
         "status": { "enum": ["pending", "approved", "credited"], "type": "string" },
         "reward_amount": { "type": "number", "default": 100 }
       }
+    },
+    "SwapTransaction": {
+      "title": "SwapTransaction",
+      "description": "A record of an institutional liquidity-provided swap.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "from_chain": { "type": "string" },
+        "to_chain": { "type": "string" },
+        "from_symbol": { "type": "string" },
+        "to_symbol": { "type": "string" },
+        "from_amount": { "type": "number" },
+        "to_amount_expected": { "type": "number" },
+        "admin_fee_usd": { "type": "number" },
+        "network_fee_usd": { "type": "number" },
+        "status": { "enum": ["pending", "user_sent", "admin_confirmed", "payout_sent", "completed", "failed"], "type": "string" },
+        "user_tx_hash": { "type": "string" },
+        "admin_tx_hash": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -53,6 +74,10 @@
     "/profiles/{userId}": {
       "schema": "UserProfile",
       "description": "Institutional identity registry."
+    },
+    "/swaps/{swapId}": {
+      "schema": "SwapTransaction",
+      "description": "Historical registry of swap executions."
     }
   }
 }

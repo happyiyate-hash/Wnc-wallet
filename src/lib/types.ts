@@ -104,6 +104,23 @@ export interface PaymentRequest {
     expires_at: string;
 }
 
+export interface SwapTransaction {
+  id: string;
+  user_id: string;
+  from_chain: string;
+  to_chain: string;
+  from_symbol: string;
+  to_symbol: string;
+  from_amount: number;
+  to_amount_expected: number;
+  admin_fee_usd: number;
+  network_fee_usd: number;
+  status: 'pending' | 'user_sent' | 'admin_confirmed' | 'payout_sent' | 'completed' | 'failed';
+  user_tx_hash?: string;
+  admin_tx_hash?: string;
+  created_at: string;
+}
+
 export interface LocalSession {
     id: string; // Supabase UID
     profile: UserProfile;
