@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -190,7 +191,7 @@ function SendClient() {
 
   const activeNetwork = useMemo(() => {
     if (selectedToken?.symbol === 'WNC') return { name: 'Wevina Internal', symbol: 'WNC', type: 'internal', chainId: 0 } as any;
-    const chainId = selectedToken?.chainId || viewingNetwork.chainId;
+    const chainId = selectedToken?.chainId ?? viewingNetwork.chainId;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 

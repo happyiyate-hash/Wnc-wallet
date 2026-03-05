@@ -462,7 +462,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId || 1]?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId ?? 1]?.name}</span>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
@@ -494,7 +494,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId || 1]?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId ?? 1]?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>
@@ -542,7 +542,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId ?? 1]?.name}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -568,7 +568,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId || 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId ?? 1]?.name}</p></div>
                   </div>
                 </div>
               </motion.div>
