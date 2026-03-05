@@ -35,7 +35,7 @@ interface QuickSwapPanelProps {
 
 /**
  * INSTITUTIONAL QUICK SWAP PANEL
- * Version: 2.0.0 (Execution Enabled)
+ * Version: 2.1.0 (Logo Precision Patch)
  * Features real-time fee handshakes and background execution.
  */
 export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelProps) {
@@ -219,7 +219,14 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                     {/* PAY SLOT */}
                     <div className="flex-1 flex items-center bg-white/[0.03] border border-white/5 rounded-xl h-10 px-3 gap-2">
                         <button onClick={() => handleOpenSelector('from')} className="shrink-0 active:scale-90 transition-all">
-                            <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={22} chainId={fromToken?.chainId} symbol={fromToken?.symbol} />
+                            <TokenLogoDynamic 
+                              logoUrl={fromToken?.iconUrl} 
+                              alt={fromToken?.symbol || ''} 
+                              size={22} 
+                              chainId={fromToken?.chainId} 
+                              symbol={fromToken?.symbol} 
+                              name={fromToken?.name}
+                            />
                         </button>
                         <Input 
                             type="number" 
@@ -246,7 +253,14 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                             </span>
                         )}
                         <button onClick={() => handleOpenSelector('to')} className="shrink-0 active:scale-90 transition-all">
-                            <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={22} chainId={toToken?.chainId} symbol={toToken?.symbol} />
+                            <TokenLogoDynamic 
+                              logoUrl={toToken?.iconUrl} 
+                              alt={toToken?.symbol || ''} 
+                              size={22} 
+                              chainId={toToken?.chainId} 
+                              symbol={toToken?.symbol} 
+                              name={toToken?.name}
+                            />
                         </button>
                     </div>
                 </div>
