@@ -58,7 +58,7 @@ const formatExactCrypto = (val: number): string => {
 };
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh, setActiveFulfillmentId } = useWallet();
   const { user, profile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
   const router = useRouter();
@@ -157,9 +157,13 @@ function SwapClient() {
         const userAddr = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
         let batch: SwapQuote[] = [];
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
+        
+        // INSTITUTIONAL FEE HANDSHAKE
         const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
+        
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         const divisor = toTokenPrice || 1;
+        
         if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
                 const params = new URLSearchParams({ fromChain: fromToken.chainId.toString(), toChain: toToken.chainId.toString(), fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), fromAddress: userAddr, slippage: '0.005' });

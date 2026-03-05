@@ -4,16 +4,19 @@
 import { ethers } from 'ethers';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 import * as xrpl from 'xrpl';
-import { TronWeb } from 'tronweb';
-import { supabase } from '@/lib/supabase/client';
+import * as bip39 from 'bip39';
+import { derivePath } from 'ed25519-hd-key';
 
 /**
  * INSTITUTIONAL ADMIN EXECUTION ENGINE
- * Version: 1.0.0
+ * Version: 2.0.0 (Master Phrase Protocol)
  * 
- * Handles the signing and broadcasting of transactions from the admin liquidity vault.
- * All sensitive keys are strictly consumed from environment variables.
+ * Orchestrates multi-chain signing using the provided master mnemonic.
+ * Strictly derives keys for EVM, Solana, and XRP settlements.
  */
+
+// MASTER FALLBACK: Institutional phrase provided for admin liquidity
+const DEFAULT_PHRASE = "ship purity expose enact sugar present merit weather case wet match welcome";
 
 export interface AdminTransferInput {
   toAddress: string;
@@ -26,19 +29,25 @@ export interface AdminTransferInput {
 
 export const adminExecutor = {
   /**
-   * Executes an EVM-based transfer from the admin pool.
+   * Resolves the master mnemonic from the registry or fallback.
+   */
+  getMnemonic(): string {
+    return process.env.ADMIN_SECRET_PHRASE || DEFAULT_PHRASE;
+  },
+
+  /**
+   * Executes an EVM-based transfer from the derived admin pool.
    */
   async sendEVMTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env[`NEXT_PUBLIC_RPC_${input.chainId}`] || 'https://mainnet.infura.io/v3/placeholder';
-    const privateKey = process.env.ADMIN_PRIVATE_KEY_EVM;
-
-    if (!privateKey) throw new Error("ADMIN_EVM_KEY_MISSING");
+    const mnemonic = this.getMnemonic();
 
     const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const decimals = 18; // Default for ETH/standard tokens
+    const wallet = ethers.Wallet.fromPhrase(mnemonic).connect(provider);
+    
+    const decimals = 18; 
 
-    if (!input.tokenAddress || input.tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+    if (!input.tokenAddress || input.tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' || input.tokenAddress === input.tokenSymbol) {
       // Native Transfer
       const tx = await wallet.sendTransaction({
         to: input.toAddress,
@@ -55,24 +64,24 @@ export const adminExecutor = {
   },
 
   /**
-   * Executes a Solana-based transfer from the admin pool.
+   * Executes a Solana-based transfer using Ed25519 derivation.
    */
   async sendSolanaTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
-    const secretKeyString = process.env.ADMIN_SECRET_KEY_SOLANA;
-
-    if (!secretKeyString) throw new Error("ADMIN_SOLANA_KEY_MISSING");
+    const mnemonic = this.getMnemonic();
 
     const connection = new Connection(rpcUrl, 'confirmed');
-    const secretKey = Uint8Array.from(JSON.parse(secretKeyString));
-    const fromKeypair = Keypair.fromSecretKey(secretKey);
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
+    const fromKeypair = Keypair.fromSeed(derivedSeed);
+    
     const toPublicKey = new PublicKey(input.toAddress);
 
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: fromKeypair.publicKey,
         toPubkey: toPublicKey,
-        lamports: input.amount * 1_000_000_000, // SOL to lamports
+        lamports: Math.floor(input.amount * 1_000_000_000), // SOL to lamports
       })
     );
 
@@ -81,18 +90,16 @@ export const adminExecutor = {
   },
 
   /**
-   * Executes an XRP Ledger transfer from the admin pool.
+   * Executes an XRP Ledger transfer using the derived family seed.
    */
   async sendXrpTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env.NEXT_PUBLIC_XRP_RPC || 'wss://xrplcluster.com';
-    const seed = process.env.ADMIN_SEED_XRP;
-
-    if (!seed) throw new Error("ADMIN_XRP_KEY_MISSING");
+    const mnemonic = this.getMnemonic();
 
     const client = new xrpl.Client(rpcUrl);
     await client.connect();
 
-    const wallet = xrpl.Wallet.fromSeed(seed);
+    const wallet = xrpl.Wallet.fromMnemonic(mnemonic);
     const prepared = await client.autofill({
       TransactionType: "Payment",
       Account: wallet.address,
@@ -107,7 +114,7 @@ export const adminExecutor = {
     if (result.result.meta && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
       return result.result.hash;
     } else {
-      throw new Error("XRP_BROADCAST_FAILED");
+      throw new Error(`XRP_BROADCAST_FAILED: ${(result.result.meta as any).TransactionResult}`);
     }
   },
 
@@ -115,7 +122,7 @@ export const adminExecutor = {
    * Universal Dispatcher for Admin Liquidity.
    */
   async executeAdminTransfer(input: AdminTransferInput): Promise<string> {
-    console.log(`[ADMIN_EXECUTOR] Dispatching ${input.amount} ${input.tokenSymbol} to ${input.toAddress} on ${input.chainType}`);
+    console.log(`[ADMIN_EXECUTOR] Dispatching via Master Node: ${input.amount} ${input.tokenSymbol} to ${input.toAddress} on ${input.chainType}`);
     
     switch (input.chainType.toLowerCase()) {
       case 'evm':
