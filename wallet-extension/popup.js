@@ -1,7 +1,7 @@
 
 /**
  * WEVINA POPUP CONTROLLER
- * Version: 2.0.0 (Handshake Engine)
+ * Version: 3.0.0 (Handshake Engine)
  * Manages the approval UI and communicates with the Background Controller.
  */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const approveBtn = document.getElementById("approve");
   const rejectBtn = document.getElementById("reject");
 
-  // Mocked Institutional Address (In production, read from secure storage)
+  // Institutional Identity Node (In production, this is synced from the main app)
   const myAddress = "0x835729104AC6729384729104837529104837";
   addressDisplay.innerText = `${myAddress.slice(0, 10)}...${myAddress.slice(-8)}`;
 
@@ -27,7 +27,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Update UI for Approval Mode
       defaultView.style.display = "none";
       approvalView.style.display = "block";
-      originLabel.innerText = new URL(origin).hostname;
+      try {
+        originLabel.innerText = new URL(origin).hostname;
+      } catch (e) {
+        originLabel.innerText = origin;
+      }
       
       if (method === "eth_requestAccounts") {
         messageLabel.innerText = "Requesting permission to view your identity node.";
@@ -35,6 +39,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (method === "eth_sendTransaction") {
         messageLabel.innerText = "Requesting signature for a new ledger transfer.";
         approveBtn.innerText = "Sign & Send";
+      } else if (method === "personal_sign") {
+        messageLabel.innerText = "Requesting signature for a secure message.";
+        approveBtn.innerText = "Sign Message";
       } else {
         messageLabel.innerText = `Requesting: ${method}`;
         approveBtn.innerText = "Authorize";
@@ -45,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.runtime.sendMessage({
           type: "WEVINA_WALLET_RESOLVE_REQUEST",
           requestId,
-          result: method === "eth_requestAccounts" ? [myAddress] : "0x_mock_tx_hash"
+          result: (method === "eth_requestAccounts" || method === "eth_accounts") ? [myAddress] : "0x_mock_tx_hash"
         });
         window.close(); // Close popup after resolution
       };
