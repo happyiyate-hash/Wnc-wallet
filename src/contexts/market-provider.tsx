@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
@@ -24,7 +23,6 @@ const MarketContext = createContext<MarketContextType | undefined>(undefined);
 const PRICE_UPDATE_INTERVAL = 15000;
 
 export function MarketProvider({ children }: { children: ReactNode }) {
-  const { user } = useUser();
   const { rates } = useCurrency();
   const [prices, setPrices] = useState<PriceResult>({});
   const [isMarketLoading, setIsMarketLoading] = useState(true);
@@ -71,7 +69,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     if (cached) {
       try {
         const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < 300000) { // 5 min TTL for cache use
+        // Using cached data if it's less than 5 minutes old to prevent "0.0%" flash
+        if (Date.now() - timestamp < 300000) { 
           setPrices(data);
           setIsMarketLoading(false);
         }

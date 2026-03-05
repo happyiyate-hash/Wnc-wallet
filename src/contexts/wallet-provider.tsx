@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -98,7 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
   const hasTriggeredAuditInSessionRef = useRef(false);
 
-  // HYDRATION ENGINE (Includes Immediate Network Restoration)
+  // HYDRATION ENGINE
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -115,7 +114,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedAcc = localStorage.getItem(`account_number_${user.id}`);
         if (savedAcc) setAccountNumber(savedAcc);
 
-        // PRE-INIT NETWORK LOCK: Load the saved network ID immediately
         const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
         if (savedNetworkId && chainsWithLogos.length > 0) {
           const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
@@ -168,7 +166,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     hydrate();
-  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]); // Added chainsWithLogos.length to re-trigger if logos arrive after first hydration
+  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
 
   const updateNetwork = useCallback((network: ChainConfig) => {
     setViewingNetwork(network);
@@ -442,6 +440,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return getInitialAssets(chainId).map(a => ({ ...a, balance: '0' } as AssetRow));
   }, []);
 
+  const addUserToken = useCallback((token: AssetRow) => {
+    setUserAddedTokens(prev => {
+        const next = [...prev, token];
+        if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next));
+        registerCustomTokens(next);
+        return next;
+    });
+    
+    // PRIORITY HANDSHAKE: Immediately trigger refresh to fetch balance/price for the new token
+    setTimeout(() => refresh(), 100);
+  }, [user, registerCustomTokens, refresh]);
+
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications,
     viewingNetwork: effectiveViewingNetwork,
@@ -463,14 +473,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return n;
         });
     }, 
-    userAddedTokens, addUserToken: (t: AssetRow) => {
-        setUserAddedTokens(prev => {
-            const n = [...prev, t];
-            if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(n));
-            registerCustomTokens(n);
-            return n;
-        });
-    },
+    userAddedTokens, addUserToken,
     getAvailableAssetsForChain, isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData,
     syncDiagnostic, runCloudDiagnostic
@@ -481,7 +484,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, 
-    updateNetwork, user, getAvailableAssetsForChain, updateInfuraKey
+    updateNetwork, user, getAvailableAssetsForChain, updateInfuraKey, addUserToken
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -22,7 +21,8 @@ const CDN_BASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';
 
 /**
  * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
- * Features Synchronous Cache Hydration to eliminate UI flickering.
+ * Version: 4.0.0 (Synchronous Cache Hydration)
+ * Features immediate localStorage resolution to eliminate UI flickering.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -36,11 +36,11 @@ export default function TokenLogoDynamic({
   // 1. DETERMINISTIC CACHE KEY
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
-    return `logo_v3_${slug}_${symbol?.toLowerCase() || 'native'}`;
+    return `logo_v4_${slug}_${symbol?.toLowerCase() || 'native'}`;
   }, [name, symbol, alt]);
 
-  // 2. SYNCHRONOUS HYDRATION (Client-Only)
-  // We initialize state from localStorage if available to prevent the 1st-render flicker
+  // 2. SYNCHRONOUS HYDRATION
+  // We check localStorage during initialization to prevent the 1st-render flicker
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(cacheKey);
@@ -53,21 +53,19 @@ export default function TokenLogoDynamic({
 
   useEffect(() => {
     async function resolve() {
-      // If we already have a cached URL, don't trigger a loading state
       const cached = localStorage.getItem(cacheKey);
-      if (!cached) {
-        setIsLoading(true);
-      } else {
-        setResolvedUrl(cached);
-        setIsLoading(false);
-      }
       
+      // If already cached, we can skip unnecessary network handshakes
+      if (cached) {
+        if (resolvedUrl !== cached) setResolvedUrl(cached);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
       setHasError(false);
 
-      // A. If already cached, we can skip the heavy Supabase lookup
-      if (cached) return;
-
-      // B. Perform direct Supabase registry lookup
+      // A. Perform direct Supabase registry lookup
       if (symbol || name) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
@@ -78,11 +76,11 @@ export default function TokenLogoDynamic({
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup failed:", e);
+          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup deferred:", e);
         }
       }
 
-      // C. Fallback to provided URL nodes
+      // B. Fallback to provided URL nodes
       if (logoUrl) {
         let finalUrl = logoUrl;
         if (logoUrl.startsWith('http')) {
@@ -101,7 +99,7 @@ export default function TokenLogoDynamic({
     }
 
     resolve();
-  }, [logoUrl, symbol, name, cacheKey]);
+  }, [logoUrl, symbol, name, cacheKey, resolvedUrl]);
 
   if (isLoading && !resolvedUrl) {
     return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
