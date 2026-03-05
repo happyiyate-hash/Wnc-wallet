@@ -1,41 +1,45 @@
 
 /**
  * WEVINA PROVIDER INJECTION
- * Version: 1.0.0
- * Injects window.ethereum into the target webpage context.
+ * Version: 2.0.0 (Proxy Architecture)
+ * Injects a fully generic window.ethereum proxy that forwards all requests to the controller.
  */
 (function () {
   const provider = {
     isWevina: true,
-    isMetaMask: false, // Explicitly identifying as Wevina Node
+    isMetaMask: false,
 
     request: async ({ method, params }) => {
-      console.log(`[WEVINA_EXTENSION] Request: ${method}`, params);
+      const requestId = Math.random().toString(36).substring(7);
+      console.log(`[WEVINA_PROXY] Dispatching: ${method}`, params);
 
-      if (method === "eth_requestAccounts" || method === "eth_accounts") {
-        return new Promise((resolve) => {
-          // Dispatch handshake request to content script
-          window.postMessage({
-            type: "WEVINA_WALLET_REQUEST_ACCOUNTS"
-          }, "*");
+      return new Promise((resolve, reject) => {
+        // Dispatch generic handshake request to content script
+        window.postMessage({
+          type: "WEVINA_WALLET_RPC_REQUEST",
+          requestId,
+          method,
+          params
+        }, "*");
 
-          // Wait for registry response
-          const handleResponse = (event) => {
-            if (event.data.type === "WEVINA_WALLET_ACCOUNTS") {
-              window.removeEventListener("message", handleResponse);
-              resolve(event.data.accounts);
+        // Wait for registry response
+        const handleResponse = (event) => {
+          if (event.data.type === "WEVINA_WALLET_RPC_RESPONSE" && event.data.requestId === requestId) {
+            window.removeEventListener("message", handleResponse);
+            
+            if (event.data.error) {
+              reject(new Error(event.data.error));
+            } else {
+              resolve(event.data.result);
             }
-          };
-          window.addEventListener("message", handleResponse);
-        });
-      }
-
-      // Placeholder for other RPC methods (eth_sendTransaction, etc.)
-      console.warn(`[WEVINA_EXTENSION] Method ${method} not yet implemented in this node.`);
-      return null;
+          }
+        };
+        window.addEventListener("message", handleResponse);
+      });
     }
   };
 
   window.ethereum = provider;
-  console.log("[WEVINA_EXTENSION] Handshake Node Injected.");
+  window.dispatchEvent(new CustomEvent('ethereum#initialized'));
+  console.log("[WEVINA_EXTENSION] Proxy Node Injected.");
 })();

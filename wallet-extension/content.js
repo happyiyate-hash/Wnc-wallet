@@ -1,7 +1,7 @@
 
 /**
  * WEVINA CONTENT SENTINEL
- * Relays messages between the Injected Provider and the Background Service Worker.
+ * Relays RPC requests between the dApp Proxy and the Background Controller.
  */
 
 // 1. Inject the provider script into the DOM
@@ -12,19 +12,28 @@ script.onload = function () {
 };
 (document.head || document.documentElement).appendChild(script);
 
-// 2. Listen for messages from the webpage
+// 2. Listen for messages from the Proxy (Website)
 window.addEventListener("message", (event) => {
-  // Security check: Only listen to messages from our own window
   if (event.source !== window) return;
 
-  if (event.data.type === "WEVINA_WALLET_REQUEST_ACCOUNTS") {
-    // Forward request to background script
-    chrome.runtime.sendMessage({ type: "GET_ACCOUNTS" }, (accounts) => {
-      // Send result back to the webpage
-      window.postMessage({ 
-        type: "WEVINA_WALLET_ACCOUNTS", 
-        accounts: accounts || [] 
-      }, "*");
+  if (event.data.type === "WEVINA_WALLET_RPC_REQUEST") {
+    // Forward RPC payload to background script
+    chrome.runtime.sendMessage(event.data, (response) => {
+      // Background worker might respond directly or wait for popup
+      if (response) {
+        window.postMessage({ 
+          type: "WEVINA_WALLET_RPC_RESPONSE", 
+          requestId: event.data.requestId,
+          ...response 
+        }, "*");
+      }
     });
+  }
+});
+
+// 3. Listen for asynchronous events from the Background Controller (User approvals)
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "WEVINA_WALLET_RPC_RESPONSE") {
+    window.postMessage(message, "*");
   }
 });
