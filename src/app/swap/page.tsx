@@ -1,11 +1,10 @@
 
 'use client';
 
-import { Suspense, useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCurrency } from '@/contexts/currency-provider';
-import { useGasPrice } from '@/hooks/useGasPrice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -47,6 +46,16 @@ interface SwapQuote {
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 
+/**
+ * HIGH-PRECISION CRYPTO FORMATTER
+ * Converts numbers to strings with up to 18 decimals, removing scientific notation.
+ */
+const formatExactCrypto = (val: number): string => {
+  if (!val || val <= 0) return '0';
+  // Standardize to 18 fixed decimals and strip trailing zeros
+  return val.toFixed(18).replace(/\.?0+$/, "");
+};
+
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, rates, infuraApiKey } = useWallet();
   const { formatFiat } = useCurrency();
@@ -76,17 +85,14 @@ function SwapClient() {
   const [showPrecision, setShowPrecision] = useState(false);
   const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [isHolding, setIsHolding] = useState(false);
   
   const lastFetchedAmountRef = useRef<string>('');
   const hasInitializedRef = useRef(false);
-  const errorDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
   /**
    * INITIAL HANDSHAKE PROTOCOL
-   * Isolated from global state after first load to prevent reset trap.
    */
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
@@ -123,7 +129,6 @@ function SwapClient() {
 
   /**
    * ATOMIC QUOTE ENGINE
-   * Strictly uses local atomic state for all calculations.
    */
   useEffect(() => {
     const runSequence = async () => {
@@ -140,7 +145,6 @@ function SwapClient() {
 
       if (!fromToken || !toToken) return;
       
-      // Ensure we don't re-fetch for the same data
       const currentSignature = `${fromToken.chainId}:${fromToken.address}:${toToken.chainId}:${toToken.address}:${debouncedAmount}`;
       if (currentSignature === lastFetchedAmountRef.current) return;
 
@@ -150,22 +154,24 @@ function SwapClient() {
       setFetchError(null);
       setFadedIndices(new Set());
       setActiveScanIndex(-1);
-      setSelectedQuoteId(null); // Clear old quote ID immediately to prevent wrong USD flash
+      setSelectedQuoteId(null);
 
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
-        const sourceWallets = wallets?.filter(w => w.type === (sourceChainConfig?.type || 'evm')) || [];
-        const userAddr = sourceWallets[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
+        const userAddr = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
 
         let batch: SwapQuote[] = [];
 
-        // Dynamic Fee Handshake
-        const tradeValueUsd = parseFloat(debouncedAmount) * fromTokenPrice;
+        // 1. INSTITUTIONAL FEE HANDSHAKE
+        const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
         const feeData = await calculateSwapFees(tradeValueUsd, fromToken.symbol);
 
-        // Logic Check: LI.FI for compatible EVM chains
+        // 2. ROUTE DISCOVERY
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         
+        // Division factor node: prevents "1.7 ETH" math bugs during zero-latency boot
+        const divisor = toTokenPrice || 1;
+
         if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
                 const params = new URLSearchParams({
@@ -185,7 +191,7 @@ function SwapClient() {
                     const rawAmountToken = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
                     
                     // Deduct fees from token output
-                    const finalAmountToken = rawAmountToken - (feeData.networkFee / (toTokenPrice || 1));
+                    const finalAmountToken = Math.max(0, rawAmountToken - (feeData.networkFee / divisor));
                     const providerName = lifiQuote.tool?.toUpperCase() || 'Aggregator';
 
                     batch = [
@@ -197,17 +203,16 @@ function SwapClient() {
                     throw new Error("LIFI_FAIL");
                 }
             } catch (e) {
-                const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
-                const finalAmt = estAmt - (feeData.networkFee / (toTokenPrice || 1));
+                const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
+                const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
                 batch = [
                     { id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true },
                     { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: finalAmt * 0.992, fee: feeData.networkFee, eta: '~12s' }
                 ];
             }
         } else {
-            // Internal Logic for Non-EVM or Offline mode
-            const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
-            const finalAmt = estAmt - (feeData.networkFee / (toTokenPrice || 1));
+            const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
+            const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
             batch = [
                 { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true },
                 { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: finalAmt * 0.994, fee: feeData.networkFee, eta: '~8s' }
@@ -263,7 +268,6 @@ function SwapClient() {
     } else {
         setToToken({ ...token });
     }
-    // Atomic Reset
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
@@ -282,7 +286,6 @@ function SwapClient() {
     setFromToken(oldTo);
     setToToken(oldFrom);
     
-    // Atomic Reset
     setQuotes([]);
     setQuotePhase('IDLE');
     setSelectedQuoteId(null);
@@ -297,7 +300,7 @@ function SwapClient() {
 
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
-    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.42'}`, icon: Fuel },
+    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
     { label: 'Institutional Slippage', value: '0.5%', icon: TrendingUp },
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
@@ -328,7 +331,7 @@ function SwapClient() {
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !fetchError && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none">
-            <motion.button animate={{ boxShadow: ["0 0 15px rgba(139, 92, 246, 0.3)", "0 0 45px rgba(139, 92, 246, 0.7)", "0 0 15px rgba(139, 92, 246, 0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto">
+            <motion.button animate={{ boxShadow: ["0 0 15px rgba(139,92,246,0.3)", "0 0 45px rgba(139,92,246,0.7)", "0 0 15px rgba(139,92,246,0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto">
               <motion.div animate={{ x: ['-150%', '300%'] }} transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12" />
               <div className="flex items-center justify-center gap-3 relative z-10"><Zap className="w-4 h-4 fill-current animate-pulse" /> Execute Swap</div>
             </motion.button>
@@ -390,7 +393,13 @@ function SwapClient() {
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10 overflow-y-auto thin-scrollbar">
         {/* YOU PAY CARD */}
-        <section style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
+        <section 
+          style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} 
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
+          onPointerDown={() => setShowPrecision(true)}
+          onPointerUp={() => setShowPrecision(false)}
+          onPointerLeave={() => setShowPrecision(false)}
+        >
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
@@ -402,7 +411,7 @@ function SwapClient() {
           
           <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>{showPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-primary font-black uppercase tracking-widest flex items-center gap-2"><Zap className="w-3 h-3" /> Exact: {amount || '0'} {fromToken?.symbol}</p></motion.div>)}</AnimatePresence>
-            <div onPointerDown={() => setShowPrecision(true)} onPointerUp={() => setShowPrecision(false)} onPointerLeave={() => setShowPrecision(false)}>
+            <div>
               <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
               <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
             </div>
@@ -416,7 +425,13 @@ function SwapClient() {
         </div>
 
         {/* YOU RECEIVE CARD */}
-        <section style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
+        <section 
+          style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} 
+          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
+          onPointerDown={() => setShowOutputPrecision(true)}
+          onPointerUp={() => setShowOutputPrecision(false)}
+          onPointerLeave={() => setShowOutputPrecision(false)}
+        >
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
@@ -426,8 +441,17 @@ function SwapClient() {
             <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId || 1]?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount || '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
-            <div className="text-2xl font-black tracking-tighter text-white flex flex-col transition-all relative z-10" onPointerDown={() => setShowOutputPrecision(true)} onPointerUp={() => setShowOutputPrecision(false)} onPointerLeave={() => setShowOutputPrecision(false)}>
+            <AnimatePresence>
+              {showOutputPrecision && (
+                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
+                  <p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3" /> 
+                    Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="text-2xl font-black tracking-tighter text-white flex flex-col transition-all relative z-10">
               {isQuoteLoading && !selectedQuote ? (
                 <div className="flex gap-1 h-8 items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-2 h-6 bg-white/10 rounded-full" />)}</div>
               ) : (
