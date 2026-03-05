@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wevina Terminal</title>
+  <style>
+    body {
+      width: 320px;
+      padding: 24px;
+      background: #050505;
+      color: #e0e0e0;
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .logo-box {
+      width: 48px;
+      height: 48px;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      color: #8b5cf6;
+    }
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 900;
+    }
+    .status-badge {
+      font-size: 9px;
+      text-transform: uppercase;
+      font-weight: 900;
+      color: #8b5cf6;
+      opacity: 0.6;
+      letter-spacing: 0.2em;
+    }
+    .address-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    #address {
+      font-family: monospace;
+      font-size: 11px;
+      color: #a0a0a0;
+      word-break: break-all;
+      margin: 0;
+    }
+    .btn {
+      width: 100%;
+      height: 48px;
+      background: #8b5cf6;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+      transition: all 0.2s;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 8px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.2);
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-box">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    </div>
+    <h2>Wevina Terminal</h2>
+    <div class="status-badge">Extension Node v1.0</div>
+  </div>
+
+  <div class="address-card">
+    <p id="address">Registry Offline</p>
+  </div>
+
+  <button id="connect" class="btn">Authorize Extension</button>
+
+  <div class="footer">Registry Integrity Verified</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
