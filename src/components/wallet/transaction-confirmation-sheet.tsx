@@ -21,6 +21,7 @@ interface TransactionConfirmationSheetProps {
   recipientName: string;
   recipientAddress: string;
   recipientAvatar?: string;
+  totalFeeUsd: number;
 }
 
 export default function TransactionConfirmationSheet({
@@ -32,18 +33,17 @@ export default function TransactionConfirmationSheet({
   token,
   recipientName,
   recipientAddress,
-  recipientAvatar
+  recipientAvatar,
+  totalFeeUsd
 }: TransactionConfirmationSheetProps) {
   const { formatFiat } = useCurrency();
   const { profile } = useUser();
   
   const amountNum = parseFloat(amount) || 0;
   const isWnc = token?.symbol === 'WNC';
-  const adminFee = isWnc ? 50 : 0;
-  const totalDebit = amountNum + adminFee;
   
   const amountUsd = amountNum * (token?.priceUsd || 0);
-  const totalUsd = totalDebit * (token?.priceUsd || 0);
+  const totalUsd = amountUsd + totalFeeUsd;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -104,40 +104,31 @@ export default function TransactionConfirmationSheet({
           </div>
 
           <div className="grid grid-cols-1 gap-2">
-            {isWnc && (
-              <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Send Amount</span>
-                  <span className="text-xs font-bold text-white">{amount} WNC</span>
+            <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Protocol Fee</span>
+                  <Zap className="w-2.5 h-2.5 text-primary fill-primary animate-pulse" />
                 </div>
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-widest">System Protocol Fee</span>
-                    <Zap className="w-2.5 h-2.5 text-primary fill-primary animate-pulse" />
-                  </div>
-                  <span className="text-xs font-bold text-primary">50 WNC</span>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Registry Debit</span>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-white">{totalDebit} WNC</p>
-                    <p className="text-[9px] font-bold text-primary">≈ {formatFiat(totalUsd)}</p>
-                  </div>
+                <span className="text-xs font-bold text-primary">{formatFiat(totalFeeUsd)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] font-black text-white uppercase tracking-widest">Estimated Total</span>
+                <div className="text-right">
+                  <p className="text-sm font-black text-white">{formatFiat(totalUsd)}</p>
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
               <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Target Address</span>
               <p className="text-[10px] font-mono break-all text-white/60 leading-relaxed">{recipientAddress}</p>
             </div>
             
-            {!isWnc && (
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-primary/5 border border-primary/10">
-                <span className="text-[10px] font-black text-primary uppercase tracking-widest">Network Speed</span>
-                <span className="text-sm font-bold text-primary">Standard (~15s)</span>
-              </div>
-            )}
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-primary/5 border border-primary/10">
+              <span className="text-[10px] font-black text-primary uppercase tracking-widest">Network Speed</span>
+              <span className="text-sm font-bold text-primary">Standard (~15s)</span>
+            </div>
           </div>
         </div>
 

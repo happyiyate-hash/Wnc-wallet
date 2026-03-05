@@ -44,6 +44,7 @@ import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-she
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
+import { calculateSwapFees } from '@/lib/services/swap-fee-calculator';
 
 /**
  * INSTITUTIONAL MULTI-CHAIN ADDRESS SNIFFER
@@ -161,6 +162,7 @@ function SendClient() {
   const debouncedRecipient = useDebounce(recipientInput, 300);
 
   const [amount, setAmount] = useState('');
+  const [totalFeeUsd, setTotalFeeUsd] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState('');
   
@@ -192,6 +194,26 @@ function SendClient() {
     const chainId = selectedToken?.chainId || viewingNetwork.chainId;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
+
+  // INSTITUTIONAL FEE HANDSHAKE
+  useEffect(() => {
+    if (!isConfirmOpen || !amount || !activeNetwork) return;
+    
+    const resolveFees = async () => {
+        try {
+            const amountNum = parseFloat(amount);
+            const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
+            const amountUsd = amountNum * tokenPrice;
+            const chainKey = activeNetwork.type || 'evm';
+            
+            const feeData = await calculateSwapFees(amountUsd, chainKey);
+            setTotalFeeUsd(feeData.networkFee);
+        } catch (e) {
+            setTotalFeeUsd(0);
+        }
+    };
+    resolveFees();
+  }, [isConfirmOpen, amount, activeNetwork, selectedToken, prices]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -454,9 +476,7 @@ function SendClient() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
   const isWnc = selectedToken?.symbol === 'WNC';
-  const adminFee = isWnc ? 50 : 0;
-  const totalDebit = amountNum + adminFee;
-  const hasInsufficientFunds = totalDebit > balance;
+  const hasInsufficientFunds = (amountNum + (totalFeeUsd / (prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 1))) > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
   // INSTITUTIONAL FIX: Direct price lookup from context to prevent $0.00 display
@@ -548,12 +568,10 @@ function SendClient() {
                         <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>
                       )}
                     </div>
-                    {isWnc && (
-                      <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-                        <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
-                        <span className="text-[9px] font-black text-primary uppercase tracking-widest">Fee: 50 WNC</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                      <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest">Dynamic Handshake Fee</span>
+                    </div>
                   </div>
                 </div>
             </div>
@@ -579,9 +597,9 @@ function SendClient() {
       )}</AnimatePresence>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
-      <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} />
+      <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} totalFeeUsd={totalFeeUsd} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={selectedToken?.symbol === 'WNC' ? '50 WNC' : `${gasData.nativeFee} ${activeNetwork.symbol}`} networkName={activeNetwork.name} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={formatFiat(totalFeeUsd)} networkName={activeNetwork.name} />
     </div>
   );
 }
