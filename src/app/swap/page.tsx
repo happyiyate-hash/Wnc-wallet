@@ -195,6 +195,27 @@ function SwapClient() {
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
   /**
+   * ACTION HANDLERS
+   */
+  const handleOpenSelector = (type: 'from' | 'to') => {
+    setSelectionType(type);
+    setIsSelectorOpen(true);
+  };
+
+  const handleTokenSelect = (token: AssetRow) => {
+    if (selectionType === 'from') setFromToken({ ...token });
+    else setToToken({ ...token });
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+  };
+
+  const handleSwapTokens = () => {
+    if (!fromToken || !toToken) return;
+    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
+    setRotation(prev => prev + 180); setFromToken(oldTo); setToToken(oldFrom);
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+  };
+
+  /**
    * INSTITUTIONAL EXECUTION HANDSHAKE
    */
   const handleExecuteSwap = async () => {
@@ -212,7 +233,6 @@ function SwapClient() {
 
       // 2. LIQUIDITY VERIFICATION
       setExecutionPhase('LIQUIDITY');
-      // Perform institutional handshake via API to lock swap ID and get admin address
       const handshakeRes = await fetch('/api/swap/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -246,7 +266,7 @@ function SwapClient() {
       
       // 4. TRIGGER ADMIN SETTLEMENT
       setExecutionPhase('SETTLING');
-      await new Promise(r => setTimeout(r, 3000)); // Simulate on-chain wait
+      await new Promise(r => setTimeout(r, 3000));
       
       setExecutionPhase('SUCCESS');
       await refreshProfile(); refresh();
@@ -264,19 +284,6 @@ function SwapClient() {
       setExecutionPhase('FAILED');
       setTimeout(() => { setIsExecuting(false); setExecutionPhase('IDLE'); }, 5000);
     }
-  };
-
-  const handleTokenSelect = (token: AssetRow) => {
-    if (selectionType === 'from') setFromToken({ ...token });
-    else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
-  };
-
-  const handleSwapTokens = () => {
-    if (!fromToken || !toToken) return;
-    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
-    setRotation(prev => prev + 180); setFromToken(oldTo); setToToken(oldFrom);
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
