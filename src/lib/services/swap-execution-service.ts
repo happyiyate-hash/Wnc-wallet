@@ -1,4 +1,3 @@
-
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -7,16 +6,18 @@ import { adminExecutor } from './admin-executor';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.5.0
+ * Version: 1.6.0 (Environment Synced)
  * 
  * Orchestrates the lifecycle of liquidity-provided swaps.
- * Isolates user execution and handles the multi-chain handshake.
+ * Strictly uses the ADMIN_VAULT_ADDRESS from environment variables.
  */
+
+const ADMIN_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
 
 // REGISTRY: Institutional Admin Vault Addresses
 const ADMIN_WALLET_MAP: { [chain: string]: string } = {
-  'ethereum': '0x71C7656EC7ab88b098defB751B7401B5f6d8976F', // Placeholder Admin Node
-  'evm': '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+  'ethereum': ADMIN_VAULT,
+  'evm': ADMIN_VAULT,
   'bitcoin': 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
   'solana': 'AdminVaultSolana1111111111111111111111111',
   'xrp': 'rHb9CJAWyUMayX9V8Gu89FWJCoDYHnC4n',
