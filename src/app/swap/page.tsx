@@ -37,7 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { calculateSwapFees } from '@/lib/services/swap-fee-calculator';
+import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
 
 interface SwapQuote {
   id: string;
@@ -54,6 +54,7 @@ type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'SENDING' | 'SETTLING
 
 const formatExactCrypto = (val: number): string => {
   if (!val || val <= 0) return '0';
+  // Avoid scientific notation for very small numbers
   return val.toFixed(18).replace(/\.?0+$/, "");
 };
 
@@ -148,10 +149,22 @@ function SwapClient() {
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
+
+      // 1. CHECK PAIR RESTRICTION
+      const restriction = checkPairRestriction(fromToken.symbol, toToken.symbol);
+      if (restriction.isRestricted) {
+        setFetchError(restriction.message!);
+        setQuotePhase('IDLE');
+        setQuotes([]);
+        return;
+      }
+
       const currentSignature = `${fromToken.chainId}:${fromToken.address}:${toToken.chainId}:${toToken.address}:${debouncedAmount}`;
       if (currentSignature === lastFetchedAmountRef.current) return;
       lastFetchedAmountRef.current = currentSignature;
+      
       setIsQuoteLoading(true); setQuotePhase('FETCHING'); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); setSelectedQuoteId(null);
+      
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const userAddr = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
@@ -396,7 +409,9 @@ function SwapClient() {
                   {fetchError ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
+                        {!fetchError.includes("unavailable") && (
+                          <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
+                        )}
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>

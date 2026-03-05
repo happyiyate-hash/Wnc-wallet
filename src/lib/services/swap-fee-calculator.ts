@@ -3,15 +3,42 @@ import { getGasFee } from "../wallets/services/fee-service";
 
 /**
  * INSTITUTIONAL SWAP FEE & VALIDATION ENGINE
- * Version: 1.2.0
+ * Version: 1.3.0
  * 
- * Handles fee calculation and enforces minimum swap amounts based on USD valuation.
+ * Handles fee calculation, minimum swap validation, and pair restrictions.
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; // Minimum for BTC, ETH, SOL, etc.
 const MIN_SWAP_USD_LOW = 0.10;  // Minimum for low-value/dust tokens
 
 const HIGH_VALUE_TOKENS = ['BTC', 'ETH', 'SOL', 'BNB', 'AVAX', 'MATIC', 'ARB', 'OP', 'DOT', 'LINK'];
+
+/**
+ * RESTRICTED PAIRS REGISTRY
+ * Allows for easy management of blocked trade routes.
+ */
+const RESTRICTED_PAIRS = [
+  { from: 'BTC', to: 'USDT' },
+  // Add future restricted pairs here
+];
+
+/**
+ * Checks if a specific swap pair is currently restricted.
+ */
+export function checkPairRestriction(fromSymbol: string, toSymbol: string): { isRestricted: boolean; message?: string } {
+  const isRestricted = RESTRICTED_PAIRS.some(
+    pair => pair.from === fromSymbol.toUpperCase() && pair.to === toSymbol.toUpperCase()
+  );
+
+  if (isRestricted) {
+    return {
+      isRestricted: true,
+      message: "⚠️ This swap is currently unavailable. Support for this pair will be added in a future update."
+    };
+  }
+
+  return { isRestricted: false };
+}
 
 /**
  * Validates if the swap amount meets the institutional minimum thresholds.
