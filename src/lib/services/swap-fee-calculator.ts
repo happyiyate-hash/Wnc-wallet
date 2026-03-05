@@ -1,68 +1,60 @@
+
+import { getGasFee } from "@/lib/wallets/services/fee-service";
+
 /**
  * INSTITUTIONAL SWAP FEE CALCULATOR
  * Version: 1.0.0
  * 
- * This module is responsible for the pure mathematical handshake of a swap quote.
- * it calculates platform revenue (Admin Fee) and combines it with real-time 
- * blockchain gas costs to determine the final settlement amount.
+ * Calculate admin and network fees for a swap and return final receive amount.
+ * This module is isolated from the UI to ensure stability.
+ *
+ * @param rawAmount - the amount the user wants to swap/send
+ * @param chain - blockchain key (e.g., "ethereum", "bitcoin", "solana", "tron", "xrp")
+ * @param apiKey - optional Infura/RPC API key for real-time gas fetching
+ * @param adminFeePercentage - optional percentage for admin fee (0.01 = 1%)
  */
+export async function calculateSwapFees(
+  rawAmount: number,
+  chain: string,
+  apiKey: string | null = null,
+  adminFeePercentage?: number
+) {
+  // 1️⃣ Fetch the blockchain network fee (in USD)
+  // Connects to the established gas-fee-service.ts
+  const blockchainFee = await getGasFee(chain, apiKey);
+  const networkFeeUSD = blockchainFee.estimatedFeeUSD;
 
-export interface SwapFeeResult {
-  rawAmount: number;
-  networkFee: number;   // Combined blockchain + admin fee
-  adminFee: number;
-  blockchainFee: number;
-  finalReceiveAmount: number;
+  // 2️⃣ Calculate admin fee as percentage (default 0.05% for small amounts)
+  // This logic scales naturally with the transaction size
+  const percentage = adminFeePercentage ?? 0.0005; // 0.05%
+  let adminFee = rawAmount * percentage;
+
+  // For very small amounts, set a minimum admin fee (e.g., $0.01)
+  // This ensures micro-swaps remain viable while covering registry costs
+  if (adminFee < 0.01) {
+    adminFee = 0.01;
+  }
+
+  // 3️⃣ Combine network fee + admin fee into a unified node
+  const totalNetworkFee = adminFee + networkFeeUSD;
+
+  // 4️⃣ Calculate final amount user will receive
+  // Formula: finalAmount = principal - (gas + platform_fee)
+  const finalReceiveAmount = Math.max(0, rawAmount - totalNetworkFee);
+
+  // 5️⃣ Return structured result node for consumption by the Swap/Send UI
+  return {
+    rawAmount,
+    adminFee,
+    blockchainFee: networkFeeUSD,
+    networkFee: totalNetworkFee,
+    finalReceiveAmount,
+  };
 }
 
 /**
- * Calculates institutional fees and final receive amounts for multi-chain swaps.
+ * Example usage in Swap Page:
  * 
- * @param rawOutputAmountUSD - The estimated output from the liquidity provider (e.g. Uniswap/1inch) in USD.
- * @param blockchainFeeUSD - The real-time network cost in USD fetched from the Gas Fee Service.
- * @param chainType - The target blockchain protocol (BTC, EVM, Solana, XRP, etc).
- * @returns SwapFeeResult
+ * const { finalReceiveAmount, networkFee } = await calculateSwapFees(1.0, "ethereum");
+ * setEstimatedOutput(finalReceiveAmount);
  */
-export function calculateSwapFees(
-  rawOutputAmountUSD: number,
-  blockchainFeeUSD: number,
-  chainType: string = 'evm'
-): SwapFeeResult {
-  // 1. Institutional Admin Fee Logic
-  // We use a dynamic percentage model:
-  // - Small swaps (< $100): 1% fee with a $0.05 minimum floor.
-  // - Large swaps (>= $100): 0.5% fee to scale with institutional volume.
-  // - Cross-chain (BTC/XRP): Flat 1% to cover bridging liquidity.
-  
-  let feePercentage = 0.01; // Default 1%
-  let minFee = 0.05;        // Default $0.05 floor
-
-  if (chainType === 'evm' || chainType === 'solana') {
-    if (rawOutputAmountUSD >= 100) {
-      feePercentage = 0.005; // Scale down to 0.5% for high-volume EVM trades
-    }
-  } else if (chainType === 'btc' || chainType === 'ltc') {
-    feePercentage = 0.015;   // 1.5% for UTXO-based swaps due to higher complexity
-    minFee = 0.50;           // $0.50 floor for BTC
-  }
-
-  // Calculate Admin Fee with floor protection
-  const adminFee = Math.max(minFee, rawOutputAmountUSD * feePercentage);
-
-  // 2. Aggregate Fees
-  // "Network Fee" in this terminal represents the total overhead (Gas + Platform)
-  const totalCombinedFee = adminFee + blockchainFeeUSD;
-
-  // 3. Final Settlement Calculation
-  // We subtract the total overhead from the raw output to find the final receive amount.
-  // Safety check: ensure we never return a negative amount for micro-swaps.
-  const finalAmount = Math.max(0, rawOutputAmountUSD - totalCombinedFee);
-
-  return {
-    rawAmount: rawOutputAmountUSD,
-    networkFee: totalCombinedFee,
-    adminFee: adminFee,
-    blockchainFee: blockchainFeeUSD,
-    finalReceiveAmount: finalAmount
-  };
-}
