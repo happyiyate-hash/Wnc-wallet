@@ -215,12 +215,12 @@ export default function MyRequestsPage() {
             </main>
 
             <Sheet open={!!selectedRequest} onOpenChange={(open) => !open && setSelectedRequest(null)}>
-                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-8 h-auto overflow-hidden">
+                <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] p-6 h-auto overflow-hidden">
                     <SheetHeader className="sr-only">
                         <SheetTitle>Request Details</SheetTitle>
                         <SheetDescription>View and share your payment request node.</SheetDescription>
                     </SheetHeader>
-                    <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
+                    <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6 shrink-0" />
                     
                     {selectedRequest && (() => {
                         const asset = getAssetForRequest(selectedRequest);
@@ -230,56 +230,56 @@ export default function MyRequestsPage() {
                         const isPaid = selectedRequest.status === 'paid';
 
                         return (
-                            <div className="flex flex-col items-center space-y-8 pb-10">
-                                <div className="text-center space-y-2">
+                            <div className="flex flex-col items-center space-y-6 pb-10">
+                                <div className="text-center space-y-1">
                                     <div className={cn(
-                                        "w-16 h-16 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border",
+                                        "w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-2 border",
                                         isPaid ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-primary/10 border-primary/20 text-primary"
                                     )}>
-                                        {isPaid ? <CheckCircle2 className="w-8 h-8" /> : <Zap className="w-8 h-8" />}
+                                        {isPaid ? <CheckCircle2 className="w-6 h-6" /> : <Zap className="w-6 h-6" />}
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                                    <h3 className="text-lg font-black text-white uppercase tracking-tight">
                                         {isPaid ? 'Handshake Fulfilled' : 'Active Request Node'}
                                     </h3>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-widest font-black opacity-60">
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">
                                         {selectedRequest.token_symbol} • {allChainsMap[asset?.chainId || 1]?.name}
                                     </p>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative group">
-                                    <QRCode value={shareUrl} size={180} level="H" />
+                                <div className="bg-white p-4 rounded-[2.5rem] shadow-2xl relative group">
+                                    <QRCode value={shareUrl} size={160} level="H" />
                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
-                                            <TokenLogoDynamic logoUrl={asset?.iconUrl} alt="Token" size={32} symbol={selectedRequest.token_symbol} name={asset?.name || selectedRequest.token_symbol} />
+                                        <div className="p-1.5 bg-white rounded-lg shadow-xl border border-zinc-100">
+                                            <TokenLogoDynamic logoUrl={asset?.iconUrl} alt="Token" size={28} symbol={selectedRequest.token_symbol} name={asset?.name || selectedRequest.token_symbol} />
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="w-full space-y-4">
-                                    <div className="p-6 rounded-3xl bg-white/[0.02] border border-white/5 flex flex-col items-center gap-1">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
-                                        <h3 className="text-3xl font-black text-white">
+                                <div className="w-full space-y-3">
+                                    <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/5 flex flex-col items-center gap-0.5">
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Amount Requested</p>
+                                        <h3 className="text-2xl font-black text-white">
                                             {selectedRequest.amount.toLocaleString()} {selectedRequest.token_symbol}
                                         </h3>
-                                        <p className="text-xs font-bold text-primary">≈ {formatFiat(selectedRequest.amount * livePrice)}</p>
+                                        <p className="text-[10px] font-bold text-primary">≈ {formatFiat(selectedRequest.amount * livePrice)}</p>
                                     </div>
 
                                     {!isPaid && (
-                                        <div className="space-y-3">
+                                        <div className="space-y-2">
                                             <button 
                                                 onClick={() => handleCopy(shareUrl)} 
                                                 className={cn(
-                                                    "w-full p-4 rounded-2xl border flex items-center justify-between transition-all", 
+                                                    "w-full p-3.5 rounded-2xl border flex items-center justify-between transition-all", 
                                                     isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10"
                                                 )}
                                             >
                                                 <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>
-                                                        <Copy className="w-4 h-4" />
+                                                    <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}>
+                                                        <Copy className="w-3.5 h-3.5" />
                                                     </div>
-                                                    <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
+                                                    <p className="text-[9px] text-white/60 truncate font-mono">{shareUrl}</p>
                                                 </div>
-                                                <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
+                                                <span className="text-[9px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
                                             </button>
                                             <Button 
                                                 onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} 
@@ -291,11 +291,11 @@ export default function MyRequestsPage() {
                                     )}
 
                                     {isPaid && (
-                                        <div className="p-5 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-4">
-                                            <CheckCircle2 className="w-6 h-6 text-green-500 shrink-0" />
+                                        <div className="p-4 rounded-[2rem] bg-green-500/10 border border-green-500/20 flex gap-3">
+                                            <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
                                             <div className="text-left">
-                                                <p className="text-xs font-black text-green-500 uppercase">Registry Status: SETTLED</p>
-                                                <p className="text-[10px] text-green-400 opacity-80 leading-relaxed">
+                                                <p className="text-[10px] font-black text-green-500 uppercase">Registry Status: SETTLED</p>
+                                                <p className="text-[9px] text-green-400 opacity-80 leading-relaxed">
                                                     Funds have been verified and cleared in the SmarterSeller ledger.
                                                 </p>
                                             </div>
@@ -303,7 +303,7 @@ export default function MyRequestsPage() {
                                     )}
                                 </div>
 
-                                <div className="flex items-center justify-center gap-2 opacity-20 pt-4">
+                                <div className="flex items-center justify-center gap-2 opacity-20 pt-2">
                                     <ShieldCheck className="w-3 h-3" />
                                     <span className="text-[8px] font-black uppercase tracking-widest">Protocol Handshake v3.1 Verified</span>
                                 </div>

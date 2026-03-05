@@ -147,7 +147,7 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
           <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
 
           <div className="p-6">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                   <HandCoins className="w-5 h-5" />
@@ -192,29 +192,29 @@ export function RequestCreateMoment({ isOpen, onClose }: { isOpen: boolean, onCl
                   </Button>
                 </motion.div>
               ) : (
-                <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-8 py-4">
-                  <div className="text-center space-y-2">
-                    <div className="w-16 h-16 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mx-auto mb-4 border border-green-500/20"><CheckCircle2 className="w-8 h-8" /></div>
-                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Ready</h3>
-                    <p className="text-xs text-muted-foreground">Share this node to receive payment</p>
+                <motion.div key="ready" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6 py-2">
+                  <div className="text-center space-y-1">
+                    <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mx-auto mb-2 border border-green-500/20"><CheckCircle2 className="w-6 h-6" /></div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Handshake Ready</h3>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Share this node to receive payment</p>
                   </div>
 
-                  <div className="bg-white p-6 rounded-[3rem] shadow-2xl relative group">
-                    <QRCode value={shareUrl} size={180} level="H" />
+                  <div className="bg-white p-4 rounded-[2.5rem] shadow-2xl relative group">
+                    <QRCode value={shareUrl} size={160} level="H" />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
-                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={32} symbol={selectedToken?.symbol} name={selectedToken?.name} />
+                      <div className="p-1.5 bg-white rounded-lg shadow-xl border border-zinc-100">
+                        <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={28} symbol={selectedToken?.symbol} name={selectedToken?.name} />
                       </div>
                     </div>
                   </div>
 
                   <div className="w-full space-y-3">
-                    <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-4 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
+                    <button onClick={() => { navigator.clipboard.writeText(shareUrl); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className={cn("w-full p-3.5 rounded-2xl border flex items-center justify-between transition-all", isCopied ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10")}>
                       <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-4 h-4" /></div>
-                        <p className="text-[10px] text-white/60 truncate font-mono">{shareUrl}</p>
+                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", isCopied ? "bg-green-500/20 text-green-500" : "bg-primary/20 text-primary")}><Copy className="w-3.5 h-3.5" /></div>
+                        <p className="text-[9px] text-white/60 truncate font-mono">{shareUrl}</p>
                       </div>
-                      <span className="text-[10px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
+                      <span className="text-[9px] font-black uppercase text-primary shrink-0">{isCopied ? "Copied" : "Copy"}</span>
                     </button>
                     <Button onClick={() => navigator.share({ title: 'Payment Request', url: shareUrl })} className="w-full h-14 rounded-2xl gap-3 font-black text-sm uppercase bg-primary"><Share2 className="w-4 h-4" /> Share Node</Button>
                   </div>
