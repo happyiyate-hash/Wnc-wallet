@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { fetchGlobalMarketData, type PriceResult } from '@/lib/market/price-service';
-import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import evmNetworks from '@/lib/evmNetworks.json';
