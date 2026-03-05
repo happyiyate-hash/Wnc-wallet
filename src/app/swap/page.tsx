@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -127,6 +126,18 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
+  // INSTITUTIONAL AUTO-PRECISION TRIGGER
+  // When a quote is successfully established, pop the precision tooltip for 10 seconds
+  useEffect(() => {
+    if (quotePhase === 'COMPLETED' && selectedQuoteId) {
+      setShowOutputPrecision(true);
+      const timer = setTimeout(() => {
+        setShowOutputPrecision(false);
+      }, 10000); // 10 second presentation
+      return () => clearTimeout(timer);
+    }
+  }, [quotePhase, selectedQuoteId]);
+
   /**
    * ATOMIC QUOTE ENGINE
    */
@@ -164,7 +175,7 @@ function SwapClient() {
 
         // 1. INSTITUTIONAL FEE HANDSHAKE
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
-        const feeData = await calculateSwapFees(tradeValueUsd, fromToken.symbol);
+        const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
 
         // 2. ROUTE DISCOVERY
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
@@ -479,7 +490,7 @@ function SwapClient() {
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
               <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-5 bg-white/[0.03] border border-white/5 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-white/5 opacity-50" />
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-50" />
                 <div className="flex items-center justify-between gap-2 relative z-10 py-1">
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">

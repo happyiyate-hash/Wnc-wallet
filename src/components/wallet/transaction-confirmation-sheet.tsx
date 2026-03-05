@@ -1,4 +1,3 @@
-
 'use client';
 
 import { motion } from 'framer-motion';
@@ -24,6 +23,10 @@ interface TransactionConfirmationSheetProps {
   totalFeeUsd: number;
 }
 
+/**
+ * INSTITUTIONAL TRANSACTION CONFIRMATION
+ * Version: 4.1.0 (Dynamic Fee Integration)
+ */
 export default function TransactionConfirmationSheet({
   isOpen,
   onOpenChange,
@@ -40,8 +43,6 @@ export default function TransactionConfirmationSheet({
   const { profile } = useUser();
   
   const amountNum = parseFloat(amount) || 0;
-  const isWnc = token?.symbol === 'WNC';
-  
   const amountUsd = amountNum * (token?.priceUsd || 0);
   const totalUsd = amountUsd + totalFeeUsd;
 
