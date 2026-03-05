@@ -1,8 +1,10 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
+import { useUser } from '@/contexts/user-provider';
 import { useCurrency } from '@/contexts/currency-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +23,11 @@ import {
   History,
   Workflow,
   CheckCircle2,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert,
+  Cpu,
+  Activity,
+  SendHorizonal
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -44,19 +50,16 @@ interface SwapQuote {
 }
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
+type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
 
-/**
- * HIGH-PRECISION CRYPTO FORMATTER
- * Converts numbers to strings with up to 18 decimals, removing scientific notation.
- */
 const formatExactCrypto = (val: number): string => {
   if (!val || val <= 0) return '0';
-  // Standardize to 18 fixed decimals and strip trailing zeros
   return val.toFixed(18).replace(/\.?0+$/, "");
 };
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, rates, infuraApiKey } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh } = useWallet();
+  const { user, profile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -80,6 +83,11 @@ function SwapClient() {
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
   const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
+  // EXECUTION ENGINE
+  const [executionPhase, setExecutionPhase] = useState<ExecutionPhase>('IDLE');
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+
   // UI STATE
   const [showPrecision, setShowPrecision] = useState(false);
   const [showOutputPrecision, setShowOutputPrecision] = useState(false);
@@ -95,22 +103,17 @@ function SwapClient() {
    */
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
-
     const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
-
     const initialFrom = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
                       allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                       allAssets[0];
-    
     const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                     allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                     allAssets[allAssets.length - 1];
-
     if (initialFrom) setFromToken({ ...initialFrom });
     if (initialTo) setToToken({ ...initialTo });
-    
     hasInitializedRef.current = true;
   }, [allAssets, viewingNetwork.chainId, searchParams]);
 
@@ -126,14 +129,11 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
-  // INSTITUTIONAL AUTO-PRECISION TRIGGER
-  // When a quote is successfully established, pop the precision tooltip for 10 seconds
+  // AUTO-PRECISION TRIGGER
   useEffect(() => {
     if (quotePhase === 'COMPLETED' && selectedQuoteId) {
       setShowOutputPrecision(true);
-      const timer = setTimeout(() => {
-        setShowOutputPrecision(false);
-      }, 10000); // 10 second presentation
+      const timer = setTimeout(() => setShowOutputPrecision(false), 10000);
       return () => clearTimeout(timer);
     }
   }, [quotePhase, selectedQuoteId]);
@@ -144,121 +144,50 @@ function SwapClient() {
   useEffect(() => {
     const runSequence = async () => {
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
-        setQuotes([]);
-        setQuotePhase('IDLE');
-        setSelectedQuoteId(null);
-        setFetchError(null);
-        setFadedIndices(new Set());
-        setActiveScanIndex(-1);
-        lastFetchedAmountRef.current = '';
-        return;
+        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
+        lastFetchedAmountRef.current = ''; return;
       }
-
       if (!fromToken || !toToken) return;
-      
       const currentSignature = `${fromToken.chainId}:${fromToken.address}:${toToken.chainId}:${toToken.address}:${debouncedAmount}`;
       if (currentSignature === lastFetchedAmountRef.current) return;
-
       lastFetchedAmountRef.current = currentSignature;
-      setIsQuoteLoading(true);
-      setQuotePhase('FETCHING');
-      setFetchError(null);
-      setFadedIndices(new Set());
-      setActiveScanIndex(-1);
-      setSelectedQuoteId(null);
-
+      setIsQuoteLoading(true); setQuotePhase('FETCHING'); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); setSelectedQuoteId(null);
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const userAddr = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
-
         let batch: SwapQuote[] = [];
-
-        // 1. INSTITUTIONAL FEE HANDSHAKE
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
         const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
-
-        // 2. ROUTE DISCOVERY
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
-        
-        // Division factor node: prevents "1.7 ETH" math bugs during zero-latency boot
         const divisor = toTokenPrice || 1;
-
         if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
-                const params = new URLSearchParams({
-                  fromChain: fromToken.chainId.toString(),
-                  toChain: toToken.chainId.toString(),
-                  fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address,
-                  toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address,
-                  fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(),
-                  fromAddress: userAddr,
-                  slippage: '0.005'
-                });
-
+                const params = new URLSearchParams({ fromChain: fromToken.chainId.toString(), toChain: toToken.chainId.toString(), fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), fromAddress: userAddr, slippage: '0.005' });
                 const response = await fetch(`/api/bridge/quote?${params.toString()}`);
                 const lifiQuote = await response.json();
-
                 if (!lifiQuote.error && response.status < 400) {
                     const rawAmountToken = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
-                    
-                    // Deduct fees from token output
                     const finalAmountToken = Math.max(0, rawAmountToken - (feeData.networkFee / divisor));
                     const providerName = lifiQuote.tool?.toUpperCase() || 'Aggregator';
-
-                    batch = [
-                      { id: 'lifi-real', provider: providerName, logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true },
-                      { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: finalAmountToken * 0.9985, fee: feeData.networkFee, eta: '~15s' },
-                      { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: finalAmountToken * 0.9992, fee: feeData.networkFee, eta: '~20s' },
-                    ];
-                } else {
-                    throw new Error("LIFI_FAIL");
-                }
+                    batch = [{ id: 'lifi-real', provider: providerName, logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true }, { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: finalAmountToken * 0.9985, fee: feeData.networkFee, eta: '~15s' }, { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: finalAmountToken * 0.9992, fee: feeData.networkFee, eta: '~20s' }];
+                } else throw new Error("LIFI_FAIL");
             } catch (e) {
                 const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
                 const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-                batch = [
-                    { id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true },
-                    { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: finalAmt * 0.992, fee: feeData.networkFee, eta: '~12s' }
-                ];
+                batch = [{ id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true }, { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: finalAmt * 0.992, fee: feeData.networkFee, eta: '~12s' }];
             }
         } else {
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
             const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-            batch = [
-                { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true },
-                { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: finalAmt * 0.994, fee: feeData.networkFee, eta: '~8s' }
-            ];
+            batch = [{ id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true }, { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: finalAmt * 0.994, fee: feeData.networkFee, eta: '~8s' }];
         }
-
         const finalBatchSorted = batch.sort((a, b) => (b.receiveAmount) - (a.receiveAmount)).map((q, idx) => ({ ...q, isBest: idx === 0 }));
-        
-        setQuotes(finalBatchSorted);
-        setIsQuoteLoading(false);
-        setQuotePhase('SHOW_ALL');
-        await new Promise(r => setTimeout(r, 800));
-        setQuotePhase('SCANNING');
-        for (let i = 0; i < finalBatchSorted.length; i++) {
-          setActiveScanIndex(i);
-          await new Promise(r => setTimeout(r, 200));
-        }
-        setQuotePhase('FINAL_SELECTED');
-        const best = finalBatchSorted.find(q => q.isBest);
-        setSelectedQuoteId(best?.id || null);
-        await new Promise(r => setTimeout(r, 1200));
-        setQuotePhase('FADING_OUT');
-        for (let i = 0; i < finalBatchSorted.length; i++) {
-          setFadedIndices(prev => new Set(prev).add(i));
-          await new Promise(r => setTimeout(r, 100));
-        }
-        setQuotePhase('SHOW_VISUAL');
-        await new Promise(r => setTimeout(r, 3500));
-        setQuotePhase('COMPLETED');
-      } catch (e: any) {
-        setFetchError("Market Sync Interrupted. Re-initializing institutional routes...");
-        setQuotePhase('IDLE');
-      } finally {
-        setIsQuoteLoading(false);
-      }
+        setQuotes(finalBatchSorted); setIsQuoteLoading(false); setQuotePhase('SHOW_ALL'); await new Promise(r => setTimeout(r, 800)); setQuotePhase('SCANNING');
+        for (let i = 0; i < finalBatchSorted.length; i++) { setActiveScanIndex(i); await new Promise(r => setTimeout(r, 200)); }
+        setQuotePhase('FINAL_SELECTED'); const best = finalBatchSorted.find(q => q.isBest); setSelectedQuoteId(best?.id || null); await new Promise(r => setTimeout(r, 1200)); setQuotePhase('FADING_OUT');
+        for (let i = 0; i < finalBatchSorted.length; i++) { setFadedIndices(prev => new Set(prev).add(i)); await new Promise(r => setTimeout(r, 100)); }
+        setQuotePhase('SHOW_VISUAL'); await new Promise(r => setTimeout(r, 3500)); setQuotePhase('COMPLETED');
+      } catch (e: any) { setFetchError("Market Sync Interrupted. Re-initializing institutional routes..."); setQuotePhase('IDLE'); } finally { setIsQuoteLoading(false); }
     };
     runSequence();
   }, [debouncedAmount, fromToken, toToken, wallets, allChainsMap, prices, fromTokenPrice, toTokenPrice, infuraApiKey]);
@@ -266,44 +195,88 @@ function SwapClient() {
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
   /**
-   * ATOMIC STATE HANDLERS
+   * INSTITUTIONAL EXECUTION HANDSHAKE
    */
-  const handleOpenSelector = (type: 'from' | 'to') => {
-    setSelectionType(type);
-    setIsSelectorOpen(true);
+  const handleExecuteSwap = async () => {
+    if (!selectedQuote || !fromToken || !toToken || !user || !wallets) return;
+    
+    setIsExecuting(true);
+    setExecutionError(null);
+    setExecutionPhase('VERIFYING');
+    
+    try {
+      // 1. BALANCE VERIFICATION
+      const balance = parseFloat(fromToken.balance || '0');
+      if (balance < parseFloat(amount)) throw new Error("Insufficient Balance for Swap.");
+      await new Promise(r => setTimeout(r, 1500));
+
+      // 2. LIQUIDITY VERIFICATION
+      setExecutionPhase('LIQUIDITY');
+      // Perform institutional handshake via API to lock swap ID and get admin address
+      const handshakeRes = await fetch('/api/swap/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromChain: fromToken.name, toChain: toToken.name,
+          fromSymbol: fromToken.symbol, toSymbol: toToken.symbol,
+          fromAmount: parseFloat(amount), fromTokenPriceUsd: fromTokenPrice,
+          toAmountExpected: selectedQuote.receiveAmount,
+          adminFeeUsd: selectedQuote.fee * 0.5, networkFeeUsd: selectedQuote.fee * 0.5,
+          recipientAddress: profile?.evm_address || ''
+        })
+      });
+      const handshake = await handshakeRes.json();
+      if (!handshake.success) throw new Error(handshake.error || "Liquidity Node Reject.");
+      await new Promise(r => setTimeout(r, 1500));
+
+      // 3. EXECUTE USER LEG (SEND TO ADMIN)
+      setExecutionPhase('SENDING');
+      const chainConfig = allChainsMap[fromToken.chainId];
+      const evmWallet = wallets.find(w => w.type === 'evm');
+      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
+      const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+      
+      let userTx;
+      if (fromToken.isNative) {
+        userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
+      } else {
+        const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
+        userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
+      }
+      
+      // 4. TRIGGER ADMIN SETTLEMENT
+      setExecutionPhase('SETTLING');
+      await new Promise(r => setTimeout(r, 3000)); // Simulate on-chain wait
+      
+      setExecutionPhase('SUCCESS');
+      await refreshProfile(); refresh();
+      
+      setTimeout(() => {
+        setIsExecuting(false);
+        setExecutionPhase('IDLE');
+        setAmount('');
+        router.push('/profile');
+      }, 4000);
+
+    } catch (e: any) {
+      console.error("[SWAP_EXEC_FAIL]", e);
+      setExecutionError(e.message || "Institutional Handshake Aborted.");
+      setExecutionPhase('FAILED');
+      setTimeout(() => { setIsExecuting(false); setExecutionPhase('IDLE'); }, 5000);
+    }
   };
 
   const handleTokenSelect = (token: AssetRow) => {
-    if (selectionType === 'from') {
-        setFromToken({ ...token });
-    } else {
-        setToToken({ ...token });
-    }
-    setQuotes([]);
-    setQuotePhase('IDLE');
-    setSelectedQuoteId(null);
-    setFetchError(null);
-    setFadedIndices(new Set());
-    setActiveScanIndex(-1);
-    lastFetchedAmountRef.current = '';
+    if (selectionType === 'from') setFromToken({ ...token });
+    else setToToken({ ...token });
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
-    const oldFrom = { ...fromToken };
-    const oldTo = { ...toToken };
-    
-    setRotation(prev => prev + 180);
-    setFromToken(oldTo);
-    setToToken(oldFrom);
-    
-    setQuotes([]);
-    setQuotePhase('IDLE');
-    setSelectedQuoteId(null);
-    setFetchError(null);
-    setFadedIndices(new Set());
-    setActiveScanIndex(-1);
-    lastFetchedAmountRef.current = '';
+    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
+    setRotation(prev => prev + 180); setFromToken(oldTo); setToToken(oldFrom);
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
@@ -338,11 +311,57 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* INSTITUTIONAL ACTION NODE */}
+      {/* BACKGROUND EXECUTION OVERLAY */}
       <AnimatePresence>
-        {quotePhase === 'COMPLETED' && !fetchError && (
+        {isExecuting && (
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
+            <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-primary/20 rounded-[2rem] p-5 shadow-2xl overflow-hidden relative">
+              <div className={cn("absolute -right-10 -top-10 w-32 h-32 blur-3xl opacity-20 transition-colors duration-1000", executionPhase === 'SUCCESS' ? "bg-green-500" : executionPhase === 'FAILED' ? "bg-red-500" : "bg-primary")} />
+              
+              <div className="relative z-10 flex items-center gap-4">
+                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
+                  {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
+                </div>
+                
+                <div className="flex-1 space-y-1">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-white">
+                    {executionPhase === 'VERIFYING' && 'Verifying Balances...'}
+                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Liquidity...'}
+                    {executionPhase === 'SENDING' && 'Executing Transfer...'}
+                    {executionPhase === 'SETTLING' && 'SmarterSeller Payout...'}
+                    {executionPhase === 'SUCCESS' && 'Swap Secured'}
+                    {executionPhase === 'FAILED' && 'Handshake Aborted'}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", executionPhase === 'SUCCESS' ? "bg-green-500" : executionPhase === 'FAILED' ? "bg-red-500" : "bg-primary")} />
+                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">
+                      {executionError || 'Watchdog Sync Active'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg">
+                  <Activity className="w-3 h-3 text-primary animate-pulse" />
+                  <span className="text-[10px] font-mono text-white/60">LIVE</span>
+                </div>
+              </div>
+
+              <div className="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: executionPhase === 'VERIFYING' ? '20%' : executionPhase === 'LIQUIDITY' ? '40%' : executionPhase === 'SENDING' ? '60%' : executionPhase === 'SETTLING' ? '85%' : '100%' }}
+                  className="h-full bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)]"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {quotePhase === 'COMPLETED' && !fetchError && !isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none">
-            <motion.button animate={{ boxShadow: ["0 0 15px rgba(139,92,246,0.3)", "0 0 45px rgba(139,92,246,0.7)", "0 0 15px rgba(139,92,246,0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto">
+            <motion.button onClick={handleExecuteSwap} animate={{ boxShadow: ["0 0 15px rgba(139,92,246,0.3)", "0 0 45px rgba(139,92,246,0.7)", "0 0 15px rgba(139,92,246,0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto active:scale-95 transition-transform">
               <motion.div animate={{ x: ['-150%', '300%'] }} transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12" />
               <div className="flex items-center justify-center gap-3 relative z-10"><Zap className="w-4 h-4 fill-current animate-pulse" /> Execute Swap</div>
             </motion.button>

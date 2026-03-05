@@ -2,24 +2,25 @@
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
-import { calculateSwapFees, validateSwapAmount } from './swap-fee-calculator';
+import { validateSwapAmount } from './swap-fee-calculator';
 import { adminExecutor } from './admin-executor';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.2.0
+ * Version: 1.5.0
  * 
  * Orchestrates the lifecycle of liquidity-provided swaps.
- * Enforces minimum swap rules and multi-chain admin settlement.
+ * Isolates user execution and handles the multi-chain handshake.
  */
 
+// REGISTRY: Institutional Admin Vault Addresses
 const ADMIN_WALLET_MAP: { [chain: string]: string } = {
-  'ethereum': '0xAdminEthVaultAddress',
-  'evm': '0xAdminEvmVaultAddress',
-  'bitcoin': 'bc1qAdminBtcVaultAddress',
-  'solana': 'AdminSolanaVaultAddress',
-  'xrp': 'rAdminXrpVaultAddress',
-  'tron': 'TAdminTronVaultAddress'
+  'ethereum': '0x71C7656EC7ab88b098defB751B7401B5f6d8976F', // Placeholder Admin Node
+  'evm': '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+  'bitcoin': 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+  'solana': 'AdminVaultSolana1111111111111111111111111',
+  'xrp': 'rHb9CJAWyUMayX9V8Gu89FWJCoDYHnC4n',
+  'tron': 'TNV9Z6XYnZAnvXAnvXAnvXAnvXAnvXAnvX'
 };
 
 export interface InitiateSwapInput {
@@ -38,8 +39,8 @@ export interface InitiateSwapInput {
 
 export const swapExecutionService = {
   /**
-   * STEP 1: Initiate Swap Request
-   * Validates minimum limits and creates a pending record in the registry.
+   * STEP 1: Initiate Swap Handshake
+   * Validates limits and creates a locked registry node.
    */
   async initiateSwap(input: InitiateSwapInput): Promise<{ swapId: string; adminAddress: string }> {
     if (!supabase) throw new Error("Registry offline.");
@@ -47,13 +48,15 @@ export const swapExecutionService = {
     // 1. Enforce Institutional Minimums
     validateSwapAmount(input.fromAmount, input.fromSymbol, input.fromTokenPriceUsd);
 
-    const adminAddress = ADMIN_WALLET_MAP[input.fromChain.toLowerCase()] || 
-                         ADMIN_WALLET_MAP['evm'];
+    // 2. Resolve Admin Deposit Node
+    const chainKey = input.fromChain.toLowerCase();
+    const adminAddress = ADMIN_WALLET_MAP[chainKey] || ADMIN_WALLET_MAP['evm'];
 
     if (!adminAddress) {
       throw new Error(`Liquidity node for ${input.fromChain} not available.`);
     }
 
+    // 3. Create Verified Ledger Entry
     const { data, error } = await supabase
       .from('swaps')
       .insert({
@@ -72,10 +75,7 @@ export const swapExecutionService = {
       .select('id')
       .single();
 
-    if (error) {
-      console.error("[SWAP_INIT_FAIL]", error);
-      throw new Error("Failed to initialize swap handshake.");
-    }
+    if (error) throw new Error("Ledger handshake failed.");
 
     return { 
       swapId: data.id, 
@@ -84,12 +84,13 @@ export const swapExecutionService = {
   },
 
   /**
-   * STEP 2: Verify User Deposit & Trigger Admin Settlement
+   * STEP 2: Finalize & Settle
+   * Triggered once the user leg is verified. Executes admin payout leg.
    */
-  async recordUserDepositAndSettle(swapId: string, userTxHash: string) {
+  async finalizeAndSettle(swapId: string, userTxHash: string) {
     if (!supabase) return;
 
-    // A. Record the incoming deposit
+    // A. Update Status to User Sent
     const { error: updateErr } = await supabase
       .from('swaps')
       .update({
@@ -100,12 +101,12 @@ export const swapExecutionService = {
 
     if (updateErr) throw updateErr;
 
-    // B. Trigger the Admin Payout (Async Settlement)
+    // B. Trigger Institutional Payout (Admin -> User)
     return await this.executeAdminPayout(swapId);
   },
 
   /**
-   * Internal Settlement logic using the Admin Execution Engine.
+   * Backend Signing Node: Admin Payout
    */
   async executeAdminPayout(swapId: string) {
     if (!supabase) return;
@@ -116,7 +117,7 @@ export const swapExecutionService = {
       .eq('id', swapId)
       .single();
 
-    if (fetchErr || !swap) throw new Error("SWAP_NOT_FOUND");
+    if (fetchErr || !swap) throw new Error("SWAP_NODE_NOT_FOUND");
 
     try {
       const { data: profile } = await supabase
@@ -125,16 +126,16 @@ export const swapExecutionService = {
         .eq('id', swap.user_id)
         .single();
 
-      if (!profile) throw new Error("USER_PROFILE_MISSING");
+      if (!profile) throw new Error("IDENTITY_NODE_MISSING");
 
       const chainKey = swap.to_chain.toLowerCase();
       const targetAddress = chainKey === 'solana' ? profile.solana_address : 
                             chainKey === 'xrp' ? profile.xrp_address : 
                             profile.evm_address;
 
-      if (!targetAddress) throw new Error(`USER_${chainKey.toUpperCase()}_ADDRESS_MISSING`);
+      if (!targetAddress) throw new Error(`RECIPIENT_${chainKey.toUpperCase()}_NODE_MISSING`);
 
-      // SIGN & BROADCAST from Admin Liquidity Pool
+      // BROADCAST FROM ADMIN VAULT
       const txHash = await adminExecutor.executeAdminTransfer({
         toAddress: targetAddress,
         amount: swap.to_amount_expected,
@@ -143,6 +144,7 @@ export const swapExecutionService = {
         chainType: chainKey === 'solana' ? 'solana' : chainKey === 'xrp' ? 'xrp' : 'evm'
       });
 
+      // Update Ledger to Completed
       await supabase
         .from('swaps')
         .update({
@@ -154,7 +156,7 @@ export const swapExecutionService = {
       return txHash;
 
     } catch (e: any) {
-      console.error("[SWAP_PAYOUT_FAIL]", e);
+      console.error("[SETTLEMENT_FAIL]", e);
       await supabase.from('swaps').update({ status: 'failed' }).eq('id', swapId);
       throw e;
     }
