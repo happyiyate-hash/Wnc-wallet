@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { calculateSwapFees } from '@/lib/services/swap-fee-calculator';
 
 interface SwapQuote {
   id: string;
@@ -158,6 +159,10 @@ function SwapClient() {
 
         let batch: SwapQuote[] = [];
 
+        // Dynamic Fee Handshake
+        const tradeValueUsd = parseFloat(debouncedAmount) * fromTokenPrice;
+        const feeData = await calculateSwapFees(tradeValueUsd, fromToken.symbol);
+
         // Logic Check: LI.FI for compatible EVM chains
         const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         
@@ -177,35 +182,39 @@ function SwapClient() {
                 const lifiQuote = await response.json();
 
                 if (!lifiQuote.error && response.status < 400) {
-                    const realAmount = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
-                    const realFee = parseFloat(lifiQuote.estimate.feeCosts?.[0]?.amountUsd || '0.25');
+                    const rawAmountToken = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
+                    
+                    // Deduct fees from token output
+                    const finalAmountToken = rawAmountToken - (feeData.networkFee / (toTokenPrice || 1));
                     const providerName = lifiQuote.tool?.toUpperCase() || 'Aggregator';
 
                     batch = [
-                      { id: 'lifi-real', provider: providerName, logo: null, receiveAmount: realAmount, fee: realFee, eta: '~30s', isBest: true },
-                      { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: realAmount * 0.9985, fee: realFee * 1.1, eta: '~15s' },
-                      { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: realAmount * 0.9992, fee: realFee * 0.9, eta: '~20s' },
+                      { id: 'lifi-real', provider: providerName, logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true },
+                      { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: finalAmountToken * 0.9985, fee: feeData.networkFee, eta: '~15s' },
+                      { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: finalAmountToken * 0.9992, fee: feeData.networkFee, eta: '~20s' },
                     ];
                 } else {
                     throw new Error("LIFI_FAIL");
                 }
             } catch (e) {
                 const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
+                const finalAmt = estAmt - (feeData.networkFee / (toTokenPrice || 1));
                 batch = [
-                    { id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: estAmt * 0.995, fee: 0.15, eta: '~10s', isBest: true },
-                    { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: estAmt * 0.992, fee: 0.10, eta: '~12s' }
+                    { id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true },
+                    { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: finalAmt * 0.992, fee: feeData.networkFee, eta: '~12s' }
                 ];
             }
         } else {
             // Internal Logic for Non-EVM or Offline mode
             const estAmt = (parseFloat(debouncedAmount) * fromTokenPrice) / (toTokenPrice || 1);
+            const finalAmt = estAmt - (feeData.networkFee / (toTokenPrice || 1));
             batch = [
-                { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: estAmt * 0.997, fee: 0.05, eta: '~5s', isBest: true },
-                { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: estAmt * 0.994, fee: 0.08, eta: '~8s' }
+                { id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true },
+                { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: finalAmt * 0.994, fee: feeData.networkFee, eta: '~8s' }
             ];
         }
 
-        const finalBatchSorted = batch.sort((a, b) => (b.receiveAmount - b.fee) - (a.receiveAmount - a.fee)).map((q, idx) => ({ ...q, isBest: idx === 0 }));
+        const finalBatchSorted = batch.sort((a, b) => (b.receiveAmount) - (a.receiveAmount)).map((q, idx) => ({ ...q, isBest: idx === 0 }));
         
         setQuotes(finalBatchSorted);
         setIsQuoteLoading(false);
@@ -288,7 +297,7 @@ function SwapClient() {
 
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
-    { label: 'Network Gas', value: `$${selectedQuote?.fee.toFixed(2) || '0.42'}`, icon: Fuel },
+    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.42'}`, icon: Fuel },
     { label: 'Institutional Slippage', value: '0.5%', icon: TrendingUp },
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
