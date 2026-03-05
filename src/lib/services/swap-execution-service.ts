@@ -2,19 +2,17 @@
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
-import type { SwapTransaction } from '@/lib/types';
-import { calculateSwapFees } from './swap-fee-calculator';
+import { calculateSwapFees, validateSwapAmount } from './swap-fee-calculator';
 import { adminExecutor } from './admin-executor';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.1.0
+ * Version: 1.2.0
  * 
- * Handles the logic-gated lifecycle of a liquidity-provided swap.
- * Orchestrates the handshake between user deposit and admin payout.
+ * Orchestrates the lifecycle of liquidity-provided swaps.
+ * Enforces minimum swap rules and multi-chain admin settlement.
  */
 
-// In production, these addresses are securely fetched from a vault or environment
 const ADMIN_WALLET_MAP: { [chain: string]: string } = {
   'ethereum': '0xAdminEthVaultAddress',
   'evm': '0xAdminEvmVaultAddress',
@@ -31,6 +29,7 @@ export interface InitiateSwapInput {
   fromSymbol: string;
   toSymbol: string;
   fromAmount: number;
+  fromTokenPriceUsd: number;
   toAmountExpected: number;
   adminFeeUsd: number;
   networkFeeUsd: number;
@@ -40,10 +39,13 @@ export interface InitiateSwapInput {
 export const swapExecutionService = {
   /**
    * STEP 1: Initiate Swap Request
-   * Creates a pending record in the institutional registry.
+   * Validates minimum limits and creates a pending record in the registry.
    */
   async initiateSwap(input: InitiateSwapInput): Promise<{ swapId: string; adminAddress: string }> {
     if (!supabase) throw new Error("Registry offline.");
+
+    // 1. Enforce Institutional Minimums
+    validateSwapAmount(input.fromAmount, input.fromSymbol, input.fromTokenPriceUsd);
 
     const adminAddress = ADMIN_WALLET_MAP[input.fromChain.toLowerCase()] || 
                          ADMIN_WALLET_MAP['evm'];
@@ -82,32 +84,32 @@ export const swapExecutionService = {
   },
 
   /**
-   * STEP 2: Verify User Deposit
-   * In a production environment, this is triggered by a blockchain listener.
-   * Records the hash and moves status to 'user_sent'.
+   * STEP 2: Verify User Deposit & Trigger Admin Settlement
    */
-  async recordUserDeposit(swapId: string, txHash: string) {
+  async recordUserDepositAndSettle(swapId: string, userTxHash: string) {
     if (!supabase) return;
 
-    const { error } = await supabase
+    // A. Record the incoming deposit
+    const { error: updateErr } = await supabase
       .from('swaps')
       .update({
-        user_tx_hash: txHash,
+        user_tx_hash: userTxHash,
         status: 'user_sent'
       })
       .eq('id', swapId);
 
-    if (error) throw error;
+    if (updateErr) throw updateErr;
+
+    // B. Trigger the Admin Payout (Async Settlement)
+    return await this.executeAdminPayout(swapId);
   },
 
   /**
-   * STEP 3: Execute Admin Payout
-   * Logic for the admin wallet to send the output token to the user.
+   * Internal Settlement logic using the Admin Execution Engine.
    */
   async executeAdminPayout(swapId: string) {
     if (!supabase) return;
 
-    // 1. Fetch full swap context from registry
     const { data: swap, error: fetchErr } = await supabase
       .from('swaps')
       .select('*')
@@ -115,10 +117,8 @@ export const swapExecutionService = {
       .single();
 
     if (fetchErr || !swap) throw new Error("SWAP_NOT_FOUND");
-    if (swap.status !== 'user_sent') throw new Error("SWAP_DEPOSIT_NOT_VERIFIED");
 
     try {
-      // 2. Resolve destination address from user profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -134,16 +134,15 @@ export const swapExecutionService = {
 
       if (!targetAddress) throw new Error(`USER_${chainKey.toUpperCase()}_ADDRESS_MISSING`);
 
-      // 3. Trigger Admin Dispatch
+      // SIGN & BROADCAST from Admin Liquidity Pool
       const txHash = await adminExecutor.executeAdminTransfer({
         toAddress: targetAddress,
         amount: swap.to_amount_expected,
         tokenSymbol: swap.to_symbol,
-        chainId: 1, // Logic to resolve from registry
+        chainId: 1, 
         chainType: chainKey === 'solana' ? 'solana' : chainKey === 'xrp' ? 'xrp' : 'evm'
       });
 
-      // 4. Update status to completed
       await supabase
         .from('swaps')
         .update({
