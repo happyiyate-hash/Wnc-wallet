@@ -274,7 +274,7 @@ function SendClient() {
         try {
           if (!supabase) throw new Error("Registry offline.");
           const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 10000));
-          const queryPromise = supabase.from('profiles').select('id, name, photo_url, account_number').eq('account_number', input).maybeSingle();
+          const queryPromise = supabase.from('profiles').select('*').eq('account_number', input).maybeSingle();
           
           const { data: userRecord, error: fetchErr } = await Promise.race([queryPromise, timeoutPromise]) as any;
           
@@ -283,13 +283,18 @@ function SendClient() {
 
           if (userRecord) {
             setRecipientProfile({ id: userRecord.id, avatar: userRecord.photo_url || '', verified: true, name: userRecord.name || input });
+            
             if (isInternalWnc) {
               setResolvedAddress(userRecord.account_number || '');
             } else {
               const targetChainType = activeNetwork.type || 'evm';
-              const { data: chainWallet } = await supabase.from('wallets').select('address').eq('user_id', userRecord.id).eq('blockchain_id', targetChainType).maybeSingle();
-              if (chainWallet?.address) setResolvedAddress(chainWallet.address);
-              else { 
+              // STANDARDIZED REGISTRY RESOLUTION
+              const fieldName = `${targetChainType}_address`;
+              const targetAddress = userRecord[fieldName];
+              
+              if (targetAddress) {
+                setResolvedAddress(targetAddress);
+              } else { 
                 setResolvedAddress(''); 
                 setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); 
               }
