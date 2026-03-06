@@ -5,14 +5,14 @@ import { FEE_RECIPIENTS } from '../wallets/services/fee-recipients';
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE
- * Version: 1.3.0 (Integrator Fee Protocol)
+ * Version: 1.4.0 (High-Volume 10 BPS Protocol)
  * Handles same-chain EVM swap discovery and signed quote generation.
- * Integrates institutional integrator fee (0.5%) routed to centralized admin vault.
+ * Integrates institutional integrator fee (0.1%) routed to centralized admin vault.
  */
 
 const ZEROX_API_KEY = process.env.NEXT_PUBLIC_ZEROX_API_KEY || '5eebaf6f-e024-41d2-a18f-e05c241129c3';
 const ADMIN_VAULT = FEE_RECIPIENTS.evm; // Synchronized with central registry
-const FEE_PERCENTAGE = '0.005'; // 0.5% Institutional Integrator Fee (50 BPS)
+const FEE_PERCENTAGE = '0.001'; // 0.1% Institutional Integrator Fee (10 BPS)
 
 const ZEROX_BASE_URLS: { [chainId: number]: string } = {
   1: 'https://api.0x.org',
@@ -62,7 +62,7 @@ export const zeroXService = {
 
   /**
    * Generates a signed quote for execution.
-   * Routes the 0.5% integrator fee to the centralized FEE_RECIPIENTS.evm vault.
+   * Routes the 0.1% integrator fee to the centralized FEE_RECIPIENTS.evm vault.
    */
   async getQuote(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress: string) {
     const baseUrl = ZEROX_BASE_URLS[chainId];

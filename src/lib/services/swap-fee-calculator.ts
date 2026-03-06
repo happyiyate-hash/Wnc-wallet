@@ -4,9 +4,10 @@ import { getFeeRecipient } from "../wallets/services/fee-recipients";
 
 /**
  * INSTITUTIONAL FEE & VALIDATION ENGINE
- * Version: 2.0.0 (Fixed-Fee Protocol)
+ * Version: 2.1.0 (High-Volume Update)
  * 
- * Implements a predictable $0.05 USD service fee for all transfers.
+ * Implements a predictable $0.05 USD service fee for all transfers
+ * and a 0.1% (10 BPS) integrator fee for swaps.
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; 
@@ -68,7 +69,7 @@ export async function calculateSendFees(amountUsd: number, chain: string) {
 
 /**
  * Calculate admin and network fees for a swap.
- * Standardized at 0.5% (50 BPS) to match 0x integrator protocol.
+ * Standardized at 0.1% (10 BPS) to match high-volume aggregator standards.
  */
 export async function calculateSwapFees(
   rawAmountUsd: number,
@@ -79,7 +80,7 @@ export async function calculateSwapFees(
   const networkFeeUSD = blockchainFee.estimatedFeeUSD;
   const recipient = getFeeRecipient(chain);
 
-  const percentage = adminFeePercentage ?? 0.005; // 0.5% Institutional Integrator Fee
+  const percentage = adminFeePercentage ?? 0.001; // 0.1% Institutional Integrator Fee (10 BPS)
   let adminFee = rawAmountUsd * percentage;
 
   // Swap Floor: $0.05
