@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -165,7 +164,15 @@ function SwapClient() {
         
         // HYBRID ROUTE SELECTION
         const providerType = determineSwapProvider(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol);
-        const isPivotRequired = needsPivotRoute(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol, providerType);
+        const isPivotRequired = needsPivotRoute(
+            fromToken.chainId ?? 1, 
+            toToken.chainId ?? 1, 
+            fromSymbol: fromToken.symbol, 
+            toSymbol: toToken.symbol, 
+            providerType,
+            fromToken.isNative,
+            toToken.isNative
+        );
         
         let quote: SwapQuote | null = null;
 
@@ -196,11 +203,17 @@ function SwapClient() {
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
             
-            // INSTITUTIONAL STATUS GUARD: Handle non-OK responses (HTML error pages)
             if (!res.ok) {
                 const text = await res.text();
+                let errMsg = `Bridge Service Unreachable (${res.status}). Market synchronization deferred.`;
+                try {
+                    const json = JSON.parse(text);
+                    if (json.details || json.error) {
+                        errMsg = json.details || json.error;
+                    }
+                } catch(e) {}
                 console.error("[BRIDGE_FETCH_FAIL]", text.slice(0, 200));
-                throw new Error(`Bridge Service Unreachable (${res.status}). Market synchronization deferred.`);
+                throw new Error(errMsg);
             }
 
             const q = await res.json();
@@ -218,15 +231,20 @@ function SwapClient() {
             };
         }
         else {
-            // INTERNAL LIQUIDITY NODE (PIVOT HANDSHAKE)
+            // INTERNAL LIQUIDITY NODE (DIRECT OR PIVOT HANDSHAKE)
+            // Existing swap engine calculation with fee inclusion
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
+            
+            // receiveAmount = gross estimation - (total fees / price)
+            const finalReceive = Math.max(0, estAmt - (feeData.networkFee / divisor));
+
             quote = {
                 id: 'internal-vault',
-                provider: isPivotRequired ? 'USDT Pivot Handshake' : 'Wevina Settle Node',
+                provider: isPivotRequired ? 'USDT Pivot Handshake' : 'Wevina Direct Settle',
                 logo: null,
-                receiveAmount: (estAmt - (feeData.networkFee / divisor)),
+                receiveAmount: finalReceive,
                 fee: feeData.networkFee,
                 eta: isPivotRequired ? '~30s' : '~5s',
                 swapProvider: 'INTERNAL',
