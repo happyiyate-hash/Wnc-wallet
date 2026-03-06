@@ -26,13 +26,7 @@ import {
   ShieldAlert,
   Cpu,
   Activity,
-  SendHorizonal,
-  ShieldQuestion,
-  Lock,
   Globe,
-  Database,
-  Search,
-  Info,
   Repeat
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
@@ -188,13 +182,11 @@ function SwapClient() {
             quotePromises.push((async () => {
                 try {
                     const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-                    // getPrice includes 5% feeRecipient logic internally in zerox-service
                     const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
                     return {
                         id: '0x-aggregator',
                         provider: '0x Aggregator',
                         logo: null,
-                        // p.buyAmount is already reduced by 5% because FEE_PERCENTAGE was passed to getPrice
                         receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
                         fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
                         eta: '~10s',
@@ -222,9 +214,9 @@ function SwapClient() {
                     const q = await res.json();
                     if (q.error) return null;
                     
-                    // Manually apply the 5% Institutional Fee to LI.FI routes
+                    // Manually apply the 0.1% Institutional Fee to LI.FI routes (Net Result)
                     const grossAmount = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
-                    const netAmount = grossAmount * 0.95;
+                    const netAmount = grossAmount * 0.999; 
 
                     return {
                         id: 'lifi-route',
@@ -232,7 +224,7 @@ function SwapClient() {
                         logo: null,
                         receiveAmount: netAmount,
                         fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
-                        eta: '~30s',
+                        eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
                         rawQuote: q,
                         swapProvider: 'LIFI'
                     } as SwapQuote;
@@ -355,7 +347,6 @@ function SwapClient() {
       if (selectedQuote.swapProvider === 'ZEROX') {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
-          // getQuote includes on-chain 5% fee routing logic in zerox-service
           const q = await zeroXService.getQuote(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
           
           if (!fromToken.isNative) {
@@ -373,6 +364,35 @@ function SwapClient() {
           setExecutionPhase('SETTLING');
           await tx.wait();
       } 
+      else if (selectedQuote.swapProvider === 'LIFI') {
+          setExecutionPhase('LIQUIDITY');
+          const q = selectedQuote.rawQuote;
+          
+          if (q.transactionRequest) {
+              setExecutionPhase('APPROVING');
+              const approvalAddress = q.estimate.approvalAddress;
+              if (approvalAddress && !fromToken.isNative) {
+                  const tokenContract = new ethers.Contract(fromToken.address, ["function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)"], wallet);
+                  const allowance = await tokenContract.allowance(wallet.address, approvalAddress);
+                  if (allowance < ethers.parseUnits(amount, fromToken.decimals || 18)) {
+                      const approveTx = await tokenContract.approve(approvalAddress, ethers.MaxUint256);
+                      await approveTx.wait();
+                  }
+              }
+
+              setExecutionPhase('SENDING');
+              const tx = await wallet.sendTransaction({
+                  to: q.transactionRequest.to,
+                  data: q.transactionRequest.data,
+                  value: q.transactionRequest.value,
+                  gasLimit: q.transactionRequest.gasLimit
+              });
+              setExecutionPhase('SETTLING');
+              await tx.wait();
+          } else {
+              throw new Error("Invalid LI.FI Transaction Request");
+          }
+      }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
           setExecutionPhase('LIQUIDITY');
           const handshakeRes = await fetch('/api/swap/execute', {
