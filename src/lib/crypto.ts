@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 /**
  * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL
- * Version: 2.3.0 (Buffer Resilience Update)
+ * Version: 3.0.0 (SmarterSeller Ecosystem Standard)
  * Algorithm: AES-256-CBC
  * Key Derivation: SHA-256 Hash of Master Key HEX
  */
@@ -10,8 +10,8 @@ import crypto from 'crypto';
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
-// Prioritize environment key for production-grade security
-const MASTER_KEY_HEX = process.env.ENCRYPTION_KEY || 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
+// Institutional Master Key Standard
+const MASTER_KEY_HEX = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
 
 /**
  * Derives the 32-byte AES key using the SHA-256 hash of the Master Key.
@@ -54,7 +54,6 @@ export function decryptPhrase(encryptedText: string, ivHex: string): string {
 
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     
-    // Explicit buffer-to-string decryption to prevent encoding errors
     let decrypted = decipher.update(encryptedData);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 

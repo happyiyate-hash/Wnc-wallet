@@ -194,12 +194,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  useEffect(() => {
-    if (isInitialized && !isWalletLoading && wallets && wallets.length > 0 && !hasFetchedInitialData) {
-      refresh();
-    }
-  }, [isInitialized, isWalletLoading, !!wallets, hasFetchedInitialData, refresh]);
-
   const updateNetwork = useCallback((network: ChainConfig) => {
     setViewingNetwork(network);
     if (user) {
@@ -335,6 +329,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No cloud backup detected.");
+    
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication required.");
     
@@ -342,20 +337,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     onStatusUpdate?.('Decrypting Registry Nodes...');
     
     try {
-      if (profile.vault_phrase) {
+      // 1. Recover Mnemonic Node
+      if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
         });
         const data = await res.json();
-        const mnemonic = data.text || data.phrase;
+        const mnemonic = data.text;
         
         if (mnemonic) {
           localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
-          onStatusUpdate?.('Deriving Multi-Chain Wallets...');
-          const derived = await deriveAllWallets(mnemonic);
           
+          // 2. Recover Infura Node (if exists)
           if (profile.vault_infura_key && profile.infura_iv) {
             const resKey = await fetch('/api/wallet/decrypt-phrase', {
               method: 'POST',
@@ -370,12 +365,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
           }
 
+          // 3. Derive Multi-Chain Wallets Atomic Step
+          onStatusUpdate?.('Deriving Multi-Chain Wallets...');
+          const derived = await deriveAllWallets(mnemonic);
           setWallets(derived);
         } else {
           throw new Error("Decryption handshake failed.");
         }
       }
 
+      // 4. Recover Account ID
       if (profile.account_number) {
         localStorage.setItem(`account_number_${user.id}`, profile.account_number);
         setAccountNumber(profile.account_number);

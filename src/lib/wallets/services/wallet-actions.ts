@@ -5,7 +5,7 @@ import type { WalletWithMetadata } from '@/lib/types';
 
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
- * Version: 3.0.0 (Standardized SmarterSeller Storage)
+ * Version: 3.1.0 (Standardized SmarterSeller Storage)
  * 
  * Handles data persistence, cloud synchronization, and cache management.
  * Uses shared ss-mnemonic- and ss-infura-key- prefixes for ecosystem interop.
@@ -124,6 +124,7 @@ export function purgeLocalWalletCache(userId: string) {
   ];
   keys.forEach(key => {
     localStorage.removeItem(`${key}-${userId}`);
+    // Cleanup old keys if any exist
     localStorage.removeItem(key);
   });
 }

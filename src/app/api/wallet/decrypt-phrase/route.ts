@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { decryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
@@ -6,7 +5,7 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE DECRYPTION ENDPOINT
- * Decrypts a provided encrypted payload.
+ * Returns: { "text": "..." } as per SmarterSeller Standard.
  */
 
 export async function POST(req: NextRequest) {
@@ -27,13 +26,12 @@ export async function POST(req: NextRequest) {
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        // Server-side identity verification using passed token or cookies
-        const { data: { user }, error: authError } = token 
+        const { data: { user } } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
 
-        if (!user || authError) {
-            return NextResponse.json({ message: 'Unauthorized: Session missing or invalid' }, { status: 401 });
+        if (!user) {
+            return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
         }
 
         const { encrypted, iv } = await req.json();
@@ -41,18 +39,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Missing vault parameters.' }, { status: 400 });
         }
 
-        // Decrypt with server-side key
         const phrase = decryptPhrase(encrypted, iv);
 
-        return NextResponse.json({ phrase });
+        // Standardized SmarterSeller return key
+        return NextResponse.json({ text: phrase });
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        
-        if (error.message === 'ENCRYPTION_KEY_MISSING') {
-            return NextResponse.json({ message: 'Server Key Missing: Recovery currently unavailable.' }, { status: 500 });
-        }
-
-        return NextResponse.json({ message: 'Decryption failed. Please contact support.' }, { status: 500 });
+        return NextResponse.json({ message: 'Decryption failed.' }, { status: 500 });
     }
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -61,27 +60,17 @@ export default function WalletSessionPage() {
     return () => stopTimer();
   }, []);
 
-  /**
-   * INSTITUTIONAL REFERRAL HANDSHAKE
-   * Establishes the P2P growth link in the registry.
-   */
   const finalizeReferral = async (newUserId: string) => {
     if (!supabase) return;
     
     try {
-      // 1. Capture referral metadata from both sources (Hydration Resilience)
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       const metadataRefCode = currentUser?.user_metadata?.referral_code;
       const localStorageRefCode = localStorage.getItem('pending_referral');
-      
       const refCode = metadataRefCode || localStorageRefCode;
       
-      if (!refCode) {
-        console.log("[REFERRAL_NODE_MISSING] No invitation detected.");
-        return;
-      }
+      if (!refCode) return;
 
-      // 2. Resolve Referrer Node by Account ID suffix
       const { data: referrer, error: fetchErr } = await supabase
         .from('profiles')
         .select('id')
@@ -90,7 +79,6 @@ export default function WalletSessionPage() {
 
       if (fetchErr || !referrer || referrer.id === newUserId) return;
 
-      // 3. Check for existing record to prevent duplicates
       const { data: existing } = await supabase
         .from('referrals')
         .select('id')
@@ -99,18 +87,14 @@ export default function WalletSessionPage() {
 
       if (existing) return;
 
-      // 4. Commit 100 WNC Escrow Node to registry
-      const { error: insertErr } = await supabase.from('referrals').insert({
+      await supabase.from('referrals').insert({
         referrer_id: referrer.id,
         referred_id: newUserId,
         status: 'pending',
         reward_amount: 100
       });
 
-      if (!insertErr) {
-        localStorage.removeItem('pending_referral');
-        console.log("[REFERRAL_HANDSHAKE_SUCCESS] Handshake locked.");
-      }
+      localStorage.removeItem('pending_referral');
     } catch (e) {
       console.warn("[REFERRAL_HANDSHAKE_FAIL]", e);
     }
@@ -126,26 +110,19 @@ export default function WalletSessionPage() {
     setStatus('Finalizing Node...');
     
     try {
-      // CRITICAL TRIGGER: Execute the referral handshake
       await finalizeReferral(user.id);
 
-      // Finalize profile node
-      const { error: dbError } = await supabase
+      await supabase
         .from('profiles')
         .upsert({ 
           id: user.id,
           onboarding_completed: true,
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
-        
-      if (dbError) {
-          console.warn("Profile sync advisory:", dbError.message);
-      }
 
       await refreshProfile();
       router.push('/');
     } catch (e) {
-      console.error("ONBOARDING_FINISH_ERROR:", e);
       router.push('/');
     } finally {
       setIsProcessing(false);
@@ -158,7 +135,8 @@ export default function WalletSessionPage() {
     setStatus('Deriving Nodes...');
     startTimer();
     try {
-      await generateWallet();
+      const mnemonic = await generateWallet();
+      // Auto-backup to vault handled inside generateWallet sync logic
       setStatus('Complete!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
@@ -192,7 +170,10 @@ export default function WalletSessionPage() {
     setStatus('Connecting to Cloud...');
     startTimer();
     try {
+      // 1. Recover from Vault Handshake
       await restoreFromCloud(setStatus);
+      
+      // 2. Finalize
       setStatus('Access Restored!');
       setTimeout(finishOnboarding, 800);
     } catch (e: any) {
@@ -323,7 +304,7 @@ export default function WalletSessionPage() {
         <div className="pt-8 flex flex-col items-center gap-3 opacity-20">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-white" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-white">Registry Integrity Handshake v2.1</span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white">Registry Integrity Handshake v3.1</span>
           </div>
         </div>
       </motion.div>
