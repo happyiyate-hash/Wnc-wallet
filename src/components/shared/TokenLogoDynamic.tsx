@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
@@ -21,7 +21,8 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 3.0.0 (IndexedDB Supported)
+ * Version: 4.0.0 (Persistent Handshake)
+ * Optimized for zero-latency hydration via IndexedDB.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -35,29 +36,35 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v8_${slug}_${sym}`;
+    return `logo_v9_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const handshakeAttempted = useRef(false);
 
   useEffect(() => {
     async function resolve() {
+      if (handshakeAttempted.current) return;
+      
       setIsLoading(true);
       setHasError(false);
 
       // 1. CHECK PERSISTENT REGISTRY (IndexedDB)
+      // Millisecond-latency check for existing branding
       const cached = await registryDb.getLogo(cacheKey);
       if (cached) {
         setResolvedUrl(cached);
         setIsLoading(false);
+        handshakeAttempted.current = true;
         return;
       }
 
-      // 2. PRIMARY: Direct Path Resolution
+      // 2. PRIMARY: Metadata URL Check
       if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         let finalUrl = logoUrl;
+        // Prepend institutional CDN base for relative paths
         if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
           const base = 'https://gcghriodmljkusdduhzl.supabase.co';
           finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
@@ -66,10 +73,11 @@ export default function TokenLogoDynamic({
         setResolvedUrl(finalUrl);
         await registryDb.saveLogo(cacheKey, finalUrl);
         setIsLoading(false);
+        handshakeAttempted.current = true;
         return;
       }
 
-      // 3. SECONDARY: Server Handshake Fallback
+      // 3. SECONDARY: Server Handshake (Fallback Discovery)
       if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
@@ -77,14 +85,16 @@ export default function TokenLogoDynamic({
             setResolvedUrl(direct);
             await registryDb.saveLogo(cacheKey, direct);
             setIsLoading(false);
+            handshakeAttempted.current = true;
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_REGISTRY] Discovery deferred.");
+          console.warn("[LOGO_REGISTRY] Handshake deferred.");
         }
       }
 
       setIsLoading(false);
+      handshakeAttempted.current = true;
     }
 
     resolve();
@@ -105,7 +115,7 @@ export default function TokenLogoDynamic({
         alt={alt}
         width={size}
         height={size}
-        className={`rounded-full object-cover bg-white/5 ${className}`}
+        className={cn("rounded-full object-cover bg-white/5", className)}
         unoptimized
         onError={() => setHasError(true)}
       />

@@ -7,7 +7,7 @@ import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (FAIL-FAST)
- * Version: 4.5.0 (8s Safety Sentinel)
+ * Version: 4.6.0 (Unified Safety Lifecycle)
  */
 export function useWalletEngine({
   wallets,
@@ -46,15 +46,13 @@ export function useWalletEngine({
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     
-    // SAFETY TIMEOUT: Force-release loading barrier after 8 seconds
-    // Ensures the terminal doesn't hang forever if RPCs are slow
+    // SAFETY TIMEOUT: Definitive barrier release after 8 seconds
     const safetyTimer = setTimeout(() => {
-        console.log("[DATA_ENGINE] Safety Sentinel triggered. Dropping barrier.");
         setHasFetchedInitialData(true);
     }, 8000);
     
     try {
-      // PHASE 1: Active Node Handshake
+      // PHASE 1: Active Network Handshake (Mission Critical)
       const activeBalances = await fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
@@ -67,18 +65,18 @@ export function useWalletEngine({
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
       lastSyncTimestampRef.current[viewingNetwork.chainId] = Date.now();
       
-      // ACTIVE NODE VERIFIED: Immediate release
+      // PHASE 1 COMPLETE: Immediate barrier release
       clearTimeout(safetyTimer);
       setHasFetchedInitialData(true);
 
-      // PHASE 2: Background Registry Sequence
+      // PHASE 2: Background Registry Sequence (Parallel Discovery)
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
       
       for (const chain of otherChains) {
         if (signal.aborted || !wallets) break;
 
         const lastSync = lastSyncTimestampRef.current[chain.chainId] || 0;
-        if (Date.now() - lastSync < 60000) continue;
+        if (Date.now() - lastSync < 60000) continue; // Throttle background refreshes
 
         const secondaryBalances = await fetchBalancesForChain(chain, wallets, infuraApiKey, userAddedTokens);
         
@@ -86,12 +84,14 @@ export function useWalletEngine({
         setBalances(prev => ({ ...prev, [chain.chainId]: secondaryBalances }));
         lastSyncTimestampRef.current[chain.chainId] = Date.now();
         
-        await sleep(400); 
+        await sleep(400); // Institutional breather
       }
     } catch (e) {
-      clearTimeout(safetyTimer);
-      setHasFetchedInitialData(true); 
+      console.warn("[DATA_ENGINE_ADVISORY] Handshake deferred.");
     } finally { 
+      // FINAL GUARD: Ensure barrier is dropped no matter the outcome
+      setHasFetchedInitialData(true);
+      clearTimeout(safetyTimer);
       setIsRefreshing(false); 
       isRefreshingRef.current = false;
     }
