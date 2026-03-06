@@ -61,7 +61,6 @@ const formatSmartAmount = (val: number) => {
   if (val === 0) return '0.00';
   if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   
-  // Find first significant digit
   const str = val.toFixed(10);
   const significantMatch = str.match(/0\.0*[1-9]/);
   if (significantMatch) {
@@ -202,7 +201,7 @@ function SwapClient() {
         else if (providerType === 'LIFI') {
             const params = new URLSearchParams({ 
                 fromChain: (fromToken.chainId ?? 1).toString(), 
-                toChain: (toChainId: toToken.chainId ?? 1).toString(), 
+                toChain: (toToken.chainId ?? 1).toString(), 
                 fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
                 toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
                 fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
@@ -211,11 +210,11 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-            const q = await res.json();
-
             if (!res.ok) {
-                throw new Error(q.details || q.error || "Bridge Protocol Failed.");
+                const err = await res.json();
+                throw new Error(err.details || err.error || "Bridge Protocol Failed.");
             }
+            const q = await res.json();
 
             const platformFeeUsd = tradeValueUsd * 0.01;
             const receiveAmountReduction = platformFeeUsd / (toTokenPrice || 1);
