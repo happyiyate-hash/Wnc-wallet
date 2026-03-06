@@ -16,7 +16,7 @@ import Link from 'next/link';
 /**
  * TERMINAL LOGIN NODE
  * Strictly handles institutional entry. 
- * Updated to bg-transparent to reveal institutional watermark.
+ * Updated with high-fidelity error handshakes for production reliability.
  */
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +35,17 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
+    console.log("[AUTH_HANDSHAKE] Initializing Login...");
+
+    if (!supabase) {
+      console.error("[AUTH_NODE_ERROR] Supabase client is null. Check environment variables.");
+      toast({
+        variant: "destructive",
+        title: "Auth Node Offline",
+        description: "The authentication service is not configured. Please contact the administrator."
+      });
+      return;
+    }
     
     setIsLoading(true);
     setUnconfirmedError(false);
@@ -43,17 +53,20 @@ export default function LoginPage() {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
-      // DETECT UNVERIFIED IDENTITY - Show alert, NOT the panel automatically
+      // DETECT UNVERIFIED IDENTITY
       if (error?.message === 'Email not confirmed') {
+        console.warn("[AUTH_HANDSHAKE] Email verification required.");
         setUnconfirmedError(true);
         return;
       }
 
       if (error) throw error;
       
+      console.log("[AUTH_HANDSHAKE] Identity Verified.");
       toast({ title: "Welcome back!", description: "Identity node verified." });
       router.replace('/');
     } catch (error: any) {
+      console.error("[AUTH_HANDSHAKE_FAIL]", error.message);
       toast({ 
         variant: "destructive", 
         title: "Authentication Error", 
@@ -66,11 +79,11 @@ export default function LoginPage() {
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || verificationCode.length !== 6) return;
+    if (!email || verificationCode.length !== 6 || !supabase) return;
 
     setIsVerifying(true);
     try {
-      const { error } = await supabase!.auth.verifyOtp({
+      const { error } = await supabase.auth.verifyOtp({
         email,
         token: verificationCode,
         type: 'signup'
@@ -93,10 +106,10 @@ export default function LoginPage() {
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email || !supabase) return;
     setIsResending(true);
     try {
-      const { error } = await supabase!.auth.resend({
+      const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
       });
@@ -110,7 +123,16 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!supabase) return;
+    console.log("[AUTH_HANDSHAKE] Initializing Google OAuth...");
+    if (!supabase) {
+      toast({
+        variant: "destructive",
+        title: "Auth Node Offline",
+        description: "OAuth services are currently unavailable."
+      });
+      return;
+    }
+    
     setIsGoogleLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -121,6 +143,7 @@ export default function LoginPage() {
       });
       if (error) throw error;
     } catch (error: any) {
+      console.error("[OAUTH_FAIL]", error.message);
       toast({ variant: "destructive", title: "OAuth Error", description: error.message });
       setIsGoogleLoading(false);
     }

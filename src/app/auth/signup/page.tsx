@@ -15,6 +15,7 @@ import Link from 'next/link';
 /**
  * SIGNUP INTERACTION NODE
  * Captures referral links and injects them into the identity metadata.
+ * Hardened with high-fidelity status feedback.
  */
 function SignupContent() {
   const router = useRouter();
@@ -55,7 +56,17 @@ function SignupContent() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
+    console.log("[AUTH_HANDSHAKE] Initializing Provisioning...");
+
+    if (!supabase) {
+      console.error("[AUTH_NODE_ERROR] Supabase client is null.");
+      toast({
+        variant: "destructive",
+        title: "Auth Node Offline",
+        description: "The authentication service is not configured correctly."
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -71,9 +82,11 @@ function SignupContent() {
       });
       if (error) throw error;
       
+      console.log("[AUTH_HANDSHAKE] Provisioning Success.");
       toast({ title: "Node Provisioned", description: "Verification code sent to your inbox." });
       setShowVerifyPanel(true);
     } catch (error: any) {
+      console.error("[AUTH_HANDSHAKE_FAIL]", error.message);
       toast({ 
         variant: "destructive", 
         title: "Provisioning Error", 
@@ -86,11 +99,11 @@ function SignupContent() {
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || verificationCode.length !== 6) return;
+    if (!email || verificationCode.length !== 6 || !supabase) return;
 
     setIsVerifying(true);
     try {
-      const { error } = await supabase!.auth.verifyOtp({
+      const { error } = await supabase.auth.verifyOtp({
         email,
         token: verificationCode,
         type: 'signup'
@@ -114,10 +127,10 @@ function SignupContent() {
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email || !supabase) return;
     setIsResending(true);
     try {
-      const { error } = await supabase!.auth.resend({
+      const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
       });
@@ -131,7 +144,16 @@ function SignupContent() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!supabase) return;
+    console.log("[AUTH_HANDSHAKE] Initializing Google OAuth...");
+    if (!supabase) {
+      toast({
+        variant: "destructive",
+        title: "Auth Node Offline",
+        description: "Google Authority services are currently unavailable."
+      });
+      return;
+    }
+
     setIsGoogleLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -145,6 +167,7 @@ function SignupContent() {
       });
       if (error) throw error;
     } catch (error: any) {
+      console.error("[OAUTH_FAIL]", error.message);
       toast({ variant: "destructive", title: "OAuth Error", description: error.message });
       setIsGoogleLoading(false);
     }
@@ -287,13 +310,13 @@ function SignupContent() {
 
                 <form onSubmit={handleVerify} className="space-y-6">
                   <div className="space-y-4">
-                    <Input 
+                    <input 
                       type="text" 
                       placeholder="000000"
                       maxLength={6}
                       value={verificationCode}
                       onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
-                      className="h-16 bg-white/5 border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white shadow-2xl"
+                      className="h-16 w-full bg-white/5 border border-white/10 rounded-2xl text-center text-3xl font-mono tracking-[0.5em] focus-visible:ring-primary text-white shadow-2xl outline-none"
                       required
                     />
                     <div className="flex justify-center">
