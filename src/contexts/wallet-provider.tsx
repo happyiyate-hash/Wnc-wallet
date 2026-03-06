@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -171,16 +172,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error("Auth required");
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
+    
+    // ATOMIC SAVE SEQUENCE
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
+    const targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    
     setWallets(derived);
-    let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
-    await syncAddressesToCloud(user.id, derived, targetAcc);
-    await saveVaultToCloud(user.id, mnemonic);
+    
+    // Cloud Handshake (Background)
+    syncAddressesToCloud(user.id, derived, targetAcc);
+    saveVaultToCloud(user.id, mnemonic);
+    
     setTimeout(() => runCloudDiagnostic(), 500);
     return mnemonic;
   }, [user, profile, runCloudDiagnostic]);
@@ -189,47 +197,77 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error("Auth required");
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid node phrase.");
+    
+    // ATOMIC IMPORT SEQUENCE
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
+    const targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    
     setWallets(derived);
-    let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
-    await syncAddressesToCloud(user.id, derived, targetAcc);
-    await saveVaultToCloud(user.id, mnemonic);
+    
+    // Cloud Handshake (Background)
+    syncAddressesToCloud(user.id, derived, targetAcc);
+    saveVaultToCloud(user.id, mnemonic);
+    
     setTimeout(() => runCloudDiagnostic(), 500);
   }, [user, profile, runCloudDiagnostic]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("Registry node missing.");
+    
     setIsWalletLoading(true);
-    onStatusUpdate?.('Decrypting Vault...');
+    onStatusUpdate?.('Accessing Cloud Vault...');
+    
     try {
+      // 1. RECOVER MNEMONIC
       if (profile.vault_phrase && profile.iv) {
+        onStatusUpdate?.('Decrypting Phrase...');
         const res = await fetch('/api/wallet/decrypt-phrase', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv }) 
         });
         const { text: mnemonic } = await res.json();
+        
         if (mnemonic) {
+          onStatusUpdate?.('Deriving Multi-Chain Nodes...');
           localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
           const derived = await deriveAllWallets(mnemonic);
+          
           const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
-          await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: profile.account_number || '', timestamp: Date.now() });
+          const targetAcc = profile.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+          
+          await registryDb.saveVault({ 
+            id: fingerprint, 
+            wallets: derived, 
+            accountNumber: targetAcc, 
+            timestamp: Date.now() 
+          });
+          
+          // ATOMIC STATE UPDATE
           setWallets(derived);
+          setAccountNumber(targetAcc);
+          localStorage.setItem(`account_number_${user.id}`, targetAcc);
         }
+      } 
+      // 2. RECOVER ACCOUNT ONLY (If no phrase backup)
+      else if (profile.account_number) {
+        setAccountNumber(profile.account_number);
+        localStorage.setItem(`account_number_${user.id}`, profile.account_number);
       }
-      if (profile.account_number) { 
-        localStorage.setItem(`account_number_${user.id}`, profile.account_number); 
-        setAccountNumber(profile.account_number); 
-      }
-      toast({ title: "Node Reclaimed" });
+
+      toast({ title: "Node Reclaimed", description: "Identity registry successfully restored." });
+      onStatusUpdate?.('Verifying Integrity...');
       setTimeout(() => runCloudDiagnostic(), 1000);
+      
     } catch (e: any) { 
-      throw new Error("Cloud handshake failed."); 
+      console.error("[RECOVERY_CRITICAL]", e);
+      throw new Error("Institutional recovery failed. Handshake interrupted."); 
     } finally { 
       setIsWalletLoading(false); 
     }
@@ -250,6 +288,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cardano_address: null, tron_address: null, algorand_address: null, 
         hedera_address: null, tezos_address: null, aptos_address: null, sui_address: null 
       }).eq('id', user.id);
+      
       registryDb.purgeAll(); 
       purgeLocalWalletCache(user.id);
       setWallets(null); 
@@ -292,10 +331,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const cached = await registryDb.getVault(fingerprint);
           if (cached) {
             setWallets(cached.wallets);
+            if (!savedAcc) setAccountNumber(cached.accountNumber);
           } else {
             const derived = await deriveAllWallets(savedMnemonic); 
             setWallets(derived); 
-            await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: savedAcc || '', timestamp: Date.now() });
+            await registryDb.saveVault({ 
+              id: fingerprint, 
+              wallets: derived, 
+              accountNumber: savedAcc || '', 
+              timestamp: Date.now() 
+            });
           }
         }
         

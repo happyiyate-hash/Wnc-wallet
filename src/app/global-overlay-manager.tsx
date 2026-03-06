@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
@@ -17,15 +17,21 @@ export default function GlobalOverlayManager() {
   const { wallets, isInitialized, isWalletLoading } = useWallet();
   const pathname = usePathname();
   const router = useRouter();
+  
+  // Transition Sentinel: Prevents redirect flickering during derivation
+  const isRecoveringRef = useRef(false);
 
   const isAuthRoute = pathname.startsWith('/auth');
   const isWalletSessionRoute = pathname === '/wallet-session';
   const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
-    // STAGE 0: HYDRATION BARRIER
+    // STAGE 0: HYDRATION & RECOVERY BARRIER
     // Wait for all cryptographic and auth nodes to be stable before evaluating guards
-    if (userLoading || !isInitialized || isWalletLoading) return;
+    if (userLoading || !isInitialized || isWalletLoading) {
+      if (isWalletLoading) isRecoveringRef.current = true;
+      return;
+    }
 
     // STAGE 1: ATOMIC SESSION GUARD
     if (!user) {
@@ -49,6 +55,7 @@ export default function GlobalOverlayManager() {
     
     // REDIRECT TO SETUP: If we are not on setup and have no wallet
     if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
+      // If we just finished "recovering" but wallets are STILL null, then we redirect
       router.replace('/wallet-session');
       return;
     }
@@ -70,6 +77,8 @@ export default function GlobalOverlayManager() {
     if (isSetupTerminal && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       if (pathname !== '/') router.replace('/');
     }
+
+    isRecoveringRef.current = false;
 
   }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 
