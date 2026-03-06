@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * INSTITUTIONAL 0X PROTOCOL PROXY
- * Version: 1.0.0
+ * Version: 2.0.0 (Hardened Production Node)
  * 
  * Safely handles indicative price and execution quote requests.
- * Enforces the 1.00% (100 BPS) platform fee.
+ * Enforces the 1.00% (100 BPS) platform fee on the server side.
  */
 
 const ZEROX_API_KEY = '5eebaf6f-e024-41d2-a18f-e05c241129c3';
@@ -30,10 +30,10 @@ export async function GET(req: NextRequest) {
   
   const baseUrl = BASE_URLS[chainId];
   if (!baseUrl) {
-    return NextResponse.json({ error: `Chain ${chainId} not supported by 0x` }, { status: 400 });
+    return NextResponse.json({ error: `Chain ${chainId} not supported by 0x Protocol` }, { status: 400 });
   }
 
-  // Forward all other relevant params
+  // Construct hardened parameter list
   const params = new URLSearchParams();
   searchParams.forEach((value, key) => {
     if (key !== 'chainId' && key !== 'mode') {
@@ -41,14 +41,16 @@ export async function GET(req: NextRequest) {
     }
   });
 
-  // Strict Institutional Fee Parameters (1.00%)
+  /**
+   * REVENUE ENFORCEMENT (1.00%)
+   * We apply this on the server to prevent frontend manipulation.
+   */
   params.set('buyTokenPercentageFee', '0.01');
   params.set('feeRecipient', '0x7f3f4206017C0aACF7A94C9eF7B80563984aD288');
 
   try {
     const targetUrl = `${baseUrl}/swap/v1/${mode}?${params.toString()}`;
-    console.log(`[0X_PROXY] Dispatching to: ${targetUrl}`);
-
+    
     const response = await fetch(targetUrl, {
       headers: {
         '0x-api-key': ZEROX_API_KEY,
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('[0X_PROXY_ERROR]', data);
+      console.error('[0X_PROXY_FAILURE]', data);
       return NextResponse.json({ 
         error: data.reason || '0x Protocol Handshake Failed',
         details: data.validationErrors
@@ -69,6 +71,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   } catch (error: any) {
     console.error('[0X_PROXY_CRITICAL]', error.message);
-    return NextResponse.json({ error: 'Internal 0x Proxy Failure' }, { status: 500 });
+    return NextResponse.json({ error: 'Institutional Proxy Node Offline' }, { status: 500 });
   }
 }

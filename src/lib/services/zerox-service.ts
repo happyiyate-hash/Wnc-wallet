@@ -2,16 +2,16 @@
 'use client';
 
 /**
- * INSTITUTIONAL 0X AGGREGATOR SERVICE (PROXY ENABLED)
- * Version: 3.0.0 (Revenue & Stability Update)
+ * INSTITUTIONAL 0X AGGREGATOR SERVICE (PROXY ONLY)
+ * Version: 4.0.0 (Handshake Hardening)
  * 
- * Routes requests through the secure backend proxy to prevent 
- * client-side key exposure and parameter malformation.
+ * Strictly routes all requests through the backend proxy.
+ * Prevents CORS failures and API key exposure.
  */
 
 export const zeroXService = {
   /**
-   * Fetches an indicative price from the proxy.
+   * Fetches an indicative price from the secure proxy.
    */
   async getPrice(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress?: string) {
     const params = new URLSearchParams({
@@ -28,14 +28,14 @@ export const zeroXService = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || '0x Price Handshake Failed');
+      throw new Error(data.error || '0x Protocol Handshake Failed');
     }
 
     return data;
   },
 
   /**
-   * Generates a signed quote for execution via the proxy.
+   * Generates a signed quote for execution via the secure proxy.
    */
   async getQuote(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress: string) {
     const params = new URLSearchParams({
@@ -51,11 +51,11 @@ export const zeroXService = {
     const data = await response.json();
 
     if (!response.ok) {
-      if (data.details) {
+      if (data.details && data.details.length > 0) {
         const firstErr = data.details[0];
-        throw new Error(`0x Validation: ${firstErr.reason} (${firstErr.field})`);
+        throw new Error(`0x Node: ${firstErr.reason} (${firstErr.field})`);
       }
-      throw new Error(data.error || '0x Quote Handshake Failed');
+      throw new Error(data.error || '0x Execution Handshake Failed');
     }
 
     return data;

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -212,7 +213,7 @@ function SwapClient() {
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.details || errData.error || "Bridge failed.");
+                throw new Error(errData.details || errData.error || "Bridge Protocol Failed.");
             }
 
             const q = await res.json();
@@ -255,20 +256,20 @@ function SwapClient() {
         setQuotes([quote]); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
-        await new Promise(r => setTimeout(r, 300)); 
+        await new Promise(r => setTimeout(r, 200)); 
         setQuotePhase('SCANNING');
         setActiveScanIndex(0); 
-        await new Promise(r => setTimeout(r, 300)); 
+        await new Promise(r => setTimeout(r, 200)); 
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(quote.id); 
-        await new Promise(r => setTimeout(r, 400)); 
+        await new Promise(r => setTimeout(r, 300)); 
         setQuotePhase('SHOW_VISUAL'); 
-        await new Promise(r => setTimeout(r, 600)); 
+        await new Promise(r => setTimeout(r, 400)); 
         setQuotePhase('COMPLETED');
 
       } catch (e: any) { 
         if (currentQuoteId === quoteIdRef.current) {
-            setFetchError(e.message || "Route deferred."); 
+            setFetchError(e.message || "Institutional Handshake Deferred."); 
             setQuotePhase('IDLE'); 
         }
       } finally { 
@@ -383,7 +384,7 @@ function SwapClient() {
       setTimeout(() => { setIsExecuting(false); setAmount(''); router.push('/profile'); }, 3000);
 
     } catch (e: any) {
-      setExecutionError(e.message || "Aborted.");
+      setExecutionError(e.message || "Handshake Aborted.");
       setExecutionPhase('FAILED');
       setTimeout(() => setIsExecuting(false), 4000);
     }
