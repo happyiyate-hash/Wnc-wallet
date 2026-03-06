@@ -1,9 +1,9 @@
 'use client';
 
 import { fetchPriceMap, fetchPricesByContract, COINGECKO_PLATFORM_MAP } from '@/lib/coingecko';
-import { logoSupabase } from '@/lib/supabase/logo-client';
 import type { AssetRow, ChainConfig } from '@/lib/types';
 import { getInitialAssets } from '@/lib/wallets/balances';
+import { fetchTokenPricesFromMetadata } from '@/lib/getTokenLogo';
 
 /**
  * INSTITUTIONAL MARKET DYNAMICS SERVICE
@@ -19,17 +19,11 @@ export interface PriceResult {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Calculates percentage change between two values.
- */
 export function calculateDelta(current: number, previous: number): number {
   if (!previous || previous === 0) return 0;
   return ((current - previous) / previous) * 100;
 }
 
-/**
- * Generates a deterministic "Daily Opening Price" for internal assets.
- */
 function getWncOpeningPrice(currentPrice: number): number {
   const now = new Date();
   const dateString = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
@@ -47,11 +41,6 @@ function getWncOpeningPrice(currentPrice: number): number {
   return currentPrice * (1 + variancePercent);
 }
 
-/**
- * STAGED PRICE DISCOVERY HANDSHAKE (UNIVERSAL)
- * Fetches market data for all known assets across all chains.
- * Implements Batch Rate-Limit Protection.
- */
 export async function fetchGlobalMarketData(
   chains: ChainConfig[],
   customTokens: AssetRow[],
@@ -61,7 +50,6 @@ export async function fetchGlobalMarketData(
   const platformTokens: { [platform: string]: Set<string> } = {};
   const allKnownAssets: AssetRow[] = [];
 
-  // 1. REGISTRY MAPPING
   chains.forEach(chain => {
     const base = getInitialAssets(chain.chainId);
     allKnownAssets.push(...base.map(a => ({ ...a, chainId: chain.chainId }) as AssetRow));
@@ -95,7 +83,7 @@ export async function fetchGlobalMarketData(
         });
     }
 
-    // STAGE 2: SEQUENTIAL CONTRACT BATCHING (Rate-Limit Sentinel)
+    // STAGE 2: Platform Sequence
     const platforms = Object.entries(platformTokens);
     for (const [platform, addresses] of platforms) {
         const contractPrices = await fetchPricesByContract(platform, Array.from(addresses));
@@ -105,41 +93,34 @@ export async function fetchGlobalMarketData(
                 change: data.usd_24h_change || 0 
             };
         });
-        // Institutional Breather between chain nodes
         await sleep(200);
     }
 
-    // STAGE 3: INSTITUTIONAL FALLBACK (CDN/Metadata Project)
+    // STAGE 3: SECURE METADATA HANDSHAKE (Server Action)
     const missingTokens = allKnownAssets.filter(a => {
         const id = (a.priceId || a.coingeckoId || a.address || '').toLowerCase();
         return !newPrices[id];
     });
 
-    if (missingTokens.length > 0 && logoSupabase) {
-        try {
-            const contractList = missingTokens.map(t => (t.address || '').toLowerCase()).filter(Boolean);
-            const { data: metadataPrices } = await logoSupabase
-                .from('token_metadata')
-                .select('contract_address, token_details')
-                .in('contract_address', contractList);
+    if (missingTokens.length > 0) {
+        const contractList = missingTokens.map(t => (t.address || '').toLowerCase()).filter(Boolean);
+        // Dispatch secure handshake to server
+        const metadataPrices = await fetchTokenPricesFromMetadata(contractList);
 
-            if (metadataPrices) {
-                metadataPrices.forEach(m => {
-                    const price = m.token_details?.priceUsd;
-                    if (price) {
-                        newPrices[m.contract_address.toLowerCase()] = { 
-                            price: price, 
-                            change: m.token_details?.pctChange24h || 0 
-                        };
-                    }
-                });
-            }
-        } catch (e) {
-            console.warn("[CDN_FALLBACK_ADVISORY] Metadata sync deferred.");
+        if (metadataPrices) {
+            metadataPrices.forEach(m => {
+                const price = m.token_details?.priceUsd;
+                if (price) {
+                    newPrices[m.contract_address.toLowerCase()] = { 
+                        price: price, 
+                        change: m.token_details?.pctChange24h || 0 
+                    };
+                }
+            });
         }
     }
 
-    // 2. INTERNAL SETTLEMENT VALUATION (WNC)
+    // WNC VALUATION
     const ngnRate = currentRates['NGN'] || 1650;
     const wncCurrentPrice = 1 / ngnRate;
     const wncOpeningPrice = getWncOpeningPrice(wncCurrentPrice);
@@ -151,7 +132,7 @@ export async function fetchGlobalMarketData(
     };
 
   } catch (e) {
-    console.warn("[MARKET_SERVICE_ERROR] Handshake interrupted:", e);
+    console.warn("[MARKET_SERVICE_ERROR] Handshake interrupted.");
   }
 
   return newPrices;

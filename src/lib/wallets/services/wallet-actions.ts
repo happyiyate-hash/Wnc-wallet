@@ -1,4 +1,3 @@
-
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -6,8 +5,10 @@ import type { WalletWithMetadata } from '@/lib/types';
 
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
+ * Version: 3.0.0 (Standardized SmarterSeller Storage)
+ * 
  * Handles data persistence, cloud synchronization, and cache management.
- * Optimized for secure encryption-first storage.
+ * Uses shared ss-mnemonic- and ss-infura-key- prefixes for ecosystem interop.
  */
 
 export async function syncAddressesToCloud(
@@ -64,7 +65,7 @@ export async function saveVaultToCloud(userId: string, mnemonic: string) {
         'Content-Type': 'application/json', 
         'Authorization': `Bearer ${session?.access_token}` 
       },
-      body: JSON.stringify({ phrase: mnemonic })
+      body: JSON.stringify({ text: mnemonic })
     });
     
     if (res.ok) {
@@ -79,10 +80,6 @@ export async function saveVaultToCloud(userId: string, mnemonic: string) {
   }
 }
 
-/**
- * ENCRYPTED RPC NODE SYNC
- * Secures the Infura API key in the cloud registry using the institutional encryption protocol.
- */
 export async function saveInfuraToCloud(userId: string, apiKey: string) {
   if (!supabase) return;
   try {
@@ -106,39 +103,27 @@ export async function saveInfuraToCloud(userId: string, apiKey: string) {
       }).eq('id', userId);
       
       if (error) throw error;
-    } else {
-      throw new Error("ENCRYPTION_SERVICE_REJECTED");
     }
   } catch (e) {
     console.error("Infura Backup Advisory:", e);
-    throw e;
   }
 }
 
 export function purgeLocalWalletCache(userId: string) {
   const keys = [
-    'wallet_mnemonic', 
-    'infura_api_key', 
+    'ss-mnemonic', 
+    'ss-infura-key', 
+    'ss-wallet-balances',
     'account_number', 
     'custom_tokens', 
     'hidden_tokens',
     'profile_cache',
     'wallet_addr_cache',
     'wallet_fingerprint',
-    'balance_cache',
-    'registry_audit_v2' // Correct key pattern for the sentinel fingerprint
+    'registry_audit_v2'
   ];
   keys.forEach(key => {
-    // Clear both direct and user-prefixed keys
-    localStorage.removeItem(`${key}_${userId}`);
+    localStorage.removeItem(`${key}-${userId}`);
     localStorage.removeItem(key);
-    
-    // Specially clear the deterministic registry fingerprints
-    // We scan for v2 audit tokens to ensure fresh setup if user logs out
-    Object.keys(localStorage).forEach(lsKey => {
-        if (lsKey.includes('registry_audit_v2') && lsKey.includes(userId)) {
-            localStorage.removeItem(lsKey);
-        }
-    });
   });
 }

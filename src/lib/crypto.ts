@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 /**
  * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL
- * Version: 2.2.0 (Environment Synced)
+ * Version: 2.3.0 (Buffer Resilience Update)
  * Algorithm: AES-256-CBC
  * Key Derivation: SHA-256 Hash of Master Key HEX
  */
@@ -22,7 +22,6 @@ function getInstitutionalKey(): Buffer {
 
 /**
  * Encrypts a plaintext string into a hex ciphertext and hex IV.
- * Compatible with SmarterSeller profiles table logic.
  */
 export function encryptPhrase(text: string): { encrypted: string; iv: string } {
   const key = getInstitutionalKey();
@@ -40,7 +39,8 @@ export function encryptPhrase(text: string): { encrypted: string; iv: string } {
 }
 
 /**
- * Decrypts hex ciphertext using a provided hex IV and the Master Key.
+ * Decrypts hex ciphertext using a provided hex IV.
+ * Hardened to handle binary buffer protocols with institutional precision.
  */
 export function decryptPhrase(encryptedText: string, ivHex: string): string {
   try {
@@ -49,17 +49,18 @@ export function decryptPhrase(encryptedText: string, ivHex: string): string {
     const encryptedData = Buffer.from(encryptedText, 'hex');
     
     if (iv.length !== IV_LENGTH) {
-      throw new Error(`IV length mismatch: expected ${IV_LENGTH}, got ${iv.length}`);
+      throw new Error(`IV_LENGTH_MISMATCH: Expected ${IV_LENGTH}, got ${iv.length}`);
     }
 
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    // Explicit buffer-to-string decryption to prevent encoding errors
+    let decrypted = decipher.update(encryptedData);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
 
-    return decrypted;
+    return decrypted.toString('utf8');
   } catch (error: any) {
     console.error("CANONICAL_DECRYPT_FAILURE:", error.message);
-    throw new Error("DECRYPTION_FAILED");
+    throw new Error("DECRYPTION_PROTOCOL_ERROR");
   }
 }

@@ -108,7 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async () => {
       try {
-        const savedInfura = localStorage.getItem(`infura_api_key_${user.id}`);
+        const savedInfura = localStorage.getItem(`ss-infura-key-${user.id}`);
         if (savedInfura) setInfuraApiKeyState(savedInfura);
 
         const savedAcc = localStorage.getItem(`account_number_${user.id}`);
@@ -120,7 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           if (found) setViewingNetwork(found);
         }
 
-        const savedMnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+        const savedMnemonic = localStorage.getItem(`ss-mnemonic-${user.id}`);
         if (savedMnemonic) {
           const cacheKey = `wallet_addr_cache_${user.id}`;
           const fingerprintKey = `wallet_fingerprint_${user.id}`;
@@ -139,7 +139,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const cachedBalances = localStorage.getItem(`balance_cache_${user.id}`);
+        const cachedBalances = localStorage.getItem(`ss-wallet-balances-${user.id}`);
         if (cachedBalances) {
           try {
             const { data } = JSON.parse(cachedBalances);
@@ -168,13 +168,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
 
-  const updateNetwork = useCallback((network: ChainConfig) => {
-    setViewingNetwork(network);
-    if (user) {
-      localStorage.setItem(`active_network_id_${user.id}`, network.chainId.toString());
-    }
-  }, [user]);
-
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
@@ -183,7 +176,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setBalances(prev => {
       const next = update(prev);
       if (user) {
-        localStorage.setItem(`balance_cache_${user.id}`, JSON.stringify({ data: next, timestamp: Date.now() }));
+        localStorage.setItem(`ss-wallet-balances-${user.id}`, JSON.stringify({ data: next, timestamp: Date.now() }));
       }
       return next;
     });
@@ -206,6 +199,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       refresh();
     }
   }, [isInitialized, isWalletLoading, !!wallets, hasFetchedInitialData, refresh]);
+
+  const updateNetwork = useCallback((network: ChainConfig) => {
+    setViewingNetwork(network);
+    if (user) {
+      localStorage.setItem(`active_network_id_${user.id}`, network.chainId.toString());
+    }
+  }, [user]);
 
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
@@ -267,7 +267,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
     
-    localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+    localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
@@ -286,7 +286,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     
-    localStorage.setItem(`wallet_mnemonic_${user.id}`, mnemonic);
+    localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     
@@ -301,7 +301,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const saveToVault = useCallback(async () => {
     if (!user || !wallets) return;
     try {
-      const mnemonic = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+      const mnemonic = localStorage.getItem(`ss-mnemonic-${user.id}`);
       if (!mnemonic) throw new Error("Local mnemonic not found");
       await saveVaultToCloud(user.id, mnemonic);
       toast({ title: "Vault Synchronized" });
@@ -338,7 +338,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication required.");
     
-    onStatusUpdate?.('Restoring Registry Nodes...');
+    setIsWalletLoading(true);
+    onStatusUpdate?.('Decrypting Registry Nodes...');
     
     try {
       if (profile.vault_phrase) {
@@ -348,10 +349,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
         });
         const data = await res.json();
-        if (data.phrase) {
-          localStorage.setItem(`wallet_mnemonic_${user.id}`, data.phrase);
-          const derived = await deriveAllWallets(data.phrase);
+        const mnemonic = data.text || data.phrase;
+        
+        if (mnemonic) {
+          localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
+          onStatusUpdate?.('Deriving Multi-Chain Wallets...');
+          const derived = await deriveAllWallets(mnemonic);
+          
+          if (profile.vault_infura_key && profile.infura_iv) {
+            const resKey = await fetch('/api/wallet/decrypt-phrase', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+              body: JSON.stringify({ encrypted: profile.vault_infura_key, iv: profile.infura_iv })
+            });
+            const keyData = await resKey.json();
+            const apiKey = keyData.text;
+            if (apiKey) {
+              localStorage.setItem(`ss-infura-key-${user.id}`, apiKey);
+              setInfuraApiKeyState(apiKey);
+            }
+          }
+
           setWallets(derived);
+        } else {
+          throw new Error("Decryption handshake failed.");
         }
       }
 
@@ -361,8 +382,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       toast({ title: "Identity Recovered" });
-    } catch (e) {
-      throw new Error("Handshake failed.");
+    } catch (e: any) {
+      throw new Error(e.message || "Handshake failed.");
+    } finally {
+      setIsWalletLoading(false);
     }
   }, [user, profile, toast]);
 
@@ -390,14 +413,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         await saveInfuraToCloud(user.id, key);
         setInfuraApiKeyState(key);
-        localStorage.setItem(`infura_api_key_${user.id}`, key);
+        localStorage.setItem(`ss-infura-key-${user.id}`, key);
       } catch (e) {
         setInfuraApiKeyState(key);
-        localStorage.setItem(`infura_api_key_${user.id}`, key);
+        localStorage.setItem(`ss-infura-key-${user.id}`, key);
       }
     } else {
       setInfuraApiKeyState(null);
-      localStorage.removeItem(`infura_api_key_${user.id}`);
+      localStorage.removeItem(`ss-infura-key-${user.id}`);
     }
   }, [user]);
 
@@ -447,10 +470,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         registerCustomTokens(next);
         return next;
     });
-    
-    // PRIORITY HANDSHAKE: Immediately trigger refresh to fetch balance/price for the new token
-    setTimeout(() => refresh(), 100);
-  }, [user, registerCustomTokens, refresh]);
+  }, [user, registerCustomTokens]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications,
@@ -480,7 +500,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }), [
     isInitialized, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey,
-    prices, registerCustomTokens,
+    prices,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic,
     refresh, generateWallet, importWallet, saveToVault, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, 
