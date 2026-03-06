@@ -110,7 +110,7 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
-  // AUTO-HIDE ERROR SENTINEL: Slides error cards up after 5 seconds
+  // AUTO-HIDE ERROR SENTINEL
   useEffect(() => {
     if (fetchError) {
       const timer = setTimeout(() => {
@@ -218,22 +218,13 @@ function SwapClient() {
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             
-            /**
-             * UNIVERSAL NATIVE TOKEN IDENTIFICATION
-             * Ethereum (Chain 1) uses 'ETH'. 
-             * Other chains (Polygon, BSC, etc.) use '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
-             */
-            const sellId = fromToken.isNative 
-              ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
-              : fromToken.address;
-            
-            const buyId = toToken.isNative 
-              ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
-              : toToken.address;
+            // INSTITUTIONAL SYMBOL MAPPING: 0x v1 Price Discovery prefers symbols for native assets
+            const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
+            const buyId = toToken.isNative ? toToken.symbol : toToken.address;
 
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, sellId, buyId, sellAmount, userAddress);
             
-            const gasCostEth = (parseFloat(p.estimatedGas) * parseFloat(p.gasPrice)) / 1e18;
+            const gasCostEth = (parseFloat(p.estimatedGas || '21000') * parseFloat(p.gasPrice || '1000000000')) / 1e18;
             const gasCostUsd = gasCostEth * (prices['ethereum']?.price || 2500);
 
             quote = {
@@ -351,13 +342,8 @@ function SwapClient() {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
           
-          const sellId = fromToken.isNative 
-            ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
-            : fromToken.address;
-          
-          const buyId = toToken.isNative 
-            ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
-            : toToken.address;
+          const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
+          const buyId = toToken.isNative ? toToken.symbol : toToken.address;
 
           const q = await zeroXService.getQuote(fromToken.chainId ?? 1, sellId, buyId, sellAmount, wallet.address);
           
@@ -484,7 +470,6 @@ function SwapClient() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
-      {/* HEADER NODE */}
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
@@ -494,27 +479,26 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* INSTITUTIONAL LIQUIDITY WARNING (TOP-DOWN) */}
+      {/* INSTITUTIONAL LIQUIDITY WARNING */}
       <AnimatePresence>
         {isAdminLiquidityValid === false && !isExecuting && (
           <motion.div 
             initial={{ y: -150, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: -150, opacity: 0 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-            className="fixed top-0 left-0 right-0 z-[110] p-4 bg-black/90 backdrop-blur-3xl border-b border-red-500/30 shadow-[0_10px_40px_rgba(239,68,68,0.2)]"
+            className="fixed top-0 left-0 right-0 z-[110] p-4 bg-black/90 backdrop-blur-3xl border-b border-red-500/30 shadow-2xl"
           >
             <div className="max-w-lg mx-auto flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/30 shadow-lg">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/30">
                 <ShieldAlert className="w-6 h-6 text-red-500" />
               </div>
               <div className="flex-1 space-y-0.5">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">Liquidity Restricted</p>
                 <p className="text-xs font-bold text-red-400/80 leading-tight">
-                  This route is currently locked due to insufficient node liquidity. Please try a different token.
+                  This route is currently locked due to insufficient node liquidity.
                 </p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsAdminLiquidityValid(null)} className="rounded-full hover:bg-white/5">
+              <Button variant="ghost" size="icon" onClick={() => setIsAdminLiquidityValid(null)} className="rounded-full">
                 <X className="w-4 h-4 text-white/20" />
               </Button>
             </div>
@@ -522,14 +506,13 @@ function SwapClient() {
         )}
       </AnimatePresence>
 
-      {/* EXECUTE SWAP BUTTON (TOP-DOWN) */}
+      {/* EXECUTE SWAP BUTTON */}
       <AnimatePresence>
         {canExecute && (
           <motion.div 
             initial={{ y: -150, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: -150, opacity: 0 }} 
-            transition={{ type: 'spring', damping: 25, stiffness: 150 }}
             className="fixed top-0 left-0 right-0 z-[120] p-4 bg-black/80 backdrop-blur-2xl border-b border-primary/20 shadow-2xl"
           >
             <div className="max-w-lg mx-auto">
@@ -537,100 +520,8 @@ function SwapClient() {
                 className="w-full h-16 rounded-[2rem] text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-[0.2em]" 
                 onClick={handleExecuteSwap}
               >
-                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0" />
                 <span className="relative z-10 flex items-center justify-center gap-3"><ShieldCheck className="w-6 h-6" />Authorize Handshake</span>
               </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* EXECUTION PROGRESS OVERLAY */}
-      <AnimatePresence>
-        {isExecuting && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6">
-            <div className="bg-[#0a0a0c] border border-primary/20 rounded-[3rem] p-10 shadow-2xl overflow-hidden relative max-w-sm w-full text-center space-y-8">
-              <div className="relative">
-                <motion.div 
-                  animate={{ rotate: 360 }} 
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }} 
-                  className="absolute -inset-4 border-2 border-dashed border-primary/20 rounded-full" 
-                />
-                <div className={cn("w-20 h-20 rounded-[2rem] flex items-center justify-center transition-colors mx-auto relative z-10 shadow-2xl", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
-                  {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-10 h-10 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-10 h-10" /> : <Loader2 className="w-10 h-10 animate-spin" />}
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-xl font-black uppercase tracking-widest text-white">
-                  {executionPhase === 'VERIFYING' && 'Verifying Node...'}
-                  {executionPhase === 'LIQUIDITY' && 'Syncing Vaults...'}
-                  {executionPhase === 'APPROVING' && 'Authorizing...'}
-                  {executionPhase === 'SENDING' && 'Dispatching...'}
-                  {executionPhase === 'SETTLING' && 'Finalizing...'}
-                  {executionPhase === 'PIVOT_CONVERTING' && 'USDC Sync...'}
-                  {executionPhase === 'PIVOT_BRIDGING' && 'Bridging...'}
-                  {executionPhase === 'PIVOT_FINALIZING' && 'Settling Node...'}
-                  {executionPhase === 'SUCCESS' && 'Handshake Secured'}
-                  {executionPhase === 'FAILED' && 'Handshake Failed'}
-                </h3>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.25em]">{executionError || 'Master Authority Active'}</p>
-              </div>
-
-              {executionPhase === 'FAILED' && (
-                <Button onClick={() => setIsExecuting(false)} variant="outline" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest bg-white/5 border-white/10">Dismiss Advisory</Button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* QUOTE SYNC STATUS (FLOATING) */}
-      <AnimatePresence>
-        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
-          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[90] max-w-lg mx-auto pointer-events-none">
-            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
-              <div className="relative z-10 space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Node Sync</h3>
-                  </div>
-                  {fetchError && (
-                    <button onClick={() => setFetchError(null)} className="p-1 rounded-full hover:bg-white/5 transition-colors">
-                      <X className="w-4 h-4 text-white/20" />
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {fetchError ? (
-                    <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
-                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync</Button>
-                    </div>
-                  ) : isQuoteLoading ? (
-                    <div className="space-y-2">{[1].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {quotes.map((quote, idx) => {
-                        const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
-                        return (
-                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : "border-white/5 bg-white/[0.02]")}>
-                            <div className="flex items-center gap-3 relative z-10">
-                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
-                              <div className="text-left">
-                                <p className="text-xs font-black text-white">{quote.provider}</p>
-                                <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{quote.routeDescription}</p>
-                              </div>
-                            </div>
-                            <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{formatSmartAmount(quote.receiveAmount)}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           </motion.div>
         )}
@@ -735,6 +626,57 @@ function SwapClient() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* QUOTE SYNC STATUS */}
+      <AnimatePresence>
+        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[90] max-w-lg mx-auto pointer-events-none">
+            <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
+              <div className="relative z-10 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Node Sync</h3>
+                  </div>
+                  {fetchError && (
+                    <button onClick={() => setFetchError(null)} className="p-1 rounded-full hover:bg-white/5 transition-colors">
+                      <X className="w-4 h-4 text-white/20" />
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {fetchError ? (
+                    <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
+                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync</Button>
+                    </div>
+                  ) : isQuoteLoading ? (
+                    <div className="space-y-2">{[1].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {quotes.map((quote, idx) => {
+                        const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
+                        return (
+                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : "border-white/5 bg-white/[0.02]")}>
+                            <div className="flex items-center gap-3 relative z-10">
+                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
+                              <div className="text-left">
+                                <p className="text-xs font-black text-white">{quote.provider}</p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{quote.routeDescription}</p>
+                              </div>
+                            </div>
+                            <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{formatSmartAmount(quote.receiveAmount)}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Sync Node" isSwapContext={true} />
     </div>
