@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -77,7 +76,7 @@ function SwapClient() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
 
-  // QUOTE STATE ENGINE (MULTI-AGGREGATOR)
+  // QUOTE STATE ENGINE
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -92,7 +91,6 @@ function SwapClient() {
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
-  // UI STATE
   const [showPrecision, setShowPrecision] = useState(false);
   const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -103,14 +101,6 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
-  const handleOpenSelector = (type: 'from' | 'to') => {
-    setSelectionType(type);
-    setIsSelectorOpen(true);
-  };
-
-  /**
-   * INITIAL HANDSHAKE PROTOCOL
-   */
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
     const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
@@ -140,9 +130,6 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
-  /**
-   * MULTI-AGGREGATOR QUOTE ENGINE (APP-DRIVEN SELECTION)
-   */
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
@@ -177,7 +164,7 @@ function SwapClient() {
         
         const quotePromises: Promise<SwapQuote | null>[] = [];
 
-        // 1. APP FETCH: 0x Aggregator (Includes On-Chain Fee)
+        // 1. Same-Chain Aggregator (0x)
         if (fromToken.chainId === toToken.chainId && (fromToken.chainId ?? 1) !== 0) {
             quotePromises.push((async () => {
                 try {
@@ -197,8 +184,8 @@ function SwapClient() {
             })());
         }
 
-        // 2. APP FETCH: LI.FI Bridge/Swap
-        if ((fromToken.chainId ?? 1) !== 0 && (toToken.chainId ?? 1) !== 0) {
+        // 2. Cross-Chain Bridge (LI.FI)
+        if ((fromToken.chainId ?? 1) !== 0 && (toToken.chainId ?? 1) !== 0 && fromToken.chainId !== toToken.chainId) {
             quotePromises.push((async () => {
                 try {
                     const params = new URLSearchParams({ 
@@ -214,16 +201,12 @@ function SwapClient() {
                     const q = await res.json();
                     if (q.error) return null;
                     
-                    // Manually apply the 0.1% Institutional Fee to LI.FI routes (Net Result)
-                    const grossAmount = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
-                    const netAmount = grossAmount * 0.999; 
-
                     return {
-                        id: 'lifi-route',
-                        provider: q.tool?.toUpperCase() || 'LIFI',
+                        id: 'lifi-bridge',
+                        provider: q.tool?.toUpperCase() || 'Bridge Protocol',
                         logo: null,
-                        receiveAmount: netAmount,
-                        fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
+                        receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
+                        fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00'),
                         eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
                         rawQuote: q,
                         swapProvider: 'LIFI'
@@ -232,14 +215,14 @@ function SwapClient() {
             })());
         }
 
-        // 3. APP FETCH: Internal Settle Node
+        // 3. Internal Liquidity Node
         quotePromises.push((async () => {
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
             return {
-                id: 'internal-node',
-                provider: 'Internal Vault',
+                id: 'internal-vault',
+                provider: 'Institutional Node',
                 logo: null,
                 receiveAmount: (estAmt - (feeData.networkFee / divisor)),
                 fee: feeData.networkFee,
@@ -251,17 +234,10 @@ function SwapClient() {
         const batchResults = (await Promise.all(quotePromises)).filter(q => q !== null) as SwapQuote[];
         if (currentQuoteId !== quoteIdRef.current) return;
 
-        // APP SELECTS BEST QUOTE DETERMINISTICALLY
         batchResults.sort((a, b) => b.receiveAmount - a.receiveAmount);
         const best = batchResults[0];
         
         if (!best) throw new Error("NO_ROUTES_FOUND");
-
-        // HARD SANITY CHECK (App Gate)
-        const outputUsd = best.receiveAmount * toTokenPrice;
-        if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
-            throw new Error("Market Anomaly Detected: Output exceeds sanity limit.");
-        }
 
         setQuotes(batchResults); 
         setIsQuoteLoading(false); 
@@ -275,7 +251,6 @@ function SwapClient() {
             await new Promise(r => setTimeout(r, 300)); 
         }
 
-        // PROCEDURE: Select Best
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(best.id); 
         await new Promise(r => setTimeout(r, 1000)); 
@@ -307,27 +282,6 @@ function SwapClient() {
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
-  /**
-   * ACTION HANDLERS
-   */
-  const handleTokenSelect = (token: AssetRow) => {
-    if (selectionType === 'from') setFromToken({ ...token });
-    else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
-  };
-
-  const handleSwapTokens = () => {
-    if (!fromToken || !toToken) return;
-    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
-    setRotation(prev => prev + 180); 
-    setFromToken({ ...oldTo });
-    setToToken({ ...oldFrom });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
-  };
-
-  /**
-   * EXECUTION HANDSHAKE
-   */
   const handleExecuteSwap = async () => {
     if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
     
@@ -390,7 +344,7 @@ function SwapClient() {
               setExecutionPhase('SETTLING');
               await tx.wait();
           } else {
-              throw new Error("Invalid LI.FI Transaction Request");
+              throw new Error("Invalid Bridge Request");
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
@@ -408,7 +362,7 @@ function SwapClient() {
             })
           });
           const handshake = await handshakeRes.json();
-          if (!handshake.success) throw new Error(handshake.error || "Liquidity Node Reject.");
+          if (!handshake.success) throw new Error(handshake.error || "Handshake Reject.");
 
           setExecutionPhase('SENDING');
           let userTx;
@@ -440,14 +394,34 @@ function SwapClient() {
     }
   };
 
+  const handleOpenSelector = (type: 'from' | 'to') => {
+    setSelectionType(type);
+    setIsSelectorOpen(true);
+  };
+
+  const handleTokenSelect = (token: AssetRow) => {
+    if (selectionType === 'from') setFromToken({ ...token });
+    else setToToken({ ...token });
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+  };
+
+  const handleSwapTokens = () => {
+    if (!fromToken || !toToken) return;
+    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
+    setRotation(prev => prev + 180); 
+    setFromToken({ ...oldTo });
+    setToToken({ ...oldFrom });
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+  };
+
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap?.[toToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
 
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
-    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
+    { label: 'Protocol Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
     { label: 'Registry Sync', value: 'Verified', icon: ShieldCheck },
-    { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
+    { label: 'Handshake Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
 
   return (
@@ -456,12 +430,11 @@ function SwapClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">{isCrossChain ? 'Bridge' : 'Swap'}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Best Price Sentinel</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Best Price Registry</span></div>
         </div>
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* TOP-DOWN EXECUTION BUTTON (SLIDES OVER HEADER) */}
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !isExecuting && (
           <motion.div
@@ -476,7 +449,6 @@ function SwapClient() {
                 className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest"
                 onClick={handleExecuteSwap}
               >
-                {/* Mirror Shine Animation */}
                 <motion.div
                   animate={{ x: ['-100%', '200%'] }}
                   transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
@@ -484,7 +456,7 @@ function SwapClient() {
                 />
                 <span className="relative z-10 flex items-center justify-center gap-3">
                   <ShieldCheck className="w-5 h-5" />
-                  Sign & Authorize Swap
+                  Sign & Authorize
                 </span>
               </Button>
             </div>
@@ -502,15 +474,15 @@ function SwapClient() {
                 </div>
                 <div className="flex-1 space-y-1">
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">
-                    {executionPhase === 'VERIFYING' && 'Verifying Balances...'}
-                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Pool...'}
+                    {executionPhase === 'VERIFYING' && 'Verifying Nodes...'}
+                    {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
                     {executionPhase === 'APPROVING' && 'Authorizing Token...'}
-                    {executionPhase === 'SENDING' && 'Executing Transfer...'}
-                    {executionPhase === 'SETTLING' && 'Institutional Settlement...'}
-                    {executionPhase === 'SUCCESS' && 'Swap Secured'}
+                    {executionPhase === 'SENDING' && 'Executing Handshake...'}
+                    {executionPhase === 'SETTLING' && 'Settling Ledger...'}
+                    {executionPhase === 'SUCCESS' && 'Handshake Secured'}
                     {executionPhase === 'FAILED' && 'Handshake Aborted'}
                   </h3>
-                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Handshake Protocol v4.1 Active'}</span>
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Institutional Protocol v4.5 Active'}</span>
                 </div>
               </div>
             </div>
@@ -567,7 +539,6 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10 overflow-y-auto thin-scrollbar">
-        {/* YOU PAY CARD */}
         <section 
           style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
@@ -599,7 +570,6 @@ function SwapClient() {
           </motion.button>
         </div>
 
-        {/* YOU RECEIVE CARD */}
         <section 
           style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} 
           className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
@@ -684,7 +654,7 @@ function SwapClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Best Price Registry" isSwapContext={true} />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Market Registry" isSwapContext={true} />
     </div>
   );
 }

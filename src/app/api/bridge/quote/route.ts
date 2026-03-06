@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getQuote } from '@lifi/sdk'
+import { FEE_RECIPIENTS } from '@/lib/wallets/services/fee-recipients'
 
 /**
  * LI.FI BRIDGE QUOTE API
- * Uses the functional getQuote method for reliable routing.
+ * Version: 2.0.0 (Institutional Monetization)
+ * Includes 0.1% integrator fee routed to the central vault.
  */
 
 export async function GET(req: Request) {
@@ -18,6 +20,7 @@ export async function GET(req: Request) {
     const fromAddress = searchParams.get('fromAddress')!
     const slippage = Number(searchParams.get('slippage'))
 
+    // Handshake with LI.FI Aggregator
     const quote = await getQuote({
       fromChain,
       toChain,
@@ -26,6 +29,9 @@ export async function GET(req: Request) {
       fromAmount,
       fromAddress,
       slippage: slippage || 0.005,
+      // INSTITUTIONAL REVENUE PARAMS
+      integrator: 'wevina-terminal',
+      fee: 0.001, // 0.1% (10 BPS)
     })
 
     return NextResponse.json(quote)
@@ -33,7 +39,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error('[LIFI_QUOTE_ERROR]', error)
     return NextResponse.json({
-      error: 'Quote failed',
+      error: 'Bridge Quote Failed',
       details: error.message
     }, { status: 500 })
   }
