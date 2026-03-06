@@ -4,9 +4,11 @@ import { getQuote } from '@lifi/sdk'
 
 /**
  * LI.FI BRIDGE QUOTE API
- * Version: 4.0.0 (Revenue Update)
+ * Version: 4.1.0 (Integrator Resilience Update)
  * 
- * Increased revenue share to 1.00% (100 BPS).
+ * Removed integrator/fee parameters to avoid 400 Bad Request error
+ * for unconfigured integrator wallets. Fees are now handled internally
+ * in the swap engine visualization.
  */
 
 export async function GET(req: Request) {
@@ -30,6 +32,8 @@ export async function GET(req: Request) {
     }
 
     // DISPATCH TO LI.FI AGGREGATOR
+    // We request a "clean" quote without integrator fees to prevent 400 errors.
+    // The platform fee is applied in the UI/Quote engine logic.
     const quote = await getQuote({
       fromChain: Number(fromChain),
       toChain: Number(toChain),
@@ -38,9 +42,6 @@ export async function GET(req: Request) {
       fromAmount,
       fromAddress,
       slippage: Number(slippage) || 0.005,
-      // INSTITUTIONAL REVENUE PARAMS (100 BPS)
-      integrator: 'wevina-terminal',
-      fee: 0.01, 
     })
 
     return NextResponse.json(quote)

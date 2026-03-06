@@ -158,9 +158,9 @@ function SwapClient() {
         // 1. RESOLVE PROVIDER VIA CENTRAL ROUTER
         const providerType = determineSwapProvider(
             fromToken.chainId ?? 1, 
-            toToken.chainId ?? 1, 
-            fromToken.symbol, 
-            toToken.symbol
+            toChainId: toToken.chainId ?? 1, 
+            fromSymbol: fromToken.symbol, 
+            toSymbol: toToken.symbol
         );
 
         const isPivotRequired = needsPivotRoute(
@@ -203,6 +203,7 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+            
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.details || errData.error || "Bridge route temporarily offline.");
@@ -211,12 +212,19 @@ function SwapClient() {
             const q = await res.json();
             if (q.error) throw new Error(q.error || "Bridge handshake failed.");
             
+            // INSTITUTIONAL FEE HANDSHAKE (1.00%)
+            // Since we removed integrator/fee from LI.FI request to fix 400 error,
+            // we calculate and display the 1% fee manually in the terminal.
+            const platformFeeUsd = tradeValueUsd * 0.01;
+            const receiveAmountReduction = platformFeeUsd / (toTokenPrice || 1);
+            const rawReceive = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
+
             quote = {
                 id: 'lifi-node',
                 provider: q.tool?.toUpperCase() || 'LI.FI Bridge Node',
                 logo: null,
-                receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
-                fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00') + 0.10,
+                receiveAmount: Math.max(0, rawReceive - receiveAmountReduction),
+                fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00') + 0.10 + platformFeeUsd,
                 eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
                 rawQuote: q,
                 swapProvider: 'LIFI',
