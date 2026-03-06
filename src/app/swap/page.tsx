@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -14,23 +13,15 @@ import {
   ChevronDown,
   ShieldCheck,
   Fuel,
-  Timer,
+  History,
   Zap,
   Settings2,
-  TrendingUp,
-  AlertCircle,
-  History,
   Workflow,
   CheckCircle2,
-  ChevronRight,
   ShieldAlert,
-  Cpu,
-  Activity,
   Globe,
-  Repeat,
-  ArrowRight,
-  Clock,
-  Info
+  Activity,
+  Repeat
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -60,6 +51,27 @@ interface SwapQuote {
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED' | 'PIVOT_CONVERTING' | 'PIVOT_BRIDGING' | 'PIVOT_FINALIZING';
+
+/**
+ * INSTITUTIONAL SMART DECIMAL PROTOCOL
+ * Automatically reveals precision for small amounts while keeping standard values clean.
+ */
+const formatSmartAmount = (val: number) => {
+  if (val === 0) return '0.00';
+  if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  
+  // Find first significant digit
+  const str = val.toFixed(10);
+  const significantMatch = str.match(/0\.0*[1-9]/);
+  if (significantMatch) {
+    const leadZeros = significantMatch[0].length - 2;
+    return val.toLocaleString(undefined, { 
+      minimumFractionDigits: leadZeros, 
+      maximumFractionDigits: leadZeros + 2 
+    });
+  }
+  return val.toLocaleString(undefined, { maximumFractionDigits: 6 });
+};
 
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh } = useWallet();
@@ -171,17 +183,15 @@ function SwapClient() {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
             
-            // 0x returns buyAmount already adjusted for the 1% fee (buyTokenPercentageFee)
-            // Gas is returned in gwei/limit format
             const gasCostEth = (parseFloat(p.estimatedGas) * parseFloat(p.gasPrice)) / 1e18;
             const gasCostUsd = gasCostEth * (prices['ethereum']?.price || 2500);
 
             quote = {
                 id: '0x-node',
-                provider: '0x Protocol Node',
+                provider: '0x Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
-                fee: gasCostUsd + 0.10, // Protocol + Gas Buffer
+                fee: gasCostUsd + 0.10,
                 eta: '~10s',
                 rawQuote: p,
                 swapProvider: 'ZEROX',
@@ -202,7 +212,7 @@ function SwapClient() {
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.details || errData.error || "Bridge handshake failed.");
+                throw new Error(errData.details || errData.error || "Bridge failed.");
             }
 
             const q = await res.json();
@@ -212,7 +222,7 @@ function SwapClient() {
 
             quote = {
                 id: 'lifi-node',
-                provider: q.tool?.toUpperCase() || 'LI.FI Bridge Node',
+                provider: q.tool?.toUpperCase().slice(0, 10) || 'Bridge',
                 logo: null,
                 receiveAmount: Math.max(0, rawReceive - receiveAmountReduction),
                 fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00') + 0.10 + platformFeeUsd,
@@ -230,7 +240,7 @@ function SwapClient() {
 
             quote = {
                 id: 'internal-vault',
-                provider: isPivotRequired ? 'USDC Pivot Bridge' : 'Internal Liquidity Node',
+                provider: isPivotRequired ? 'USDC Bridge' : 'Sync Node',
                 logo: null,
                 receiveAmount: finalReceive,
                 fee: feeData.networkFee,
@@ -245,20 +255,20 @@ function SwapClient() {
         setQuotes([quote]); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
-        await new Promise(r => setTimeout(r, 600)); 
+        await new Promise(r => setTimeout(r, 300)); 
         setQuotePhase('SCANNING');
         setActiveScanIndex(0); 
-        await new Promise(r => setTimeout(r, 500)); 
+        await new Promise(r => setTimeout(r, 300)); 
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(quote.id); 
-        await new Promise(r => setTimeout(r, 800)); 
+        await new Promise(r => setTimeout(r, 400)); 
         setQuotePhase('SHOW_VISUAL'); 
-        await new Promise(r => setTimeout(r, 1200)); 
+        await new Promise(r => setTimeout(r, 600)); 
         setQuotePhase('COMPLETED');
 
       } catch (e: any) { 
         if (currentQuoteId === quoteIdRef.current) {
-            setFetchError(e.message || "Institutional route deferred."); 
+            setFetchError(e.message || "Route deferred."); 
             setQuotePhase('IDLE'); 
         }
       } finally { 
@@ -279,7 +289,7 @@ function SwapClient() {
     
     try {
       const balance = parseFloat(fromToken.balance || '0');
-      if (balance < parseFloat(amount)) throw new Error("Insufficient Funds.");
+      if (balance < parseFloat(amount)) throw new Error("Funds low.");
       
       const chainConfig = allChainsMap[fromToken.chainId ?? 1];
       const evmWallet = wallets.find(w => w.type === 'evm');
@@ -343,7 +353,7 @@ function SwapClient() {
             })
           });
           const handshake = await handshakeRes.json();
-          if (!handshake.success) throw new Error(handshake.error || "Handshake Rejected.");
+          if (!handshake.success) throw new Error(handshake.error || "Denied.");
 
           if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_BRIDGING');
           else setExecutionPhase('SENDING');
@@ -370,12 +380,12 @@ function SwapClient() {
 
       setExecutionPhase('SUCCESS');
       await refreshProfile(); refresh();
-      setTimeout(() => { setIsExecuting(false); setAmount(''); router.push('/profile'); }, 4000);
+      setTimeout(() => { setIsExecuting(false); setAmount(''); router.push('/profile'); }, 3000);
 
     } catch (e: any) {
-      setExecutionError(e.message || "Handshake Aborted.");
+      setExecutionError(e.message || "Aborted.");
       setExecutionPhase('FAILED');
-      setTimeout(() => setIsExecuting(false), 5000);
+      setTimeout(() => setIsExecuting(false), 4000);
     }
   };
 
@@ -402,10 +412,10 @@ function SwapClient() {
   const toChainColor = toToken ? (allChainsMap?.[toToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
 
   const infoItems = [
-    { label: 'Route Type', value: selectedQuote?.provider || 'Hybrid', icon: Workflow },
-    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
-    { label: 'Time Node', value: selectedQuote?.eta || '~15s', icon: History },
-    { label: 'Handshake', value: 'Secured', icon: ShieldCheck }
+    { label: 'Route', value: selectedQuote?.provider || 'Sync', icon: Workflow },
+    { label: 'Gas', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
+    { label: 'Time', value: selectedQuote?.eta || '~15s', icon: History },
+    { label: 'Safe', value: 'Yes', icon: ShieldCheck }
   ];
 
   return (
@@ -414,7 +424,7 @@ function SwapClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">{isCrossChain ? 'Bridge' : 'Swap'}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Institutional Router</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Verified Router</span></div>
         </div>
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
@@ -443,18 +453,18 @@ function SwapClient() {
                   </div>
                   <div className="flex-1 space-y-1">
                     <h3 className="text-sm font-black uppercase tracking-widest text-white">
-                      {executionPhase === 'VERIFYING' && 'Verifying Nodes...'}
-                      {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
-                      {executionPhase === 'APPROVING' && 'Authorizing Asset...'}
-                      {executionPhase === 'SENDING' && 'Executing Leg 1...'}
-                      {executionPhase === 'SETTLING' && 'Settling Leg 2...'}
-                      {executionPhase === 'PIVOT_CONVERTING' && 'Converting to USDC...'}
-                      {executionPhase === 'PIVOT_BRIDGING' && 'Bridging Assets...'}
-                      {executionPhase === 'PIVOT_FINALIZING' && 'Finalizing Swap...'}
-                      {executionPhase === 'SUCCESS' && 'Swap Secured'}
-                      {executionPhase === 'FAILED' && 'Handshake Aborted'}
+                      {executionPhase === 'VERIFYING' && 'Verifying...'}
+                      {executionPhase === 'LIQUIDITY' && 'Syncing...'}
+                      {executionPhase === 'APPROVING' && 'Authorizing...'}
+                      {executionPhase === 'SENDING' && 'Dispatching...'}
+                      {executionPhase === 'SETTLING' && 'Settling...'}
+                      {executionPhase === 'PIVOT_CONVERTING' && 'USDC Sync...'}
+                      {executionPhase === 'PIVOT_BRIDGING' && 'Bridging...'}
+                      {executionPhase === 'PIVOT_FINALIZING' && 'Completing...'}
+                      {executionPhase === 'SUCCESS' && 'Handshake Secured'}
+                      {executionPhase === 'FAILED' && 'Handshake Failed'}
                     </h3>
-                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Master Terminal v5.1 Active'}</span>
+                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Master Node Active'}</span>
                   </div>
                 </div>
               </div>
@@ -471,14 +481,14 @@ function SwapClient() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Market Synchronization</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Node Sync</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Network</Button>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync</Button>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
@@ -495,7 +505,7 @@ function SwapClient() {
                                 <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{quote.routeDescription}</p>
                               </div>
                             </div>
-                            <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                            <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{formatSmartAmount(quote.receiveAmount)}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
                           </motion.div>
                         );
                       })}
@@ -516,7 +526,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {fromToken?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">{fromToken?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
@@ -537,14 +547,14 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {toToken?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">{toToken?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <div className="text-2xl font-black tracking-tighter text-white flex flex-col">
               {isQuoteLoading && !selectedQuote ? <Skeleton className="h-8 w-24 bg-white/10 rounded" /> : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
-                    {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : '0.00'}
+                    {selectedQuote ? formatSmartAmount(selectedQuote.receiveAmount) : '0.00'}
                   </motion.span>
                   <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}</span></div>
                 </>
@@ -553,9 +563,9 @@ function SwapClient() {
           </div>
         </section>
 
-        <div className="mt-6 px-4 grid grid-cols-2 gap-3">
+        <div className="mt-6 px-4 grid grid-cols-2 gap-2">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
-            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
               <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><item.icon className="w-3 h-3" /></div><span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest">{item.label}</span></div>
               <span className="text-[9px] font-black text-white">{item.value}</span>
             </motion.div>
@@ -587,7 +597,7 @@ function SwapClient() {
                         <><Activity className="w-6 h-6 text-primary" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" /></>
                       )}
                     </div>
-                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'USDC Bridge' : 'Direct Node'}</span>
+                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'Bridge' : 'Sync'}</span>
                   </div>
 
                   <div className="flex-1 px-1 relative h-3 overflow-hidden">
@@ -608,7 +618,7 @@ function SwapClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Hybrid Liquidity Node" isSwapContext={true} />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Sync Node" isSwapContext={true} />
     </div>
   );
 }
