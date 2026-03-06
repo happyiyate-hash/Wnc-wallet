@@ -26,7 +26,7 @@ interface TransactionConfirmationSheetProps {
 
 /**
  * INSTITUTIONAL TRANSACTION CONFIRMATION
- * Version: 4.2.0 (Fee Transparency Redesign)
+ * Version: 4.3.0 (Fixed $0.05 Fee UI)
  */
 export default function TransactionConfirmationSheet({
   isOpen,
@@ -108,13 +108,13 @@ export default function TransactionConfirmationSheet({
             <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
               <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Institutional Fee</span>
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Institutional Service Fee</span>
                   <Zap className="w-2.5 h-2.5 text-primary fill-primary animate-pulse" />
                 </div>
-                <span className="text-xs font-bold text-primary">{formatFiat(totalFeeUsd)}</span>
+                <span className="text-xs font-bold text-primary">{formatFiat(0.05)}</span>
               </div>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Debit</span>
+                <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Debit (Inc. Gas)</span>
                 <div className="text-right">
                   <p className="text-sm font-black text-white">{formatFiat(totalUsd)}</p>
                 </div>
@@ -124,7 +124,7 @@ export default function TransactionConfirmationSheet({
             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start">
                 <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 <p className="text-[10px] text-zinc-400 leading-relaxed">
-                    The protocol collects a <span className="text-white font-bold">5% institutional fee</span> to authorize this multi-chain handshake. This ensures the recipient receives the exact amount typed above.
+                    The protocol collects a predictable <span className="text-white font-bold">$0.05 service fee</span> to authorize this multi-chain handshake. This ensures the recipient receives the exact principal amount.
                 </p>
             </div>
           </div>
@@ -136,7 +136,7 @@ export default function TransactionConfirmationSheet({
                 onClick={onConfirm}
                 disabled={isSubmitting}
             >
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize Transfer"}
+                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize Dispatch"}
             </Button>
             <Button 
                 variant="ghost" 
@@ -144,13 +144,13 @@ export default function TransactionConfirmationSheet({
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
             >
-                Cancel Dispatch
+                Cancel Handshake
             </Button>
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-2 opacity-20">
             <ShieldCheck className="w-3 h-3" />
-            <span className="text-[8px] font-black uppercase tracking-widest">Handshake Secured v4.2</span>
+            <span className="text-[8px] font-black uppercase tracking-widest">Handshake Secured v4.3</span>
         </div>
       </SheetContent>
     </Sheet>

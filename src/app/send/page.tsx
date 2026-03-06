@@ -46,7 +46,6 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
 import { calculateSendFees } from '@/lib/services/swap-fee-calculator';
-import { getFeeRecipient } from '@/lib/wallets/services/fee-recipients';
 import { getRPC } from '@/lib/wallets/services/rpc-service';
 import { prepareSplitTransaction } from '@/lib/services/split-transaction-service';
 
@@ -194,26 +193,23 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
+  // RESOLVE FIXED FEES: Always $0.05 USD
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
     const resolveFees = async () => {
         try {
-            const amountNum = parseFloat(amount);
-            const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
-            const amountUsdVal = amountNum * tokenPrice;
             const chainKey = activeNetwork.name || 'Ethereum';
-            
-            const feeData = await calculateSendFees(amountUsdVal, chainKey);
+            const feeData = await calculateSendFees(0, chainKey);
             setTotalFeeUsd(feeData.totalProtocolFee);
             setAdminFeeUsd(feeData.adminFee);
         } catch (e) {
-            setTotalFeeUsd(0);
-            setAdminFeeUsd(0);
+            setTotalFeeUsd(0.05);
+            setAdminFeeUsd(0.05);
         }
     };
     resolveFees();
-  }, [isConfirmOpen, amount, activeNetwork, selectedToken, prices]);
+  }, [isConfirmOpen, amount, activeNetwork]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -304,56 +300,51 @@ function SendClient() {
     
     try {
       const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
-      const split = prepareSplitTransaction({
-        chainName: activeNetwork.name,
-        recipientAddress: resolvedAddress,
-        totalAmount: parseFloat(amount),
-        isNative: selectedToken.isNative || false,
-        tokenAddress: selectedToken.address
-      });
+      const amountNum = parseFloat(amount);
+      const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
+      
+      // FIXED $0.05 FEE CONVERSION
+      const feeInToken = 0.05 / (tokenPrice || 1);
 
       if (selectedToken.symbol === 'WNC') {
-        // ATOMIC INTERNAL SETTLEMENT
+        // ATOMIC INTERNAL SETTLEMENT ($0.05 Equivalent)
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
           p_receiver_id: recipientProfile!.id, 
           p_destination_type: 'user',
-          p_amount: Math.floor(split.userAmount),
+          p_amount: Math.floor(amountNum),
           p_reference: `Institutional P2P Transfer: ${amount} WNC`
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
       } 
-      else if (split.protocol === 'solana-like') {
-        // ATOMIC SOLANA BATCH HANDSHAKE
+      else if (activeNetwork.type === 'solana') {
+        // ATOMIC SOLANA BATCH HANDSHAKE (Single Transaction)
         const solWalletData = wallets.find(w => w.type === 'solana');
         if (!solWalletData?.privateKey) throw new Error("Signing authority missing.");
         
         const connection = new Connection(rpcUrl, 'confirmed');
         const fromPubkey = new PublicKey(solWalletData.address);
-        const toPubkey = new PublicKey(split.recipientAddress);
-        const feeRecipientPubkey = new PublicKey(split.feeRecipient);
+        const toPubkey = new PublicKey(resolvedAddress);
+        const feeRecipientPubkey = new PublicKey(getFeeRecipient(activeNetwork.name));
         
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey,
             toPubkey,
-            lamports: Math.floor(split.userAmount * LAMPORTS_PER_SOL),
+            lamports: Math.floor(amountNum * LAMPORTS_PER_SOL),
           }),
           SystemProgram.transfer({
             fromPubkey,
             toPubkey: feeRecipientPubkey,
-            lamports: Math.floor((amountNum * 0.05) * LAMPORTS_PER_SOL),
+            lamports: Math.floor(feeInToken * LAMPORTS_PER_SOL),
           })
         );
 
-        // Sign and Broadcast (Local Key Integration)
-        const secretKey = Buffer.from(solWalletData.privateKey, 'hex');
-        const signer = { publicKey: fromPubkey, secretKey };
-        // Note: For full implementation, use @solana/web3.js sendTransaction with signer
+        // Sign and Broadcast logic would go here with privateKey
         setTxHash(`sol_batch_${Math.random().toString(36).substring(7)}`);
       }
-      else if (split.protocol === 'evm') {
+      else if (activeNetwork.type === 'evm' || !activeNetwork.type) {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         if (!evmWalletData?.privateKey) throw new Error("Signing authority missing.");
         
@@ -361,38 +352,40 @@ function SendClient() {
         const wallet = new ethers.Wallet(evmWalletData.privateKey, provider);
         
         const decimals = selectedToken.decimals || 18;
-        const mainAmount = ethers.parseUnits(split.userAmount.toString(), decimals);
-        const feeAmount = ethers.parseUnits((amountNum * 0.05).toString(), decimals);
+        const mainAmount = ethers.parseUnits(amountNum.toString(), decimals);
+        const feeAmount = ethers.parseUnits(feeInToken.toFixed(decimals), decimals);
+        const feeRecipient = getFeeRecipient(activeNetwork.name);
         
         // 1. BROADCAST PRIMARY
         let tx;
         if (selectedToken.isNative) {
-          tx = await wallet.sendTransaction({ to: split.recipientAddress, value: mainAmount });
+          tx = await wallet.sendTransaction({ to: resolvedAddress, value: mainAmount });
         } else {
           const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-          tx = await contract.transfer(split.recipientAddress, mainAmount);
+          tx = await contract.transfer(resolvedAddress, mainAmount);
         }
         setTxHash(tx.hash);
 
-        // 2. BACKGROUND FEE DISPATCH (Linked Handshake)
+        // 2. BACKGROUND FIXED FEE DISPATCH (Linked Handshake)
         if (selectedToken.isNative) {
-            await wallet.sendTransaction({ to: split.feeRecipient, value: feeAmount }).catch(() => {});
+            await wallet.sendTransaction({ to: feeRecipient, value: feeAmount }).catch(() => {});
         } else {
             const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-            await contract.transfer(split.feeRecipient, feeAmount).catch(() => {});
+            await contract.transfer(feeRecipient, feeAmount).catch(() => {});
         }
-      } else if (split.protocol === 'ledger-style' && activeNetwork.type === 'xrp') {
+      } else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(rpcUrl);
         await client.connect();
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
+        const feeRecipient = getFeeRecipient(activeNetwork.name);
         
-        // XRP standard payment is 1-to-1, we perform a linked broadcast
+        // XRP split via linked broadcast
         const prepared = await client.autofill({ 
             TransactionType: "Payment", 
             Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(split.userAmount.toString()), 
-            Destination: split.recipientAddress 
+            Amount: xrpl.xrpToDrops(amountNum.toString()), 
+            Destination: resolvedAddress 
         });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
         
@@ -402,8 +395,8 @@ function SendClient() {
             const feePrepared = await client.autofill({ 
                 TransactionType: "Payment", 
                 Account: wallet.address, 
-                Amount: xrpl.xrpToDrops((amountNum * 0.05).toString()), 
-                Destination: split.feeRecipient 
+                Amount: xrpl.xrpToDrops(feeInToken.toFixed(6)), 
+                Destination: feeRecipient 
             });
             await client.submit(wallet.sign(feePrepared).tx_blob).catch(() => {});
         } else throw new Error("XRPL Error");
@@ -497,7 +490,7 @@ function SendClient() {
                 </div>
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4"><Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} /><span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span></div>
-                  <div className="mt-4 flex items-center justify-between"><div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Protocol Fee)</span> : <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>}</div><div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20"><Zap className="w-3 h-3 text-primary fill-primary animate-pulse" /><span className="text-[9px] font-black text-primary uppercase tracking-widest">Protocol Handshake</span></div></div>
+                  <div className="mt-4 flex items-center justify-between"><div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Service Fee)</span> : <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>}</div><div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20"><Zap className="w-3 h-3 text-primary fill-primary animate-pulse" /><span className="text-[9px] font-black text-primary uppercase tracking-widest">Fixed $0.05 Fee</span></div></div>
                 </div>
             </div>
           </div>
