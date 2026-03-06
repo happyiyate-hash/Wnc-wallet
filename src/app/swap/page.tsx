@@ -193,9 +193,18 @@ function SwapClient() {
                 fromAddress: userAddress, 
                 slippage: '0.005' 
             });
+            
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+            
+            // INSTITUTIONAL STATUS GUARD: Handle non-OK responses (HTML error pages)
+            if (!res.ok) {
+                const text = await res.text();
+                console.error("[BRIDGE_FETCH_FAIL]", text.slice(0, 200));
+                throw new Error(`Bridge Service Unreachable (${res.status}). Market synchronization deferred.`);
+            }
+
             const q = await res.json();
-            if (q.error) throw new Error("Bridge route unavailable.");
+            if (q.error) throw new Error(q.error || "Bridge route unavailable.");
             
             quote = {
                 id: 'lifi-bridge',

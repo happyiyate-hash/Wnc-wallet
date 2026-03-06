@@ -1,34 +1,44 @@
+
 import { NextResponse } from 'next/server'
 import { getQuote } from '@lifi/sdk'
-import { FEE_RECIPIENTS } from '@/lib/wallets/services/fee-recipients'
 
 /**
  * LI.FI BRIDGE QUOTE API
- * Version: 2.0.0 (Institutional Monetization)
- * Includes 0.1% integrator fee routed to the central vault.
+ * Version: 3.0.0 (Institutional Handshake Guard)
+ * 
+ * Secure entry point for cross-chain liquidity discovery.
+ * Implements strict parameter validation to prevent HTML error leaks.
  */
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
 
-    const fromChain = Number(searchParams.get('fromChain'))
-    const toChain = Number(searchParams.get('toChain'))
-    const fromToken = searchParams.get('fromToken')!
-    const toToken = searchParams.get('toToken')!
-    const fromAmount = searchParams.get('fromAmount')!
-    const fromAddress = searchParams.get('fromAddress')!
-    const slippage = Number(searchParams.get('slippage'))
+    const fromChain = searchParams.get('fromChain')
+    const toChain = searchParams.get('toChain')
+    const fromToken = searchParams.get('fromToken')
+    const toToken = searchParams.get('toToken')
+    const fromAmount = searchParams.get('fromAmount')
+    const fromAddress = searchParams.get('fromAddress')
+    const slippage = searchParams.get('slippage')
 
-    // Handshake with LI.FI Aggregator
+    // PARAMETER GUARD: Ensure all required nodes are present before SDK handshake
+    if (!fromChain || !toChain || !fromToken || !toToken || !fromAmount || !fromAddress) {
+      return NextResponse.json({ 
+        error: 'Missing required bridge parameters',
+        details: 'Handshake requires fromChain, toChain, tokens, amount and taker address.'
+      }, { status: 400 })
+    }
+
+    // DISPATCH TO LI.FI AGGREGATOR
     const quote = await getQuote({
-      fromChain,
-      toChain,
+      fromChain: Number(fromChain),
+      toChain: Number(toChain),
       fromToken,
       toToken,
       fromAmount,
       fromAddress,
-      slippage: slippage || 0.005,
+      slippage: Number(slippage) || 0.005,
       // INSTITUTIONAL REVENUE PARAMS
       integrator: 'wevina-terminal',
       fee: 0.001, // 0.1% (10 BPS)
@@ -37,10 +47,12 @@ export async function GET(req: Request) {
     return NextResponse.json(quote)
 
   } catch (error: any) {
-    console.error('[LIFI_QUOTE_ERROR]', error)
+    console.error('[LIFI_QUOTE_ERROR]', error.message || error)
+    
+    // STRUCTURED ERROR HANDSHAKE: Never return standard HTML
     return NextResponse.json({
       error: 'Bridge Quote Failed',
-      details: error.message
+      details: error.message || 'Liquidity route not found for this specific pair.'
     }, { status: 500 })
   }
 }
