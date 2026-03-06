@@ -95,11 +95,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // VARIABLE INITIALIZATION PRIORITY: Defined before hooks that use them
+  // 1. Resolve Effective Network
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
+  // 2. Map All Assets
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
 
@@ -164,6 +165,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
+  // 3. Initialize Engine
   const { refresh } = useWalletEngine({
     wallets, 
     viewingNetwork: effectiveViewingNetwork, 
@@ -176,21 +178,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  const deleteWalletPermanently = useCallback(async () => {
-    if (!user) return;
-    try {
-      await supabase.from('profiles').update({
-        vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, account_number: null, onboarding_completed: false,
-        evm_address: null, xrp_address: null, polkadot_address: null, kusama_address: null, near_address: null, solana_address: null, btc_address: null, ltc_address: null, doge_address: null,
-        cosmos_address: null, osmosis_address: null, secret_address: null, injective_address: null, celestia_address: null, cardano_address: null, tron_address: null, algorand_address: null,
-        hedera_address: null, tezos_address: null, aptos_address: null, sui_address: null,
-      }).eq('id', user.id);
-      registryDb.purgeAll();
-      purgeLocalWalletCache(user.id);
-      setWallets(null); setAccountNumber(null);
-      router.replace('/wallet-session');
-    } catch (e) { console.error(e); }
-  }, [user, router]);
+  // 4. Trigger Initial Handshake
+  useEffect(() => {
+    if (isInitialized && wallets && wallets.length > 0 && !hasFetchedInitialData) {
+      console.log("[WALLET_PROVIDER] Executing initial registry sync...");
+      refresh();
+    }
+  }, [isInitialized, wallets, refresh, hasFetchedInitialData]);
 
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Authentication required");
@@ -255,6 +249,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast({ title: "Identity Reclaimed" });
     } catch (e: any) { throw new Error(e.message || "Cloud Handshake failed."); } finally { setIsWalletLoading(false); }
   }, [user, profile, toast]);
+
+  const deleteWalletPermanently = useCallback(async () => {
+    if (!user) return;
+    try {
+      await supabase.from('profiles').update({
+        vault_phrase: null, iv: null, vault_infura_key: null, infura_iv: null, account_number: null, onboarding_completed: false,
+        evm_address: null, xrp_address: null, polkadot_address: null, kusama_address: null, near_address: null, solana_address: null, btc_address: null, ltc_address: null, doge_address: null,
+        cosmos_address: null, osmosis_address: null, secret_address: null, injective_address: null, celestia_address: null, cardano_address: null, tron_address: null, algorand_address: null,
+        hedera_address: null, tezos_address: null, aptos_address: null, sui_address: null,
+      }).eq('id', user.id);
+      registryDb.purgeAll();
+      purgeLocalWalletCache(user.id);
+      setWallets(null); setAccountNumber(null);
+      router.replace('/wallet-session');
+    } catch (e) { console.error(e); }
+  }, [user, router]);
 
   const logout = useCallback(async () => {
     if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); }

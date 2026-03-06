@@ -13,7 +13,8 @@ import { useWallet } from '@/contexts/wallet-provider';
  * NAVIGATION OPTIMIZED: Once dismissed, this barrier remains hidden
  * during internal routing to prevent jarring UX.
  * 
- * HYDRATION FIX: Synchronizes initial server/client text nodes.
+ * FAIL-SAFE SENTINEL: Internal 8-second timeout ensures the barrier
+ * always drops, even if RPC handshakes hang.
  */
 export default function GlobalLoadingBarrier() {
   const { user, loading: authLoading } = useUser();
@@ -21,9 +22,18 @@ export default function GlobalLoadingBarrier() {
   const [hasMounted, setHasMounted] = useState(false);
   const hasHydratedOnceRef = useRef(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [isTimedOut, setIsTimedOut] = useState(false);
   
   useEffect(() => {
     setHasMounted(true);
+    
+    // SAFETY SENTINEL: Drop barrier after 8 seconds no matter what
+    const timer = setTimeout(() => {
+      console.warn("[LOADING_BARRIER] Safety Sentinel triggered. Forcing barrier release.");
+      setIsTimedOut(true);
+    }, 8000);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const isAuthResolved = !authLoading;
@@ -33,23 +43,20 @@ export default function GlobalLoadingBarrier() {
   // Data Resolve Rule: If user has a wallet, we MUST wait for the first data burst.
   const isDataResolved = !user || !hasWallet || hasFetchedInitialData;
 
-  const isAppReady = hasMounted && isAuthResolved && isWalletResolved && isDataResolved;
+  // The barrier is ready to drop if everything is resolved OR if the safety sentinel triggered
+  const isAppReady = hasMounted && (isTimedOut || (isAuthResolved && isWalletResolved && isDataResolved));
 
-  // Once the app is ready for the first time, we mark it as hydrated and hide the barrier permanently for this session
+  // Once the app is ready for the first time, we mark it as hydrated and hide the barrier permanently
   useEffect(() => {
     if (isAppReady && !hasHydratedOnceRef.current) {
       hasHydratedOnceRef.current = true;
-      // Delay removal slightly for a smooth fade-out feel
       const timer = setTimeout(() => setIsVisible(false), 500);
       return () => clearTimeout(timer);
     }
   }, [isAppReady]);
 
-  // If already hydrated in this session, never show the barrier again during navigation
   if (hasHydratedOnceRef.current || !isVisible) return null;
 
-  // Determine the most accurate feedback for the user
-  // HYDRATION GUARD: Ensure initial client render matches server assumption (authLoading = true)
   const getStatusText = () => {
     if (!hasMounted) return 'Verifying Identity...';
     if (!isAuthResolved) return 'Verifying Identity...';
