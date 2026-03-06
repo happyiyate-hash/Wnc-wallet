@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
@@ -7,6 +6,7 @@ import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
 import { registryDb } from '@/lib/storage/registry-db';
+import { cn } from '@/lib/utils';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -21,7 +21,7 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 4.0.0 (Persistent Handshake)
+ * Version: 4.1.0 (Import Stability Fix)
  * Optimized for zero-latency hydration via IndexedDB.
  */
 export default function TokenLogoDynamic({
@@ -36,7 +36,7 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v9_${slug}_${sym}`;
+    return `logo_v10_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -52,7 +52,6 @@ export default function TokenLogoDynamic({
       setHasError(false);
 
       // 1. CHECK PERSISTENT REGISTRY (IndexedDB)
-      // Millisecond-latency check for existing branding
       const cached = await registryDb.getLogo(cacheKey);
       if (cached) {
         setResolvedUrl(cached);
@@ -61,10 +60,10 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 2. PRIMARY: Metadata URL Check
+      // 2. PRIMARY: Metadata URL Check (Direct Guide Alignment)
       if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         let finalUrl = logoUrl;
-        // Prepend institutional CDN base for relative paths
+        // Prepend institutional CDN base for relative paths as per guide
         if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
           const base = 'https://gcghriodmljkusdduhzl.supabase.co';
           finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
@@ -101,7 +100,7 @@ export default function TokenLogoDynamic({
   }, [logoUrl, symbol, name, cacheKey]);
 
   if (isLoading && !resolvedUrl) {
-    return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;
+    return <Skeleton className={cn("rounded-full bg-white/5 animate-pulse", className)} style={{ width: size, height: size }} />;
   }
 
   if (!resolvedUrl || hasError) {
