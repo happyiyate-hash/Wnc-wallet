@@ -173,7 +173,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { generateMnemonic } = await import('bip39');
     const mnemonic = generateMnemonic();
     
-    // ATOMIC SAVE SEQUENCE
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     const targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -185,7 +184,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
     
-    // Cloud Handshake (Background)
     syncAddressesToCloud(user.id, derived, targetAcc);
     saveVaultToCloud(user.id, mnemonic);
     
@@ -198,7 +196,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid node phrase.");
     
-    // ATOMIC IMPORT SEQUENCE
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     const targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
@@ -210,7 +207,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
     
-    // Cloud Handshake (Background)
     syncAddressesToCloud(user.id, derived, targetAcc);
     saveVaultToCloud(user.id, mnemonic);
     
@@ -225,18 +221,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     onStatusUpdate?.('Accessing Cloud Vault...');
     
     try {
-      // 1. RECOVER MNEMONIC
       if (profile.vault_phrase && profile.iv) {
-        onStatusUpdate?.('Decrypting Phrase...');
+        onStatusUpdate?.('Authorizing Decryption...');
+        
+        // SECURE HANDSHAKE: Get fresh session for Bearer token
+        const { data: { session } } = await supabase.auth.getSession();
+        
         const res = await fetch('/api/wallet/decrypt-phrase', { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': session?.access_token ? `Bearer ${session.access_token}` : ''
+          }, 
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv }) 
         });
         
         const data = await res.json();
         
-        // Hardened Status Guard
         if (!res.ok) {
           throw new Error(data.message || "DECRYPTION_FAILED");
         }
@@ -251,7 +252,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
         const targetAcc = profile.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
         
-        // ATOMIC SAVE TO LOCAL REGISTRY
         await registryDb.saveVault({ 
           id: fingerprint, 
           wallets: derived, 
@@ -261,11 +261,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         
         localStorage.setItem(`account_number_${user.id}`, targetAcc);
         
-        // ATOMIC STATE UPDATE
         setWallets(derived);
         setAccountNumber(targetAcc);
       } 
-      // 2. RECOVER ACCOUNT ONLY (If no phrase backup)
       else if (profile.account_number) {
         setAccountNumber(profile.account_number);
         localStorage.setItem(`account_number_${user.id}`, profile.account_number);
@@ -274,19 +272,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       onStatusUpdate?.('Verifying Integrity...');
       toast({ title: "Node Reclaimed", description: "Identity registry successfully restored." });
       
-      // FINAL HANDSHAKE
       setIsInitialized(true);
       setIsWalletLoading(false);
       
-      // Trigger background verification
       setTimeout(() => runCloudDiagnostic(), 1000);
       
     } catch (e: any) { 
       console.error("[RECOVERY_CRITICAL]", e);
       setIsWalletLoading(false);
       setIsInitialized(true);
-      // Re-throw standardized error for UI feedback
-      throw new Error(e.message || "Institutional recovery failed. Handshake interrupted."); 
+      throw new Error(e.message || "Institutional recovery failed."); 
     }
   }, [user, profile, toast, runCloudDiagnostic]);
 
@@ -333,15 +328,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         const uid = user.id;
         
-        // 1. Recover API Key
         const savedInfura = localStorage.getItem(`ss-infura-key-${uid}`);
         if (savedInfura) setInfuraApiKeyState(savedInfura);
         
-        // 2. Recover Account ID
         const savedAcc = localStorage.getItem(`account_number_${uid}`);
         if (savedAcc) setAccountNumber(savedAcc);
         
-        // 3. Persistent Identity Hydration (IndexedDB)
         const savedMnemonic = localStorage.getItem(`ss-mnemonic-${uid}`);
         if (savedMnemonic) {
           const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
@@ -361,7 +353,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        // 4. Instant Balance Hydration (LocalStorage)
         const cachedBalances = localStorage.getItem(`ss-wallet-balances-${uid}`);
         if (cachedBalances) {
           try { 
@@ -380,7 +371,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, [authLoading, user?.id, chainsWithLogos]);
 
-  // TRIGGER BACKGROUND REFRESH
   useEffect(() => {
     if (isInitialized && wallets && user) {
       refresh();

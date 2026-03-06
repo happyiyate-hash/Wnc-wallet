@@ -6,16 +6,18 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE ENCRYPTION ENDPOINT
- * Version: 4.1.0 (Strict Payload Handling)
- * Standardized for SmarterSeller Ecosystem Interop.
- * Payload: { "text": "..." }
+ * Version: 4.3.0 (Institutional Hardening - Production Priority)
  */
+
+const SUPABASE_URL = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxibHRnZWxkZXN4a2dkcmJsZnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MTg3NDQsImV4cCI6MjA3NzQ5NDc0NH0.P20DLsxlceN1rOqJXs4ucpkN1zb_rtL_sQqZs1DloRs';
 
 export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
+    
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
         {
           cookies: {
             get(name: string) { return cookieStore.get(name)?.value },
@@ -29,20 +31,19 @@ export async function POST(req: NextRequest) {
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        const { data: { user } } = token 
+        const { data: { user }, error: authError } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
 
-        if (!user) {
+        if (authError || !user) {
             return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
         }
 
         const body = await req.json();
-        // Support SmarterSeller 'text' key or fallback to 'phrase'
         const payload = body.text || body.phrase;
 
         if (!payload || typeof payload !== 'string') {
-            return NextResponse.json({ message: 'Plaintext string data required.' }, { status: 400 });
+            return NextResponse.json({ message: 'Plaintext string required.' }, { status: 400 });
         }
 
         const { encrypted, iv } = encryptPhrase(payload);
@@ -51,6 +52,6 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error('[API_ENCRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Encryption protocol handshake failed.' }, { status: 500 });
+        return NextResponse.json({ message: 'Encryption protocol failed.' }, { status: 500 });
     }
 }

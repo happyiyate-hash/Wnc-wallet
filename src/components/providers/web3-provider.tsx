@@ -2,13 +2,15 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { mainnet, polygon, base } from 'wagmi/chains';
 
 /**
  * WEB3 PROVIDER
- * Combines Wagmi and TanStack Query for decentralized data management.
+ * Version: 2.1.0 (SSR Stability Patch)
+ * 
+ * Hardened to prevent useState initialization crashes during production SSR passes.
  */
 
 const config = createConfig({
@@ -21,7 +23,14 @@ const config = createConfig({
 });
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+  // Use useMemo for SSR-safe client initialization to prevent dispatcher null errors
+  const queryClient = useMemo(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000,
+      },
+    },
+  }), []);
 
   return (
     <WagmiProvider config={config}>

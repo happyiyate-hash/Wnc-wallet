@@ -6,15 +6,19 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE DECRYPTION ENDPOINT
- * Version: 4.1.0 (Hardened Error Reporting)
- * Returns: { "text": "..." } as per SmarterSeller Standard.
+ * Version: 4.3.0 (Institutional Hardening - Production Priority)
  */
+
+const SUPABASE_URL = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxibHRnZWxkZXN4a2dkcmJsZnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MTg3NDQsImV4cCI6MjA3NzQ5NDc0NH0.P20DLsxlceN1rOqJXs4ucpkN1zb_rtL_sQqZs1DloRs';
 
 export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
+    
+    // PRIORITY: Use hardcoded values to prevent poisoned environment variables in production
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
         {
           cookies: {
             get(name: string) { return cookieStore.get(name)?.value },
@@ -28,31 +32,37 @@ export async function POST(req: NextRequest) {
         const authHeader = req.headers.get('Authorization');
         const token = authHeader?.split(' ')[1];
 
-        const { data: { user } } = token 
+        // SESSION DISCOVERY: Prioritize the Bearer token for cross-environment reliability
+        const { data: { user }, error: authError } = token 
             ? await supabase.auth.getUser(token)
             : await supabase.auth.getUser();
 
-        if (!user) {
-            return NextResponse.json({ message: 'Unauthorized: Session missing' }, { status: 401 });
+        if (authError || !user) {
+            console.warn("[API_DECRYPT_UNAUTHORIZED] Identity verification failed in production.");
+            return NextResponse.json({ 
+                message: 'Unauthorized: Session missing',
+                details: authError?.message || 'Token verification failed'
+            }, { status: 401 });
         }
 
-        const { encrypted, iv } = await req.json();
+        const body = await req.json();
+        const { encrypted, iv } = body;
+        
         if (!encrypted || !iv) {
-            return NextResponse.json({ message: 'Missing vault parameters (encrypted/iv).' }, { status: 400 });
+            return NextResponse.json({ message: 'Missing vault parameters.' }, { status: 400 });
         }
 
-        // Execute cryptographic handshake
+        // EXECUTE CRYPTOGRAPHIC HANDSHAKE
         const phrase = decryptPhrase(encrypted, iv);
 
-        // Standardized SmarterSeller return key
         return NextResponse.json({ text: phrase });
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
         return NextResponse.json({ 
             message: error.message === 'DECRYPTION_FAILED' 
-                ? 'Decryption protocol failed. Ensure your recovery phrase is valid.' 
-                : 'Vault service error. Please try again.' 
+                ? 'Decryption protocol failed. Ensure your node phrase is valid.' 
+                : 'Vault service error. Handshake interrupted.' 
         }, { status: 500 });
     }
 }
