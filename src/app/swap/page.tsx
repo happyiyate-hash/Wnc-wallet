@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -21,7 +22,8 @@ import {
   ShieldAlert,
   Globe,
   Activity,
-  Repeat
+  Repeat,
+  AlertCircle
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -34,6 +36,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
 import { determineSwapProvider, needsPivotRoute, getRouteDescription, type SwapProvider } from '@/lib/services/swap-router';
 import { zeroXService } from '@/lib/services/zerox-service';
+import { swapExecutionService } from '@/lib/services/swap-execution-service';
 
 interface SwapQuote {
   id: string;
@@ -54,7 +57,6 @@ type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDIN
 
 /**
  * INSTITUTIONAL SMART DECIMAL PROTOCOL
- * Automatically reveals precision for small amounts while keeping standard values clean.
  */
 const formatSmartAmount = (val: number) => {
   if (val === 0) return '0.00';
@@ -99,6 +101,10 @@ function SwapClient() {
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
+  // LIQUIDITY SENTINEL STATE
+  const [isAdminLiquidityValid, setIsAdminLiquidityValid] = useState<boolean | null>(null);
+  const [isCheckingLiquidity, setIsCheckingLiquidity] = useState(false);
+
   const [rotation, setRotation] = useState(0);
   
   const lastFetchedAmountRef = useRef<string>('');
@@ -128,12 +134,36 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
+  // LIQUIDITY SENTINEL EFFECT
+  useEffect(() => {
+    if (!toToken || !selectedQuoteId || !infuraApiKey) return;
+    
+    const checkLiquidity = async () => {
+      const quote = quotes.find(q => q.id === selectedQuoteId);
+      if (!quote) return;
+
+      setIsCheckingLiquidity(true);
+      const targetChain = allChainsMap[toToken.chainId];
+      const isValid = await swapExecutionService.checkAdminLiquidity(
+        targetChain, 
+        toToken, 
+        quote.receiveAmount, 
+        infuraApiKey
+      );
+      setIsAdminLiquidityValid(isValid);
+      setIsCheckingLiquidity(false);
+    };
+
+    checkLiquidity();
+  }, [selectedQuoteId, toToken, quotes, allChainsMap, infuraApiKey]);
+
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
 
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setActiveScanIndex(-1);
+        setIsAdminLiquidityValid(null);
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
@@ -154,6 +184,7 @@ function SwapClient() {
       setFetchError(null); 
       setActiveScanIndex(-1); 
       setSelectedQuoteId(null);
+      setIsAdminLiquidityValid(null);
       
       try {
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
@@ -279,12 +310,8 @@ function SwapClient() {
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
-  /**
-   * AUTOMATIC MULTI-STEP EXECUTION
-   * Orchestrates 0x, LI.FI, and Pivot routes without user intervention.
-   */
   const handleExecuteSwap = async () => {
-    if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
+    if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey || isAdminLiquidityValid === false) return;
     
     setIsExecuting(true);
     setExecutionError(null);
@@ -297,7 +324,6 @@ function SwapClient() {
       const chainConfig = allChainsMap[fromToken.chainId ?? 1];
       const evmWallet = wallets.find(w => w.type === 'evm');
       
-      // ENSURE ETHEREUM RPC IS LOADED
       const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
@@ -342,7 +368,6 @@ function SwapClient() {
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
-          // PIVOT ROUTE: Token -> USDC -> Bridge -> Token
           if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_CONVERTING');
           else setExecutionPhase('LIQUIDITY');
 
@@ -404,6 +429,7 @@ function SwapClient() {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
     setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); lastFetchedAmountRef.current = '';
+    setIsAdminLiquidityValid(null);
   };
 
   const handleSwapTokens = () => {
@@ -412,6 +438,7 @@ function SwapClient() {
     const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
     setFromToken(oldTo); setToToken(oldFrom);
     setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); lastFetchedAmountRef.current = '';
+    setIsAdminLiquidityValid(null);
   };
 
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
@@ -424,6 +451,8 @@ function SwapClient() {
     { label: 'Safe', value: 'Yes', icon: ShieldCheck }
   ];
 
+  const canExecute = quotePhase === 'COMPLETED' && !isExecuting && isAdminLiquidityValid === true;
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
@@ -435,8 +464,42 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
+      {/* LIQUIDITY SENTINEL CARD (SLIDE-DOWN) */}
       <AnimatePresence>
-        {quotePhase === 'COMPLETED' && !isExecuting && (
+        {isAdminLiquidityValid !== null && !isExecuting && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-[72px] inset-x-4 z-40 max-w-lg mx-auto"
+          >
+            <div className={cn(
+              "p-4 rounded-2xl border backdrop-blur-3xl shadow-2xl flex items-center gap-4 transition-colors duration-500",
+              isAdminLiquidityValid ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"
+            )}>
+              <div className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg",
+                isAdminLiquidityValid ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
+              )}>
+                {isCheckingLiquidity ? <Loader2 className="w-5 h-5 animate-spin" /> : isAdminLiquidityValid ? <CheckCircle2 className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 space-y-0.5">
+                <p className={cn("text-[10px] font-black uppercase tracking-widest", isAdminLiquidityValid ? "text-green-500" : "text-red-500")}>
+                  {isAdminLiquidityValid ? 'Liquidity Verified' : 'Liquidity Restricted'}
+                </p>
+                <p className="text-[11px] text-white/60 font-medium leading-tight">
+                  {isAdminLiquidityValid 
+                    ? `Sufficient ${toToken?.symbol} liquidity available for this swap.` 
+                    : `Registry node has insufficient ${toToken?.symbol} liquidity at this moment.`}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {canExecute && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl">
             <div className="max-w-lg mx-auto">
               <Button className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest" onClick={handleExecuteSwap}>

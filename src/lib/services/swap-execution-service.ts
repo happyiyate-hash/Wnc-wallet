@@ -5,10 +5,12 @@ import { supabase } from '@/lib/supabase/client';
 import { validateSwapAmount } from './swap-fee-calculator';
 import { adminExecutor } from './admin-executor';
 import { getFeeRecipient } from '../wallets/services/fee-recipients';
+import type { AssetRow, ChainConfig } from '@/lib/types';
+import { fetchBalancesForChain } from '../wallets/services/balance-service';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.7.0 (Unified Registry Sync)
+ * Version: 1.8.0 (Liquidity Guard Update)
  * 
  * Orchestrates the lifecycle of liquidity-provided swaps.
  * Synchronized with the centralized fee-recipients registry.
@@ -29,6 +31,41 @@ export interface InitiateSwapInput {
 }
 
 export const swapExecutionService = {
+  /**
+   * Checks if the platform's admin vault has enough liquidity to fulfill a trade.
+   */
+  async checkAdminLiquidity(
+    chain: ChainConfig, 
+    token: AssetRow, 
+    requiredAmount: number, 
+    infuraKey: string | null
+  ): Promise<boolean> {
+    try {
+      const adminAddress = getFeeRecipient(chain.name);
+      if (!adminAddress) return false;
+
+      // Wrap admin address in a temporary metadata structure for the balance service
+      const adminWallet = [{
+        address: adminAddress,
+        type: chain.type || 'evm'
+      }] as any;
+
+      const results = await fetchBalancesForChain(chain, adminWallet, infuraKey, []);
+      const tokenResult = results.find(r => 
+        token.isNative ? r.isNative : r.address?.toLowerCase() === token.address?.toLowerCase()
+      );
+
+      if (!tokenResult) return false;
+
+      const adminBalance = parseFloat(tokenResult.balance || '0');
+      // Add a 5% buffer to admin liquidity check for safety
+      return adminBalance >= (requiredAmount * 1.05);
+    } catch (e) {
+      console.warn("[LIQUIDITY_GUARD_ADVISORY] Failed to verify admin node.");
+      return false;
+    }
+  },
+
   /**
    * STEP 1: Initiate Swap Handshake
    * Validates limits and creates a locked registry node.
@@ -102,8 +139,8 @@ export const swapExecutionService = {
     if (!supabase) return;
 
     const { data: swap, error: fetchErr } = await supabase
-      .from('swaps')
       .select('*')
+      .from('swaps')
       .eq('id', swapId)
       .single();
 
