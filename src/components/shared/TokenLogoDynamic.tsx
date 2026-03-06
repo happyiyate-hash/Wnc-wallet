@@ -21,13 +21,14 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 6.0.0 (Cache-First Non-Blocking)
+ * Version: 7.0.0 (Cache-Strict Independent Discovery)
  * 
- * Implements a professional logo caching architecture:
- * 1. Check IndexedDB Registry (Instant)
- * 2. Fallback to provided URL (Async)
- * 3. Fallback to Global Registry Search (Async)
- * 4. Cache result for future loads.
+ * Logic:
+ * 1. Calculate persistent cache key from asset signature.
+ * 2. Check IndexedDB registry immediately.
+ * 3. Serve cached URL instantly if found.
+ * 4. Perform silent background discovery if cache miss.
+ * 5. Decorate relative paths with institutional CDN base.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -45,26 +46,30 @@ export default function TokenLogoDynamic({
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
   const isFetchingRef = useRef(false);
 
   useEffect(() => {
     async function resolve() {
-      if (isFetchingRef.current) return;
-      
-      // 1. ATOMIC CACHE CHECK (IndexedDB)
-      const cached = await registryDb.getLogo(cacheKey);
-      if (cached) {
-        setResolvedUrl(cached);
-        setIsLoading(false);
-        return;
+      // 1. INSTANT REGISTRY CHECK
+      try {
+        const cached = await registryDb.getLogo(cacheKey);
+        if (cached) {
+          setResolvedUrl(cached);
+          setIsInitializing(false);
+          return;
+        }
+      } catch (e) {
+        // DB Handshake deferred
       }
 
-      // 2. NETWORK HANDSHAKE (Non-Blocking)
+      if (isFetchingRef.current) return;
       isFetchingRef.current = true;
+
+      // 2. SILENT BACKGROUND DISCOVERY
       let finalUrl: string | null = null;
 
-      // Check provided logoUrl first
+      // Normalize provided URL
       if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         finalUrl = logoUrl;
         if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
@@ -72,7 +77,7 @@ export default function TokenLogoDynamic({
           finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
         }
       } 
-      // If no URL provided, search global registry by name/symbol
+      // Fallback: Global Registry Handshake
       else if (name || symbol) {
         try {
           finalUrl = await getDirectLogoUrl(name || '', symbol || '');
@@ -83,19 +88,19 @@ export default function TokenLogoDynamic({
 
       if (finalUrl) {
         setResolvedUrl(finalUrl);
-        // Persist to local registry for next reload
+        // Persist for zero-latency next reload
         await registryDb.saveLogo(cacheKey, finalUrl);
       }
 
-      setIsLoading(false);
+      setIsInitializing(false);
       isFetchingRef.current = false;
     }
 
     resolve();
   }, [logoUrl, symbol, name, cacheKey]);
 
-  // NON-BLOCKING UI: Render immediate fallback if still loading and no cache
-  if (isLoading && !resolvedUrl) {
+  // NON-BLOCKING UI: Show fallback while cache is priming
+  if (isInitializing && !resolvedUrl) {
     return (
       <div style={{ width: size, height: size }} className={cn("shrink-0 flex items-center justify-center", className)}>
         <div className="w-full h-full rounded-full bg-white/[0.03] animate-pulse border border-white/5" />
@@ -118,14 +123,15 @@ export default function TokenLogoDynamic({
         alt={alt}
         width={size}
         height={size}
-        className="rounded-full object-cover transition-opacity duration-300"
+        className="rounded-full object-cover transition-opacity duration-300 opacity-0"
         unoptimized
         onLoad={(e) => {
           (e.target as HTMLImageElement).style.opacity = '1';
         }}
         onError={() => {
           setResolvedUrl(null);
-          registryDb.saveLogo(cacheKey, ''); // Mark as failed in cache
+          // Mark as invalid node in cache to prevent repeated failing handshakes
+          registryDb.saveLogo(cacheKey, ''); 
         }}
       />
     </div>
