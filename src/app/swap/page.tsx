@@ -29,7 +29,10 @@ import {
   Activity,
   SendHorizonal,
   ShieldQuestion,
-  Lock
+  Lock,
+  Globe,
+  Database,
+  Search
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -80,7 +83,7 @@ function SwapClient() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
 
-  // QUOTE STATE ENGINE (HARDENED)
+  // QUOTE STATE ENGINE (MULTI-AGGREGATOR)
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -105,7 +108,7 @@ function SwapClient() {
   const hasInitializedRef = useRef(false);
   const quoteIdRef = useRef<number>(0);
 
-  const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
+  const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
   /**
    * INITIAL HANDSHAKE PROTOCOL
@@ -140,7 +143,7 @@ function SwapClient() {
   }, [toToken, prices]);
 
   /**
-   * ATOMIC QUOTE ENGINE (HYBRID ROUTING)
+   * MULTI-AGGREGATOR QUOTE ENGINE
    */
   useEffect(() => {
     const runSequence = async () => {
@@ -172,103 +175,107 @@ function SwapClient() {
       setSelectedQuoteId(null);
       
       try {
-        const sourceChainConfig = allChainsMap[fromToken.chainId];
+        const sourceChainConfig = allChainsMap[fromToken.chainId ?? 1];
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         
-        // Determine Provider
-        const provider = determineSwapProvider(fromToken.chainId, toToken.chainId, fromToken.symbol, toToken.symbol);
-        
-        let batch: SwapQuote[] = [];
+        // 1. DISPATCH PARALLEL QUOTES (0x, LI.FI, Internal)
+        const quotePromises: Promise<SwapQuote | null>[] = [];
 
-        if (provider === 'ZEROX') {
-            // 0X AGGREGATOR HANDSHAKE
-            const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-            const zeroxPrice = await zeroXService.getPrice(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
-            
-            const receiveAmt = parseFloat(ethers.formatUnits(zeroxPrice.buyAmount, toToken.decimals || 18));
-            const totalFee = parseFloat(ethers.formatUnits(zeroxPrice.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001; // Mock gas calculation
-
-            batch = [{
-                id: 'zerox-aggregator',
-                provider: '0x Aggregator',
-                logo: null,
-                receiveAmount: receiveAmt,
-                fee: totalFee || 0.50,
-                eta: '~10s',
-                isBest: true,
-                rawQuote: zeroxPrice,
-                swapProvider: 'ZEROX'
-            }];
-        } else if (provider === 'LIFI') {
-            // LI.FI BRIDGE HANDSHAKE
-            const params = new URLSearchParams({ 
-                fromChain: fromToken.chainId.toString(), 
-                toChain: toToken.chainId.toString(), 
-                fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
-                toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
-                fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
-                fromAddress: wallets?.[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', 
-                slippage: '0.005' 
-            });
-            const response = await fetch(`/api/bridge/quote?${params.toString()}`);
-            const lifiQuote = await response.json();
-            
-            if (lifiQuote.error) throw new Error(lifiQuote.details || "Bridge handshake failed.");
-
-            batch = [{
-                id: 'lifi-bridge',
-                provider: lifiQuote.tool?.toUpperCase() || 'Aggregator',
-                logo: null,
-                receiveAmount: parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18)),
-                fee: parseFloat(lifiQuote.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
-                eta: '~30s',
-                isBest: true,
-                rawQuote: lifiQuote,
-                swapProvider: 'LIFI'
-            }];
-        } else {
-            // INTERNAL LIQUIDITY HANDSHAKE
-            const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
-            const divisor = toTokenPrice || 1;
-            const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-            const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-
-            batch = [{
-                id: 'internal-node',
-                provider: 'Institutional Settle',
-                logo: null,
-                receiveAmount: finalAmt * 0.997,
-                fee: feeData.networkFee,
-                eta: '~5s',
-                isBest: true,
-                swapProvider: 'INTERNAL'
-            }];
+        // Candidate A: 0x Aggregator (Same chain EVM)
+        if (fromToken.chainId === toToken.chainId && fromToken.chainId !== 0) {
+            quotePromises.push((async () => {
+                try {
+                    const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
+                    const p = await zeroXService.getPrice(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
+                    return {
+                        id: '0x-aggregator',
+                        provider: '0x Aggregator',
+                        logo: null,
+                        receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
+                        fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
+                        eta: '~10s',
+                        rawQuote: p,
+                        swapProvider: 'ZEROX'
+                    } as SwapQuote;
+                } catch { return null; }
+            })());
         }
 
+        // Candidate B: LI.FI Bridge/Swap (Cross-chain or fallback)
+        if (fromToken.chainId !== 0 && toToken.chainId !== 0) {
+            quotePromises.push((async () => {
+                try {
+                    const params = new URLSearchParams({ 
+                        fromChain: fromToken.chainId.toString(), 
+                        toChain: toToken.chainId.toString(), 
+                        fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
+                        toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
+                        fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
+                        fromAddress: wallets?.[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', 
+                        slippage: '0.005' 
+                    });
+                    const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+                    const q = await res.json();
+                    if (q.error) return null;
+                    return {
+                        id: 'lifi-route',
+                        provider: q.tool?.toUpperCase() || 'LIFI',
+                        logo: null,
+                        receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
+                        fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
+                        eta: '~30s',
+                        rawQuote: q,
+                        swapProvider: 'LIFI'
+                    } as SwapQuote;
+                } catch { return null; }
+            })());
+        }
+
+        // Candidate C: Internal Settle Node (Always available)
+        quotePromises.push((async () => {
+            const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
+            const divisor = toTokenPrice || 1;
+            const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
+            return {
+                id: 'internal-node',
+                provider: 'Internal Vault',
+                logo: null,
+                receiveAmount: (estAmt - (feeData.networkFee / divisor)) * 0.997,
+                fee: feeData.networkFee,
+                eta: '~5s',
+                swapProvider: 'INTERNAL'
+            } as SwapQuote;
+        })());
+
+        const batchResults = (await Promise.all(quotePromises)).filter(q => q !== null) as SwapQuote[];
         if (currentQuoteId !== quoteIdRef.current) return;
 
-        const best = batch[0];
-        if (!best) throw new Error("NO_ROUTES");
+        // 2. SORT & SELECT BEST
+        batchResults.sort((a, b) => b.receiveAmount - a.receiveAmount);
+        const best = batchResults[0];
+        
+        if (!best) throw new Error("NO_ROUTES_FOUND");
 
-        // Mathematical Sanity Check
+        // 3. QUOTE GUARD: Hardened Sanity Check
         const outputUsd = best.receiveAmount * toTokenPrice;
         if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
             throw new Error("Market Anomaly Detected: Quote output value exceeds institutional sanity limit.");
         }
 
-        setQuotes(batch); 
+        setQuotes(batchResults); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
         await new Promise(r => setTimeout(r, 600)); 
         
+        // 4. CINEMATIC SCANNING SEQUENCE
         setQuotePhase('SCANNING');
-        for (let i = 0; i < batch.length; i++) { 
+        for (let i = 0; i < batchResults.length; i++) { 
             if (currentQuoteId !== quoteIdRef.current) return;
             setActiveScanIndex(i); 
-            await new Promise(r => setTimeout(r, 200)); 
+            await new Promise(r => setTimeout(r, 300)); 
         }
 
-        // TRADE GUARDIAN AI VALIDATION
+        // 5. TRADE GUARDIAN AI VALIDATION
         setQuotePhase('GUARDIAN_SCAN');
         const aiValidation = await currencyConversionWithLLMValidation({
             fromCurrency: fromToken.symbol,
@@ -288,19 +295,22 @@ function SwapClient() {
             return;
         }
 
+        // 6. FINALIZE SELECTION
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(best.id); 
         await new Promise(r => setTimeout(r, 1000)); 
         
         setQuotePhase('FADING_OUT');
-        for (let i = 0; i < batch.length; i++) { 
+        for (let i = 0; i < batchResults.length; i++) { 
             if (currentQuoteId !== quoteIdRef.current) return;
-            setFadedIndices(prev => new Set(prev).add(i)); 
+            if (batchResults[i].id !== best.id) {
+                setFadedIndices(prev => new Set(prev).add(i)); 
+            }
             await new Promise(r => setTimeout(r, 100)); 
         }
         
         setQuotePhase('SHOW_VISUAL'); 
-        await new Promise(r => setTimeout(r, 2500)); 
+        await new Promise(r => setTimeout(r, 2000)); 
         setQuotePhase('COMPLETED');
 
       } catch (e: any) { 
@@ -352,40 +362,32 @@ function SwapClient() {
       const balance = parseFloat(fromToken.balance || '0');
       if (balance < parseFloat(amount)) throw new Error("Insufficient Balance for Swap.");
       
-      const chainConfig = allChainsMap[fromToken.chainId];
+      const chainConfig = allChainsMap[fromToken.chainId ?? 1];
       const evmWallet = wallets.find(w => w.type === 'evm');
       const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
       if (selectedQuote.swapProvider === 'ZEROX') {
-          // 0X EXECUTION HANDSHAKE
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
-          const quote = await zeroXService.getQuote(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
+          const q = await zeroXService.getQuote(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
           
-          // Check & Approve
           if (!fromToken.isNative) {
               setExecutionPhase('APPROVING');
               const tokenContract = new ethers.Contract(fromToken.address, ["function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)"], wallet);
-              const allowance = await tokenContract.allowance(wallet.address, quote.allowanceTarget);
+              const allowance = await tokenContract.allowance(wallet.address, q.allowanceTarget);
               if (allowance < ethers.parseUnits(amount, fromToken.decimals || 18)) {
-                  const approveTx = await tokenContract.approve(quote.allowanceTarget, ethers.MaxUint256);
+                  const approveTx = await tokenContract.approve(q.allowanceTarget, ethers.MaxUint256);
                   await approveTx.wait();
               }
           }
 
           setExecutionPhase('SENDING');
-          const tx = await wallet.sendTransaction({
-              to: quote.to,
-              data: quote.data,
-              value: quote.value,
-              gasLimit: quote.gas
-          });
+          const tx = await wallet.sendTransaction({ to: q.to, data: q.data, value: q.value, gasLimit: q.gas });
           setExecutionPhase('SETTLING');
           await tx.wait();
       } 
       else if (selectedQuote.swapProvider === 'INTERNAL') {
-          // INTERNAL SETTLEMENT HANDSHAKE
           setExecutionPhase('LIQUIDITY');
           const handshakeRes = await fetch('/api/swap/execute', {
             method: 'POST',
@@ -405,7 +407,7 @@ function SwapClient() {
           setExecutionPhase('SENDING');
           let userTx;
           if (fromToken.isNative) {
-            userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseUnits(amount, 18) });
+            userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
           } else {
             const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
             userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
@@ -416,23 +418,17 @@ function SwapClient() {
 
       setExecutionPhase('SUCCESS');
       await refreshProfile(); refresh();
-      
-      setTimeout(() => {
-        setIsExecuting(false);
-        setExecutionPhase('IDLE');
-        setAmount('');
-        router.push('/profile');
-      }, 4000);
+      setTimeout(() => { setIsExecuting(false); setAmount(''); router.push('/profile'); }, 4000);
 
     } catch (e: any) {
-      setExecutionError(e.message || "Institutional Handshake Aborted.");
+      setExecutionError(e.message || "Handshake Aborted.");
       setExecutionPhase('FAILED');
-      setTimeout(() => { setIsExecuting(false); setExecutionPhase('IDLE'); }, 5000);
+      setTimeout(() => setIsExecuting(false), 5000);
     }
   };
 
-  const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
-  const toChainColor = toToken ? (allChainsMap?.[toToken.chainId]?.themeColor || '#818cf8') : '#818cf8';
+  const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
+  const toChainColor = toToken ? (allChainsMap?.[toToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
 
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
@@ -447,12 +443,12 @@ function SwapClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">{isCrossChain ? 'Bridge' : 'Swap'}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Institutional Route</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Best Price Sentinel</span></div>
         </div>
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* BACKGROUND EXECUTION OVERLAY */}
+      {/* EXECUTION OVERLAY */}
       <AnimatePresence>
         {isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
@@ -464,30 +460,17 @@ function SwapClient() {
                 <div className="flex-1 space-y-1">
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">
                     {executionPhase === 'VERIFYING' && 'Verifying Balances...'}
-                    {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
+                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Pool...'}
                     {executionPhase === 'APPROVING' && 'Authorizing Token...'}
                     {executionPhase === 'SENDING' && 'Executing Transfer...'}
                     {executionPhase === 'SETTLING' && 'Institutional Settlement...'}
                     {executionPhase === 'SUCCESS' && 'Swap Secured'}
                     {executionPhase === 'FAILED' && 'Handshake Aborted'}
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", executionPhase === 'SUCCESS' ? "bg-green-500" : executionPhase === 'FAILED' ? "bg-red-500" : "bg-primary")} />
-                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Watchdog Sync Active'}</span>
-                  </div>
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Handshake Protocol v4.1 Active'}</span>
                 </div>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {quotePhase === 'COMPLETED' && !fetchError && !isExecuting && (
-          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none">
-            <motion.button onClick={handleExecuteSwap} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto active:scale-95 transition-transform">
-              <div className="flex items-center justify-center gap-3 relative z-10"><Zap className="w-4 h-4 fill-current animate-pulse" /> Execute Swap</div>
-            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -499,15 +482,15 @@ function SwapClient() {
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : (fetchError || guardianWarning) ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{(fetchError || guardianWarning) ? 'Safety Rejection' : 'Market Analysis'}</h3>
+                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : (fetchError || guardianWarning) ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Market Discovery</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {fetchError || guardianWarning ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{guardianWarning || fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Market</Button>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
@@ -519,19 +502,16 @@ function SwapClient() {
                                 <ShieldQuestion className="w-8 h-8 text-primary animate-pulse" />
                                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} className="absolute -inset-2 border-2 border-dashed border-primary/20 rounded-full" />
                             </div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Quote...</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Best Quote...</p>
                         </motion.div>
                       )}
                       {quotePhase !== 'GUARDIAN_SCAN' && quotes.map((quote, idx) => {
                         const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
-                        const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
-                        const isPending = quotePhase === 'SCANNING' && idx > activeScanIndex;
                         const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
-                        const isRejected = quotePhase === 'FINAL_SELECTED' && quote.id !== selectedQuoteId;
                         const isFading = fadedIndices.has(idx);
                         
                         return (
-                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: isFading ? 0 : 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : "border-white/5 bg-white/[0.02]")}>
+                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: isFading ? 0 : 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : isScanning ? "border-primary/40 bg-primary/5" : "border-white/5 bg-white/[0.02]")}>
                             <div className="flex items-center gap-3 relative z-10">
                               <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
                               <div className="text-left">
@@ -539,7 +519,7 @@ function SwapClient() {
                                 <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
                               </div>
                             </div>
-                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                            <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
                           </motion.div>
                         );
                       })}
@@ -602,20 +582,9 @@ function SwapClient() {
             <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId ?? 1]?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>
-              {showOutputPrecision && (
-                <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl">
-                  <p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2">
-                    <CheckCircle2 className="w-3 h-3" /> 
-                    Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="text-2xl font-black tracking-tighter text-white flex flex-col transition-all relative z-10">
-              {isQuoteLoading && !selectedQuote ? (
-                <div className="flex gap-1 h-8 items-center">{[1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} className="w-2 h-6 bg-white/10 rounded-full" />)}</div>
-              ) : (
+            <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
+            <div className="text-2xl font-black tracking-tighter text-white flex flex-col">
+              {isQuoteLoading && !selectedQuote ? <Skeleton className="h-8 w-24 bg-white/10 rounded" /> : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
                     {selectedQuote ? selectedQuote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }) : '0.00'}
@@ -629,7 +598,7 @@ function SwapClient() {
 
         <div className="mt-6 px-4 grid grid-cols-2 gap-3 relative min-h-[100px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
-            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 h-fit">
+            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
               <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><item.icon className="w-3 h-3" /></div><span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest">{item.label}</span></div>
               <span className="text-[9px] font-black text-white">{item.value}</span>
             </motion.div>
@@ -679,9 +648,19 @@ function SwapClient() {
             )}
           </AnimatePresence>
         </div>
+
+        <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
+          <Button 
+            className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all border-b-4", quotePhase === 'COMPLETED' && !isExecuting ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed")} 
+            disabled={quotePhase !== 'COMPLETED' || isExecuting} 
+            onClick={handleExecuteSwap}
+          >
+            {isExecuting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
+          </Button>
+        </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Network Selector" isSwapContext={true} />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Best Price Registry" isSwapContext={true} />
     </div>
   );
 }
