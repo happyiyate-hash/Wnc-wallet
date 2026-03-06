@@ -54,6 +54,20 @@ const detectAddressType = (input: string) => {
   const clean = input.trim();
   
   if (/^835\d{7}$/.test(clean)) return 'account-id';
+
+  // PRIORITIZE POLKADOT (Prefix 0 starts with '1', Prefix 42 starts with '5')
+  // This must happen before BTC detection to prevent collisions on '1' prefix
+  if (clean.length >= 47 && !clean.includes('0x')) {
+    try {
+        const [isValidPolkadot] = checkAddress(clean, 0);
+        const [isValidKusama] = checkAddress(clean, 2);
+        const [isValidGeneric] = checkAddress(clean, 42);
+        
+        if (isValidPolkadot || isValidGeneric) return 'polkadot';
+        if (isValidKusama) return 'kusama';
+    } catch (e) {}
+  }
+
   if (/^\d+\.\d+\.\d+$/.test(clean)) return 'hedera';
   if (/^tz[123][a-km-zA-HJ-NP-Z1-9]{33}$/.test(clean)) return 'tezos';
 
@@ -76,7 +90,10 @@ const detectAddressType = (input: string) => {
   if (clean.length === 58 && /^[A-Z2-7]{58}$/.test(clean)) return 'algorand';
   if (clean.startsWith('T') && clean.length === 34) return 'tron';
   if (clean.startsWith('D') && clean.length === 34) return 'doge';
+  
+  // Now it's safe to check BTC
   if (clean.startsWith('bc1') || clean.startsWith('1') || clean.startsWith('3')) return 'btc';
+  
   if (clean.startsWith('ltc1') || clean.startsWith('L') || clean.startsWith('M')) return 'ltc';
   if (clean.startsWith('cosmos1')) return 'cosmos';
   if (clean.startsWith('osmo1')) return 'osmosis';
@@ -84,15 +101,6 @@ const detectAddressType = (input: string) => {
   if (clean.startsWith('inj1')) return 'injective';
   if (clean.startsWith('celestia1')) return 'celestia';
   if (clean.startsWith('addr1')) return 'cardano';
-  
-  if (clean.length >= 47 && !clean.includes('0x')) {
-    try {
-        if (clean.startsWith('K')) return 'kusama';
-        const [isValid] = checkAddress(clean, 42); 
-        const [isValidPolkadot] = checkAddress(clean, 0);
-        if (isValid || isValidPolkadot) return 'polkadot';
-    } catch (e) {}
-  }
 
   if (clean.endsWith('.near') || clean.endsWith('.testnet') || /^[a-f0-9]{64}$/.test(clean)) {
     return 'near';
