@@ -1,3 +1,4 @@
+
 'use client';
 
 import { motion } from 'framer-motion';
@@ -25,7 +26,7 @@ interface TransactionConfirmationSheetProps {
 
 /**
  * INSTITUTIONAL TRANSACTION CONFIRMATION
- * Version: 4.1.0 (Dynamic Fee Integration)
+ * Version: 4.2.0 (Fee Transparency Redesign)
  */
 export default function TransactionConfirmationSheet({
   isOpen,
@@ -56,7 +57,6 @@ export default function TransactionConfirmationSheet({
 
         <div className="w-12 h-1 bg-white/10 rounded-full mx-auto mb-8" />
         
-        {/* SENDER -> RECIPIENT VISUALS */}
         <div className="flex items-center justify-between mb-10 px-4">
           <div className="flex flex-col items-center gap-2">
             <div className="relative">
@@ -99,7 +99,7 @@ export default function TransactionConfirmationSheet({
 
         <div className="space-y-4 mb-10">
           <div className="p-6 rounded-3xl bg-white/[0.02] border border-white/5 flex flex-col items-center gap-1">
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount to Dispatch</p>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount to Recipient</p>
             <h3 className="text-3xl font-black text-white">{amount} {token?.symbol}</h3>
             <p className="text-xs font-bold text-primary">≈ {formatFiat(amountUsd)}</p>
           </div>
@@ -108,27 +108,24 @@ export default function TransactionConfirmationSheet({
             <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 space-y-3">
               <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Protocol Fee</span>
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Institutional Fee</span>
                   <Zap className="w-2.5 h-2.5 text-primary fill-primary animate-pulse" />
                 </div>
                 <span className="text-xs font-bold text-primary">{formatFiat(totalFeeUsd)}</span>
               </div>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-[10px] font-black text-white uppercase tracking-widest">Estimated Total</span>
+                <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Debit</span>
                 <div className="text-right">
                   <p className="text-sm font-black text-white">{formatFiat(totalUsd)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-              <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Target Address</span>
-              <p className="text-[10px] font-mono break-all text-white/60 leading-relaxed">{recipientAddress}</p>
-            </div>
-            
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-primary/5 border border-primary/10">
-              <span className="text-[10px] font-black text-primary uppercase tracking-widest">Network Speed</span>
-              <span className="text-sm font-bold text-primary">Standard (~15s)</span>
+            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex gap-3 items-start">
+                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    The protocol collects a <span className="text-white font-bold">5% institutional fee</span> to authorize this multi-chain handshake. This ensures the recipient receives the exact amount typed above.
+                </p>
             </div>
           </div>
         </div>
@@ -139,7 +136,7 @@ export default function TransactionConfirmationSheet({
                 onClick={onConfirm}
                 disabled={isSubmitting}
             >
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Confirm & Broadcast"}
+                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize Transfer"}
             </Button>
             <Button 
                 variant="ghost" 
@@ -147,13 +144,13 @@ export default function TransactionConfirmationSheet({
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
             >
-                Cancel
+                Cancel Dispatch
             </Button>
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-2 opacity-20">
             <ShieldCheck className="w-3 h-3" />
-            <span className="text-[8px] font-black uppercase tracking-widest">Secured by Master Wevina Node</span>
+            <span className="text-[8px] font-black uppercase tracking-widest">Handshake Secured v4.2</span>
         </div>
       </SheetContent>
     </Sheet>

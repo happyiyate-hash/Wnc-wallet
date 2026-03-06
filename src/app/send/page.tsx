@@ -44,11 +44,10 @@ import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-she
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
-import { calculateSwapFees } from '@/lib/services/swap-fee-calculator';
+import { calculateSendFees } from '@/lib/services/swap-fee-calculator';
 
-/**
- * INSTITUTIONAL MULTI-CHAIN ADDRESS SNIFFER
- */
+const ADMIN_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x144F9E614c094ADDA010A27c254faDeFF390A3B2';
+
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
   const clean = input.trim();
@@ -133,7 +132,6 @@ const getDetectedNetworkMeta = (type: string) => {
 const mapTechnicalError = (err: any): string => {
   const msg = (err.message || String(err)).toLowerCase();
   if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
-  if (msg.includes('candidate function') || msg.includes('ambiguous')) return "Registry Ambiguity: Multiple transfer protocols detected. Please use the whole-number (integer) unit standard.";
   if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your terminal.";
   if (err.message) return `System Advisory: ${err.message}`;
   return "Dispatch Error: The transaction was rejected by the network protocol.";
@@ -163,6 +161,7 @@ function SendClient() {
 
   const [amount, setAmount] = useState('');
   const [totalFeeUsd, setTotalFeeUsd] = useState(0);
+  const [adminFeeUsd, setAdminFeeUsd] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState('');
   
@@ -174,24 +173,22 @@ function SendClient() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const gasData = useGasPrice(selectedToken?.chainId);
-
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
     const symbol = searchParams.get('symbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
     let target = allAssets.find(a => a.symbol === symbol && (a.chainId === chainIdParam || a.symbol === 'WNC'));
     if (!target) {
-        target = allAssets.find(a => a.chainId === viewingNetwork.chainId && a.isNative) || 
-                 allAssets.find(a => a.chainId === viewingNetwork.chainId) || 
+        target = allAssets.find(a => a.chainId === (viewingNetwork?.chainId ?? 1) && a.isNative) || 
+                 allAssets.find(a => a.chainId === (viewingNetwork?.chainId ?? 1)) || 
                  allAssets[0];
     }
     if (target) { setSelectedToken({ ...target }); hasInitialized.current = true; }
-  }, [allAssets, searchParams, viewingNetwork.chainId]);
+  }, [allAssets, searchParams, viewingNetwork]);
 
   const activeNetwork = useMemo(() => {
     if (selectedToken?.symbol === 'WNC') return { name: 'Wevina Internal', symbol: 'WNC', type: 'internal', chainId: 0 } as any;
-    const chainId = selectedToken?.chainId ?? viewingNetwork.chainId;
+    const chainId = selectedToken?.chainId ?? 1;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
@@ -203,13 +200,15 @@ function SendClient() {
         try {
             const amountNum = parseFloat(amount);
             const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
-            const amountUsd = amountNum * tokenPrice;
+            const amountUsdVal = amountNum * tokenPrice;
             const chainKey = activeNetwork.type || 'evm';
             
-            const feeData = await calculateSwapFees(amountUsd, chainKey);
-            setTotalFeeUsd(feeData.networkFee);
+            const feeData = await calculateSendFees(amountUsdVal, chainKey);
+            setTotalFeeUsd(feeData.totalProtocolFee);
+            setAdminFeeUsd(feeData.adminFee);
         } catch (e) {
             setTotalFeeUsd(0);
+            setAdminFeeUsd(0);
         }
     };
     resolveFees();
@@ -250,190 +249,56 @@ function SendClient() {
   const handleRecipientInputChange = (val: string) => {
     setRecipientInput(val);
     const type = detectAddressType(val);
-    if (type === 'account-id') {
-        setIsResolving(true);
-    } else {
-        setIsResolving(false);
-    }
+    if (type === 'account-id') setIsResolving(true);
+    else setIsResolving(false);
   };
 
-  /**
-   * ROBUST ADDRESS RESOLVER
-   */
   useEffect(() => {
     const currentId = ++resolutionCounter.current;
-    
     async function resolve() {
       const input = debouncedRecipient.trim();
       const isInternalWnc = selectedToken?.symbol === 'WNC';
       const isRawChainAddress = ['evm', 'xrp', 'polkadot', 'kusama', 'near', 'btc', 'ltc', 'doge', 'solana', 'cosmos', 'osmosis', 'secret', 'injective', 'celestia', 'cardano', 'tron', 'algorand', 'hedera', 'tezos', 'move-chain'].includes(addrType);
       
       if (!input || input.length < 3 || isSelfTransfer || isNetworkMismatch || validationError) {
-        if (currentId === resolutionCounter.current) { 
-          setResolvedAddress(''); 
-          setRecipientProfile(null); 
-          setIsResolving(false); 
-          setResolutionError(null); 
-        }
+        if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
         return;
       }
 
       if (isRawChainAddress) {
-        if (currentId === resolutionCounter.current) { 
-          setResolvedAddress(input); 
-          setRecipientProfile(null); 
-          setIsResolving(false); 
-          setResolutionError(null); 
-        }
+        if (currentId === resolutionCounter.current) { setResolvedAddress(input); setRecipientProfile(null); setIsResolving(false); setResolutionError(null); }
         return;
       }
 
       if (addrType === 'account-id') {
-        setRecipientProfile(null); 
-        setIsResolving(true); 
-        setResolutionError(null);
-        
+        setRecipientProfile(null); setIsResolving(true); setResolutionError(null);
         try {
           if (!supabase) throw new Error("Registry offline.");
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 10000));
-          const queryPromise = supabase.from('profiles').select('*').eq('account_number', input).maybeSingle();
-          
-          const { data: userRecord, error: fetchErr } = await Promise.race([queryPromise, timeoutPromise]) as any;
-          
+          const { data: userRecord, error: fetchErr } = await supabase.from('profiles').select('*').eq('account_number', input).maybeSingle();
           if (currentId !== resolutionCounter.current) return;
           if (fetchErr) throw fetchErr;
-
           if (userRecord) {
             setRecipientProfile({ id: userRecord.id, avatar: userRecord.photo_url || '', verified: true, name: userRecord.name || input });
-            
-            if (isInternalWnc) {
-              setResolvedAddress(userRecord.account_number || '');
-            } else {
+            if (isInternalWnc) setResolvedAddress(userRecord.account_number || '');
+            else {
               const targetChainType = activeNetwork.type || 'evm';
-              // STANDARDIZED REGISTRY RESOLUTION
               const fieldName = `${targetChainType}_address`;
               const targetAddress = userRecord[fieldName];
-              
-              if (targetAddress) {
-                setResolvedAddress(targetAddress);
-              } else { 
-                setResolvedAddress(''); 
-                setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); 
-              }
+              if (targetAddress) setResolvedAddress(targetAddress);
+              else { setResolvedAddress(''); setResolutionError(`Recipient found, but no node configured for ${activeNetwork.name}.`); }
             }
-          } else { 
-            setResolvedAddress(''); 
-            setResolutionError("Identity Node not found in registry."); 
-          }
-        } catch (e: any) { 
-          if (currentId === resolutionCounter.current) { 
-            setResolvedAddress(''); 
-            setResolutionError(e.message === "TIMEOUT" ? "Registry connection timed out. Retrying..." : "Handshake failed."); 
-          } 
-        }
+          } else { setResolvedAddress(''); setResolutionError("Identity Node not found in registry."); }
+        } catch (e: any) { if (currentId === resolutionCounter.current) { setResolvedAddress(''); setResolutionError("Handshake failed."); } }
         finally { if (currentId === resolutionCounter.current) setIsResolving(false); }
         return;
       }
-
-      if (currentId === resolutionCounter.current) { 
-        setResolvedAddress(''); 
-        setRecipientProfile(null); 
-        setIsResolving(false); 
-        setResolutionError("I could not find any account or blockchain related to this symbol."); 
-      }
+      if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError("Unknown node standard."); }
     }
     resolve();
-  }, [debouncedRecipient, addrType, activeNetwork.type, isSelfTransfer, selectedToken, isNetworkMismatch, validationError, activeNetwork.name]);
-
-  /**
-   * RESUME SENTINEL
-   */
-  useEffect(() => {
-    const handleFocus = () => {
-      if (recipientInput.length >= 10 && !resolvedAddress && !resolutionError && !isResolving) {
-        const current = recipientInput;
-        setRecipientInput('');
-        setTimeout(() => setRecipientInput(current), 10);
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [recipientInput, resolvedAddress, resolutionError, isResolving]);
-
-  const startCamera = async (scanner: Html5Qrcode) => {
-    try {
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => handleScanSuccess(decodedText),
-        () => {}
-      );
-    } catch (e) { console.warn("Camera Init Fail:", e); }
-  };
-
-  useEffect(() => {
-    if (isScannerOpen) {
-      const html5QrCode = new Html5Qrcode("reader");
-      scannerRef.current = html5QrCode;
-      startCamera(html5QrCode);
-      return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(e => console.warn("Stop Fail:", e)); };
-    }
-  }, [isScannerOpen]);
-
-  const handleScanSuccess = (decodedText: string) => {
-    setIsScannerOpen(false);
-    if (decodedText.includes('/request/')) {
-      const parts = decodedText.split('/request/');
-      const id = parts[parts.length - 1].split(/[?#]/)[0]; 
-      if (id && id.length > 10) {
-        setActiveFulfillmentId(id);
-        router.push('/');
-        toast({ title: "Request Detected", description: "Entering fulfillment handshake..." });
-        return;
-      }
-    }
-    if (decodedText.startsWith('wnc://')) {
-      try {
-        const url = new URL(decodedText);
-        const account = url.searchParams.get('account');
-        const symbol = url.searchParams.get('symbol');
-        if (account) {
-          handleRecipientInputChange(account);
-          if (symbol) {
-            const token = allAssets.find(a => a.symbol === symbol);
-            if (token) setSelectedToken(token);
-          }
-          toast({ title: "Node Resolved" });
-        }
-      } catch (e) { toast({ variant: "destructive", title: "Invalid QR Protocol" }); }
-      return;
-    }
-    let cleanAddress = decodedText;
-    if (decodedText.includes(':')) {
-        const parts = decodedText.split(':');
-        if (parts[1]) cleanAddress = parts[1].split(/[?#]/)[0];
-    }
-    handleRecipientInputChange(cleanAddress);
-    toast({ title: "Handshake Authorized" });
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !scannerRef.current) return;
-    if (scannerRef.current.isScanning) {
-        await scannerRef.current.stop().catch(() => {});
-    }
-    try {
-      const decodedText = await scannerRef.current.scanFile(file, false);
-      handleScanSuccess(decodedText);
-    } catch (err) {
-      toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in this image." });
-      if (isScannerOpen && scannerRef.current) startCamera(scannerRef.current);
-    }
-  };
+  }, [debouncedRecipient, addrType, activeNetwork, isSelfTransfer, selectedToken, isNetworkMismatch, validationError]);
 
   const handleSendRequest = async () => {
-    if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
+    if (!wallets || !selectedToken || !resolvedAddress || !profile || !infuraApiKey) return;
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     try {
       if (selectedToken.symbol === 'WNC') {
@@ -447,7 +312,37 @@ function SendClient() {
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         setTxHash(`int_${Math.random().toString(36).substring(7)}`);
-        await refreshProfile(); 
+      } else if (activeNetwork.type === 'evm') {
+        const evmWalletData = wallets.find(w => w.type === 'evm');
+        const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+        const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
+        
+        const decimals = selectedToken.decimals || 18;
+        const mainAmount = ethers.parseUnits(amount, decimals);
+        
+        // 1. BROADCAST PRIMARY
+        let tx;
+        if (selectedToken.isNative) {
+          tx = await wallet.sendTransaction({ to: resolvedAddress, value: mainAmount });
+        } else {
+          const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
+          tx = await contract.transfer(resolvedAddress, mainAmount);
+        }
+        setTxHash(tx.hash);
+
+        // 2. BACKGROUND FEE DISPATCH (Institutional Protocol)
+        const feePrice = prices[(selectedToken.priceId || selectedToken.address || '').toLowerCase()]?.price || 1;
+        const feeAmountNative = adminFeeUsd / feePrice;
+        
+        if (feeAmountNative > 0) {
+            const feeAmountUnits = ethers.parseUnits(feeAmountNative.toFixed(decimals), decimals);
+            if (selectedToken.isNative) {
+                await wallet.sendTransaction({ to: ADMIN_VAULT, value: feeAmountUnits }).catch(() => {});
+            } else {
+                const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
+                await contract.transfer(ADMIN_VAULT, feeAmountUnits).catch(() => {});
+            }
+        }
       } else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(activeNetwork.rpcUrl);
@@ -458,33 +353,23 @@ function SendClient() {
         await client.disconnect();
         if ((result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
         else throw new Error("XRPL Error");
-      } else {
-        const evmWalletData = wallets.find(w => w.type === 'evm');
-        const provider = new ethers.JsonRpcProvider(activeNetwork.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
-        const wallet = new ethers.Wallet(evmWalletData!.privateKey!, provider);
-        const decimals = selectedToken.decimals || 18;
-        let tx = selectedToken.isNative 
-          ? await wallet.sendTransaction({ to: resolvedAddress, value: ethers.parseUnits(amount, decimals) }) 
-          : await (new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet)).transfer(resolvedAddress, ethers.parseUnits(amount, decimals));
-        setTxHash(tx.hash);
       }
       setTxStatus('success');
+      await refreshProfile(); refresh();
     } catch (e: any) { setTxStatus('error'); setReceiptError(mapTechnicalError(e)); }
     finally { setIsSubmitting(false); setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000); }
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
-  const isWnc = selectedToken?.symbol === 'WNC';
-  const hasInsufficientFunds = (amountNum + (totalFeeUsd / (prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 1))) > balance;
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
-
-  // INSTITUTIONAL FIX: Direct price lookup from context to prevent $0.00 display
   const livePrice = useMemo(() => {
     if (!selectedToken) return 0;
     const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
     return prices[priceId]?.price || selectedToken.priceUsd || 0;
   }, [selectedToken, prices]);
+
+  const hasInsufficientFunds = (amountNum + (totalFeeUsd / (livePrice || 1))) > balance;
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -492,45 +377,32 @@ function SendClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <button onClick={() => setIsSelectorOpen(true)} className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all">
             <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-            <div className="flex items-start leading-none"><span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select Asset'}</span><span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span></div>
+            <div className="flex items-start leading-none"><span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span><span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span></div>
             <ChevronDown className="w-3 h-3 text-primary" />
         </button>
         <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(true)} className="rounded-xl"><QrCode className="w-5 h-5 text-primary" /></Button>
       </header>
 
       <main className="flex-1 p-6 max-w-lg mx-auto w-full pb-48">
-          <div className="space-y-10 pt-2 px-1">
-            <section className="flex items-center justify-between px-2">
+          <div className="space-y-10 pt-2">
+            <section className="flex items-center justify-between">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black relative z-10">
-                            <AvatarImage src={profile?.photo_url} />
-                            <AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback>
-                        </Avatar>
-                        <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20">
-                            <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" />
-                        </div>
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black relative z-10"><AvatarImage src={profile?.photo_url} /><AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback></Avatar>
+                        <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" /></div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">FROM YOU</span>
                 </div>
                 <div className="flex-1 px-4 relative flex flex-col items-center justify-center min-h-[100px]">
                     <div className="w-full h-[1px] bg-gradient-to-r from-primary/20 via-primary to-primary/20 relative"><div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050505] p-2 border border-white/5 rounded-full z-10"><ArrowRight className="w-4 h-4 text-primary animate-pulse" /></div></div>
                     <AnimatePresence>{resolvedAddress && !isResolving && (
-                        <motion.div initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 30, opacity: 1, scale: 1 }} exit={{ y: 15, opacity: 0 }} className="absolute left-0 right-0 text-center z-20">
-                            <div className="inline-flex flex-col items-center gap-1.5"><p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>{isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Node'}</p><div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}><p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">{resolvedAddress.length > 15 ? `${resolvedAddress.slice(0, 10)}...${resolvedAddress.slice(-8)}` : resolvedAddress}</p></div></div>
-                        </motion.div>
+                        <motion.div initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 30, opacity: 1, scale: 1 }} exit={{ y: 15, opacity: 0 }} className="absolute left-0 right-0 text-center z-20"><div className="inline-flex flex-col items-center gap-1.5"><p className={cn("text-[7px] font-black uppercase tracking-[0.25em]", (isNetworkMismatch || validationError) ? "text-red-500" : "text-primary")}>{isNetworkMismatch ? 'Incompatible Route' : validationError ? 'Format Alert' : 'Resolved Node'}</p><div className={cn("bg-black/80 border px-3 py-2 rounded-2xl backdrop-blur-md shadow-2xl", (isNetworkMismatch || validationError) ? "border-red-500/30" : "border-primary/20")}><p className="text-[10px] font-mono text-white tracking-tighter whitespace-nowrap">{resolvedAddress.length > 15 ? `${resolvedAddress.slice(0, 10)}...${resolvedAddress.slice(-8)}` : resolvedAddress}</p></div></div></motion.div>
                     )}</AnimatePresence>
                 </div>
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>
-                            {isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}
-                        </div>
-                        {resolvedAddress && !isResolving && (
-                            <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20">
-                                <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" />
-                            </div>
-                        )}
+                        <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>{isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}</div>
+                        {resolvedAddress && !isResolving && <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" /></div>}
                     </div>
                     <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'NODE REFLECTION' : recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
                 </div>
@@ -538,9 +410,7 @@ function SendClient() {
 
             <section className="space-y-3">
                 <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => handleRecipientInputChange(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
-                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2 transition-all", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}>
-                    <div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => handleRecipientInputChange(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div>
-                </div>
+                <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}><div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => handleRecipientInputChange(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div></div>
                 {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || validationError?.message}</p></div>}
                 {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}
             </section>
@@ -549,30 +419,13 @@ function SendClient() {
                 <div className="flex justify-between items-center px-2">
                   <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
                   <div className="flex items-center gap-2">
-                    <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>
-                      Bal: {balance.toFixed(2)} {selectedToken?.symbol}
-                    </span>
-                    <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(isWnc ? (balance >= 50 ? (balance - 50).toString() : '0') : balance.toString())}>MAX</button>
+                    <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>Bal: {balance.toFixed(2)} {selectedToken?.symbol}</span>
+                    <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button>
                   </div>
                 </div>
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
-                  <div className="flex items-baseline justify-between gap-4">
-                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
-                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">
-                      {hasInsufficientFunds ? (
-                        <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Fee)</span>
-                      ) : (
-                        <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-                      <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
-                      <span className="text-[9px] font-black text-primary uppercase tracking-widest">Dynamic Handshake Fee</span>
-                    </div>
-                  </div>
+                  <div className="flex items-baseline justify-between gap-4"><Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} /><span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span></div>
+                  <div className="mt-4 flex items-center justify-between"><div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Protocol Fee)</span> : <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>}</div><div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20"><Zap className="w-3 h-3 text-primary fill-primary animate-pulse" /><span className="text-[9px] font-black text-primary uppercase tracking-widest">Protocol Handshake</span></div></div>
                 </div>
             </div>
           </div>
@@ -583,20 +436,10 @@ function SendClient() {
       </main>
 
       <AnimatePresence>{isScannerOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6">
-            <div className="w-full max-sm mx-auto space-y-8">
-              <div className="flex items-center justify-between"><div className="space-y-1"><h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3><p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p></div><Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button></div>
-              <div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-2xl bg-zinc-900"><div id="reader" className="w-full h-full" /><motion.div animate={{ y: [0, 250, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10" /></div>
-              <div className="space-y-4 px-4">
-                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full h-14 rounded-2xl bg-white/5 border-white/10 gap-3 font-bold uppercase tracking-widest text-[10px] text-white hover:bg-white/10"><ImageIcon className="w-4 h-4 text-primary" /> Get from Gallery</Button>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-                <div className="flex items-center justify-center gap-2 opacity-40"><ShieldCheck className="w-3.5 h-3.5 text-white" /><span className="text-[8px] font-black uppercase text-white">Registry Protocol v3.1</span></div>
-              </div>
-            </div>
-          </motion.div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6"><div className="w-full max-sm mx-auto space-y-8"><div className="flex items-center justify-between"><div className="space-y-1"><h3 className="text-xl font-black text-white uppercase tracking-tight">Identity Scanner</h3><p className="text-[10px] font-black text-primary uppercase tracking-widest">WNC Structured Handshake</p></div><Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(false)} className="rounded-full bg-white/5"><X className="w-5 h-5 text-white" /></Button></div><div className="relative aspect-square w-full rounded-[3rem] overflow-hidden border-4 border-primary/20 shadow-2xl bg-zinc-900"><div id="reader" className="w-full h-full" /><motion.div animate={{ y: [0, 250, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute left-0 right-0 h-1 bg-primary/60 blur-md z-10" /></div><div className="space-y-4 px-4"><Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full h-14 rounded-2xl bg-white/5 border-white/10 gap-3 font-bold uppercase tracking-widest text-[10px] text-white hover:bg-white/10"><ImageIcon className="w-4 h-4 text-primary" /> Get from Gallery</Button><input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" /><div className="flex items-center justify-center gap-2 opacity-40"><ShieldCheck className="w-3.5 h-3.5 text-white" /><span className="text-[8px] font-black uppercase text-white">Registry Protocol v3.1</span></div></div></div></motion.div>
       )}</AnimatePresence>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); hasInitialized.current = true; }} title="Select Asset" />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} totalFeeUsd={totalFeeUsd} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
       <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={formatFiat(totalFeeUsd)} networkName={activeNetwork.name} />
@@ -606,8 +449,6 @@ function SendClient() {
 
 export default function SendPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-[#050505]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
-      <SendClient />
-    </Suspense>
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-[#050505]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}><SendClient /></Suspense>
   );
 }
