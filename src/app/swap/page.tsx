@@ -218,9 +218,18 @@ function SwapClient() {
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             
-            // USE NATIVE SYMBOL FOR 0X NATIVE ASSETS (SAFEST STANDARD)
-            const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
-            const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+            /**
+             * UNIVERSAL NATIVE TOKEN IDENTIFICATION
+             * Ethereum (Chain 1) uses 'ETH'. 
+             * Other chains (Polygon, BSC, etc.) use '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+             */
+            const sellId = fromToken.isNative 
+              ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
+              : fromToken.address;
+            
+            const buyId = toToken.isNative 
+              ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
+              : toToken.address;
 
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, sellId, buyId, sellAmount, userAddress);
             
@@ -342,8 +351,13 @@ function SwapClient() {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
           
-          const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
-          const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+          const sellId = fromToken.isNative 
+            ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
+            : fromToken.address;
+          
+          const buyId = toToken.isNative 
+            ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') 
+            : toToken.address;
 
           const q = await zeroXService.getQuote(fromToken.chainId ?? 1, sellId, buyId, sellAmount, wallet.address);
           

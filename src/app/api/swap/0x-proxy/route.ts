@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * INSTITUTIONAL 0X PROTOCOL PROXY
- * Version: 4.0.0 (Hardened Production Node)
+ * Version: 4.1.0 (Strict Key Hardening)
  * 
  * Safely handles indicative price and execution quote requests.
  * Enforces the 1.00% (100 BPS) platform fee on the server side.
- * Now features detailed error propagation and timeout nodes.
+ * Features detailed error propagation and strictly formatted API keys.
  */
 
 const ZEROX_API_KEY = '5eebaf6f-e024-41d2-a18f-e05c241129c3';
