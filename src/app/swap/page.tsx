@@ -23,7 +23,8 @@ import {
   Globe,
   Activity,
   Repeat,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -108,6 +109,16 @@ function SwapClient() {
   const quoteIdRef = useRef<number>(0);
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
+
+  // AUTO-HIDE ERROR SENTINEL: Slides error cards up after 5 seconds
+  useEffect(() => {
+    if (fetchError) {
+      const timer = setTimeout(() => {
+        setFetchError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [fetchError]);
 
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
@@ -562,6 +573,11 @@ function SwapClient() {
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Node Sync</h3>
                   </div>
+                  {fetchError && (
+                    <button onClick={() => setFetchError(null)} className="p-1 rounded-full hover:bg-white/5 transition-colors">
+                      <X className="w-4 h-4 text-white/20" />
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
