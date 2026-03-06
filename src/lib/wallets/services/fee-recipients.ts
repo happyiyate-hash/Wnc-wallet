@@ -1,7 +1,7 @@
 
 /**
  * INSTITUTIONAL FEE RECIPIENT REGISTRY
- * Version: 3.0.0 (Production Verified)
+ * Version: 3.1.0 (Production Registry Sync)
  * 
  * Centralized node for managing fee targets across 39 blockchain ecosystems.
  * EVM chains are merged into a single vault, while others maintain discrete nodes.
@@ -10,7 +10,7 @@
 export const FEE_RECIPIENTS = {
     // --- EVM COMPATIBLE GROUP (19 Chains) ---
     // Ethereum, Polygon, Base, Linea, Optimism, Arbitrum, Blast, Avalanche, BSC, Celo, zkSync, Scroll, Sei, Mantle, opBNB, Palm, Hemi, Swellchain, Unichain
-    evm: '0x7f3f4206017C0aACF7A94C9eF7B80563984aD288',
+    evm: process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x144F9E614c094ADDA010A27c254faDeFF390A3B2',
 
     // --- LEDGER / ACCOUNT NODES ---
     xrpLedger: "rpgFikx5ncjZ73C5Z4aRvnL6PAKGsiowVB",
