@@ -3,13 +3,14 @@ import crypto from 'crypto';
 
 /**
  * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL (HARDCODED PRODUCTION)
- * Version: 3.0.0 (SmarterSeller Shared Standard)
+ * Version: 3.1.0 (SmarterSeller Shared Standard)
  */
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
 // MASTER KEY: Strictly hardcoded for SmarterSeller Inter-App Compatibility
+// Reference: c4b8f9e7a1d2c3f4b5e6a7d8c9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8
 const MASTER_KEY_HEX = 'c4b8f9e7a1d2c3f4b5e6a7d8c9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8';
 
 function getInstitutionalKey(): Buffer {

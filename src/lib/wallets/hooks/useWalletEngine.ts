@@ -7,7 +7,7 @@ import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (FAIL-FAST)
- * Version: 4.6.0 (Unified Safety Lifecycle)
+ * Version: 5.1.0 (8s Unified Safety Lifecycle)
  */
 export function useWalletEngine({
   wallets,
@@ -46,13 +46,13 @@ export function useWalletEngine({
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     
-    // SAFETY TIMEOUT: Definitive barrier release after 8 seconds
+    // SAFETY TIMEOUT: Hard barrier release after 8 seconds
     const safetyTimer = setTimeout(() => {
         setHasFetchedInitialData(true);
     }, 8000);
     
     try {
-      // PHASE 1: Active Network Handshake (Mission Critical)
+      // PHASE 1: Active Network Handshake
       const activeBalances = await fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
@@ -65,18 +65,18 @@ export function useWalletEngine({
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
       lastSyncTimestampRef.current[viewingNetwork.chainId] = Date.now();
       
-      // PHASE 1 COMPLETE: Immediate barrier release
+      // Release barrier immediately after first network sync
       clearTimeout(safetyTimer);
       setHasFetchedInitialData(true);
 
-      // PHASE 2: Background Registry Sequence (Parallel Discovery)
+      // PHASE 2: Background Sequence
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
       
       for (const chain of otherChains) {
         if (signal.aborted || !wallets) break;
 
         const lastSync = lastSyncTimestampRef.current[chain.chainId] || 0;
-        if (Date.now() - lastSync < 60000) continue; // Throttle background refreshes
+        if (Date.now() - lastSync < 60000) continue;
 
         const secondaryBalances = await fetchBalancesForChain(chain, wallets, infuraApiKey, userAddedTokens);
         
@@ -84,12 +84,11 @@ export function useWalletEngine({
         setBalances(prev => ({ ...prev, [chain.chainId]: secondaryBalances }));
         lastSyncTimestampRef.current[chain.chainId] = Date.now();
         
-        await sleep(400); // Institutional breather
+        await sleep(400); 
       }
     } catch (e) {
-      console.warn("[DATA_ENGINE_ADVISORY] Handshake deferred.");
+      // Handshake deferred
     } finally { 
-      // FINAL GUARD: Ensure barrier is dropped no matter the outcome
       setHasFetchedInitialData(true);
       clearTimeout(safetyTimer);
       setIsRefreshing(false); 

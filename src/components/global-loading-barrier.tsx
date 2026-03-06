@@ -6,12 +6,9 @@ import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 
 /**
- * GLOBAL LOADING BARRIER (Institutional Gate)
- * Hardened to ensure the UI remains blocked until all cryptographic
- * AND data nodes (balances/prices) are fully synchronized.
- * 
- * FAIL-SAFE SENTINEL: Internal 8-second timeout ensures the barrier
- * always drops, even if RPC handshakes hang.
+ * GLOBAL LOADING BARRIER
+ * Version: 5.1.0 (8s Unified Safety Sentinel)
+ * Strictly visual. Guaranteed release within 8 seconds.
  */
 export default function GlobalLoadingBarrier() {
   const { user, loading: authLoading } = useUser();
@@ -19,31 +16,21 @@ export default function GlobalLoadingBarrier() {
   const [hasMounted, setHasMounted] = useState(false);
   const hasHydratedOnceRef = useRef(false);
   const [isVisible, setIsVisible] = useState(true);
-  const [isTimedOut, setIsTimedOut] = useState(false);
   
   useEffect(() => {
     setHasMounted(true);
     
     // SAFETY SENTINEL: Drop barrier after 8 seconds no matter what
     const timer = setTimeout(() => {
-      console.warn("[LOADING_BARRIER] Safety Sentinel triggered. Forcing barrier release.");
-      setIsTimedOut(true);
+      hasHydratedOnceRef.current = true;
+      setIsVisible(false);
     }, 8000);
     
     return () => clearTimeout(timer);
   }, []);
 
-  const isAuthResolved = !authLoading;
-  const isWalletResolved = isInitialized;
-  const hasWallet = wallets && wallets.length > 0;
-  
-  // Data Resolve Rule: If user has a wallet, we MUST wait for the first data burst.
-  const isDataResolved = !user || !hasWallet || hasFetchedInitialData;
+  const isAppReady = hasMounted && (!authLoading && isInitialized && (!user || !wallets || wallets.length === 0 || hasFetchedInitialData));
 
-  // The barrier is ready to drop if everything is resolved OR if the safety sentinel triggered
-  const isAppReady = hasMounted && (isTimedOut || (isAuthResolved && isWalletResolved && isDataResolved));
-
-  // Once the app is ready for the first time, we mark it as hydrated and hide the barrier permanently
   useEffect(() => {
     if (isAppReady && !hasHydratedOnceRef.current) {
       hasHydratedOnceRef.current = true;
@@ -54,30 +41,17 @@ export default function GlobalLoadingBarrier() {
 
   if (hasHydratedOnceRef.current || !isVisible) return null;
 
-  const getStatusText = () => {
-    if (!hasMounted) return 'Verifying Identity...';
-    if (!isAuthResolved) return 'Verifying Identity...';
-    if (!isWalletResolved) return 'Deriving Secure Nodes...';
-    if (!isDataResolved) return 'Synchronizing Registry...';
-    return 'Establishing Terminal...';
-  };
-
-  const statusText = getStatusText();
-
   return (
     <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white transition-opacity duration-500">
       <div className="relative mb-12 flex items-center justify-center">
-        {/* Outer spin ring */}
-        <div className="w-24 h-24 rounded-full border-t-2 border-primary animate-spin shadow-[0_0_30px_rgba(139,92,246,0.2)]" />
-        
-        {/* Inner hardware node */}
+        <div className="w-24 h-24 rounded-full border-t-2 border-primary animate-spin" />
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-12 h-12 rounded-2xl bg-primary border border-primary/50 animate-pulse shadow-[0_0_20px_rgba(139,92,246,0.4)]" />
         </div>
       </div>
       
       <div className="space-y-4 text-center px-10">
-        <h2 className="text-xl font-black uppercase tracking-[0.5em] text-white drop-shadow-2xl">
+        <h2 className="text-xl font-black uppercase tracking-[0.5em] text-white">
           Wevina
         </h2>
         <div className="flex flex-col items-center gap-2">
@@ -85,7 +59,7 @@ export default function GlobalLoadingBarrier() {
             <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
           </div>
           <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] animate-pulse">
-            {statusText}
+            Establishing Terminal...
           </p>
         </div>
       </div>

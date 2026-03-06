@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * INSTITUTIONAL LOGO & METADATA REGISTRY (SERVER-ONLY HARDCODED)
  * Project: gcghriodmljkusdduhzl
- * Version: 5.0.0 (Production Hardened)
+ * Version: 5.1.0 (Production Hardened - Direct Supabase Access)
  */
 
 const LOGO_SUPABASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';

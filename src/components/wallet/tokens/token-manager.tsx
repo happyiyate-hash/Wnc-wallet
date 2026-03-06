@@ -21,26 +21,26 @@ interface TokenManagerProps {
 
 /**
  * INSTITUTIONAL ASSET MANAGER
- * Version: 3.0.0 (Non-Blocking Hydration)
- * Prioritizes hardcoded assets and native nodes for instant UI response.
+ * Version: 3.1.0 (Non-Blocking Silent Discovery)
+ * Independent of auth process. Prioritizes hardcoded nodes.
  */
 export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps) {
   const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens, refresh } = useWallet();
   const [searchTerm, setSearchTerm] = useState('');
   const [dbTokens, setDbTokens] = useState<AssetRow[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     async function discover() {
       if (!isOpen || !viewingNetwork) return;
       
-      setIsLoading(true);
+      setIsSearching(true);
       try {
-        const networkSlug = viewingNetwork.name.split(' ')[0].toLowerCase();
-        // SECURE HANDSHAKE: Discovery happens in background
+        const networkSlug = viewingNetwork.name.toLowerCase();
+        // SEARCH DIRECTLY FROM LOGO CDN REGISTRY (Server Action)
         const tokens = await fetchNetworkTokens(networkSlug);
 
-        if (tokens) {
+        if (tokens && tokens.length > 0) {
           const formatted = tokens.map(t => ({
             chainId: viewingNetwork.chainId,
             address: t.contract?.toLowerCase().trim(),
@@ -51,15 +51,14 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             balance: '0',
             isNative: false,
             priceSource: t.priceSource || 'coingecko',
-            priceId: t.priceId,
-            coingeckoId: t.priceId
+            priceId: t.priceId
           } as AssetRow));
           setDbTokens(formatted);
         }
       } catch (e) {
-        console.warn("[TOKEN_MANAGER_ADVISORY] CDN Discovery deferred.");
+        // Handshake deferred
       } finally {
-        setIsLoading(false);
+        setIsSearching(false);
       }
     }
 
@@ -69,13 +68,13 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
   const mergedTokens = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // 1. Load Hardcoded Assets (Instant)
+    // 1. Load Hardcoded Assets (Instant Handshake)
     const hardcoded = getInitialAssets(viewingNetwork.chainId).map(a => ({
         ...a,
         balance: '0'
     } as AssetRow));
 
-    // 2. Merge with CDN Discovered Assets
+    // 2. Merge with Registry Discovered Assets
     const combined = [...hardcoded, ...dbTokens];
     return combined.reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
@@ -126,9 +125,9 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
             
             <SheetHeader className="px-6 mb-4">
-              <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center">Manage Assets</SheetTitle>
+              <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center">Registry Assets</SheetTitle>
               <SheetDescription className="text-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-                {viewingNetwork?.name} Registry
+                {viewingNetwork?.name} Node Handshake
               </SheetDescription>
             </SheetHeader>
 
@@ -136,73 +135,33 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                 <div className="relative flex-1 bg-white/5 border border-white/10 rounded-2xl">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search asset or paste address"
+                      placeholder="Search asset or contract..."
                       className="w-full h-14 bg-transparent border-none pl-11 rounded-2xl focus-visible:ring-0 text-base"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                {isLoading && (
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
-                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    </div>
-                )}
+                {isSearching && <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>}
             </div>
 
             <ScrollArea className="flex-1 px-6">
               <div className="space-y-2 pb-32">
-                {filteredTokens.length > 0 ? (
-                    filteredTokens.map((token) => {
-                        const key = `${viewingNetwork.chainId}:${token.symbol}`;
-                        const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
-                        const isHidden = hiddenTokenKeys.has(key);
-                        const isOn = (token.isNative || isAdded) && !isHidden;
+                {filteredTokens.map((token) => {
+                    const key = `${viewingNetwork.chainId}:${token.symbol}`;
+                    const isAdded = userAddedTokens.some(t => t.chainId === viewingNetwork.chainId && t.symbol === token.symbol);
+                    const isHidden = hiddenTokenKeys.has(key);
+                    const isOn = (token.isNative || isAdded) && !isHidden;
 
-                        return (
-                            <div 
-                                key={token.isNative ? token.symbol : token.address}
-                                className="flex items-center justify-between p-4 rounded-3xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="relative">
-                                        <TokenLogoDynamic 
-                                            logoUrl={token.iconUrl} 
-                                            alt={token.symbol} 
-                                            size={44} 
-                                            chainId={token.chainId} 
-                                            symbol={token.symbol} 
-                                            name={token.name}
-                                        />
-                                        {token.isNative && (
-                                            <div className="absolute -top-1 -right-1 bg-primary p-0.5 rounded-full border-2 border-[#0a0a0c]">
-                                                <Zap className="w-2.5 h-2.5 text-white fill-current" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-base text-white">{token.symbol}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-40">
-                                            {token.isNative ? 'Native Gas Node' : token.name}
-                                        </p>
-                                    </div>
-                                </div>
-                                <Switch 
-                                    checked={isOn} 
-                                    onCheckedChange={(checked) => handleToggle(token, checked)}
-                                    className="data-[state=checked]:bg-primary"
-                                />
+                    return (
+                        <div key={token.isNative ? token.symbol : token.address} className="flex items-center justify-between p-4 rounded-3xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
+                            <div className="flex items-center gap-4">
+                                <TokenLogoDynamic logoUrl={token.iconUrl} alt={token.symbol} size={44} chainId={token.chainId} symbol={token.symbol} name={token.name} />
+                                <div className="text-left"><p className="font-bold text-base text-white">{token.symbol}</p><p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-40">{token.isNative ? 'Native Gas Node' : token.name}</p></div>
                             </div>
-                        );
-                    })
-                ) : (
-                    <div className="py-24 flex flex-col items-center justify-center text-center space-y-4 opacity-20">
-                        <Search className="w-12 h-12 text-white" />
-                        <div className="space-y-1">
-                            <p className="text-xs font-black uppercase tracking-widest text-white">No assets found</p>
-                            <p className="text-[9px] font-medium">Try a different search or contract address.</p>
+                            <Switch checked={isOn} onCheckedChange={(checked) => handleToggle(token, checked)} className="data-[state=checked]:bg-primary" />
                         </div>
-                    </div>
-                )}
+                    );
+                })}
               </div>
             </ScrollArea>
         </div>
