@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -21,8 +22,9 @@ const CDN_BASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';
 
 /**
  * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
- * Version: 4.0.0 (Synchronous Cache Hydration)
+ * Version: 4.1.0 (Name-Priority Cache)
  * Features immediate localStorage resolution to eliminate UI flickering.
+ * Optimized to differentiate between assets sharing symbols (e.g., Blast ETH).
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -33,14 +35,15 @@ export default function TokenLogoDynamic({
   symbol,
   name,
 }: TokenLogoDynamicProps) {
-  // 1. DETERMINISTIC CACHE KEY
+  // 1. DETERMINISTIC NAME-FIRST CACHE KEY
+  // Leading with the name ensures "Base" vs "Blast" vs "Ethereum" doesn't collide on "ETH"
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
-    return `logo_v4_${slug}_${symbol?.toLowerCase() || 'native'}`;
+    const sym = symbol?.toLowerCase() || 'native';
+    return `logo_v4.1_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   // 2. SYNCHRONOUS HYDRATION
-  // We check localStorage during initialization to prevent the 1st-render flicker
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(cacheKey);
@@ -55,7 +58,6 @@ export default function TokenLogoDynamic({
     async function resolve() {
       const cached = localStorage.getItem(cacheKey);
       
-      // If already cached, we can skip unnecessary network handshakes
       if (cached) {
         if (resolvedUrl !== cached) setResolvedUrl(cached);
         setIsLoading(false);
@@ -65,8 +67,9 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // A. Perform direct Supabase registry lookup
-      if (symbol || name) {
+      // A. Perform Name-Priority Registry Lookup
+      // Passing both ensures the resolver can prioritize the full name (e.g. "Blast")
+      if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
@@ -76,7 +79,7 @@ export default function TokenLogoDynamic({
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup deferred:", e);
+          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup deferred.");
         }
       }
 
