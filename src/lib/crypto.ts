@@ -2,8 +2,8 @@
 import crypto from 'crypto';
 
 /**
- * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL (HARDCODED)
- * Version: 2.0.0
+ * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL (HARDCODED PRODUCTION)
+ * Version: 3.0.0 (SmarterSeller Shared Standard)
  */
 
 const ALGORITHM = 'aes-256-cbc';

@@ -10,9 +10,6 @@ import { useWallet } from '@/contexts/wallet-provider';
  * Hardened to ensure the UI remains blocked until all cryptographic
  * AND data nodes (balances/prices) are fully synchronized.
  * 
- * NAVIGATION OPTIMIZED: Once dismissed, this barrier remains hidden
- * during internal routing to prevent jarring UX.
- * 
  * FAIL-SAFE SENTINEL: Internal 8-second timeout ensures the barrier
  * always drops, even if RPC handshakes hang.
  */

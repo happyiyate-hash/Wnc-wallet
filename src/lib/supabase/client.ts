@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * PRIMARY AUTHENTICATION & PROFILE REGISTRY (HARDCODED PRODUCTION)
  * Project: lbltgeldesxkgdrblfxj
+ * Version: 5.0.0 (Environment Independent)
  */
 
 const supabaseUrl = 'https://lbltgeldesxkgdrblfxj.supabase.co';

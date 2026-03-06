@@ -4,7 +4,7 @@ import {googleAI} from '@genkit-ai/google-genai';
 
 /**
  * INSTITUTIONAL AI GATEWAY (HARDCODED PRODUCTION)
- * Version: 2.0.0
+ * Version: 3.0.0 (Environment Independent)
  */
 export const ai = genkit({
   plugins: [

@@ -155,6 +155,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
   }, [isInitialized, effectiveViewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
+  // 3. Initialize Engine
   const handleSetBalances = useCallback((update: (prev: any) => any) => {
     setBalances(prev => {
       const next = update(prev);
@@ -165,7 +166,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
-  // 3. Initialize Engine
   const { refresh } = useWalletEngine({
     wallets, 
     viewingNetwork: effectiveViewingNetwork, 
@@ -178,13 +178,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setHasFetchedInitialData
   });
 
-  // 4. Trigger Initial Handshake
-  useEffect(() => {
-    if (isInitialized && wallets && wallets.length > 0 && !hasFetchedInitialData) {
-      console.log("[WALLET_PROVIDER] Executing initial registry sync...");
-      refresh();
+  /**
+   * REGISTRY DIAGNOSTIC ENGINE
+   * Verifies and repairs multi-chain addresses between local and cloud nodes.
+   */
+  const runCloudDiagnostic = useCallback(async (options?: { forceUI?: boolean }) => {
+    if (!user || !wallets || wallets.length === 0 || !accountNumber) {
+      console.warn("[SENTINEL] Diagnostic deferred: Identity node incomplete.");
+      return;
     }
-  }, [isInitialized, wallets, refresh, hasFetchedInitialData]);
+    
+    console.log("[SENTINEL] Launching Registry Audit...");
+    await backgroundSyncWorker.performCloudAudit(
+      user.id, 
+      wallets, 
+      profile, 
+      accountNumber, 
+      chainsWithLogos, 
+      setSyncDiagnostic
+    );
+  }, [user, wallets, profile, accountNumber, chainsWithLogos]);
+
+  // 4. Trigger Automatic Registry Audit on Boot & Sync
+  useEffect(() => {
+    if (isInitialized && wallets && wallets.length > 0 && user && !authLoading) {
+      // Small breather to allow hydration to settle
+      const timer = setTimeout(() => {
+        runCloudDiagnostic();
+        refresh(); // Also refresh balances
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, wallets, user, authLoading, runCloudDiagnostic, refresh]);
 
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Authentication required");
@@ -196,39 +221,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
+    
+    // ATOMIC CLOUD SYNC
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
+    
+    // Trigger Audit Sentinel
+    setTimeout(() => runCloudDiagnostic(), 500);
     return mnemonic;
-  }, [user?.id, profile?.account_number]);
+  }, [user, profile, runCloudDiagnostic]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Authentication required");
     const { validateMnemonic } = await import('bip39');
     if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic protocol.");
+    
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
     let targetAcc = profile?.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
+    
     await syncAddressesToCloud(user.id, derived, targetAcc);
     await saveVaultToCloud(user.id, mnemonic);
-  }, [user?.id, profile?.account_number]);
+    
+    setTimeout(() => runCloudDiagnostic(), 500);
+  }, [user, profile, runCloudDiagnostic]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No backup node detected.");
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Unauthorized: Session missing.");
+    
     setIsWalletLoading(true);
     onStatusUpdate?.('Decrypting Vault Node...');
     try {
       if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv })
         });
         const data = await res.json();
@@ -242,13 +280,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setWallets(derived);
         } else { throw new Error("Decryption handshake failed."); }
       }
+      
       if (profile.account_number) { 
         localStorage.setItem(`account_number_${user.id}`, profile.account_number); 
         setAccountNumber(profile.account_number); 
       }
+      
       toast({ title: "Identity Reclaimed" });
-    } catch (e: any) { throw new Error(e.message || "Cloud Handshake failed."); } finally { setIsWalletLoading(false); }
-  }, [user, profile, toast]);
+      setTimeout(() => runCloudDiagnostic(), 1000);
+    } catch (e: any) { 
+      throw new Error(e.message || "Cloud Handshake failed."); 
+    } finally { 
+      setIsWalletLoading(false); 
+    }
+  }, [user, profile, toast, runCloudDiagnostic]);
 
   const deleteWalletPermanently = useCallback(async () => {
     if (!user) return;
@@ -259,16 +304,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cosmos_address: null, osmosis_address: null, secret_address: null, injective_address: null, celestia_address: null, cardano_address: null, tron_address: null, algorand_address: null,
         hedera_address: null, tezos_address: null, aptos_address: null, sui_address: null,
       }).eq('id', user.id);
+      
       registryDb.purgeAll();
       purgeLocalWalletCache(user.id);
-      setWallets(null); setAccountNumber(null);
+      setWallets(null); 
+      setAccountNumber(null);
+      setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
       router.replace('/wallet-session');
     } catch (e) { console.error(e); }
   }, [user, router]);
 
   const logout = useCallback(async () => {
-    if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); }
-    setWallets(null); setBalances({}); setAccountNumber(null);
+    if (user) { 
+      registryDb.purgeAll(); 
+      purgeLocalWalletCache(user.id); 
+    }
+    setWallets(null); 
+    setBalances({}); 
+    setAccountNumber(null);
+    setSyncDiagnostic({ status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0 });
     if (signOut) await signOut();
     window.location.href = '/auth/login';
   }, [signOut, user]);
@@ -327,13 +381,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     getAvailableAssetsForChain: (cid: number) => getInitialAssets(cid).map(a => ({ ...a, balance: '0' } as AssetRow)),
     isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen,
     activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic,
-    runCloudDiagnostic: async () => backgroundSyncWorker.performCloudAudit(user!.id, wallets, profile, accountNumber, chainsWithLogos, setSyncDiagnostic)
+    runCloudDiagnostic
   }), [
     isInitialized, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets,
     chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices,
     hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId,
     setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, user, profile, router,
-    refresh, generateWallet, importWallet, restoreFromCloud, deleteWalletPermanently, logout
+    refresh, generateWallet, importWallet, restoreFromCloud, deleteWalletPermanently, logout, runCloudDiagnostic
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
