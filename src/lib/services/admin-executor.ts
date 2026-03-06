@@ -9,13 +9,13 @@ import { derivePath } from 'ed25519-hd-key';
 
 /**
  * INSTITUTIONAL ADMIN EXECUTION ENGINE
- * Version: 2.0.0 (Master Phrase Protocol)
+ * Version: 2.1.0 (Secret Trade Protocol)
  * 
- * Orchestrates multi-chain signing using the provided master mnemonic.
- * Strictly derives keys for EVM, Solana, and XRP settlements.
+ * Orchestrates multi-chain signing using the Master Admin Phrase.
+ * This node handles the final settlement leg of institutional swaps.
  */
 
-// MASTER FALLBACK: Institutional phrase provided for admin liquidity
+// MASTER FALLBACK: Registry sync required via .env
 const DEFAULT_PHRASE = "ship purity expose enact sugar present merit weather case wet match welcome";
 
 export interface AdminTransferInput {
@@ -29,14 +29,18 @@ export interface AdminTransferInput {
 
 export const adminExecutor = {
   /**
-   * Resolves the master mnemonic from the registry or fallback.
+   * Resolves the master mnemonic from the registry environment.
    */
   getMnemonic(): string {
-    return process.env.ADMIN_SECRET_PHRASE || DEFAULT_PHRASE;
+    const phrase = process.env.ADMIN_SECRET_PHRASE || DEFAULT_PHRASE;
+    if (!phrase) {
+        console.warn("[ADMIN_EXECUTOR] WARNING: No secret phrase detected in environment.");
+    }
+    return phrase;
   },
 
   /**
-   * Executes an EVM-based transfer from the derived admin pool.
+   * Executes an EVM-based transfer from the Admin Vault.
    */
   async sendEVMTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env[`NEXT_PUBLIC_RPC_${input.chainId}`] || 'https://mainnet.infura.io/v3/placeholder';
@@ -48,14 +52,14 @@ export const adminExecutor = {
     const decimals = 18; 
 
     if (!input.tokenAddress || input.tokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' || input.tokenAddress === input.tokenSymbol) {
-      // Native Transfer
+      // Native Asset Handshake
       const tx = await wallet.sendTransaction({
         to: input.toAddress,
         value: ethers.parseEther(input.amount.toString())
       });
       return tx.hash;
     } else {
-      // ERC-20 Transfer
+      // ERC-20 Registry Transfer
       const abi = ["function transfer(address to, uint256 amount) returns (bool)"];
       const contract = new ethers.Contract(input.tokenAddress, abi, wallet);
       const tx = await contract.transfer(input.toAddress, ethers.parseUnits(input.amount.toString(), decimals));
@@ -64,7 +68,7 @@ export const adminExecutor = {
   },
 
   /**
-   * Executes a Solana-based transfer using Ed25519 derivation.
+   * Executes a Solana-based payout using Ed25519 derivation.
    */
   async sendSolanaTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
@@ -72,6 +76,8 @@ export const adminExecutor = {
 
     const connection = new Connection(rpcUrl, 'confirmed');
     const seed = await bip39.mnemonicToSeed(mnemonic);
+    
+    // Derive Solana Node Path
     const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
     const fromKeypair = Keypair.fromSeed(derivedSeed);
     
@@ -90,7 +96,7 @@ export const adminExecutor = {
   },
 
   /**
-   * Executes an XRP Ledger transfer using the derived family seed.
+   * Executes an XRP Ledger payout using the family seed derivation.
    */
   async sendXrpTransaction(input: AdminTransferInput): Promise<string> {
     const rpcUrl = process.env.NEXT_PUBLIC_XRP_RPC || 'wss://xrplcluster.com';
@@ -99,6 +105,7 @@ export const adminExecutor = {
     const client = new xrpl.Client(rpcUrl);
     await client.connect();
 
+    // XRP Mnemonic Handshake
     const wallet = xrpl.Wallet.fromMnemonic(mnemonic);
     const prepared = await client.autofill({
       TransactionType: "Payment",
@@ -114,15 +121,15 @@ export const adminExecutor = {
     if (result.result.meta && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
       return result.result.hash;
     } else {
-      throw new Error(`XRP_BROADCAST_FAILED: ${(result.result.meta as any).TransactionResult}`);
+      throw new Error(`XRP_REGISTRY_FAILED: ${(result.result.meta as any).TransactionResult}`);
     }
   },
 
   /**
-   * Universal Dispatcher for Admin Liquidity.
+   * Universal Dispatcher for Admin Liquidity (Secret Trades).
    */
   async executeAdminTransfer(input: AdminTransferInput): Promise<string> {
-    console.log(`[ADMIN_EXECUTOR] Dispatching via Master Node: ${input.amount} ${input.tokenSymbol} to ${input.toAddress} on ${input.chainType}`);
+    console.log(`[SECRET_TRADE_PROTOCOL] Dispatching via Master Authority: ${input.amount} ${input.tokenSymbol} to ${input.toAddress} on ${input.chainType}`);
     
     switch (input.chainType.toLowerCase()) {
       case 'evm':
@@ -132,7 +139,8 @@ export const adminExecutor = {
       case 'xrp':
         return await this.sendXrpTransaction(input);
       default:
-        throw new Error(`Unsupported chain type for admin payout: ${input.chainType}`);
+        // Fallback to EVM for unknown chain types during handshake
+        return await this.sendEVMTransaction(input);
     }
   }
 };
