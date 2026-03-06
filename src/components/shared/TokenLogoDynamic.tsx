@@ -19,11 +19,11 @@ interface TokenLogoDynamicProps {
 }
 
 /**
- * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
- * Version: 5.0.0 (Server-Handshake Sync)
+ * INSTITUTIONAL TOKEN LOGO ENGINE (TYPE-SAFE)
+ * Version: 5.1.0 (Guide Compliant)
  * 
- * Re-engineered to utilize Server Actions for registry lookups,
- * ensuring no Supabase keys are exposed to the browser.
+ * Handles relative path resolution by prepending the CDN URL
+ * and ensures strict string checking to prevent TypeErrors.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -37,7 +37,7 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v5.0_${slug}_${sym}`;
+    return `logo_v5.1_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
@@ -63,10 +63,25 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // A. SERVER HANDSHAKE: Resolve via Backend Registry
+      // 1. PRIMARY: Direct Path Resolution (Strict String Check)
+      if (logoUrl && typeof logoUrl === 'string') {
+        let finalUrl = logoUrl;
+        if (logoUrl.startsWith('/api/cdn')) {
+          finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
+        } else if (!logoUrl.startsWith('http')) {
+          // If relative but not starting with /api/cdn, treat as institutional path
+          finalUrl = `${LOGO_CDN_URL}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
+        }
+        
+        setResolvedUrl(finalUrl);
+        localStorage.setItem(cacheKey, finalUrl);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. SECONDARY: Server Handshake (Prioritized Search)
       if (name || symbol) {
         try {
-          // This calls the 'use server' action securely
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
@@ -75,23 +90,8 @@ export default function TokenLogoDynamic({
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_CLIENT_ADVISORY] Server handshake deferred.");
+          console.warn("[LOGO_CLIENT_ADVISORY] Registry handshake deferred.");
         }
-      }
-
-      // B. FALLBACK: Direct CDN Link
-      if (logoUrl) {
-        let finalUrl = logoUrl;
-        if (logoUrl.startsWith('http')) {
-          finalUrl = logoUrl;
-        } else if (logoUrl.startsWith('/')) {
-          finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
-        }
-        
-        setResolvedUrl(finalUrl);
-        localStorage.setItem(cacheKey, finalUrl);
-        setIsLoading(false);
-        return;
       }
 
       setIsLoading(false);

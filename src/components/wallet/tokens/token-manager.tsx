@@ -17,6 +17,10 @@ interface TokenManagerProps {
     onOpenChange: (isOpen: boolean) => void;
 }
 
+/**
+ * INSTITUTIONAL ASSET MANAGER
+ * Version: 2.2.0 (Server Action Compliant)
+ */
 export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps) {
   const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens, refresh } = useWallet();
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,7 +34,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
       setIsLoading(true);
       try {
         const networkSlug = viewingNetwork.name.split(' ')[0].toLowerCase();
-        // SECURE HANDSHAKE: Call server action instead of direct Supabase
+        // SECURE HANDSHAKE: Call server action instead of direct Supabase client
         const tokens = await fetchNetworkTokens(networkSlug);
 
         if (tokens) {

@@ -97,7 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
   const hasTriggeredAuditInSessionRef = useRef(false);
 
-  // HYDRATION ENGINE
+  // 1. HYDRATION ENGINE (Shared SmarterSeller Logic)
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -108,6 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async () => {
       try {
+        // Use institutional shared keys
         const savedInfura = localStorage.getItem(`ss-infura-key-${user.id}`);
         if (savedInfura) setInfuraApiKeyState(savedInfura);
 
@@ -168,6 +169,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
 
+  // 2. STABILITY NODES: Declare dependencies BEFORE the engine init
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
@@ -182,6 +184,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
+  // 3. ENGINE INITIALIZATION
   const { refresh } = useWalletEngine({
     wallets, 
     viewingNetwork: effectiveViewingNetwork, 
@@ -327,8 +330,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, router, toast]);
 
+  /**
+   * INSTITUTIONAL RECOVERY FLOW (Atomic Sequence)
+   * Version: 4.0.0 (Guide Compliant)
+   */
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
-    if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No cloud backup detected.");
+    if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No backup found.");
     
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Authentication required.");
@@ -337,7 +344,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     onStatusUpdate?.('Decrypting Registry Nodes...');
     
     try {
-      // 1. Recover Mnemonic Node
+      // 1. Decrypt Mnemonic Node via API
       if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
           method: 'POST',
@@ -348,9 +355,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const mnemonic = data.text;
         
         if (mnemonic) {
+          // Persist to Shared Registry
           localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
           
-          // 2. Recover Infura Node (if exists)
+          // 2. Decrypt Infura Node (if exists)
           if (profile.vault_infura_key && profile.infura_iv) {
             const resKey = await fetch('/api/wallet/decrypt-phrase', {
               method: 'POST',
@@ -365,9 +373,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          // 3. Derive Multi-Chain Wallets Atomic Step
+          // 3. ATOMIC DERIVATION: Derive all 39 blockchain nodes in-process
           onStatusUpdate?.('Deriving Multi-Chain Wallets...');
           const derived = await deriveAllWallets(mnemonic);
+          
+          // Cache derived addresses for instant subsequent hydrations
+          localStorage.setItem(`wallet_addr_cache_${user.id}`, JSON.stringify(derived));
+          localStorage.setItem(`wallet_fingerprint_${user.id}`, `${mnemonic.length}:${mnemonic.slice(0, 10)}`);
+          
           setWallets(derived);
         } else {
           throw new Error("Decryption handshake failed.");
@@ -382,6 +395,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       toast({ title: "Identity Recovered" });
     } catch (e: any) {
+      console.error("[RECOVERY_FAIL]:", e.message);
       throw new Error(e.message || "Handshake failed.");
     } finally {
       setIsWalletLoading(false);

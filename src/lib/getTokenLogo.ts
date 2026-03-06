@@ -1,80 +1,51 @@
 'use server';
 
 import { logoSupabase } from './supabase/logo-server';
-import type { AssetRow } from './types';
 
 /**
  * WEVINA INSTITUTIONAL REGISTRY SERVICE (SERVER-SIDE)
- * Version: 6.0.0 (Flattened Metadata & Pricing)
+ * Version: 6.1.0 (Developer Guide Compliant)
  * 
- * Provides secure backend handshakes for branding and asset metadata.
+ * Implements direct Supabase access logic for metadata and logos.
  */
 
-function cleanTokenName(name: string): string {
-  return name
-    .replace(/Mainnet/gi, '')
-    .replace(/Network/gi, '')
-    .replace(/Chain/gi, '')
-    .replace(/Ecosystem Token/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /**
- * High-precision logo resolution following the Developer API Guide.
+ * Fetches a token's direct logo URL from Supabase storage.
+ * Prioritizes lookup by full token name for accuracy before falling back to symbol.
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
 
   try {
-    const searchName = tokenName?.trim();
-    const searchSymbol = tokenSymbol?.trim();
+    // 1. Prioritize lookup by the full token name for accuracy (Case-Insensitive)
+    const { data: nameData } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('name', tokenName)
+      .limit(1)
+      .maybeSingle();
 
-    // 1. PRIMARY: Exact Name Match
-    if (searchName) {
-        const { data: nameData } = await logoSupabase
-          .from('token_logos')
-          .select('public_url')
-          .ilike('name', searchName)
-          .limit(1)
-          .maybeSingle();
-
-        if (nameData?.public_url) return nameData.public_url;
+    if (nameData?.public_url) {
+      return nameData.public_url;
     }
 
-    // 2. SECONDARY: Cleaned Name
-    const cleaned = searchName ? cleanTokenName(searchName) : null;
-    if (cleaned && cleaned !== searchName) {
-        const { data: cleanData } = await logoSupabase
-          .from('token_logos')
-          .select('public_url')
-          .ilike('name', cleaned)
-          .limit(1)
-          .maybeSingle();
+    // 2. Fall back to the symbol search
+    const { data: symbolData } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('symbol', tokenSymbol)
+      .limit(1)
+      .maybeSingle();
 
-        if (cleanData?.public_url) return cleanData.public_url;
-    }
-
-    // 3. FALLBACK: Symbol Match
-    if (searchSymbol) {
-        const { data: symbolData } = await logoSupabase
-          .from('token_logos')
-          .select('public_url')
-          .ilike('symbol', searchSymbol)
-          .limit(1)
-          .maybeSingle();
-
-        if (symbolData?.public_url) return symbolData.public_url;
-    }
-
-    return null;
+    return symbolData?.public_url || null;
   } catch (error) {
+    console.error("[REGISTRY_LOGO_FAIL]:", error);
     return null;
   }
 }
 
 /**
- * Fetches all flattened tokens for a specific network.
+ * Fetches all tokens for a given network and flattens the token_details.
  */
 export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
   if (!logoSupabase) return [];
@@ -87,6 +58,7 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
 
     if (error || !data) return [];
 
+    // The 'token_details' field is a JSON object, we flatten it for the terminal engine.
     return data.map(token => ({
       symbol: token.token_details.symbol,
       name: token.token_details.name,
@@ -98,12 +70,13 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
       priceId: token.token_details.priceId || token.token_details.coingeckoId,
     }));
   } catch (e) {
+    console.error("[REGISTRY_METADATA_FAIL]:", e);
     return [];
   }
 }
 
 /**
- * Fetches real-time pricing data for custom assets from the metadata registry.
+ * Fetches real-time pricing metadata for custom assets from the registry.
  */
 export async function fetchTokenPricesFromMetadata(contracts: string[]): Promise<any[]> {
   if (!logoSupabase || contracts.length === 0) return [];
@@ -120,6 +93,9 @@ export async function fetchTokenPricesFromMetadata(contracts: string[]): Promise
   }
 }
 
+/**
+ * Client-facing resolver for TokenLogoDynamic.
+ */
 export async function getTokenLogoUrl(symbol?: string | null, name?: string | null): Promise<string | null> {
     if (!symbol && !name) return null;
     const identifier = (name || symbol || '').toLowerCase().replace(/\s+/g, '-');
