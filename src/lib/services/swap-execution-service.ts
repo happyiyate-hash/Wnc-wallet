@@ -10,10 +10,10 @@ import { fetchBalancesForChain } from '../wallets/services/balance-service';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.8.0 (Liquidity Guard Update)
+ * Version: 1.9.0 (WNC Liquidity Sync)
  * 
  * Orchestrates the lifecycle of liquidity-provided swaps.
- * Synchronized with the centralized fee-recipients registry.
+ * Handles both on-chain and virtual internal (WNC) balance discovery.
  */
 
 export interface InitiateSwapInput {
@@ -41,6 +41,9 @@ export const swapExecutionService = {
     infuraKey: string | null
   ): Promise<boolean> {
     try {
+      // INTERNAL WNC BYPASS: Admin has infinite virtual liquidity for the internal token
+      if (token.symbol === 'WNC') return true;
+
       const adminAddress = getFeeRecipient(chain.name);
       if (!adminAddress) return false;
 
@@ -50,6 +53,7 @@ export const swapExecutionService = {
         type: chain.type || 'evm'
       }] as any;
 
+      // Use the provided user's Infura key for the admin balance fetch
       const results = await fetchBalancesForChain(chain, adminWallet, infuraKey, []);
       const tokenResult = results.find(r => 
         token.isNative ? r.isNative : r.address?.toLowerCase() === token.address?.toLowerCase()

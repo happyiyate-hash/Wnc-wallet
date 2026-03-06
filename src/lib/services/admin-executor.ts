@@ -9,14 +9,14 @@ import { derivePath } from 'ed25519-hd-key';
 
 /**
  * INSTITUTIONAL ADMIN EXECUTION ENGINE
- * Version: 2.1.0 (Secret Trade Protocol)
+ * Version: 2.2.0 (Chelsea Protocol Sync)
  * 
  * Orchestrates multi-chain signing using the Master Admin Phrase.
  * This node handles the final settlement leg of institutional swaps.
  */
 
 // MASTER FALLBACK: Registry sync required via .env
-const DEFAULT_PHRASE = "ship purity expose enact sugar present merit weather case wet match welcome";
+const DEFAULT_PHRASE = "chelsea ship purity expose enact sugar present merit weather case wet match welcome";
 
 export interface AdminTransferInput {
   toAddress: string;

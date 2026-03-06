@@ -281,7 +281,7 @@ function SwapClient() {
             };
         }
 
-        if (currentQuoteId !== quoteIdRef.current) return;
+        if (currentQuoteId !== quoteIdRef.current || !quote) return;
         setQuotes([quote]); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
@@ -623,7 +623,7 @@ function SwapClient() {
               {isQuoteLoading && !selectedQuote ? <Skeleton className="h-8 w-24 bg-white/10 rounded" /> : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
-                    {selectedQuote ? formatSmartAmount(quote.receiveAmount) : '0.00'}
+                    {selectedQuote ? formatSmartAmount(selectedQuote.receiveAmount) : '0.00'}
                   </motion.span>
                   <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}</span></div>
                 </>
