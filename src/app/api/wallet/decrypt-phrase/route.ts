@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { decryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
@@ -5,6 +6,7 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE DECRYPTION ENDPOINT
+ * Version: 4.1.0 (Hardened Error Reporting)
  * Returns: { "text": "..." } as per SmarterSeller Standard.
  */
 
@@ -36,9 +38,10 @@ export async function POST(req: NextRequest) {
 
         const { encrypted, iv } = await req.json();
         if (!encrypted || !iv) {
-            return NextResponse.json({ message: 'Missing vault parameters.' }, { status: 400 });
+            return NextResponse.json({ message: 'Missing vault parameters (encrypted/iv).' }, { status: 400 });
         }
 
+        // Execute cryptographic handshake
         const phrase = decryptPhrase(encrypted, iv);
 
         // Standardized SmarterSeller return key
@@ -46,6 +49,10 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error('[API_DECRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Decryption failed.' }, { status: 500 });
+        return NextResponse.json({ 
+            message: error.message === 'DECRYPTION_FAILED' 
+                ? 'Decryption protocol failed. Ensure your recovery phrase is valid.' 
+                : 'Vault service error. Please try again.' 
+        }, { status: 500 });
     }
 }

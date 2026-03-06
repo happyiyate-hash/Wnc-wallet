@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { encryptPhrase } from '@/lib/crypto';
 import { createServerClient } from '@supabase/ssr';
@@ -5,6 +6,7 @@ import { cookies } from 'next/headers';
 
 /**
  * GENERIC SECURE ENCRYPTION ENDPOINT
+ * Version: 4.1.0 (Strict Payload Handling)
  * Standardized for SmarterSeller Ecosystem Interop.
  * Payload: { "text": "..." }
  */
@@ -39,8 +41,8 @@ export async function POST(req: NextRequest) {
         // Support SmarterSeller 'text' key or fallback to 'phrase'
         const payload = body.text || body.phrase;
 
-        if (!payload) {
-            return NextResponse.json({ message: 'Plaintext data required.' }, { status: 400 });
+        if (!payload || typeof payload !== 'string') {
+            return NextResponse.json({ message: 'Plaintext string data required.' }, { status: 400 });
         }
 
         const { encrypted, iv } = encryptPhrase(payload);
@@ -49,6 +51,6 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error('[API_ENCRYPT_ERROR]', error.message);
-        return NextResponse.json({ message: 'Encryption failed.' }, { status: 500 });
+        return NextResponse.json({ message: 'Encryption protocol handshake failed.' }, { status: 500 });
     }
 }

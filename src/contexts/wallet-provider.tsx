@@ -233,9 +233,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify({ encrypted: profile.vault_phrase, iv: profile.iv }) 
         });
-        const { text: mnemonic } = await res.json();
         
-        if (!mnemonic) throw new Error("DECRYPTION_FAILED");
+        const data = await res.json();
+        
+        // Hardened Status Guard
+        if (!res.ok) {
+          throw new Error(data.message || "DECRYPTION_FAILED");
+        }
+
+        const mnemonic = data.text;
+        if (!mnemonic) throw new Error("DECRYPTION_EMPTY");
 
         onStatusUpdate?.('Deriving Multi-Chain Nodes...');
         localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
@@ -278,7 +285,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error("[RECOVERY_CRITICAL]", e);
       setIsWalletLoading(false);
       setIsInitialized(true);
-      throw new Error("Institutional recovery failed. Handshake interrupted."); 
+      // Re-throw standardized error for UI feedback
+      throw new Error(e.message || "Institutional recovery failed. Handshake interrupted."); 
     }
   }, [user, profile, toast, runCloudDiagnostic]);
 
