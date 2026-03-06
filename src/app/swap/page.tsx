@@ -184,7 +184,7 @@ function SwapClient() {
         const quotePromises: Promise<SwapQuote | null>[] = [];
 
         // 1. APP FETCH: 0x Aggregator
-        if (fromToken.chainId === toToken.chainId && fromToken.chainId !== 0) {
+        if (fromToken.chainId === toToken.chainId && (fromToken.chainId ?? 1) !== 0) {
             quotePromises.push((async () => {
                 try {
                     const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
@@ -204,7 +204,7 @@ function SwapClient() {
         }
 
         // 2. APP FETCH: LI.FI Bridge/Swap
-        if (fromToken.chainId !== 0 && toToken.chainId !== 0) {
+        if ((fromToken.chainId ?? 1) !== 0 && (toToken.chainId ?? 1) !== 0) {
             quotePromises.push((async () => {
                 try {
                     const params = new URLSearchParams({ 
@@ -433,6 +433,37 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
+      {/* TOP-DOWN EXECUTION BUTTON (SLIDES OVER HEADER) */}
+      <AnimatePresence>
+        {quotePhase === 'COMPLETED' && !isExecuting && (
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 120 }}
+            className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl"
+          >
+            <div className="max-w-lg mx-auto">
+              <Button
+                className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest"
+                onClick={handleExecuteSwap}
+              >
+                {/* Mirror Shine Animation */}
+                <motion.div
+                  animate={{ x: ['-100%', '200%'] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0"
+                />
+                <span className="relative z-10 flex items-center justify-center gap-3">
+                  <ShieldCheck className="w-5 h-5" />
+                  Sign & Authorize Swap
+                </span>
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
@@ -522,7 +553,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {fromToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {(fromToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
@@ -554,7 +585,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {toToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {(toToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
@@ -590,7 +621,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{fromToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{(fromToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -616,22 +647,12 @@ function SwapClient() {
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{toToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{(toToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
                   </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/95 to-transparent backdrop-blur-md z-40">
-          <Button 
-            className={cn("w-full h-16 rounded-[2rem] text-lg font-black shadow-2xl transition-all border-b-4", quotePhase === 'COMPLETED' && !isExecuting ? "bg-primary hover:bg-primary/90 border-primary/50 text-white" : "bg-zinc-900 border-zinc-950 opacity-50 grayscale cursor-not-allowed")} 
-            disabled={quotePhase !== 'COMPLETED' || isExecuting} 
-            onClick={handleExecuteSwap}
-          >
-            {isExecuting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Sign & Authorize"}
-          </Button>
         </div>
       </main>
 
