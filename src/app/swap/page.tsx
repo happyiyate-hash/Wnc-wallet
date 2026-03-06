@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -280,6 +279,10 @@ function SwapClient() {
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
+  /**
+   * AUTOMATIC MULTI-STEP EXECUTION
+   * Orchestrates 0x, LI.FI, and Pivot routes without user intervention.
+   */
   const handleExecuteSwap = async () => {
     if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
     
@@ -293,6 +296,8 @@ function SwapClient() {
       
       const chainConfig = allChainsMap[fromToken.chainId ?? 1];
       const evmWallet = wallets.find(w => w.type === 'evm');
+      
+      // ENSURE ETHEREUM RPC IS LOADED
       const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
@@ -337,6 +342,7 @@ function SwapClient() {
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
+          // PIVOT ROUTE: Token -> USDC -> Bridge -> Token
           if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_CONVERTING');
           else setExecutionPhase('LIQUIDITY');
 
@@ -554,7 +560,7 @@ function SwapClient() {
               {isQuoteLoading && !selectedQuote ? <Skeleton className="h-8 w-24 bg-white/10 rounded" /> : (
                 <>
                   <motion.span key={selectedQuoteId || 'empty'} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="tabular-nums">
-                    {selectedQuote ? formatSmartAmount(selectedQuote.receiveAmount) : '0.00'}
+                    {selectedQuote ? formatSmartAmount(quote.receiveAmount) : '0.00'}
                   </motion.span>
                   <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat((selectedQuote?.receiveAmount || 0) * toTokenPrice)}</span></div>
                 </>

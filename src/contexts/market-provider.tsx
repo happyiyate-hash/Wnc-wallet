@@ -23,11 +23,11 @@ const PRICE_CACHE_KEY = 'ss-price-cache-global';
 
 /**
  * INSTITUTIONAL INDEPENDENT MARKET ENGINE
- * Version: 6.0.0 (Zero-Latency Discovery)
+ * Version: 7.0.0 (Zero-Latency Logo Discovery)
  * 
  * Operates independently of Auth and Wallet state.
  * Loads cached global prices instantly on boot.
- * Triggers background logo pre-fetching for all whitelisted assets.
+ * Triggers background logo pre-fetching for all whitelisted assets to eliminate black placeholders.
  */
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
@@ -43,7 +43,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
   /**
    * CENTRALIZED LOGO PRE-FETCH
-   * Populates the IndexedDB logo registry for whitelisted tokens.
+   * Populates the IndexedDB logo registry for whitelisted tokens and networks.
+   * This eliminates the "grey placeholder" blink in selectors.
    */
   const prefetchLogos = useCallback(async (chains: ChainConfig[]) => {
     if (hasInitializedLogosRef.current) return;
@@ -51,12 +52,21 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
     console.log("[MARKET_ENGINE] Initializing logo pre-fetch sequence...");
     
+    // Process chains sequentially to avoid rate limits
     for (const chain of chains) {
+      // 1. Fetch Network Logo
+      const chainCacheKey = `logo_v12_${chain.name.replace(/\s+/g, '_').toLowerCase()}_${chain.symbol.toLowerCase()}`;
+      const chainCached = await registryDb.getLogo(chainCacheKey);
+      if (!chainCached) {
+        const url = await getDirectLogoUrl(chain.name, chain.symbol);
+        if (url) await registryDb.saveLogo(chainCacheKey, url);
+      }
+
+      // 2. Fetch Whitelisted Token Logos
       const assets = getInitialAssets(chain.chainId);
       for (const asset of assets) {
         const cacheKey = `logo_v12_${asset.name.replace(/\s+/g, '_').toLowerCase()}_${asset.symbol.toLowerCase()}`;
         
-        // Only fetch if not already in cache
         const cached = await registryDb.getLogo(cacheKey);
         if (!cached) {
           try {
@@ -67,16 +77,22 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           }
         }
       }
+      
+      // Institutional Breather
+      await new Promise(r => setTimeout(r, 100));
     }
+    console.log("[MARKET_ENGINE] Logo registry synchronized.");
   }, []);
 
   const updatePrices = useCallback((newPrices: PriceResult) => {
     setPrices(prev => {
       const merged = { ...prev, ...newPrices };
-      localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({ 
-        data: merged, 
-        timestamp: Date.now() 
-      }));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({ 
+          data: merged, 
+          timestamp: Date.now() 
+        }));
+      }
       return merged;
     });
   }, []);

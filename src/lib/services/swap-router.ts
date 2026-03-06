@@ -4,12 +4,12 @@ import { LIFI_SUPPORTED_CHAINS } from '../lifiSupportedChains';
 
 /**
  * INSTITUTIONAL HYBRID SWAP ROUTER
- * Version: 5.1.0 (Concise Node Naming)
+ * Version: 6.0.0 (Pivot Logic Update)
  * 
  * Strictly enforces routing logic based on chain type:
  * 1. Same-Chain EVM -> 0x Protocol
  * 2. Cross-EVM -> LI.FI API
- * 3. Hybrid/Non-EVM -> Sync Node (USDC Bridge)
+ * 3. Hybrid/Non-EVM -> Sync Node (Multi-Step Pivot Bridge)
  */
 
 export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL';
@@ -28,10 +28,12 @@ export function determineSwapProvider(
     const fromEVM = isEVM(fromChainId);
     const toEVM = isEVM(toChainId);
 
+    // 1. Same Chain EVM -> High speed 0x
     if (fromChainId === toChainId && fromEVM) {
         return 'ZEROX';
     }
 
+    // 2. Cross-EVM -> LI.FI Aggregator
     const isFromLifiSupported = LIFI_SUPPORTED_CHAINS.includes(fromChainId);
     const isToLifiSupported = LIFI_SUPPORTED_CHAINS.includes(toChainId);
     
@@ -39,9 +41,15 @@ export function determineSwapProvider(
         return 'LIFI';
     }
 
+    // 3. All other routes (SOL, BTC, XRP, etc) -> Internal Liquidity Node
     return 'INTERNAL';
 }
 
+/**
+ * Detects if a "Pivot Route" is required.
+ * A pivot is needed if the transfer is cross-chain and neither asset is a stablecoin (USDC/USDT).
+ * Path: Token A -> USDC (Source) -> USDC (Dest) -> Token B
+ */
 export function needsPivotRoute(
     fromChainId: number,
     toChainId: number,
@@ -52,10 +60,14 @@ export function needsPivotRoute(
     toIsNative: boolean = false
 ): boolean {
     if (provider !== 'INTERNAL') return false;
-    if (fromIsNative && toIsNative && fromChainId !== toChainId) return false;
+    
+    // Internal swaps on same chain or simple native-to-native don't need pivot
     if (fromChainId === toChainId) return false;
+    if (fromIsNative && toIsNative) return false;
 
     const isStable = (s: string) => ['USDT', 'USDC'].includes(s.toUpperCase());
+    
+    // If we are cross-chain and moving between non-stables, pivot is mandatory for liquidity
     return !isStable(fromSymbol) && !isStable(toSymbol);
 }
 
