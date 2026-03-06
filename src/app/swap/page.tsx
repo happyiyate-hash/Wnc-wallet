@@ -28,7 +28,8 @@ import {
   Cpu,
   Activity,
   SendHorizonal,
-  ShieldQuestion
+  ShieldQuestion,
+  Lock
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,8 @@ import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
 import { currencyConversionWithLLMValidation } from '@/app/actions';
+import { determineSwapProvider, type SwapProvider } from '@/lib/services/swap-router';
+import { zeroXService } from '@/lib/services/zerox-service';
 
 interface SwapQuote {
   id: string;
@@ -49,10 +52,12 @@ interface SwapQuote {
   fee: number;
   eta: string;
   isBest?: boolean;
+  rawQuote?: any;
+  swapProvider: SwapProvider;
 }
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'GUARDIAN_SCAN' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
-type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
+type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
 
 const formatExactCrypto = (val: number): string => {
   if (!val || val <= 0) return '0';
@@ -109,18 +114,18 @@ function SwapClient() {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
     const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    const targetChainId = !isNaN(chainIdParam) ? (chainIdParam ?? viewingNetwork.chainId) : viewingNetwork.chainId;
+    const targetChainId = !isNaN(chainIdParam) ? (chainIdParam ?? (viewingNetwork?.chainId || 1)) : (viewingNetwork?.chainId || 1);
     
     const initialFrom = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
-                      allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+                      allAssets.find(a => a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
                       allAssets[0];
-    const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
-                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
+    const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
+                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
                     allAssets[allAssets.length - 1];
     if (initialFrom) setFromToken({ ...initialFrom });
     if (initialTo) setToToken({ ...initialTo });
     hasInitializedRef.current = true;
-  }, [allAssets, viewingNetwork.chainId, searchParams]);
+  }, [allAssets, viewingNetwork, searchParams]);
 
   const fromTokenPrice = useMemo(() => {
     if (!fromToken) return 0;
@@ -135,7 +140,7 @@ function SwapClient() {
   }, [toToken, prices]);
 
   /**
-   * ATOMIC QUOTE ENGINE (HARDENED)
+   * ATOMIC QUOTE ENGINE (HYBRID ROUTING)
    */
   useEffect(() => {
     const runSequence = async () => {
@@ -151,7 +156,6 @@ function SwapClient() {
       if (currentSignature === lastFetchedAmountRef.current) return;
       lastFetchedAmountRef.current = currentSignature;
       
-      // 1. PRE-FLIGHT RESTRICTIONS
       const restriction = checkPairRestriction(fromToken.symbol, toToken.symbol);
       if (restriction.isRestricted) {
         setFetchError(restriction.message!);
@@ -171,41 +175,82 @@ function SwapClient() {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         
-        // Fee Handshake
-        const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
-        const divisor = toTokenPrice || 1;
+        // Determine Provider
+        const provider = determineSwapProvider(fromToken.chainId, toToken.chainId, fromToken.symbol, toToken.symbol);
         
         let batch: SwapQuote[] = [];
-        const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
-        
-        if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
-            try {
-                const params = new URLSearchParams({ fromChain: fromToken.chainId.toString(), toChain: toToken.chainId.toString(), fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), fromAddress: '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', slippage: '0.005' });
-                const response = await fetch(`/api/bridge/quote?${params.toString()}`);
-                const lifiQuote = await response.json();
-                if (!lifiQuote.error && response.status < 400) {
-                    const rawAmountToken = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
-                    const finalAmountToken = Math.max(0, rawAmountToken - (feeData.networkFee / divisor));
-                    batch = [{ id: 'lifi-real', provider: lifiQuote.tool?.toUpperCase() || 'Aggregator', logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true }];
-                } else throw new Error("LIFI_FAIL");
-            } catch (e) {
-                const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-                const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-                batch = [{ id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true }];
-            }
+
+        if (provider === 'ZEROX') {
+            // 0X AGGREGATOR HANDSHAKE
+            const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
+            const zeroxPrice = await zeroXService.getPrice(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
+            
+            const receiveAmt = parseFloat(ethers.formatUnits(zeroxPrice.buyAmount, toToken.decimals || 18));
+            const totalFee = parseFloat(ethers.formatUnits(zeroxPrice.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001; // Mock gas calculation
+
+            batch = [{
+                id: 'zerox-aggregator',
+                provider: '0x Aggregator',
+                logo: null,
+                receiveAmount: receiveAmt,
+                fee: totalFee || 0.50,
+                eta: '~10s',
+                isBest: true,
+                rawQuote: zeroxPrice,
+                swapProvider: 'ZEROX'
+            }];
+        } else if (provider === 'LIFI') {
+            // LI.FI BRIDGE HANDSHAKE
+            const params = new URLSearchParams({ 
+                fromChain: fromToken.chainId.toString(), 
+                toChain: toToken.chainId.toString(), 
+                fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
+                toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
+                fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
+                fromAddress: wallets?.[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', 
+                slippage: '0.005' 
+            });
+            const response = await fetch(`/api/bridge/quote?${params.toString()}`);
+            const lifiQuote = await response.json();
+            
+            if (lifiQuote.error) throw new Error(lifiQuote.details || "Bridge handshake failed.");
+
+            batch = [{
+                id: 'lifi-bridge',
+                provider: lifiQuote.tool?.toUpperCase() || 'Aggregator',
+                logo: null,
+                receiveAmount: parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18)),
+                fee: parseFloat(lifiQuote.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
+                eta: '~30s',
+                isBest: true,
+                rawQuote: lifiQuote,
+                swapProvider: 'LIFI'
+            }];
         } else {
+            // INTERNAL LIQUIDITY HANDSHAKE
+            const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
+            const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
             const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-            batch = [{ id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true }];
+
+            batch = [{
+                id: 'internal-node',
+                provider: 'Institutional Settle',
+                logo: null,
+                receiveAmount: finalAmt * 0.997,
+                fee: feeData.networkFee,
+                eta: '~5s',
+                isBest: true,
+                swapProvider: 'INTERNAL'
+            }];
         }
 
-        // RACE CONDITION GUARD
         if (currentQuoteId !== quoteIdRef.current) return;
 
         const best = batch[0];
         if (!best) throw new Error("NO_ROUTES");
 
-        // 2. MATH SANITY CHECK (Protect against impossible gains)
+        // Mathematical Sanity Check
         const outputUsd = best.receiveAmount * toTokenPrice;
         if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
             throw new Error("Market Anomaly Detected: Quote output value exceeds institutional sanity limit.");
@@ -223,7 +268,7 @@ function SwapClient() {
             await new Promise(r => setTimeout(r, 200)); 
         }
 
-        // 3. TRADE GUARDIAN AI VALIDATION
+        // TRADE GUARDIAN AI VALIDATION
         setQuotePhase('GUARDIAN_SCAN');
         const aiValidation = await currencyConversionWithLLMValidation({
             fromCurrency: fromToken.symbol,
@@ -268,7 +313,7 @@ function SwapClient() {
       }
     };
     runSequence();
-  }, [debouncedAmount, fromToken, toToken, prices, fromTokenPrice, toTokenPrice, infuraApiKey, allChainsMap]);
+  }, [debouncedAmount, fromToken, toToken, prices, fromTokenPrice, toTokenPrice, infuraApiKey, allChainsMap, wallets]);
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
@@ -297,7 +342,7 @@ function SwapClient() {
    * INSTITUTIONAL EXECUTION HANDSHAKE
    */
   const handleExecuteSwap = async () => {
-    if (!selectedQuote || !fromToken || !toToken || !user || !wallets) return;
+    if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
     
     setIsExecuting(true);
     setExecutionError(null);
@@ -306,42 +351,69 @@ function SwapClient() {
     try {
       const balance = parseFloat(fromToken.balance || '0');
       if (balance < parseFloat(amount)) throw new Error("Insufficient Balance for Swap.");
-      await new Promise(r => setTimeout(r, 1200));
-
-      setExecutionPhase('LIQUIDITY');
-      const handshakeRes = await fetch('/api/swap/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fromChain: fromToken.name, toChain: toToken.name,
-          fromSymbol: fromToken.symbol, toSymbol: toToken.symbol,
-          fromAmount: parseFloat(amount), fromTokenPriceUsd: fromTokenPrice,
-          toAmountExpected: selectedQuote.receiveAmount,
-          adminFeeUsd: selectedQuote.fee * 0.5, networkFeeUsd: selectedQuote.fee * 0.5,
-          recipientAddress: profile?.evm_address || ''
-        })
-      });
-      const handshake = await handshakeRes.json();
-      if (!handshake.success) throw new Error(handshake.error || "Liquidity Node Reject.");
-      await new Promise(r => setTimeout(r, 1200));
-
-      setExecutionPhase('SENDING');
+      
       const chainConfig = allChainsMap[fromToken.chainId];
       const evmWallet = wallets.find(w => w.type === 'evm');
-      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey!), undefined, { staticNetwork: true });
+      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
       const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
-      
-      let userTx;
-      if (fromToken.isNative) {
-        userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
-      } else {
-        const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-        userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
+
+      if (selectedQuote.swapProvider === 'ZEROX') {
+          // 0X EXECUTION HANDSHAKE
+          setExecutionPhase('LIQUIDITY');
+          const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
+          const quote = await zeroXService.getQuote(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
+          
+          // Check & Approve
+          if (!fromToken.isNative) {
+              setExecutionPhase('APPROVING');
+              const tokenContract = new ethers.Contract(fromToken.address, ["function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)"], wallet);
+              const allowance = await tokenContract.allowance(wallet.address, quote.allowanceTarget);
+              if (allowance < ethers.parseUnits(amount, fromToken.decimals || 18)) {
+                  const approveTx = await tokenContract.approve(quote.allowanceTarget, ethers.MaxUint256);
+                  await approveTx.wait();
+              }
+          }
+
+          setExecutionPhase('SENDING');
+          const tx = await wallet.sendTransaction({
+              to: quote.to,
+              data: quote.data,
+              value: quote.value,
+              gasLimit: quote.gas
+          });
+          setExecutionPhase('SETTLING');
+          await tx.wait();
+      } 
+      else if (selectedQuote.swapProvider === 'INTERNAL') {
+          // INTERNAL SETTLEMENT HANDSHAKE
+          setExecutionPhase('LIQUIDITY');
+          const handshakeRes = await fetch('/api/swap/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fromChain: fromToken.name, toChain: toToken.name,
+              fromSymbol: fromToken.symbol, toSymbol: toToken.symbol,
+              fromAmount: parseFloat(amount), fromTokenPriceUsd: fromTokenPrice,
+              toAmountExpected: selectedQuote.receiveAmount,
+              adminFeeUsd: selectedQuote.fee * 0.5, networkFeeUsd: selectedQuote.fee * 0.5,
+              recipientAddress: profile?.evm_address || ''
+            })
+          });
+          const handshake = await handshakeRes.json();
+          if (!handshake.success) throw new Error(handshake.error || "Liquidity Node Reject.");
+
+          setExecutionPhase('SENDING');
+          let userTx;
+          if (fromToken.isNative) {
+            userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseUnits(amount, 18) });
+          } else {
+            const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
+            userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
+          }
+          setExecutionPhase('SETTLING');
+          await userTx.wait();
       }
-      
-      setExecutionPhase('SETTLING');
-      await new Promise(r => setTimeout(r, 3000));
-      
+
       setExecutionPhase('SUCCESS');
       await refreshProfile(); refresh();
       
@@ -392,9 +464,10 @@ function SwapClient() {
                 <div className="flex-1 space-y-1">
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">
                     {executionPhase === 'VERIFYING' && 'Verifying Balances...'}
-                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Pool...'}
+                    {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
+                    {executionPhase === 'APPROVING' && 'Authorizing Token...'}
                     {executionPhase === 'SENDING' && 'Executing Transfer...'}
-                    {executionPhase === 'SETTLING' && 'SmarterSeller Payout...'}
+                    {executionPhase === 'SETTLING' && 'Institutional Settlement...'}
                     {executionPhase === 'SUCCESS' && 'Swap Secured'}
                     {executionPhase === 'FAILED' && 'Handshake Aborted'}
                   </h3>
