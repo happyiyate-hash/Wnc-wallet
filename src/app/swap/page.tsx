@@ -28,7 +28,8 @@ import {
   Globe,
   Repeat,
   ArrowRight,
-  Clock
+  Clock,
+  Info
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -39,7 +40,7 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
-import { determineSwapProvider, needsPivotRoute, type SwapProvider } from '@/lib/services/swap-router';
+import { determineSwapProvider, needsPivotRoute, getRouteDescription, type SwapProvider } from '@/lib/services/swap-router';
 import { zeroXService } from '@/lib/services/zerox-service';
 
 interface SwapQuote {
@@ -53,6 +54,7 @@ interface SwapQuote {
   rawQuote?: any;
   swapProvider: SwapProvider;
   isPivotRoute?: boolean;
+  routeDescription?: string;
 }
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
@@ -87,7 +89,6 @@ function SwapClient() {
   
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
-  const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
 
   // EXECUTION ENGINE
   const [executionPhase, setExecutionPhase] = useState<ExecutionPhase>('IDLE');
@@ -105,7 +106,7 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
-  // HYBRID INIT: Filter by whitelist context
+  // INITIAL HYDRATION
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
     const initialFrom = allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
@@ -128,14 +129,14 @@ function SwapClient() {
   }, [toToken, prices]);
 
   /**
-   * INSTITUTIONAL HYBRID QUOTE ENGINE (PIVOT-AWARE)
+   * CENTRALIZED HYBRID QUOTE ENGINE
    */
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
 
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
-        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
+        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setActiveScanIndex(-1);
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
@@ -154,7 +155,6 @@ function SwapClient() {
       setIsQuoteLoading(true); 
       setQuotePhase('FETCHING'); 
       setFetchError(null); 
-      setFadedIndices(new Set()); 
       setActiveScanIndex(-1); 
       setSelectedQuoteId(null);
       
@@ -162,13 +162,13 @@ function SwapClient() {
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
-        // HYBRID ROUTE SELECTION
+        // 1. RESOLVE PROVIDER VIA CENTRAL ROUTER
         const providerType = determineSwapProvider(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol);
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1, 
             toToken.chainId ?? 1, 
-            fromSymbol: fromToken.symbol, 
-            toSymbol: toToken.symbol, 
+            fromToken.symbol, 
+            toToken.symbol, 
             providerType,
             fromToken.isNative,
             toToken.isNative
@@ -176,18 +176,20 @@ function SwapClient() {
         
         let quote: SwapQuote | null = null;
 
+        // 2. EXECUTE PROVIDER-SPECIFIC HANDSHAKE
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
             quote = {
-                id: '0x-aggregator',
-                provider: '0x Liquidity Node',
+                id: '0x-node',
+                provider: '0x Protocol Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
                 fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
                 eta: '~10s',
                 rawQuote: p,
-                swapProvider: 'ZEROX'
+                swapProvider: 'ZEROX',
+                routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'ZEROX', false)
             };
         } 
         else if (providerType === 'LIFI') {
@@ -202,80 +204,63 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-            
-            if (!res.ok) {
-                const text = await res.text();
-                let errMsg = `Bridge Service Unreachable (${res.status}). Market synchronization deferred.`;
-                try {
-                    const json = JSON.parse(text);
-                    if (json.details || json.error) {
-                        errMsg = json.details || json.error;
-                    }
-                } catch(e) {}
-                console.error("[BRIDGE_FETCH_FAIL]", text.slice(0, 200));
-                throw new Error(errMsg);
-            }
+            if (!res.ok) throw new Error("Bridge route temporarily offline.");
 
             const q = await res.json();
-            if (q.error) throw new Error(q.error || "Bridge route unavailable.");
+            if (q.error) throw new Error(q.error || "Bridge handshake failed.");
             
             quote = {
-                id: 'lifi-bridge',
-                provider: q.tool?.toUpperCase() || 'Institutional Bridge',
+                id: 'lifi-node',
+                provider: q.tool?.toUpperCase() || 'LI.FI Bridge Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
                 fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00'),
                 eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
                 rawQuote: q,
-                swapProvider: 'LIFI'
+                swapProvider: 'LIFI',
+                routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'LIFI', false)
             };
         }
         else {
-            // INTERNAL LIQUIDITY NODE (DIRECT OR PIVOT HANDSHAKE)
-            // Existing swap engine calculation with fee inclusion
+            // Case 3: INTERNAL (USDC Pivot or Direct Native)
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-            
-            // receiveAmount = gross estimation - (total fees / price)
             const finalReceive = Math.max(0, estAmt - (feeData.networkFee / divisor));
 
             quote = {
                 id: 'internal-vault',
-                provider: isPivotRequired ? 'USDT Pivot Handshake' : 'Wevina Direct Settle',
+                provider: isPivotRequired ? 'USDC Pivot Bridge' : 'Internal Liquidity Node',
                 logo: null,
                 receiveAmount: finalReceive,
                 fee: feeData.networkFee,
-                eta: isPivotRequired ? '~30s' : '~5s',
+                eta: isPivotRequired ? '~45s' : '~10s',
                 swapProvider: 'INTERNAL',
-                isPivotRoute: isPivotRequired
+                isPivotRoute: isPivotRequired,
+                routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'INTERNAL', isPivotRequired)
             };
         }
 
         if (currentQuoteId !== quoteIdRef.current) return;
-        if (!quote) throw new Error("NO_ROUTE_HANDSHAKE");
+        if (!quote) throw new Error("NO_ROUTE_FOUND");
 
-        const results = [quote];
-        setQuotes(results); 
+        setQuotes([quote]); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
         await new Promise(r => setTimeout(r, 600)); 
-        
         setQuotePhase('SCANNING');
         setActiveScanIndex(0); 
         await new Promise(r => setTimeout(r, 500)); 
-
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(quote.id); 
         await new Promise(r => setTimeout(r, 800)); 
-        
         setQuotePhase('SHOW_VISUAL'); 
         await new Promise(r => setTimeout(r, 1200)); 
         setQuotePhase('COMPLETED');
 
       } catch (e: any) { 
         if (currentQuoteId === quoteIdRef.current) {
-            setFetchError(e.message || "Market discovery failed."); 
+            setFetchError(e.message || "Institutional route deferred."); 
             setQuotePhase('IDLE'); 
         }
       } finally { 
@@ -297,7 +282,7 @@ function SwapClient() {
     
     try {
       const balance = parseFloat(fromToken.balance || '0');
-      if (balance < parseFloat(amount)) throw new Error("Insufficient Balance for Swap.");
+      if (balance < parseFloat(amount)) throw new Error("Insufficient Funds.");
       
       const chainConfig = allChainsMap[fromToken.chainId ?? 1];
       const evmWallet = wallets.find(w => w.type === 'evm');
@@ -327,7 +312,6 @@ function SwapClient() {
       else if (selectedQuote.swapProvider === 'LIFI') {
           setExecutionPhase('LIQUIDITY');
           const q = selectedQuote.rawQuote;
-          
           if (q.transactionRequest) {
               setExecutionPhase('APPROVING');
               const approvalAddress = q.estimate.approvalAddress;
@@ -339,20 +323,13 @@ function SwapClient() {
                       await approveTx.wait();
                   }
               }
-
               setExecutionPhase('SENDING');
-              const tx = await wallet.sendTransaction({
-                  to: q.transactionRequest.to,
-                  data: q.transactionRequest.data,
-                  value: q.transactionRequest.value,
-                  gasLimit: q.transactionRequest.gasLimit
-              });
+              const tx = await wallet.sendTransaction({ to: q.transactionRequest.to, data: q.transactionRequest.data, value: q.transactionRequest.value, gasLimit: q.transactionRequest.gasLimit });
               setExecutionPhase('SETTLING');
               await tx.wait();
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
-          // PIVOT ORCHESTRATION
           if (selectedQuote.isPivotRoute) {
               setExecutionPhase('PIVOT_CONVERTING');
               setCurrentPivotStep(1);
@@ -425,32 +402,25 @@ function SwapClient() {
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); lastFetchedAmountRef.current = '';
   };
 
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
-    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
     setRotation(prev => prev + 180); 
-    setFromToken({ ...oldTo });
-    setToToken({ ...oldFrom });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
+    setFromToken(oldTo); setToToken(oldFrom);
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); lastFetchedAmountRef.current = '';
   };
 
   const fromChainColor = fromToken ? (allChainsMap?.[fromToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
   const toChainColor = toToken ? (allChainsMap?.[toToken.chainId ?? 1]?.themeColor || '#818cf8') : '#818cf8';
 
   const infoItems = [
-    { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
-    { label: 'Protocol Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
-    { label: 'Registry Sync', value: 'Verified', icon: ShieldCheck },
-    { label: 'Handshake Route', value: selectedQuote?.provider || 'Hybrid', icon: Workflow }
-  ];
-
-  const pivotSteps = [
-    { id: 1, label: `Converting ${fromToken?.symbol} to USDT (Source)`, icon: Zap },
-    { id: 2, label: `Bridging USDT to ${toToken?.name}`, icon: Globe },
-    { id: 3, label: `Converting USDT to ${toToken?.symbol} (Destination)`, icon: Repeat }
+    { label: 'Route Type', value: selectedQuote?.provider || 'Hybrid', icon: Workflow },
+    { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
+    { label: 'Time Node', value: selectedQuote?.eta || '~15s', icon: History },
+    { label: 'Handshake', value: 'Secured', icon: ShieldCheck }
   ];
 
   return (
@@ -459,33 +429,18 @@ function SwapClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">{isCrossChain ? 'Bridge' : 'Swap'}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Hybrid Liquidity Engine</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Institutional Router</span></div>
         </div>
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !isExecuting && (
-          <motion.div
-            initial={{ y: -100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -100, opacity: 0 }}
-            className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl"
-          >
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl">
             <div className="max-w-lg mx-auto">
-              <Button
-                className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest"
-                onClick={handleExecuteSwap}
-              >
-                <motion.div
-                  animate={{ x: ['-100%', '200%'] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0"
-                />
-                <span className="relative z-10 flex items-center justify-center gap-3">
-                  <ShieldCheck className="w-5 h-5" />
-                  Sign & Authorize
-                </span>
+              <Button className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest" onClick={handleExecuteSwap}>
+                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0" />
+                <span className="relative z-10 flex items-center justify-center gap-3"><ShieldCheck className="w-5 h-5" />Sign & Authorize</span>
               </Button>
             </div>
           </motion.div>
@@ -505,35 +460,16 @@ function SwapClient() {
                     <h3 className="text-sm font-black uppercase tracking-widest text-white">
                       {executionPhase === 'VERIFYING' && 'Verifying Nodes...'}
                       {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
-                      {executionPhase === 'APPROVING' && 'Authorizing Token...'}
-                      {executionPhase === 'SENDING' && 'Executing Handshake...'}
-                      {executionPhase === 'SETTLING' && 'Settling Ledger...'}
+                      {executionPhase === 'APPROVING' && 'Authorizing Asset...'}
+                      {executionPhase === 'SENDING' && 'Executing Leg 1...'}
+                      {executionPhase === 'SETTLING' && 'Settling Leg 2...'}
                       {executionPhase.startsWith('PIVOT') && 'Multi-Step Pivot Active'}
-                      {executionPhase === 'SUCCESS' && 'Handshake Secured'}
+                      {executionPhase === 'SUCCESS' && 'Swap Secured'}
                       {executionPhase === 'FAILED' && 'Handshake Aborted'}
                     </h3>
-                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Hybrid Protocol v5.1 Active'}</span>
+                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Master Terminal v5.1 Active'}</span>
                   </div>
                 </div>
-
-                {selectedQuote?.isPivotRoute && executionPhase !== 'SUCCESS' && executionPhase !== 'FAILED' && (
-                  <div className="space-y-3 pt-2">
-                    {pivotSteps.map((step) => {
-                      const isActive = currentPivotStep === step.id;
-                      const isCompleted = currentPivotStep > step.id;
-                      return (
-                        <div key={step.id} className={cn("flex items-center gap-3 transition-opacity duration-500", !isActive && !isCompleted && "opacity-20")}>
-                          <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center border", isCompleted ? "bg-green-500/20 border-green-500/40 text-green-500" : isActive ? "bg-primary/20 border-primary/40 text-primary animate-pulse" : "bg-white/5 border-white/10 text-muted-foreground")}>
-                            {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <step.icon className="w-3.5 h-3.5" />}
-                          </div>
-                          <span className={cn("text-[10px] font-black uppercase tracking-widest", isCompleted ? "text-green-500/60" : isActive ? "text-white" : "text-muted-foreground")}>
-                            {step.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             </div>
           </motion.div>
@@ -548,30 +484,28 @@ function SwapClient() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Institutional Routing</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Market Synchronization</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {fetchError ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
                         <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Market</Button>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Network</Button>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
                     <div className="space-y-2">
                       {quotes.map((quote, idx) => {
-                        const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
                         const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
-                        
                         return (
-                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : isScanning ? "border-primary/40 bg-primary/5" : "border-white/5 bg-white/[0.02]")}>
+                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : "border-white/5 bg-white/[0.02]")}>
                             <div className="flex items-center gap-3 relative z-10">
                               <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
                               <div className="text-left">
                                 <p className="text-xs font-black text-white">{quote.provider}</p>
-                                <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{quote.routeDescription}</p>
                               </div>
                             </div>
                             <div className="text-right"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
@@ -588,13 +522,7 @@ function SwapClient() {
       </AnimatePresence>
 
       <main className="flex-1 w-full space-y-1 pb-40 pt-6 px-4 relative z-10 overflow-y-auto thin-scrollbar">
-        <section 
-          style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
-          onPointerDown={() => setShowPrecision(true)}
-          onPointerUp={() => setShowPrecision(false)}
-          onPointerLeave={() => setShowPrecision(false)}
-        >
+        <section style={{ backgroundColor: `${fromChainColor}40`, borderColor: `${fromChainColor}cc`, boxShadow: `0 0 60px ${fromChainColor}40, inset 0 0 20px ${fromChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('from')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt={fromToken?.symbol || ''} size={20} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
@@ -603,29 +531,19 @@ function SwapClient() {
             </button>
             <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {fromToken?.name}</span>
           </div>
-          
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>{showPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-primary/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-primary font-black uppercase tracking-widest flex items-center gap-2"><Zap className="w-3 h-3" /> Exact: {amount || '0'} {fromToken?.symbol}</p></motion.div>)}</AnimatePresence>
-            <div>
-              <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
-              <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
-            </div>
+            <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
+            <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
           </div>
         </section>
 
         <div className="relative h-6 flex items-center justify-center z-20">
-          <motion.button animate={{ rotate: rotation }} transition={{ type: 'spring', damping: 15 }} onClick={handleSwapTokens} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl active:scale-90 transition-transform relative">
-            <Zap className="w-5 h-5 fill-current relative z-10" />
+          <motion.button animate={{ rotate: rotation }} transition={{ type: 'spring', damping: 15 }} onClick={handleSwapTokens} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl active:scale-90 transition-transform">
+            <Zap className="w-5 h-5 fill-current" />
           </motion.button>
         </div>
 
-        <section 
-          style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} 
-          className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden"
-          onPointerDown={() => setShowOutputPrecision(true)}
-          onPointerUp={() => setShowOutputPrecision(false)}
-          onPointerLeave={() => setShowOutputPrecision(false)}
-        >
+        <section style={{ backgroundColor: `${toChainColor}40`, borderColor: `${toChainColor}cc`, boxShadow: `0 0 60px ${toChainColor}40, inset 0 0 20px ${toChainColor}20` }} className="w-full border p-4 rounded-[2.5rem] space-y-1 relative transition-all duration-500 h-[125px] flex flex-col justify-center overflow-hidden">
           <div className="flex items-center justify-between h-10 shrink-0 relative">
             <button onClick={() => handleOpenSelector('to')} className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full border border-white/10 transition-all">
                 <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt={toToken?.symbol || ''} size={20} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
@@ -635,7 +553,6 @@ function SwapClient() {
             <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {toToken?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
-            <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
             <div className="text-2xl font-black tracking-tighter text-white flex flex-col">
               {isQuoteLoading && !selectedQuote ? <Skeleton className="h-8 w-24 bg-white/10 rounded" /> : (
                 <>
@@ -649,7 +566,7 @@ function SwapClient() {
           </div>
         </section>
 
-        <div className="mt-6 px-4 grid grid-cols-2 gap-3 relative min-h-[100px]">
+        <div className="mt-6 px-4 grid grid-cols-2 gap-3">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
               <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><item.icon className="w-3 h-3" /></div><span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest">{item.label}</span></div>
@@ -662,20 +579,12 @@ function SwapClient() {
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
               <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-5 bg-white/[0.03] border border-white/5 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
-                {/* 3-NODE PIVOT PATH ANIMATION */}
                 <div className="flex items-center justify-between gap-2 relative z-10 py-1">
-                  {/* FROM NODE */}
                   <div className="flex flex-col items-center gap-2">
-                    <div className="relative p-1.5">
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center">
-                        <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
-                      </div>
-                    </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p></div>
+                    <div className="relative p-1.5"><motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" /><div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div></div>
+                    <p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p>
                   </div>
 
-                  {/* LEG 1: From -> Pivot */}
                   <div className="flex-1 px-1 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
@@ -683,25 +592,17 @@ function SwapClient() {
                     </svg>
                   </div>
 
-                  {/* PIVOT NODE (USDT) */}
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-primary/10 border border-primary/20">
                       {selectedQuote?.isPivotRoute ? (
-                        <div className="relative">
-                          <TokenLogoDynamic symbol="USDT" name="Tether" logoUrl={null} size={24} className="opacity-80" alt="pivot" />
-                          <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute -inset-2 rounded-full border border-dashed border-primary/30" />
-                        </div>
+                        <div className="relative"><TokenLogoDynamic symbol="USDC" name="USD Coin" logoUrl={null} size={24} className="opacity-80" alt="pivot" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute -inset-2 rounded-full border border-dashed border-primary/30" /></div>
                       ) : (
-                        <>
-                          <Activity className="w-6 h-6 text-primary" />
-                          <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" />
-                        </>
+                        <><Activity className="w-6 h-6 text-primary" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" /></>
                       )}
                     </div>
-                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'USDT Pivot' : 'Routing'}</span>
+                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'USDC Bridge' : 'Direct Node'}</span>
                   </div>
 
-                  {/* LEG 2: Pivot -> To */}
                   <div className="flex-1 px-1 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
@@ -709,15 +610,9 @@ function SwapClient() {
                     </svg>
                   </div>
 
-                  {/* TO NODE */}
                   <div className="flex flex-col items-center gap-2">
-                    <div className="relative p-1.5">
-                      <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center">
-                        <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
-                      </div>
-                    </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p></div>
+                    <div className="relative p-1.5"><motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" /><div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div></div>
+                    <p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p>
                   </div>
                 </div>
               </motion.div>
@@ -726,7 +621,7 @@ function SwapClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Hybrid Registry" isSwapContext={true} />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Hybrid Liquidity Node" isSwapContext={true} />
     </div>
   );
 }
