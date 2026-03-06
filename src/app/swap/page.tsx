@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -101,22 +102,18 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
+  // HYBRID INIT: Filter by whitelist context
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
-    const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
-    const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    const targetChainId = !isNaN(chainIdParam) ? (chainIdParam ?? (viewingNetwork?.chainId || 1)) : (viewingNetwork?.chainId || 1);
     
-    const initialFrom = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
-                      allAssets.find(a => a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
-                      allAssets[0];
-    const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
-                    allAssets.find(a => a.symbol !== 'WNC' && a.chainId === (viewingNetwork?.chainId || 1)) || 
-                    allAssets[allAssets.length - 1];
+    // Whitelisted tokens are provided by context already
+    const initialFrom = allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
+    const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC') || allAssets[allAssets.length - 1];
+    
     if (initialFrom) setFromToken({ ...initialFrom });
     if (initialTo) setToToken({ ...initialTo });
     hasInitializedRef.current = true;
-  }, [allAssets, viewingNetwork, searchParams]);
+  }, [allAssets]);
 
   const fromTokenPrice = useMemo(() => {
     if (!fromToken) return 0;
@@ -130,6 +127,9 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
+  /**
+   * INSTITUTIONAL HYBRID QUOTE ENGINE
+   */
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
@@ -162,115 +162,90 @@ function SwapClient() {
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
-        const quotePromises: Promise<SwapQuote | null>[] = [];
+        // HYBRID ROUTE SELECTION
+        const providerType = determineSwapProvider(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol);
+        
+        let quote: SwapQuote | null = null;
 
-        // 1. Same-Chain Aggregator (0x)
-        if (fromToken.chainId === toToken.chainId && (fromToken.chainId ?? 1) !== 0) {
-            quotePromises.push((async () => {
-                try {
-                    const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-                    const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
-                    return {
-                        id: '0x-aggregator',
-                        provider: '0x Aggregator',
-                        logo: null,
-                        receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
-                        fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
-                        eta: '~10s',
-                        rawQuote: p,
-                        swapProvider: 'ZEROX'
-                    } as SwapQuote;
-                } catch { return null; }
-            })());
+        if (providerType === 'ZEROX') {
+            const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
+            const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
+            quote = {
+                id: '0x-aggregator',
+                provider: '0x Liquidity Node',
+                logo: null,
+                receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
+                fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
+                eta: '~10s',
+                rawQuote: p,
+                swapProvider: 'ZEROX'
+            };
+        } 
+        else if (providerType === 'LIFI') {
+            const params = new URLSearchParams({ 
+                fromChain: (fromToken.chainId ?? 1).toString(), 
+                toChain: (toToken.chainId ?? 1).toString(), 
+                fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
+                toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
+                fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
+                fromAddress: userAddress, 
+                slippage: '0.005' 
+            });
+            const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+            const q = await res.json();
+            if (q.error) throw new Error("Bridge route unavailable.");
+            
+            quote = {
+                id: 'lifi-bridge',
+                provider: q.tool?.toUpperCase() || 'Institutional Bridge',
+                logo: null,
+                receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
+                fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00'),
+                eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
+                rawQuote: q,
+                swapProvider: 'LIFI'
+            };
         }
-
-        // 2. Cross-Chain Bridge (LI.FI)
-        if ((fromToken.chainId ?? 1) !== 0 && (toToken.chainId ?? 1) !== 0 && fromToken.chainId !== toToken.chainId) {
-            quotePromises.push((async () => {
-                try {
-                    const params = new URLSearchParams({ 
-                        fromChain: (fromToken.chainId ?? 1).toString(), 
-                        toChain: (toToken.chainId ?? 1).toString(), 
-                        fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
-                        toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
-                        fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
-                        fromAddress: userAddress, 
-                        slippage: '0.005' 
-                    });
-                    const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-                    const q = await res.json();
-                    if (q.error) return null;
-                    
-                    return {
-                        id: 'lifi-bridge',
-                        provider: q.tool?.toUpperCase() || 'Bridge Protocol',
-                        logo: null,
-                        receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
-                        fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00'),
-                        eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
-                        rawQuote: q,
-                        swapProvider: 'LIFI'
-                    } as SwapQuote;
-                } catch { return null; }
-            })());
-        }
-
-        // 3. Internal Liquidity Node
-        quotePromises.push((async () => {
+        else {
+            // INTERNAL LIQUIDITY NODE
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-            return {
+            quote = {
                 id: 'internal-vault',
-                provider: 'Institutional Node',
+                provider: 'Wevina Settle Node',
                 logo: null,
                 receiveAmount: (estAmt - (feeData.networkFee / divisor)),
                 fee: feeData.networkFee,
                 eta: '~5s',
                 swapProvider: 'INTERNAL'
-            } as SwapQuote;
-        })());
+            };
+        }
 
-        const batchResults = (await Promise.all(quotePromises)).filter(q => q !== null) as SwapQuote[];
         if (currentQuoteId !== quoteIdRef.current) return;
+        if (!quote) throw new Error("NO_ROUTE_HANDSHAKE");
 
-        batchResults.sort((a, b) => b.receiveAmount - a.receiveAmount);
-        const best = batchResults[0];
-        
-        if (!best) throw new Error("NO_ROUTES_FOUND");
-
-        setQuotes(batchResults); 
+        const results = [quote];
+        setQuotes(results); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
         await new Promise(r => setTimeout(r, 600)); 
         
         setQuotePhase('SCANNING');
-        for (let i = 0; i < batchResults.length; i++) { 
-            if (currentQuoteId !== quoteIdRef.current) return;
-            setActiveScanIndex(i); 
-            await new Promise(r => setTimeout(r, 300)); 
-        }
+        setActiveScanIndex(0); 
+        await new Promise(r => setTimeout(r, 500)); 
 
         setQuotePhase('FINAL_SELECTED'); 
-        setSelectedQuoteId(best.id); 
-        await new Promise(r => setTimeout(r, 1000)); 
-        
-        setQuotePhase('FADING_OUT');
-        for (let i = 0; i < batchResults.length; i++) { 
-            if (currentQuoteId !== quoteIdRef.current) return;
-            if (batchResults[i].id !== best.id) {
-                setFadedIndices(prev => new Set(prev).add(i)); 
-            }
-            await new Promise(r => setTimeout(r, 100)); 
-        }
+        setSelectedQuoteId(quote.id); 
+        await new Promise(r => setTimeout(r, 800)); 
         
         setQuotePhase('SHOW_VISUAL'); 
-        await new Promise(r => setTimeout(r, 2000)); 
+        await new Promise(r => setTimeout(r, 1200)); 
         setQuotePhase('COMPLETED');
 
       } catch (e: any) { 
         if (currentQuoteId === quoteIdRef.current) {
-            setFetchError(e.message || "Market Sync Interrupted."); 
+            setFetchError(e.message || "Market discovery failed."); 
             setQuotePhase('IDLE'); 
         }
       } finally { 
@@ -343,8 +318,6 @@ function SwapClient() {
               });
               setExecutionPhase('SETTLING');
               await tx.wait();
-          } else {
-              throw new Error("Invalid Bridge Request");
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
@@ -362,7 +335,7 @@ function SwapClient() {
             })
           });
           const handshake = await handshakeRes.json();
-          if (!handshake.success) throw new Error(handshake.error || "Handshake Reject.");
+          if (!handshake.success) throw new Error(handshake.error || "Handshake Rejected.");
 
           setExecutionPhase('SENDING');
           let userTx;
@@ -421,7 +394,7 @@ function SwapClient() {
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Protocol Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
     { label: 'Registry Sync', value: 'Verified', icon: ShieldCheck },
-    { label: 'Handshake Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
+    { label: 'Handshake Route', value: selectedQuote?.provider || 'Hybrid', icon: Workflow }
   ];
 
   return (
@@ -430,7 +403,7 @@ function SwapClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
             <h1 className="text-xs font-black uppercase tracking-[0.2em] leading-none">{isCrossChain ? 'Bridge' : 'Swap'}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Best Price Registry</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5"><ShieldCheck className="w-2.5 h-2.5 text-primary" /><span className="text-[8px] text-primary font-black uppercase tracking-tighter">Hybrid Liquidity Engine</span></div>
         </div>
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
@@ -441,7 +414,6 @@ function SwapClient() {
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 120 }}
             className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl"
           >
             <div className="max-w-lg mx-auto">
@@ -482,7 +454,7 @@ function SwapClient() {
                     {executionPhase === 'SUCCESS' && 'Handshake Secured'}
                     {executionPhase === 'FAILED' && 'Handshake Aborted'}
                   </h3>
-                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Institutional Protocol v4.5 Active'}</span>
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Hybrid Protocol v5.0 Active'}</span>
                 </div>
               </div>
             </div>
@@ -498,7 +470,7 @@ function SwapClient() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Market Discovery</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Institutional Routing</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -508,16 +480,15 @@ function SwapClient() {
                         <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Market</Button>
                     </div>
                   ) : isQuoteLoading ? (
-                    <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
+                    <div className="space-y-2">{[1].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
-                    <div className="space-y-2 min-h-[200px]">
+                    <div className="space-y-2">
                       {quotes.map((quote, idx) => {
                         const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
                         const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
-                        const isFading = fadedIndices.has(idx);
                         
                         return (
-                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: isFading ? 0 : 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : isScanning ? "border-primary/40 bg-primary/5" : "border-white/5 bg-white/[0.02]")}>
+                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : isScanning ? "border-primary/40 bg-primary/5" : "border-white/5 bg-white/[0.02]")}>
                             <div className="flex items-center gap-3 relative z-10">
                               <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
                               <div className="text-left">
@@ -552,7 +523,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {(fromToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {fromToken?.name}</span>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
@@ -583,7 +554,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {(toToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {toToken?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
@@ -619,7 +590,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{(fromToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{fromToken?.name}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -645,7 +616,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{(toToken?.chainId ?? 1) === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{toToken?.name}</p></div>
                   </div>
                 </div>
               </motion.div>
@@ -654,7 +625,7 @@ function SwapClient() {
         </div>
       </main>
 
-      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Market Registry" isSwapContext={true} />
+      <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={handleTokenSelect} title="Hybrid Registry" isSwapContext={true} />
     </div>
   );
 }
