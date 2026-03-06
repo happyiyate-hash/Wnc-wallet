@@ -178,21 +178,23 @@ function SwapClient() {
       setSelectedQuoteId(null);
       
       try {
-        const sourceChainConfig = allChainsMap[fromToken.chainId ?? 1];
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
+        const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
         const quotePromises: Promise<SwapQuote | null>[] = [];
 
-        // 1. APP FETCH: 0x Aggregator
+        // 1. APP FETCH: 0x Aggregator (Includes On-Chain Fee)
         if (fromToken.chainId === toToken.chainId && (fromToken.chainId ?? 1) !== 0) {
             quotePromises.push((async () => {
                 try {
                     const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-                    const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
+                    // getPrice includes 5% feeRecipient logic internally in zerox-service
+                    const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
                     return {
                         id: '0x-aggregator',
                         provider: '0x Aggregator',
                         logo: null,
+                        // p.buyAmount is already reduced by 5% because FEE_PERCENTAGE was passed to getPrice
                         receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
                         fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) || 0.50,
                         eta: '~10s',
@@ -213,17 +215,22 @@ function SwapClient() {
                         fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
                         toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
                         fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
-                        fromAddress: wallets?.[0]?.address || '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', 
+                        fromAddress: userAddress, 
                         slippage: '0.005' 
                     });
                     const res = await fetch(`/api/bridge/quote?${params.toString()}`);
                     const q = await res.json();
                     if (q.error) return null;
+                    
+                    // Manually apply the 5% Institutional Fee to LI.FI routes
+                    const grossAmount = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
+                    const netAmount = grossAmount * 0.95;
+
                     return {
                         id: 'lifi-route',
                         provider: q.tool?.toUpperCase() || 'LIFI',
                         logo: null,
-                        receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
+                        receiveAmount: netAmount,
                         fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '5.00'),
                         eta: '~30s',
                         rawQuote: q,
@@ -242,7 +249,7 @@ function SwapClient() {
                 id: 'internal-node',
                 provider: 'Internal Vault',
                 logo: null,
-                receiveAmount: (estAmt - (feeData.networkFee / divisor)) * 0.997,
+                receiveAmount: (estAmt - (feeData.networkFee / divisor)),
                 fee: feeData.networkFee,
                 eta: '~5s',
                 swapProvider: 'INTERNAL'
@@ -348,6 +355,7 @@ function SwapClient() {
       if (selectedQuote.swapProvider === 'ZEROX') {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
+          // getQuote includes on-chain 5% fee routing logic in zerox-service
           const q = await zeroXService.getQuote(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
           
           if (!fromToken.isNative) {

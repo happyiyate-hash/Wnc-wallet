@@ -3,11 +3,14 @@
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE
- * Version: 1.1.0 (Hardened Error Handling)
+ * Version: 1.2.0 (Fee Protocol Integration)
  * Handles same-chain EVM swap discovery and signed quote generation.
+ * Integrates institutional fee collection (5%) routed to admin vault.
  */
 
 const ZEROX_API_KEY = process.env.NEXT_PUBLIC_ZEROX_API_KEY || '5eebaf6f-e024-41d2-a18f-e05c241129c3';
+const ADMIN_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x144F9E614c094ADDA010A27c254faDeFF390A3B2';
+const FEE_PERCENTAGE = '0.05'; // 5% Institutional Fee
 
 const ZEROX_BASE_URLS: { [chainId: number]: string } = {
   1: 'https://api.0x.org',
@@ -24,8 +27,9 @@ const ZEROX_BASE_URLS: { [chainId: number]: string } = {
 export const zeroXService = {
   /**
    * Fetches an indicative price for UI display.
+   * Includes buyTokenPercentageFee to ensure UI receiveAmount is NET of platform fees.
    */
-  async getPrice(chainId: number, sellToken: string, buyToken: string, sellAmount: string) {
+  async getPrice(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress?: string) {
     const baseUrl = ZEROX_BASE_URLS[chainId];
     if (!baseUrl) throw new Error(`0x protocol not supported on chain ${chainId}`);
 
@@ -33,7 +37,11 @@ export const zeroXService = {
     const sellAddr = sellToken.toLowerCase() === 'eth' || sellToken.toLowerCase().length < 5 ? 'ETH' : sellToken;
     const buyAddr = buyToken.toLowerCase() === 'eth' || buyToken.toLowerCase().length < 5 ? 'ETH' : buyToken;
 
-    const url = `${baseUrl}/swap/v1/price?sellToken=${sellAddr}&buyToken=${buyAddr}&sellAmount=${sellAmount}`;
+    let url = `${baseUrl}/swap/v1/price?sellToken=${sellAddr}&buyToken=${buyAddr}&sellAmount=${sellAmount}&buyTokenPercentageFee=${FEE_PERCENTAGE}&feeRecipient=${ADMIN_VAULT}`;
+    
+    if (takerAddress) {
+        url += `&takerAddress=${takerAddress}`;
+    }
     
     const response = await fetch(url, {
       headers: { 
@@ -52,6 +60,7 @@ export const zeroXService = {
 
   /**
    * Generates a signed quote for execution.
+   * Routes the 5% fee to the institutional ADMIN_VAULT on-chain.
    */
   async getQuote(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress: string) {
     const baseUrl = ZEROX_BASE_URLS[chainId];
@@ -60,7 +69,7 @@ export const zeroXService = {
     const sellAddr = sellToken.toLowerCase() === 'eth' || sellToken.toLowerCase().length < 5 ? 'ETH' : sellToken;
     const buyAddr = buyToken.toLowerCase() === 'eth' || buyToken.toLowerCase().length < 5 ? 'ETH' : buyToken;
 
-    const url = `${baseUrl}/swap/v1/quote?sellToken=${sellAddr}&buyToken=${buyAddr}&sellAmount=${sellAmount}&takerAddress=${takerAddress}`;
+    const url = `${baseUrl}/swap/v1/quote?sellToken=${sellAddr}&buyToken=${buyAddr}&sellAmount=${sellAmount}&takerAddress=${takerAddress}&buyTokenPercentageFee=${FEE_PERCENTAGE}&feeRecipient=${ADMIN_VAULT}`;
     
     const response = await fetch(url, {
       headers: { 
@@ -71,7 +80,6 @@ export const zeroXService = {
 
     if (!response.ok) {
         const error = await response.json();
-        // Extract specific 0x validation errors
         if (error.validationErrors) {
             const firstErr = error.validationErrors[0];
             throw new Error(`0x Validation: ${firstErr.reason} (${firstErr.field})`);
