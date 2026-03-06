@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -22,9 +21,9 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL TOKEN LOGO ENGINE (PERSISTENT)
- * Version: 6.0.0 (IndexedDB Registry)
+ * Version: 6.2.0 (Strict Type-Safe Patch)
  * 
- * Uses IndexedDB logo_registry for high-speed branding persistence.
+ * Ensures logoUrl is a valid string before executing path resolution.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -50,7 +49,7 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // 1. CHECK PERSISTENT REGISTRY (IndexedDB)
+      // 1. CHECK PERSISTENT REGISTRY
       const cached = await registryDb.getLogo(cacheKey);
       if (cached) {
         setResolvedUrl(cached);
@@ -58,8 +57,8 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 2. PRIMARY: Direct Path Resolution
-      if (logoUrl && typeof logoUrl === 'string') {
+      // 2. PRIMARY: Direct Path Resolution (Strict Type Check)
+      if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         let finalUrl = logoUrl;
         if (logoUrl.startsWith('/api/cdn')) {
           finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
@@ -73,7 +72,7 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 3. SECONDARY: Server Handshake
+      // 3. SECONDARY: Server Handshake (Fallback Discovery)
       if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');

@@ -1,21 +1,13 @@
-
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * PRIMARY AUTHENTICATION SUPABASE CLIENT (lbltgeldesxkgdrblfxj)
- * Used for user authentication, profiles, and encrypted vault storage.
- * Hardened to prevent silent failures if keys are missing.
+ * PRIMARY AUTHENTICATION SUPABASE CLIENT
+ * Hardcoded Production Keys for gcghriodmljkusdduhzl
  */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lbltgeldesxkgdrblfxj.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 'https://gcghriodmljkusdduhzl.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZ2hyaW9kbWxqa3VzZGR1aHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MzkzMTQsImV4cCI6MjA4NzUxNTMxNH0.QCWXCs-K4C96zvQcvaBLNqVqxAA7GKUXEulEruVbaE4';
 
-if (!supabaseAnonKey) {
-  console.warn("[AUTH_CLIENT_ADVISORY] NEXT_PUBLIC_SUPABASE_ANON_KEY is missing. Identity handshakes will be disabled.");
-}
-
-export const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

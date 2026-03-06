@@ -2,11 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * INSTITUTIONAL LOGO REGISTRY (SERVER-ONLY)
- * Version: 5.0.0 (Hardcoded Internal Handshake)
- * 
- * This file is strictly backend-only. It contains the hardcoded production 
- * credentials for the Logo Supabase instance to ensure zero-latency 
- * resolution without environment variable processing.
+ * Hardcoded Production Keys for gcghriodmljkusdduhzl
  */
 
 const LOGO_SUPABASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';

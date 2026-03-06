@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata, UserProfile } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser } from './user-provider';
 import { useCurrency } from './currency-provider';
@@ -72,7 +71,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
   const { chainsWithLogos, areLogosLoading, allChainsMap } = useNetworkLogos();
-  const { user, loading: authLoading, profile, signOut } = useUser();
+  const { user, loading: authLoading, profile, signOut, refreshProfile } = useUser();
   const { prices, registerCustomTokens } = useMarket();
   
   const [balances, setBalances] = useState<{ [key: string]: AssetRow[] }>({});
@@ -99,82 +98,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isAuditRunningRef = useRef(false);
   const hasTriggeredAuditInSessionRef = useRef(false);
 
-  // 1. HYDRATION ENGINE (Shared SmarterSeller Logic)
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      setIsWalletLoading(false);
-      setIsInitialized(true);
-      return;
-    }
-
-    const hydrate = async () => {
-      try {
-        const savedInfura = localStorage.getItem(`ss-infura-key-${user.id}`);
-        if (savedInfura) setInfuraApiKeyState(savedInfura);
-
-        const savedAcc = localStorage.getItem(`account_number_${user.id}`);
-        if (savedAcc) setAccountNumber(savedAcc);
-
-        const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
-        if (savedNetworkId && chainsWithLogos.length > 0) {
-          const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
-          if (found) setViewingNetwork(found);
-        }
-
-        const savedMnemonic = localStorage.getItem(`ss-mnemonic-${user.id}`);
-        if (savedMnemonic) {
-          const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
-          
-          // ATOMIC PERSISTENCE: Check IndexedDB first
-          const cached = await registryDb.getVault(fingerprint);
-          
-          if (cached) {
-            console.log("[VAULT] Resuming from Persistent Registry Cache.");
-            setWallets(cached.wallets);
-          } else {
-            console.log("[VAULT] No cache node. Executing cryptographic derivation...");
-            const derived = await deriveAllWallets(savedMnemonic);
-            setWallets(derived);
-            
-            // Commit to Persistent Cache
-            await registryDb.saveVault({
-              id: fingerprint,
-              wallets: derived,
-              accountNumber: savedAcc || '',
-              timestamp: Date.now()
-            });
-          }
-        }
-
-        const cachedBalances = localStorage.getItem(`ss-wallet-balances-${user.id}`);
-        if (cachedBalances) {
-          try {
-            const { data } = JSON.parse(cachedBalances);
-            setBalances(data);
-          } catch (e) {}
-        }
-
-        const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
-        if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
-
-        const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
-        if (savedCustom) {
-            const tokens = JSON.parse(savedCustom);
-            setUserAddedTokens(tokens);
-            registerCustomTokens(tokens);
-        }
-
-        setIsInitialized(true);
-      } catch (e) {
-        setIsInitialized(true);
-      } finally {
-        setIsWalletLoading(false);
-      }
-    };
-
-    hydrate();
-  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
+  // --- 1. CORE LOGIC ORDERING (FIXED) ---
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -201,13 +125,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing, 
     setHasFetchedInitialData
   });
-
-  const updateNetwork = useCallback((network: ChainConfig) => {
-    setViewingNetwork(network);
-    if (user) {
-      localStorage.setItem(`active_network_id_${user.id}`, network.chainId.toString());
-    }
-  }, [user]);
 
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
@@ -264,6 +181,85 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
   }, [isInitialized, effectiveViewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
+  // --- 2. HYDRATION ENGINE ---
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setIsWalletLoading(false);
+      setIsInitialized(true);
+      return;
+    }
+
+    const hydrate = async () => {
+      try {
+        const savedInfura = localStorage.getItem(`ss-infura-key-${user.id}`);
+        if (savedInfura) setInfuraApiKeyState(savedInfura);
+
+        const savedAcc = localStorage.getItem(`account_number_${user.id}`);
+        if (savedAcc) setAccountNumber(savedAcc);
+
+        const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
+        if (savedNetworkId && chainsWithLogos.length > 0) {
+          const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
+          if (found) setViewingNetwork(found);
+        }
+
+        const savedMnemonic = localStorage.getItem(`ss-mnemonic-${user.id}`);
+        if (savedMnemonic) {
+          const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
+          const cached = await registryDb.getVault(fingerprint);
+          
+          if (cached) {
+            setWallets(cached.wallets);
+          } else {
+            const derived = await deriveAllWallets(savedMnemonic);
+            setWallets(derived);
+            await registryDb.saveVault({
+              id: fingerprint,
+              wallets: derived,
+              accountNumber: savedAcc || '',
+              timestamp: Date.now()
+            });
+          }
+        }
+
+        const cachedBalances = localStorage.getItem(`ss-wallet-balances-${user.id}`);
+        if (cachedBalances) {
+          try {
+            const { data } = JSON.parse(cachedBalances);
+            setBalances(data);
+          } catch (e) {}
+        }
+
+        const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
+        if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
+
+        const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
+        if (savedCustom) {
+            const tokens = JSON.parse(savedCustom);
+            setUserAddedTokens(tokens);
+            registerCustomTokens(tokens);
+        }
+
+        setIsInitialized(true);
+      } catch (e) {
+        setIsInitialized(true);
+      } finally {
+        setIsWalletLoading(false);
+      }
+    };
+
+    hydrate();
+  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
+
+  const updateNetwork = useCallback((network: ChainConfig) => {
+    setViewingNetwork(network);
+    if (user) {
+      localStorage.setItem(`active_network_id_${user.id}`, network.chainId.toString());
+    }
+  }, [user]);
+
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Authentication required");
     const { generateMnemonic } = await import('bip39');
@@ -277,7 +273,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
 
-    // Commit to persistent registry cache
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
     await registryDb.saveVault({
       id: fingerprint,
@@ -329,30 +324,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [user, wallets, toast]);
 
-  const deleteWalletPermanently = useCallback(async () => {
-    if (!user || !supabase) return;
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          vault_phrase: null, iv: null,
-          evm_address: null, xrp_address: null, polkadot_address: null,
-          near_address: null, solana_address: null, btc_address: null,
-          onboarding_completed: false
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      await registryDb.purgeAll();
-      purgeLocalWalletCache(user.id);
-      setWallets(null); setBalances({}); setAccountNumber(null);
-      router.replace('/wallet-session');
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Action Failed" });
-    }
-  }, [user, router, toast]);
-
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No backup found.");
     
@@ -360,7 +331,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!session) throw new Error("Authentication required.");
     
     setIsWalletLoading(true);
-    onStatusUpdate?.('Decrypting Registry Nodes...');
+    onStatusUpdate?.('Decrypting Vault...');
     
     try {
       if (profile.vault_phrase && profile.iv) {
@@ -413,7 +384,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       toast({ title: "Identity Recovered" });
     } catch (e: any) {
-      console.error("[RECOVERY_FAIL]:", e.message);
       throw new Error(e.message || "Handshake failed.");
     } finally {
       setIsWalletLoading(false);
@@ -427,6 +397,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setWallets(null);
       setAccountNumber(null);
       router.replace('/wallet-session');
+    }
+  }, [user, router]);
+
+  const deleteWalletPermanently = useCallback(async () => {
+    if (!user || !supabase) return;
+    try {
+      // 1. Wipe cloud fields
+      await supabase.from('profiles').update({
+        vault_phrase: null,
+        iv: null,
+        vault_infura_key: null,
+        infura_iv: null,
+        account_number: null,
+        onboarding_completed: false,
+        evm_address: null,
+        xrp_address: null,
+        polkadot_address: null,
+        kusama_address: null,
+        near_address: null,
+        solana_address: null,
+        btc_address: null,
+        ltc_address: null,
+        doge_address: null,
+        cosmos_address: null,
+        osmosis_address: null,
+        secret_address: null,
+        injective_address: null,
+        celestia_address: null,
+        cardano_address: null,
+        tron_address: null,
+        algorand_address: null,
+        hedera_address: null,
+        tezos_address: null,
+        aptos_address: null,
+        sui_address: null,
+      }).eq('id', user.id);
+
+      // 2. Wipe local
+      await registryDb.purgeAll();
+      purgeLocalWalletCache(user.id);
+      
+      setWallets(null);
+      setAccountNumber(null);
+      router.replace('/wallet-session');
+    } catch (e) {
+      console.error("PERMANENT_DELETE_FAIL:", e);
     }
   }, [user, router]);
 
