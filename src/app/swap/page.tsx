@@ -19,7 +19,6 @@ import {
   Settings2,
   TrendingUp,
   AlertCircle,
-  Bot,
   History,
   Workflow,
   CheckCircle2,
@@ -33,7 +32,8 @@ import {
   Globe,
   Database,
   Search,
-  Info
+  Info,
+  Repeat
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -44,7 +44,6 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
-import { currencyConversionWithLLMValidation } from '@/app/actions';
 import { determineSwapProvider, type SwapProvider } from '@/lib/services/swap-router';
 import { zeroXService } from '@/lib/services/zerox-service';
 
@@ -60,7 +59,7 @@ interface SwapQuote {
   swapProvider: SwapProvider;
 }
 
-type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'GUARDIAN_SCAN' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
+type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
 
 const formatExactCrypto = (val: number): string => {
@@ -69,7 +68,7 @@ const formatExactCrypto = (val: number): string => {
 };
 
 function SwapClient() {
-  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh, setActiveFulfillmentId } = useWallet();
+  const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh } = useWallet();
   const { user, profile, refreshProfile } = useUser();
   const { formatFiat } = useCurrency();
   const router = useRouter();
@@ -90,9 +89,6 @@ function SwapClient() {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   
-  // AI ADVISORY STATE
-  const [guardianAnalysis, setGuardianAnalysis] = useState<any>(null);
-
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
   const [fadedIndices, setFadedIndices] = useState<Set<number>>(new Set());
@@ -158,7 +154,7 @@ function SwapClient() {
       const currentQuoteId = ++quoteIdRef.current;
 
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
-        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
+        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
@@ -177,7 +173,6 @@ function SwapClient() {
       setIsQuoteLoading(true); 
       setQuotePhase('FETCHING'); 
       setFetchError(null); 
-      setGuardianAnalysis(null);
       setFadedIndices(new Set()); 
       setActiveScanIndex(-1); 
       setSelectedQuoteId(null);
@@ -193,7 +188,7 @@ function SwapClient() {
             quotePromises.push((async () => {
                 try {
                     const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-                    const p = await zeroXService.getPrice(fromToken.chainId, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
+                    const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount);
                     return {
                         id: '0x-aggregator',
                         provider: '0x Aggregator',
@@ -213,8 +208,8 @@ function SwapClient() {
             quotePromises.push((async () => {
                 try {
                     const params = new URLSearchParams({ 
-                        fromChain: fromToken.chainId.toString(), 
-                        toChain: toToken.chainId.toString(), 
+                        fromChain: (fromToken.chainId ?? 1).toString(), 
+                        toChain: (toToken.chainId ?? 1).toString(), 
                         fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
                         toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
                         fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
@@ -281,22 +276,7 @@ function SwapClient() {
             await new Promise(r => setTimeout(r, 300)); 
         }
 
-        // AI IS SUPPLEMENTARY ONLY
-        setQuotePhase('GUARDIAN_SCAN');
-        const aiAnalysis = await currencyConversionWithLLMValidation({
-            fromCurrency: fromToken.symbol,
-            toCurrency: toToken.symbol,
-            amount: parseFloat(debouncedAmount),
-            convertedAmount: best.receiveAmount,
-            priceImpact: tradeValueUsd > 0 ? ((outputUsd - tradeValueUsd) / tradeValueUsd) * 100 : 0,
-            gasFeeUsd: best.fee,
-            chainName: sourceChainConfig?.name || 'Unknown'
-        });
-
-        if (currentQuoteId !== quoteIdRef.current) return;
-        setGuardianAnalysis(aiAnalysis);
-
-        // PROCEDURE: Select Best and proceed regardless of AI sentiment (Advisor Role)
+        // PROCEDURE: Select Best
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(best.id); 
         await new Promise(r => setTimeout(r, 1000)); 
@@ -334,7 +314,7 @@ function SwapClient() {
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const handleSwapTokens = () => {
@@ -343,7 +323,7 @@ function SwapClient() {
     setRotation(prev => prev + 180); 
     setFromToken({ ...oldTo });
     setToToken({ ...oldFrom });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   /**
@@ -438,7 +418,7 @@ function SwapClient() {
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
-    { label: 'Guardian Analysis', value: guardianAnalysis?.riskLevel || 'Verified', icon: ShieldCheck },
+    { label: 'Registry Sync', value: 'Verified', icon: ShieldCheck },
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
 
@@ -500,16 +480,7 @@ function SwapClient() {
                     <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
                     <div className="space-y-2 min-h-[200px]">
-                      {quotePhase === 'GUARDIAN_SCAN' && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-10 gap-4">
-                            <div className="relative p-4 rounded-full bg-primary/10 border border-primary/20">
-                                <ShieldQuestion className="w-8 h-8 text-primary animate-pulse" />
-                                <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} className="absolute -inset-2 border-2 border-dashed border-primary/20 rounded-full" />
-                            </div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Market Route...</p>
-                        </motion.div>
-                      )}
-                      {quotePhase !== 'GUARDIAN_SCAN' && quotes.map((quote, idx) => {
+                      {quotes.map((quote, idx) => {
                         const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
                         const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
                         const isFading = fadedIndices.has(idx);
@@ -600,40 +571,6 @@ function SwapClient() {
           </div>
         </section>
 
-        {/* ADVISORY NODE */}
-        <AnimatePresence>
-          {guardianAnalysis && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6 px-2">
-              <div className={cn(
-                "p-4 rounded-[2rem] border backdrop-blur-xl flex gap-4 shadow-2xl relative overflow-hidden",
-                guardianAnalysis.riskLevel === 'HIGH' ? "bg-red-500/5 border-red-500/20" : "bg-primary/5 border-primary/20"
-              )}>
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                  guardianAnalysis.riskLevel === 'HIGH' ? "bg-red-500/10 text-red-400" : "bg-primary/10 text-primary"
-                )}>
-                  {guardianAnalysis.riskLevel === 'HIGH' ? <ShieldAlert className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/80">Guardian Insights</p>
-                    <span className={cn(
-                      "text-[7px] font-black px-1.5 py-0.5 rounded-md uppercase",
-                      guardianAnalysis.riskLevel === 'LOW' ? "bg-green-500/20 text-green-400" : 
-                      guardianAnalysis.riskLevel === 'MEDIUM' ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"
-                    )}>Risk: {guardianAnalysis.riskLevel}</span>
-                  </div>
-                  <p className="text-[11px] font-bold text-white/60 leading-relaxed">{guardianAnalysis.analysis}</p>
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <Zap className="w-3 h-3 text-primary" />
-                    <p className="text-[10px] font-black text-primary uppercase">{guardianAnalysis.advice}</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <div className="mt-6 px-4 grid grid-cols-2 gap-3 relative min-h-[100px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
@@ -663,7 +600,7 @@ function SwapClient() {
                   </div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-primary/10 border border-primary/20">
-                      <Bot className="w-6 h-6 text-primary" />
+                      <Activity className="w-6 h-6 text-primary" />
                       <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" />
                     </div>
                     <span className="text-[7px] font-black text-primary uppercase tracking-widest">Routing</span>
