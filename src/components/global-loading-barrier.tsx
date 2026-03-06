@@ -12,6 +12,8 @@ import { useWallet } from '@/contexts/wallet-provider';
  * 
  * NAVIGATION OPTIMIZED: Once dismissed, this barrier remains hidden
  * during internal routing to prevent jarring UX.
+ * 
+ * HYDRATION FIX: Synchronizes initial server/client text nodes.
  */
 export default function GlobalLoadingBarrier() {
   const { user, loading: authLoading } = useUser();
@@ -47,10 +49,16 @@ export default function GlobalLoadingBarrier() {
   if (hasHydratedOnceRef.current || !isVisible) return null;
 
   // Determine the most accurate feedback for the user
-  let statusText = 'Establishing Terminal...';
-  if (!isAuthResolved) statusText = 'Verifying Identity...';
-  else if (!isWalletResolved) statusText = 'Deriving Secure Nodes...';
-  else if (!isDataResolved) statusText = 'Synchronizing Registry...';
+  // HYDRATION GUARD: Ensure initial client render matches server assumption (authLoading = true)
+  const getStatusText = () => {
+    if (!hasMounted) return 'Verifying Identity...';
+    if (!isAuthResolved) return 'Verifying Identity...';
+    if (!isWalletResolved) return 'Deriving Secure Nodes...';
+    if (!isDataResolved) return 'Synchronizing Registry...';
+    return 'Establishing Terminal...';
+  };
+
+  const statusText = getStatusText();
 
   return (
     <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-[#050505] text-white transition-opacity duration-500">
