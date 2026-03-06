@@ -3,11 +3,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * PRIMARY AUTHENTICATION SUPABASE CLIENT
- * Hardcoded Production Keys for gcghriodmljkusdduhzl
+ * PRIMARY AUTHENTICATION SUPABASE CLIENT (HARDCODED PRODUCTION)
+ * Project: lbltgeldesxkgdrblfxj
  */
 
-const supabaseUrl = 'https://gcghriodmljkusdduhzl.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZ2hyaW9kbWxqa3VzZGR1aHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MzkzMTQsImV4cCI6MjA4NzUxNTMxNH0.QCWXCs-K4C96zvQcvaBLNqVqxAA7GKUXEulEruVbaE4';
+const supabaseUrl = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxibHRnZWxkZXN4a2dkcmJsZnhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE5MTg3NDQsImV4cCI6MjA3NzQ5NDc0NH0.P20DLsxlceN1rOqJXs4ucpkN1zb_rtL_sQqZs1DloRs';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

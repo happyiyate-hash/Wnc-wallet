@@ -19,12 +19,6 @@ interface TokenLogoDynamicProps {
   name?: string;
 }
 
-/**
- * INSTITUTIONAL TOKEN LOGO ENGINE (PERSISTENT)
- * Version: 6.2.0 (Strict Type-Safe Patch)
- * 
- * Ensures logoUrl is a valid string before executing path resolution.
- */
 export default function TokenLogoDynamic({
   logoUrl,
   alt,
@@ -37,7 +31,7 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v6_${slug}_${sym}`;
+    return `logo_v7_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -49,7 +43,7 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // 1. CHECK PERSISTENT REGISTRY
+      // 1. CHECK PERSISTENT REGISTRY (IndexedDB)
       const cached = await registryDb.getLogo(cacheKey);
       if (cached) {
         setResolvedUrl(cached);
@@ -57,13 +51,13 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 2. PRIMARY: Direct Path Resolution (Strict Type Check)
+      // 2. PRIMARY: Direct Path Resolution from Database
       if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         let finalUrl = logoUrl;
-        if (logoUrl.startsWith('/api/cdn')) {
-          finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
-        } else if (!logoUrl.startsWith('http')) {
-          finalUrl = `${LOGO_CDN_URL}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
+        if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
+          // Prepend Institutional CDN URL for relative paths
+          const base = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+          finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
         }
         
         setResolvedUrl(finalUrl);
@@ -72,7 +66,7 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 3. SECONDARY: Server Handshake (Fallback Discovery)
+      // 3. SECONDARY: Server Handshake Fallback
       if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');

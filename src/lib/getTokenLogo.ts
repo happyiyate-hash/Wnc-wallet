@@ -3,21 +3,17 @@
 import { logoSupabase } from './supabase/logo-server';
 
 /**
- * WEVINA INSTITUTIONAL REGISTRY SERVICE (SERVER-SIDE)
- * Version: 6.1.0 (Developer Guide Compliant)
- * 
- * Implements direct Supabase access logic for metadata and logos.
+ * WEVINA INSTITUTIONAL REGISTRY SERVICE
+ * Implementation based on Developer API Guide: Direct Supabase Access
  */
 
-/**
- * Fetches a token's direct logo URL from Supabase storage.
- * Prioritizes lookup by full token name for accuracy before falling back to symbol.
- */
+const CDN_BASE_URL = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
 
   try {
-    // 1. Prioritize lookup by the full token name for accuracy (Case-Insensitive)
+    // 1. Prioritize lookup by the full token name for accuracy
     const { data: nameData } = await logoSupabase
       .from('token_logos')
       .select('public_url')
@@ -25,9 +21,7 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
       .limit(1)
       .maybeSingle();
 
-    if (nameData?.public_url) {
-      return nameData.public_url;
-    }
+    if (nameData?.public_url) return nameData.public_url;
 
     // 2. Fall back to the symbol search
     const { data: symbolData } = await logoSupabase
@@ -44,9 +38,6 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
   }
 }
 
-/**
- * Fetches all tokens for a given network and flattens the token_details.
- */
 export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
   if (!logoSupabase) return [];
 
@@ -58,14 +49,13 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
 
     if (error || !data) return [];
 
-    // The 'token_details' field is a JSON object, we flatten it for the terminal engine.
     return data.map(token => ({
       symbol: token.token_details.symbol,
       name: token.token_details.name,
       decimals: token.token_details.decimals || 18,
       network: token.network,
       contract: token.contract_address,
-      logo_url: token.logo_url,
+      logo_url: token.logo_url, // Relative path from DB
       priceSource: token.token_details.priceSource,
       priceId: token.token_details.priceId || token.token_details.coingeckoId,
     }));
@@ -75,27 +65,19 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
   }
 }
 
-/**
- * Fetches real-time pricing metadata for custom assets from the registry.
- */
 export async function fetchTokenPricesFromMetadata(contracts: string[]): Promise<any[]> {
   if (!logoSupabase || contracts.length === 0) return [];
-
   try {
     const { data } = await logoSupabase
       .from('token_metadata')
       .select('contract_address, token_details')
       .in('contract_address', contracts.map(c => c.toLowerCase()));
-
     return data || [];
   } catch (e) {
     return [];
   }
 }
 
-/**
- * Client-facing resolver for TokenLogoDynamic.
- */
 export async function getTokenLogoUrl(symbol?: string | null, name?: string | null): Promise<string | null> {
     if (!symbol && !name) return null;
     const identifier = (name || symbol || '').toLowerCase().replace(/\s+/g, '-');

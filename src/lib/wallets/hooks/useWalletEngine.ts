@@ -6,7 +6,7 @@ import { fetchBalancesForChain } from '../services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (FAIL-FAST)
- * Version: 4.1.0
+ * Version: 4.2.0 (8s Safety Sentinel)
  */
 export function useWalletEngine({
   wallets,
@@ -35,9 +35,6 @@ export function useWalletEngine({
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  /**
-   * REVALIDATION HANDSHAKE
-   */
   const executeRevalidation = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRefreshingRef.current) return;
     
@@ -48,13 +45,13 @@ export function useWalletEngine({
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     
-    // SAFETY TIMEOUT: Release dashboard even if chains are slow
+    // SAFETY TIMEOUT: Force-release loading barrier after 8 seconds
     const safetyTimer = setTimeout(() => {
         setHasFetchedInitialData(true);
     }, 8000);
     
     try {
-      // PHASE 1: Active Handshake
+      // PHASE 1: Active Node Handshake
       const activeBalances = await fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
@@ -67,11 +64,11 @@ export function useWalletEngine({
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
       lastSyncTimestampRef.current[viewingNetwork.chainId] = Date.now();
       
-      // ACTIVE NODE VERIFIED: Release dashboard
+      // ACTIVE NODE VERIFIED: Immediate release
       clearTimeout(safetyTimer);
       setHasFetchedInitialData(true);
 
-      // PHASE 2: Background Sequence
+      // PHASE 2: Background Registry Sequence
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
       
       for (const chain of otherChains) {
