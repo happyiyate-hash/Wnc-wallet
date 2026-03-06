@@ -6,8 +6,10 @@ import { syncAddressesToCloud } from './services/wallet-actions';
 
 /**
  * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Optimized for logic-gated "Snap-Dwell-Snap" rhythm.
- * Force-terminates if wallet state becomes null.
+ * Version: 5.0.0 (Network-Aware Comparison Protocol)
+ * 
+ * Performs granular address matching between local storage and cloud registry.
+ * Uses explicit blockchain identifiers to resolve "none" assumptions.
  */
 
 export interface SyncDiagnostic {
@@ -20,7 +22,7 @@ export interface SyncDiagnostic {
 
 export const backgroundSyncWorker = {
   /**
-   * Performs a strict sequential audit of the vault registry.
+   * Performs a strict sequential audit of the vault registry per network.
    */
   async performCloudAudit(
     userId: string,
@@ -30,7 +32,6 @@ export const backgroundSyncWorker = {
     allChains: ChainConfig[],
     onUpdate: (update: Partial<SyncDiagnostic>) => void
   ) {
-    // 1. PRE-FLIGHT GUARD: Terminate if wallet state is missing
     if (!userId || !wallets || wallets.length === 0 || !accountNumber || allChains.length === 0) {
         onUpdate({ status: 'idle', progress: 0 });
         return;
@@ -38,64 +39,51 @@ export const backgroundSyncWorker = {
 
     const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // 2. CONSTRUCT AUDIT SEQUENCE (Symbol-Only Branding)
-    const evmChains = allChains.filter(c => (c.type || 'evm') === 'evm');
-    const nonEvmChains = allChains.filter(c => c.type && c.type !== 'evm');
+    // 1. CONSTRUCT GRANULAR AUDIT SEQUENCE
+    const auditNodes: { label: string; type: string; local: string | null; cloud: string | null }[] = [];
 
-    interface AuditNode {
-      label: string;
-      type: string;
-      localAddr: string | null;
-      cloudAddr: string | null;
-    }
+    // Group chains by their unique wallet types (EVM, BTC, SOL, etc.)
+    const uniqueTypes = Array.from(new Set(allChains.map(c => c.type || 'evm')));
 
-    const sequence: AuditNode[] = [];
+    uniqueTypes.forEach(type => {
+      const localWallet = wallets.find(w => w.type === type);
+      const fieldName = `${type}_address`;
+      
+      // Resolve the display label (e.g., 'EVM', 'XRP')
+      const chainSample = allChains.find(c => (c.type || 'evm') === type);
+      const label = type === 'evm' ? 'EVM' : (chainSample?.symbol.toUpperCase() || type.toUpperCase());
 
-    // Node A: Unified EVM Protocol
-    if (evmChains.length > 0) {
-      const localWallet = wallets.find(w => w.type === 'evm');
-      sequence.push({
-        label: 'EVM',
-        type: 'evm',
-        localAddr: localWallet?.address || null,
-        cloudAddr: profile?.evm_address || null
-      });
-    }
-
-    // Nodes B-Z: Ecosystem-Specific Symbols (BTC, XRP, SOL, etc.)
-    nonEvmChains.forEach(c => {
-      const localWallet = wallets.find(w => w.type === c.type);
-      const fieldName = `${c.type}_address`;
-      sequence.push({
-        label: c.symbol.toUpperCase(),
-        type: c.type || 'unknown',
-        localAddr: localWallet?.address || null,
-        cloudAddr: (profile as any)?.[fieldName] || null
+      auditNodes.push({
+        label,
+        type,
+        local: localWallet?.address || null,
+        cloud: (profile as any)?.[fieldName] || null
       });
     });
 
-    const totalSteps = sequence.length;
+    const totalSteps = auditNodes.length;
     let completed = 0;
 
-    // 3. STRICT SEQUENTIAL HANDSHAKE LOOP
-    for (const node of sequence) {
-      // MID-FLIGHT GUARD: Check if wallet was deleted during the loop
+    // 2. EXECUTE NETWORK-SPECIFIC COMPARISON
+    for (const node of auditNodes) {
       if (!wallets || wallets.length === 0) {
-          onUpdate({ status: 'idle', progress: 0 });
+          onUpdate({ status: 'idle' });
           return;
       }
 
       onUpdate({ 
         status: 'checking',
         chain: node.label, 
-        localValue: node.localAddr, 
-        cloudValue: node.cloudAddr,
+        localValue: node.local, 
+        cloudValue: node.cloud,
         progress: (completed / totalSteps) * 100
       });
 
-      await breathe(800);
+      await breathe(600);
 
-      const isMismatch = node.localAddr && node.localAddr !== node.cloudAddr;
+      // CRITICAL LOGIC: If local exists but cloud is missing or different, it's a mismatch.
+      // We don't assume "none" means synchronized if a local node is active.
+      const isMismatch = node.local && node.local !== node.cloud;
 
       if (isMismatch) {
         onUpdate({ status: 'mismatch' });
@@ -104,28 +92,25 @@ export const backgroundSyncWorker = {
         onUpdate({ status: 'syncing' });
         
         try {
-          // Trigger atomic repair
+          // Trigger atomic repair node
           await syncAddressesToCloud(userId, wallets, accountNumber!);
-          // UI REFLECTION: Physically update displayed cloud value to match local
-          onUpdate({ cloudValue: node.localAddr });
-          await breathe(500); 
+          onUpdate({ cloudValue: node.local });
+          await breathe(400); 
         } catch (e) {
-          console.error(`[REGISTRY_REPAIR_FAIL] ${node.label}:`, e);
+          console.error(`[SYNC_REPAIR_FAIL] ${node.label}:`, e);
           onUpdate({ status: 'idle' });
           return;
         }
       }
 
-      // PHASE 3: VERIFIED
       onUpdate({ status: 'success' });
-      await breathe(1000); 
+      await breathe(600); 
       
       completed++;
       onUpdate({ progress: (completed / totalSteps) * 100 });
-      await breathe(200);
     }
 
-    onUpdate({ status: 'completed', chain: 'VAULT', progress: 100 });
+    onUpdate({ status: 'completed', chain: 'ALL NODES', progress: 100 });
     await breathe(1500);
     onUpdate({ status: 'idle', progress: 0 });
   }

@@ -1,7 +1,7 @@
 
 /**
  * INSTITUTIONAL REGISTRY DATABASE (IndexedDB)
- * Version: 1.0.0 (High-Speed Cryptographic Cache)
+ * Version: 1.1.0 (High-Speed Cryptographic Cache & Logo Node)
  * 
  * Provides persistent storage for derived identity nodes and asset branding.
  */
@@ -19,6 +19,7 @@ export interface CachedWallet {
 export interface CachedLogo {
   id: string; // identifier slug
   url: string;
+  blob?: Blob; // Optional: Store raw blob for instant display
   timestamp: number;
 }
 
@@ -77,7 +78,14 @@ class RegistryDB {
       const transaction = db.transaction('logo_registry', 'readonly');
       const store = transaction.objectStore('logo_registry');
       const request = store.get(id);
-      request.onsuccess = () => resolve(request.result?.url || null);
+      request.onsuccess = () => {
+        const result = request.result;
+        if (result && result.url) {
+          resolve(result.url);
+        } else {
+          resolve(null);
+        }
+      };
       request.onerror = () => resolve(null);
     });
   }
