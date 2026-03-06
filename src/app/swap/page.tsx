@@ -55,9 +55,6 @@ interface SwapQuote {
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED' | 'PIVOT_CONVERTING' | 'PIVOT_BRIDGING' | 'PIVOT_FINALIZING';
 
-/**
- * INSTITUTIONAL SMART DECIMAL PROTOCOL
- */
 const formatSmartAmount = (val: number) => {
   if (val === 0) return '0.00';
   if (val >= 1) return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -101,7 +98,6 @@ function SwapClient() {
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
-  // LIQUIDITY SENTINEL STATE
   const [isAdminLiquidityValid, setIsAdminLiquidityValid] = useState<boolean | null>(null);
   const [isCheckingLiquidity, setIsCheckingLiquidity] = useState(false);
 
@@ -134,9 +130,8 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
-  // LIQUIDITY SENTINEL EFFECT
   useEffect(() => {
-    if (!toToken || !selectedQuoteId || !infuraApiKey) return;
+    if (!toToken || !selectedQuoteId) return;
     
     const checkLiquidity = async () => {
       const quote = quotes.find(q => q.id === selectedQuoteId);
@@ -455,6 +450,7 @@ function SwapClient() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
+      {/* HEADER NODE */}
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <div className="flex flex-col items-center text-center">
@@ -464,87 +460,101 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* LIQUIDITY SENTINEL CARD (SLIDE-DOWN) */}
+      {/* INSTITUTIONAL LIQUIDITY WARNING (TOP-DOWN) */}
       <AnimatePresence>
-        {isAdminLiquidityValid !== null && !isExecuting && (
+        {isAdminLiquidityValid === false && !isExecuting && (
           <motion.div 
-            initial={{ y: -100, opacity: 0 }} 
+            initial={{ y: -150, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
-            exit={{ y: -100, opacity: 0 }}
-            className="fixed top-[72px] inset-x-4 z-40 max-w-lg mx-auto"
+            exit={{ y: -150, opacity: 0 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+            className="fixed top-0 left-0 right-0 z-[110] p-4 bg-black/90 backdrop-blur-3xl border-b border-red-500/30 shadow-[0_10px_40px_rgba(239,68,68,0.2)]"
           >
-            <div className={cn(
-              "p-4 rounded-2xl border backdrop-blur-3xl shadow-2xl flex items-center gap-4 transition-colors duration-500",
-              isAdminLiquidityValid ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"
-            )}>
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg",
-                isAdminLiquidityValid ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
-              )}>
-                {isCheckingLiquidity ? <Loader2 className="w-5 h-5 animate-spin" /> : isAdminLiquidityValid ? <CheckCircle2 className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+            <div className="max-w-lg mx-auto flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/30 shadow-lg">
+                <ShieldAlert className="w-6 h-6 text-red-500" />
               </div>
               <div className="flex-1 space-y-0.5">
-                <p className={cn("text-[10px] font-black uppercase tracking-widest", isAdminLiquidityValid ? "text-green-500" : "text-red-500")}>
-                  {isAdminLiquidityValid ? 'Liquidity Verified' : 'Liquidity Restricted'}
-                </p>
-                <p className="text-[11px] text-white/60 font-medium leading-tight">
-                  {isAdminLiquidityValid 
-                    ? `Sufficient ${toToken?.symbol} liquidity available for this swap.` 
-                    : `Registry node has insufficient ${toToken?.symbol} liquidity at this moment.`}
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">Liquidity Restricted</p>
+                <p className="text-xs font-bold text-red-400/80 leading-tight">
+                  This route is currently locked due to insufficient node liquidity. Please try a different token.
                 </p>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {canExecute && (
-          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 left-0 right-0 z-[60] p-4 bg-black/80 backdrop-blur-xl border-b border-primary/20 shadow-2xl">
-            <div className="max-w-lg mx-auto">
-              <Button className="w-full h-14 rounded-2xl text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-widest" onClick={handleExecuteSwap}>
-                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0" />
-                <span className="relative z-10 flex items-center justify-center gap-3"><ShieldCheck className="w-5 h-5" />Sign & Authorize</span>
+              <Button variant="ghost" size="icon" onClick={() => setIsAdminLiquidityValid(null)} className="rounded-full hover:bg-white/5">
+                <X className="w-4 h-4 text-white/20" />
               </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* EXECUTE SWAP BUTTON (TOP-DOWN) */}
       <AnimatePresence>
-        {isExecuting && (
-          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
-            <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-primary/20 rounded-[2rem] p-6 shadow-2xl overflow-hidden relative">
-              <div className="relative z-10 space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
-                    {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-black uppercase tracking-widest text-white">
-                      {executionPhase === 'VERIFYING' && 'Verifying...'}
-                      {executionPhase === 'LIQUIDITY' && 'Syncing...'}
-                      {executionPhase === 'APPROVING' && 'Authorizing...'}
-                      {executionPhase === 'SENDING' && 'Dispatching...'}
-                      {executionPhase === 'SETTLING' && 'Settling...'}
-                      {executionPhase === 'PIVOT_CONVERTING' && 'USDC Sync...'}
-                      {executionPhase === 'PIVOT_BRIDGING' && 'Bridging...'}
-                      {executionPhase === 'PIVOT_FINALIZING' && 'Completing...'}
-                      {executionPhase === 'SUCCESS' && 'Handshake Secured'}
-                      {executionPhase === 'FAILED' && 'Handshake Failed'}
-                    </h3>
-                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Master Node Active'}</span>
-                  </div>
-                </div>
-              </div>
+        {canExecute && (
+          <motion.div 
+            initial={{ y: -150, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: -150, opacity: 0 }} 
+            transition={{ type: 'spring', damping: 25, stiffness: 150 }}
+            className="fixed top-0 left-0 right-0 z-[120] p-4 bg-black/80 backdrop-blur-2xl border-b border-primary/20 shadow-2xl"
+          >
+            <div className="max-w-lg mx-auto">
+              <Button 
+                className="w-full h-16 rounded-[2rem] text-base font-black shadow-2xl transition-all border-b-4 bg-primary hover:bg-primary/90 border-primary/50 text-white relative overflow-hidden group uppercase tracking-[0.2em]" 
+                onClick={handleExecuteSwap}
+              >
+                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12 z-0" />
+                <span className="relative z-10 flex items-center justify-center gap-3"><ShieldCheck className="w-6 h-6" />Authorize Handshake</span>
+              </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* EXECUTION PROGRESS OVERLAY */}
+      <AnimatePresence>
+        {isExecuting && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6">
+            <div className="bg-[#0a0a0c] border border-primary/20 rounded-[3rem] p-10 shadow-2xl overflow-hidden relative max-w-sm w-full text-center space-y-8">
+              <div className="relative">
+                <motion.div 
+                  animate={{ rotate: 360 }} 
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }} 
+                  className="absolute -inset-4 border-2 border-dashed border-primary/20 rounded-full" 
+                />
+                <div className={cn("w-20 h-20 rounded-[2rem] flex items-center justify-center transition-colors mx-auto relative z-10 shadow-2xl", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
+                  {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-10 h-10 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-10 h-10" /> : <Loader2 className="w-10 h-10 animate-spin" />}
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-xl font-black uppercase tracking-widest text-white">
+                  {executionPhase === 'VERIFYING' && 'Verifying Node...'}
+                  {executionPhase === 'LIQUIDITY' && 'Syncing Vaults...'}
+                  {executionPhase === 'APPROVING' && 'Authorizing...'}
+                  {executionPhase === 'SENDING' && 'Dispatching...'}
+                  {executionPhase === 'SETTLING' && 'Finalizing...'}
+                  {executionPhase === 'PIVOT_CONVERTING' && 'USDC Sync...'}
+                  {executionPhase === 'PIVOT_BRIDGING' && 'Bridging...'}
+                  {executionPhase === 'PIVOT_FINALIZING' && 'Settling Node...'}
+                  {executionPhase === 'SUCCESS' && 'Handshake Secured'}
+                  {executionPhase === 'FAILED' && 'Handshake Failed'}
+                </h3>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.25em]">{executionError || 'Master Authority Active'}</p>
+              </div>
+
+              {executionPhase === 'FAILED' && (
+                <Button onClick={() => setIsExecuting(false)} variant="outline" className="w-full h-14 rounded-2xl font-black uppercase tracking-widest bg-white/5 border-white/10">Dismiss Advisory</Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QUOTE SYNC STATUS (FLOATING) */}
       <AnimatePresence>
         {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
-          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none">
+          <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[90] max-w-lg mx-auto pointer-events-none">
             <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
