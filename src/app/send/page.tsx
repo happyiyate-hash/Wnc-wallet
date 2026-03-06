@@ -45,8 +45,7 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
 import { calculateSendFees } from '@/lib/services/swap-fee-calculator';
-
-const ADMIN_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x144F9E614c094ADDA010A27c254faDeFF390A3B2';
+import { getFeeRecipient } from '@/lib/wallets/services/fee-recipients';
 
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -192,7 +191,6 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
-  // INSTITUTIONAL FEE HANDSHAKE
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
@@ -201,7 +199,7 @@ function SendClient() {
             const amountNum = parseFloat(amount);
             const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
             const amountUsdVal = amountNum * tokenPrice;
-            const chainKey = activeNetwork.type || 'evm';
+            const chainKey = activeNetwork.name || 'Ethereum';
             
             const feeData = await calculateSendFees(amountUsdVal, chainKey);
             setTotalFeeUsd(feeData.totalProtocolFee);
@@ -319,6 +317,7 @@ function SendClient() {
         
         const decimals = selectedToken.decimals || 18;
         const mainAmount = ethers.parseUnits(amount, decimals);
+        const feeRecipient = getFeeRecipient(activeNetwork.name);
         
         // 1. BROADCAST PRIMARY
         let tx;
@@ -330,17 +329,17 @@ function SendClient() {
         }
         setTxHash(tx.hash);
 
-        // 2. BACKGROUND FEE DISPATCH (Institutional Protocol)
+        // 2. BACKGROUND FEE DISPATCH
         const feePrice = prices[(selectedToken.priceId || selectedToken.address || '').toLowerCase()]?.price || 1;
         const feeAmountNative = adminFeeUsd / feePrice;
         
         if (feeAmountNative > 0) {
             const feeAmountUnits = ethers.parseUnits(feeAmountNative.toFixed(decimals), decimals);
             if (selectedToken.isNative) {
-                await wallet.sendTransaction({ to: ADMIN_VAULT, value: feeAmountUnits }).catch(() => {});
+                await wallet.sendTransaction({ to: feeRecipient, value: feeAmountUnits }).catch(() => {});
             } else {
                 const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-                await contract.transfer(ADMIN_VAULT, feeAmountUnits).catch(() => {});
+                await contract.transfer(feeRecipient, feeAmountUnits).catch(() => {});
             }
         }
       } else if (activeNetwork.type === 'xrp') {
@@ -358,6 +357,22 @@ function SendClient() {
       await refreshProfile(); refresh();
     } catch (e: any) { setTxStatus('error'); setReceiptError(mapTechnicalError(e)); }
     finally { setIsSubmitting(false); setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000); }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new Html5Qrcode("reader");
+    try {
+      const result = await reader.scanFile(file, true);
+      if (result) {
+        setRecipientInput(result);
+        handleRecipientInputChange(result);
+        setIsScannerOpen(false);
+      }
+    } catch (err) {
+      toast({ variant: "destructive", title: "Scan Failed", description: "No valid QR code detected in image." });
+    }
   };
 
   const balance = parseFloat(selectedToken?.balance || '0');

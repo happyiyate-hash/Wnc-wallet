@@ -1,28 +1,18 @@
+
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
 import { validateSwapAmount } from './swap-fee-calculator';
 import { adminExecutor } from './admin-executor';
+import { getFeeRecipient } from '../wallets/services/fee-recipients';
 
 /**
  * INSTITUTIONAL SWAP EXECUTION SERVICE
- * Version: 1.6.0 (Environment Synced)
+ * Version: 1.7.0 (Unified Registry Sync)
  * 
  * Orchestrates the lifecycle of liquidity-provided swaps.
- * Strictly uses the ADMIN_VAULT_ADDRESS from environment variables.
+ * Synchronized with the centralized fee-recipients registry.
  */
-
-const ADMIN_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
-
-// REGISTRY: Institutional Admin Vault Addresses
-const ADMIN_WALLET_MAP: { [chain: string]: string } = {
-  'ethereum': ADMIN_VAULT,
-  'evm': ADMIN_VAULT,
-  'bitcoin': 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-  'solana': 'AdminVaultSolana1111111111111111111111111',
-  'xrp': 'rHb9CJAWyUMayX9V8Gu89FWJCoDYHnC4n',
-  'tron': 'TNV9Z6XYnZAnvXAnvXAnvXAnvXAnvXAnvX'
-};
 
 export interface InitiateSwapInput {
   userId: string;
@@ -49,9 +39,8 @@ export const swapExecutionService = {
     // 1. Enforce Institutional Minimums
     validateSwapAmount(input.fromAmount, input.fromSymbol, input.fromTokenPriceUsd);
 
-    // 2. Resolve Admin Deposit Node
-    const chainKey = input.fromChain.toLowerCase();
-    const adminAddress = ADMIN_WALLET_MAP[chainKey] || ADMIN_WALLET_MAP['evm'];
+    // 2. Resolve Admin Deposit Node from Central Registry
+    const adminAddress = getFeeRecipient(input.fromChain);
 
     if (!adminAddress) {
       throw new Error(`Liquidity node for ${input.fromChain} not available.`);
@@ -130,8 +119,9 @@ export const swapExecutionService = {
       if (!profile) throw new Error("IDENTITY_NODE_MISSING");
 
       const chainKey = swap.to_chain.toLowerCase();
-      const targetAddress = chainKey === 'solana' ? profile.solana_address : 
-                            chainKey === 'xrp' ? profile.xrp_address : 
+      // Use unified property resolution logic
+      const targetAddress = chainKey.includes('solana') ? profile.solana_address : 
+                            chainKey.includes('xrp') ? profile.xrp_address : 
                             profile.evm_address;
 
       if (!targetAddress) throw new Error(`RECIPIENT_${chainKey.toUpperCase()}_NODE_MISSING`);
@@ -142,7 +132,7 @@ export const swapExecutionService = {
         amount: swap.to_amount_expected,
         tokenSymbol: swap.to_symbol,
         chainId: 1, 
-        chainType: chainKey === 'solana' ? 'solana' : chainKey === 'xrp' ? 'xrp' : 'evm'
+        chainType: chainKey.includes('solana') ? 'solana' : chainKey.includes('xrp') ? 'xrp' : 'evm'
       });
 
       // Update Ledger to Completed

@@ -1,9 +1,10 @@
 
 import { getGasFee } from "../wallets/services/fee-service";
+import { getFeeRecipient } from "../wallets/services/fee-recipients";
 
 /**
  * INSTITUTIONAL FEE & VALIDATION ENGINE
- * Version: 1.4.0 (Send-Fee Extension)
+ * Version: 1.5.0 (Registry Integration)
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; 
@@ -48,6 +49,7 @@ export function validateSwapAmount(amount: number, tokenSymbol: string, tokenPri
 export async function calculateSendFees(amountUsd: number, chain: string) {
     const blockchainFee = await getGasFee(chain);
     const networkFeeUSD = blockchainFee.estimatedFeeUSD;
+    const recipient = getFeeRecipient(chain);
 
     // Institutional 5% Fee Model
     const percentage = 0.05; 
@@ -62,6 +64,7 @@ export async function calculateSendFees(amountUsd: number, chain: string) {
       adminFee,
       networkFee: networkFeeUSD,
       totalProtocolFee: adminFee + networkFeeUSD,
+      feeRecipient: recipient
     };
 }
 
@@ -75,6 +78,7 @@ export async function calculateSwapFees(
 ) {
   const blockchainFee = await getGasFee(chain);
   const networkFeeUSD = blockchainFee.estimatedFeeUSD;
+  const recipient = getFeeRecipient(chain);
 
   const percentage = adminFeePercentage ?? 0.05; 
   let adminFee = rawAmountUsd * percentage;
@@ -90,5 +94,6 @@ export async function calculateSwapFees(
     adminFee,
     blockchainFee: networkFeeUSD,
     networkFee: totalNetworkFee,
+    feeRecipient: recipient
   };
 }
