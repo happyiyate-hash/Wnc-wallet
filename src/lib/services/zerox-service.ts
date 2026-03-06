@@ -3,10 +3,11 @@
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE (PROXY ONLY)
- * Version: 4.0.0 (Handshake Hardening)
+ * Version: 4.1.0 (Detailed Error Propagation)
  * 
  * Strictly routes all requests through the backend proxy.
  * Prevents CORS failures and API key exposure.
+ * Now captures and surfaces specific protocol error messages.
  */
 
 export const zeroXService = {
@@ -51,10 +52,6 @@ export const zeroXService = {
     const data = await response.json();
 
     if (!response.ok) {
-      if (data.details && data.details.length > 0) {
-        const firstErr = data.details[0];
-        throw new Error(`0x Node: ${firstErr.reason} (${firstErr.field})`);
-      }
       throw new Error(data.error || '0x Execution Handshake Failed');
     }
 

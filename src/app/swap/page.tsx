@@ -217,7 +217,12 @@ function SwapClient() {
 
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-            const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
+            
+            // USE NATIVE SYMBOL FOR 0X NATIVE ASSETS (SAFEST STANDARD)
+            const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
+            const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+
+            const p = await zeroXService.getPrice(fromToken.chainId ?? 1, sellId, buyId, sellAmount, userAddress);
             
             const gasCostEth = (parseFloat(p.estimatedGas) * parseFloat(p.gasPrice)) / 1e18;
             const gasCostUsd = gasCostEth * (prices['ethereum']?.price || 2500);
@@ -336,7 +341,11 @@ function SwapClient() {
       if (selectedQuote.swapProvider === 'ZEROX') {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
-          const q = await zeroXService.getQuote(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, wallet.address);
+          
+          const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
+          const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+
+          const q = await zeroXService.getQuote(fromToken.chainId ?? 1, sellId, buyId, sellAmount, wallet.address);
           
           if (!fromToken.isNative) {
               setExecutionPhase('APPROVING');
