@@ -68,7 +68,6 @@ function SwapClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ATOMIC SWAP STATE
   const [fromToken, setFromToken] = useState<AssetRow | null>(null);
   const [toToken, setToToken] = useState<AssetRow | null>(null);
   const [amount, setAmount] = useState('');
@@ -77,7 +76,6 @@ function SwapClient() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
 
-  // QUOTE STATE ENGINE
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -86,7 +84,6 @@ function SwapClient() {
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
 
-  // EXECUTION ENGINE
   const [executionPhase, setExecutionPhase] = useState<ExecutionPhase>('IDLE');
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -99,7 +96,6 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
-  // INITIAL HYDRATION
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
     const initialFrom = allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
@@ -121,9 +117,6 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
-  /**
-   * CENTRALIZED HYBRID QUOTE ENGINE
-   */
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
@@ -155,12 +148,11 @@ function SwapClient() {
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
-        // 1. RESOLVE PROVIDER VIA CENTRAL ROUTER
         const providerType = determineSwapProvider(
             fromToken.chainId ?? 1, 
-            toChainId: toToken.chainId ?? 1, 
-            fromSymbol: fromToken.symbol, 
-            toSymbol: toToken.symbol
+            toToken.chainId ?? 1, 
+            fromToken.symbol, 
+            toToken.symbol
         );
 
         const isPivotRequired = needsPivotRoute(
@@ -175,16 +167,21 @@ function SwapClient() {
         
         let quote: SwapQuote | null = null;
 
-        // 2. EXECUTE PROVIDER-SPECIFIC HANDSHAKE
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, fromToken.isNative ? 'ETH' : fromToken.address, toToken.isNative ? 'ETH' : toToken.address, sellAmount, userAddress);
+            
+            // 0x returns buyAmount already adjusted for the 1% fee (buyTokenPercentageFee)
+            // Gas is returned in gwei/limit format
+            const gasCostEth = (parseFloat(p.estimatedGas) * parseFloat(p.gasPrice)) / 1e18;
+            const gasCostUsd = gasCostEth * (prices['ethereum']?.price || 2500);
+
             quote = {
                 id: '0x-node',
                 provider: '0x Protocol Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
-                fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) + 0.10,
+                fee: gasCostUsd + 0.10, // Protocol + Gas Buffer
                 eta: '~10s',
                 rawQuote: p,
                 swapProvider: 'ZEROX',
@@ -203,18 +200,12 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-            
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.details || errData.error || "Bridge route temporarily offline.");
+                throw new Error(errData.details || errData.error || "Bridge handshake failed.");
             }
 
             const q = await res.json();
-            if (q.error) throw new Error(q.error || "Bridge handshake failed.");
-            
-            // INSTITUTIONAL FEE HANDSHAKE (1.00%)
-            // Since we removed integrator/fee from LI.FI request to fix 400 error,
-            // we calculate and display the 1% fee manually in the terminal.
             const platformFeeUsd = tradeValueUsd * 0.01;
             const receiveAmountReduction = platformFeeUsd / (toTokenPrice || 1);
             const rawReceive = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
@@ -251,8 +242,6 @@ function SwapClient() {
         }
 
         if (currentQuoteId !== quoteIdRef.current) return;
-        if (!quote) throw new Error("NO_ROUTE_FOUND");
-
         setQuotes([quote]); 
         setIsQuoteLoading(false); 
         setQuotePhase('SHOW_ALL'); 
