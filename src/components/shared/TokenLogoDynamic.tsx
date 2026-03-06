@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -6,6 +7,7 @@ import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
 import { LOGO_CDN_URL } from '@/lib/supabase/logo-client';
+import { registryDb } from '@/lib/storage/registry-db';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -19,11 +21,10 @@ interface TokenLogoDynamicProps {
 }
 
 /**
- * INSTITUTIONAL TOKEN LOGO ENGINE (TYPE-SAFE)
- * Version: 5.1.0 (Guide Compliant)
+ * INSTITUTIONAL TOKEN LOGO ENGINE (PERSISTENT)
+ * Version: 6.0.0 (IndexedDB Registry)
  * 
- * Handles relative path resolution by prepending the CDN URL
- * and ensures strict string checking to prevent TypeErrors.
+ * Uses IndexedDB logo_registry for high-speed branding persistence.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -37,60 +38,53 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v5.1_${slug}_${sym}`;
+    return `logo_v6_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(cacheKey);
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState(!resolvedUrl);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     async function resolve() {
-      const cached = localStorage.getItem(cacheKey);
-      
+      setIsLoading(true);
+      setHasError(false);
+
+      // 1. CHECK PERSISTENT REGISTRY (IndexedDB)
+      const cached = await registryDb.getLogo(cacheKey);
       if (cached) {
-        if (resolvedUrl !== cached) setResolvedUrl(cached);
+        setResolvedUrl(cached);
         setIsLoading(false);
         return;
       }
 
-      setIsLoading(true);
-      setHasError(false);
-
-      // 1. PRIMARY: Direct Path Resolution (Strict String Check)
+      // 2. PRIMARY: Direct Path Resolution
       if (logoUrl && typeof logoUrl === 'string') {
         let finalUrl = logoUrl;
         if (logoUrl.startsWith('/api/cdn')) {
           finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
         } else if (!logoUrl.startsWith('http')) {
-          // If relative but not starting with /api/cdn, treat as institutional path
           finalUrl = `${LOGO_CDN_URL}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
         }
         
         setResolvedUrl(finalUrl);
-        localStorage.setItem(cacheKey, finalUrl);
+        await registryDb.saveLogo(cacheKey, finalUrl);
         setIsLoading(false);
         return;
       }
 
-      // 2. SECONDARY: Server Handshake (Prioritized Search)
+      // 3. SECONDARY: Server Handshake
       if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
-            localStorage.setItem(cacheKey, direct); 
+            await registryDb.saveLogo(cacheKey, direct);
             setIsLoading(false);
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_CLIENT_ADVISORY] Registry handshake deferred.");
+          console.warn("[LOGO_REGISTRY] Discovery deferred.");
         }
       }
 
@@ -98,7 +92,7 @@ export default function TokenLogoDynamic({
     }
 
     resolve();
-  }, [logoUrl, symbol, name, cacheKey, resolvedUrl]);
+  }, [logoUrl, symbol, name, cacheKey]);
 
   if (isLoading && !resolvedUrl) {
     return <Skeleton className={`rounded-full bg-white/5 animate-pulse`} style={{ width: size, height: size }} />;

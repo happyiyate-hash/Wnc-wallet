@@ -1,14 +1,13 @@
+
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
 import type { WalletWithMetadata } from '@/lib/types';
+import { registryDb } from '@/lib/storage/registry-db';
 
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
- * Version: 3.1.0 (Standardized SmarterSeller Storage)
- * 
- * Handles data persistence, cloud synchronization, and cache management.
- * Uses shared ss-mnemonic- and ss-infura-key- prefixes for ecosystem interop.
+ * Version: 3.2.0 (Persistent Registry Cleanup)
  */
 
 export async function syncAddressesToCloud(
@@ -120,11 +119,14 @@ export function purgeLocalWalletCache(userId: string) {
     'profile_cache',
     'wallet_addr_cache',
     'wallet_fingerprint',
-    'registry_audit_v2'
+    'registry_audit_v2',
+    'active_network_id'
   ];
   keys.forEach(key => {
     localStorage.removeItem(`${key}-${userId}`);
-    // Cleanup old keys if any exist
     localStorage.removeItem(key);
   });
+  
+  // Also clear persistent IndexedDB
+  registryDb.purgeAll();
 }
