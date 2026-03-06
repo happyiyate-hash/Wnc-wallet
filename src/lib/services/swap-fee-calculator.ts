@@ -4,14 +4,15 @@ import { getFeeRecipient } from "../wallets/services/fee-recipients";
 
 /**
  * INSTITUTIONAL FEE & VALIDATION ENGINE
- * Version: 2.1.0 (High-Volume Update)
+ * Version: 3.0.0 (Liquidity Protection Update)
  * 
- * Implements a predictable $0.05 USD service fee for all transfers
- * and a 0.1% (10 BPS) integrator fee for swaps.
+ * Implements real-time gas discovery with a $0.10 volatility buffer
+ * and an increased 0.30% (30 BPS) institutional system fee.
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; 
 const MIN_SWAP_USD_LOW = 0.10;  
+const GAS_BUFFER_USD = 0.10; // Institutional Volatility Protection
 
 const HIGH_VALUE_TOKENS = ['BTC', 'ETH', 'SOL', 'BNB', 'AVAX', 'MATIC', 'ARB', 'OP', 'DOT', 'LINK'];
 
@@ -68,19 +69,34 @@ export async function calculateSendFees(amountUsd: number, chain: string) {
 }
 
 /**
- * Calculate admin and network fees for a swap.
- * Standardized at 0.1% (10 BPS) to match high-volume aggregator standards.
+ * Calculate system and network fees for a swap.
+ * Version 3.0: Includes delivery gas and 0.10 buffer.
+ * Standardized at 0.30% (30 BPS).
  */
 export async function calculateSwapFees(
   rawAmountUsd: number,
-  chain: string,
+  fromChain: string,
+  toChain?: string,
   adminFeePercentage?: number
 ) {
-  const blockchainFee = await getGasFee(chain);
-  const networkFeeUSD = blockchainFee.estimatedFeeUSD;
-  const recipient = getFeeRecipient(chain);
+  // 1. Fetch Real-time Gas for Execution Leg (User -> Admin)
+  const sourceGas = await getGasFee(fromChain);
+  let totalGasUsd = sourceGas.estimatedFeeUSD;
 
-  const percentage = adminFeePercentage ?? 0.001; // 0.1% Institutional Integrator Fee (10 BPS)
+  // 2. Fetch Real-time Gas for Delivery Leg (Admin -> User)
+  if (toChain && toChain.toLowerCase() !== fromChain.toLowerCase()) {
+    const targetGas = await getGasFee(toChain);
+    totalGasUsd += targetGas.estimatedFeeUSD;
+  } else {
+    // If same chain, estimate delivery as equal to source execution
+    totalGasUsd *= 2;
+  }
+
+  // 3. Add Institutional Volatility Buffer (0.10)
+  totalGasUsd += GAS_BUFFER_USD;
+
+  // 4. Calculate System Fee (0.30%)
+  const percentage = adminFeePercentage ?? 0.003; 
   let adminFee = rawAmountUsd * percentage;
 
   // Swap Floor: $0.05
@@ -88,13 +104,13 @@ export async function calculateSwapFees(
     adminFee = 0.05;
   }
 
-  const totalNetworkFee = adminFee + networkFeeUSD;
+  const totalNetworkFee = adminFee + totalGasUsd;
 
   return {
     rawAmountUsd,
     adminFee,
-    blockchainFee: networkFeeUSD,
+    blockchainFee: totalGasUsd,
     networkFee: totalNetworkFee,
-    feeRecipient: recipient
+    feeRecipient: getFeeRecipient(fromChain)
   };
 }

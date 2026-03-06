@@ -5,14 +5,14 @@ import { FEE_RECIPIENTS } from '../wallets/services/fee-recipients';
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE
- * Version: 1.4.0 (High-Volume 10 BPS Protocol)
- * Handles same-chain EVM swap discovery and signed quote generation.
- * Integrates institutional integrator fee (0.1%) routed to centralized admin vault.
+ * Version: 1.5.0 (Sustainability Update)
+ * 
+ * Increased fee to 0.30% (30 BPS) to cover operational and gas buffer costs.
  */
 
 const ZEROX_API_KEY = process.env.NEXT_PUBLIC_ZEROX_API_KEY || '5eebaf6f-e024-41d2-a18f-e05c241129c3';
-const ADMIN_VAULT = FEE_RECIPIENTS.evm; // Synchronized with central registry
-const FEE_PERCENTAGE = '0.001'; // 0.1% Institutional Integrator Fee (10 BPS)
+const ADMIN_VAULT = FEE_RECIPIENTS.evm; 
+const FEE_PERCENTAGE = '0.003'; // 0.30% Institutional Integrator Fee (30 BPS)
 
 const ZEROX_BASE_URLS: { [chainId: number]: string } = {
   1: 'https://api.0x.org',
@@ -29,13 +29,11 @@ const ZEROX_BASE_URLS: { [chainId: number]: string } = {
 export const zeroXService = {
   /**
    * Fetches an indicative price for UI display.
-   * Includes buyTokenPercentageFee to ensure UI receiveAmount is NET of integrator fees.
    */
   async getPrice(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress?: string) {
     const baseUrl = ZEROX_BASE_URLS[chainId];
     if (!baseUrl) throw new Error(`0x protocol not supported on chain ${chainId}`);
 
-    // Map native tokens to 0x 'ETH' constant
     const sellAddr = sellToken.toLowerCase() === 'eth' || sellToken.toLowerCase().length < 5 ? 'ETH' : sellToken;
     const buyAddr = buyToken.toLowerCase() === 'eth' || buyToken.toLowerCase().length < 5 ? 'ETH' : buyToken;
 
@@ -62,7 +60,6 @@ export const zeroXService = {
 
   /**
    * Generates a signed quote for execution.
-   * Routes the 0.1% integrator fee to the centralized FEE_RECIPIENTS.evm vault.
    */
   async getQuote(chainId: number, sellToken: string, buyToken: string, sellAmount: string, takerAddress: string) {
     const baseUrl = ZEROX_BASE_URLS[chainId];

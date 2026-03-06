@@ -4,10 +4,9 @@ import { getQuote } from '@lifi/sdk'
 
 /**
  * LI.FI BRIDGE QUOTE API
- * Version: 3.0.0 (Institutional Handshake Guard)
+ * Version: 3.1.0 (Sustainability Update)
  * 
- * Secure entry point for cross-chain liquidity discovery.
- * Implements strict parameter validation to prevent HTML error leaks.
+ * Increased revenue share to 0.30% (30 BPS).
  */
 
 export async function GET(req: Request) {
@@ -22,7 +21,7 @@ export async function GET(req: Request) {
     const fromAddress = searchParams.get('fromAddress')
     const slippage = searchParams.get('slippage')
 
-    // PARAMETER GUARD: Ensure all required nodes are present before SDK handshake
+    // PARAMETER GUARD: Ensure all required nodes are present
     if (!fromChain || !toChain || !fromToken || !toToken || !fromAmount || !fromAddress) {
       return NextResponse.json({ 
         error: 'Missing required bridge parameters',
@@ -39,9 +38,9 @@ export async function GET(req: Request) {
       fromAmount,
       fromAddress,
       slippage: Number(slippage) || 0.005,
-      // INSTITUTIONAL REVENUE PARAMS
+      // INSTITUTIONAL REVENUE PARAMS (30 BPS)
       integrator: 'wevina-terminal',
-      fee: 0.001, // 0.1% (10 BPS)
+      fee: 0.003, 
     })
 
     return NextResponse.json(quote)
@@ -49,7 +48,6 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error('[LIFI_QUOTE_ERROR]', error.message || error)
     
-    // STRUCTURED ERROR HANDSHAKE: Never return standard HTML
     return NextResponse.json({
       error: 'Bridge Quote Failed',
       details: error.message || 'Liquidity route not found for this specific pair.'
