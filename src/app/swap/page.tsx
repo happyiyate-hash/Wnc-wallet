@@ -202,7 +202,7 @@ function SwapClient() {
         else if (providerType === 'LIFI') {
             const params = new URLSearchParams({ 
                 fromChain: (fromToken.chainId ?? 1).toString(), 
-                toChain: (toToken.chainId ?? 1).toString(), 
+                toChain: (toChainId: toToken.chainId ?? 1).toString(), 
                 fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
                 toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
                 fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
@@ -211,12 +211,12 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
+            const q = await res.json();
+
             if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.details || errData.error || "Bridge Protocol Failed.");
+                throw new Error(q.details || q.error || "Bridge Protocol Failed.");
             }
 
-            const q = await res.json();
             const platformFeeUsd = tradeValueUsd * 0.01;
             const receiveAmountReduction = platformFeeUsd / (toTokenPrice || 1);
             const rawReceive = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
@@ -269,7 +269,7 @@ function SwapClient() {
 
       } catch (e: any) { 
         if (currentQuoteId === quoteIdRef.current) {
-            setFetchError(e.message || "Institutional Handshake Deferred."); 
+            setFetchError(e.message || "Handshake Aborted."); 
             setQuotePhase('IDLE'); 
         }
       } finally { 

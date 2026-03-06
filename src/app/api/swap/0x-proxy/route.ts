@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * INSTITUTIONAL 0X PROTOCOL PROXY
- * Version: 2.0.0 (Hardened Production Node)
+ * Version: 3.0.0 (Hardened Production Node)
  * 
  * Safely handles indicative price and execution quote requests.
  * Enforces the 1.00% (100 BPS) platform fee on the server side.
