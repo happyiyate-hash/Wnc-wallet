@@ -158,9 +158,9 @@ function SwapClient() {
         // 1. RESOLVE PROVIDER VIA CENTRAL ROUTER
         const providerType = determineSwapProvider(
             fromToken.chainId ?? 1, 
-            toChainId: toToken.chainId ?? 1, 
-            fromSymbol: fromToken.symbol, 
-            toSymbol: toToken.symbol
+            toToken.chainId ?? 1, 
+            fromToken.symbol, 
+            toToken.symbol
         );
 
         const isPivotRequired = needsPivotRoute(
@@ -184,7 +184,6 @@ function SwapClient() {
                 provider: '0x Protocol Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
-                // Add 0.10 buffer to display
                 fee: (parseFloat(ethers.formatUnits(p.estimatedGas, 9)) * (prices['ethereum']?.price || 2000) * 0.000000001) + 0.10,
                 eta: '~10s',
                 rawQuote: p,
@@ -217,7 +216,6 @@ function SwapClient() {
                 provider: q.tool?.toUpperCase() || 'LI.FI Bridge Node',
                 logo: null,
                 receiveAmount: parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18)),
-                // Add 0.10 buffer to display
                 fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00') + 0.10,
                 eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
                 rawQuote: q,
@@ -226,8 +224,6 @@ function SwapClient() {
             };
         }
         else {
-            // Case 3: INTERNAL (USDC Pivot or Direct Native)
-            // CALCULATE WITH REAL-TIME GAS + BUFFER + 0.30% FEE
             const feeData = await calculateSwapFees(tradeValueUsd, fromToken.name, toToken.name);
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
