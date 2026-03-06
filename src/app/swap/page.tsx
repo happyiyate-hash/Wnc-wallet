@@ -27,7 +27,8 @@ import {
   ShieldAlert,
   Cpu,
   Activity,
-  SendHorizonal
+  SendHorizonal,
+  ShieldQuestion
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
+import { currencyConversionWithLLMValidation } from '@/app/actions';
 
 interface SwapQuote {
   id: string;
@@ -49,12 +51,11 @@ interface SwapQuote {
   isBest?: boolean;
 }
 
-type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
+type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'GUARDIAN_SCAN' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
 
 const formatExactCrypto = (val: number): string => {
   if (!val || val <= 0) return '0';
-  // Avoid scientific notation for very small numbers
   return val.toFixed(18).replace(/\.?0+$/, "");
 };
 
@@ -74,11 +75,12 @@ function SwapClient() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
 
-  // QUOTE STATE ENGINE
+  // QUOTE STATE ENGINE (HARDENED)
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [guardianWarning, setGuardianWarning] = useState<string | null>(null);
 
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
@@ -96,6 +98,7 @@ function SwapClient() {
   
   const lastFetchedAmountRef = useRef<string>('');
   const hasInitializedRef = useRef(false);
+  const quoteIdRef = useRef<number>(0);
 
   const isCrossChain = fromToken && toToken && fromToken.chainId !== toToken.chainId;
 
@@ -106,7 +109,8 @@ function SwapClient() {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
     const fromSymbol = searchParams.get('symbol') || searchParams.get('fromSymbol');
     const chainIdParam = parseInt(searchParams.get('chainId') || '');
-    const targetChainId = !isNaN(chainIdParam) ? chainIdParam : viewingNetwork.chainId;
+    const targetChainId = !isNaN(chainIdParam) ? (chainIdParam ?? viewingNetwork.chainId) : viewingNetwork.chainId;
+    
     const initialFrom = allAssets.find(a => a.symbol === fromSymbol && a.chainId === targetChainId && a.symbol !== 'WNC') || 
                       allAssets.find(a => a.symbol !== 'WNC' && a.chainId === viewingNetwork.chainId) || 
                       allAssets[0];
@@ -130,84 +134,141 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
-  // AUTO-PRECISION TRIGGER
-  useEffect(() => {
-    if (quotePhase === 'COMPLETED' && selectedQuoteId) {
-      setShowOutputPrecision(true);
-      const timer = setTimeout(() => setShowOutputPrecision(false), 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [quotePhase, selectedQuoteId]);
-
   /**
-   * ATOMIC QUOTE ENGINE
+   * ATOMIC QUOTE ENGINE (HARDENED)
    */
   useEffect(() => {
     const runSequence = async () => {
+      const currentQuoteId = ++quoteIdRef.current;
+
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
-        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
+        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
-
-      // 1. CHECK PAIR RESTRICTION
-      const restriction = checkPairRestriction(fromToken.symbol, toToken.symbol);
-      if (restriction.isRestricted) {
-        setFetchError(restriction.message!);
-        setQuotePhase('IDLE');
-        setQuotes([]);
-        return;
-      }
 
       const currentSignature = `${fromToken.chainId}:${fromToken.address}:${toToken.chainId}:${toToken.address}:${debouncedAmount}`;
       if (currentSignature === lastFetchedAmountRef.current) return;
       lastFetchedAmountRef.current = currentSignature;
       
-      setIsQuoteLoading(true); setQuotePhase('FETCHING'); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); setSelectedQuoteId(null);
+      // 1. PRE-FLIGHT RESTRICTIONS
+      const restriction = checkPairRestriction(fromToken.symbol, toToken.symbol);
+      if (restriction.isRestricted) {
+        setFetchError(restriction.message!);
+        setQuotePhase('IDLE');
+        return;
+      }
+
+      setIsQuoteLoading(true); 
+      setQuotePhase('FETCHING'); 
+      setFetchError(null); 
+      setGuardianWarning(null);
+      setFadedIndices(new Set()); 
+      setActiveScanIndex(-1); 
+      setSelectedQuoteId(null);
       
       try {
         const sourceChainConfig = allChainsMap[fromToken.chainId];
-        const userAddr = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045'; 
-        let batch: SwapQuote[] = [];
-        const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
+        const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         
-        // INSTITUTIONAL FEE HANDSHAKE
+        // Fee Handshake
         const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
-        
-        const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         const divisor = toTokenPrice || 1;
+        
+        let batch: SwapQuote[] = [];
+        const isEvmOnly = sourceChainConfig?.type === 'evm' && allChainsMap[toToken.chainId]?.type === 'evm';
         
         if (isEvmOnly && fromToken.symbol !== 'WNC' && toToken.symbol !== 'WNC' && infuraApiKey) {
             try {
-                const params = new URLSearchParams({ fromChain: fromToken.chainId.toString(), toChain: toToken.chainId.toString(), fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), fromAddress: userAddr, slippage: '0.005' });
+                const params = new URLSearchParams({ fromChain: fromToken.chainId.toString(), toChain: toToken.chainId.toString(), fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), fromAddress: '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', slippage: '0.005' });
                 const response = await fetch(`/api/bridge/quote?${params.toString()}`);
                 const lifiQuote = await response.json();
                 if (!lifiQuote.error && response.status < 400) {
                     const rawAmountToken = parseFloat(ethers.formatUnits(lifiQuote.estimate.toAmount, toToken.decimals || 18));
                     const finalAmountToken = Math.max(0, rawAmountToken - (feeData.networkFee / divisor));
-                    const providerName = lifiQuote.tool?.toUpperCase() || 'Aggregator';
-                    batch = [{ id: 'lifi-real', provider: providerName, logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true }, { id: 'bench-1', provider: 'Uniswap v3', logo: null, receiveAmount: finalAmountToken * 0.9985, fee: feeData.networkFee, eta: '~15s' }, { id: 'bench-2', provider: '1inch Node', logo: null, receiveAmount: finalAmountToken * 0.9992, fee: feeData.networkFee, eta: '~20s' }];
+                    batch = [{ id: 'lifi-real', provider: lifiQuote.tool?.toUpperCase() || 'Aggregator', logo: null, receiveAmount: finalAmountToken, fee: feeData.networkFee, eta: '~30s', isBest: true }];
                 } else throw new Error("LIFI_FAIL");
             } catch (e) {
                 const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
                 const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-                batch = [{ id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true }, { id: 'internal-2', provider: 'SmarterSeller Route', logo: null, receiveAmount: finalAmt * 0.992, fee: feeData.networkFee, eta: '~12s' }];
+                batch = [{ id: 'internal-1', provider: 'Institutional Node', logo: null, receiveAmount: finalAmt * 0.995, fee: feeData.networkFee, eta: '~10s', isBest: true }];
             }
         } else {
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
             const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
-            batch = [{ id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true }, { id: 'internal-liq', provider: 'Wevina Vault', logo: null, receiveAmount: finalAmt * 0.994, fee: feeData.networkFee, eta: '~8s' }];
+            batch = [{ id: 'internal-node', provider: 'Institutional Settle', logo: null, receiveAmount: finalAmt * 0.997, fee: feeData.networkFee, eta: '~5s', isBest: true }];
         }
-        const finalBatchSorted = batch.sort((a, b) => (b.receiveAmount) - (a.receiveAmount)).map((q, idx) => ({ ...q, isBest: idx === 0 }));
-        setQuotes(finalBatchSorted); setIsQuoteLoading(false); setQuotePhase('SHOW_ALL'); await new Promise(r => setTimeout(r, 800)); setQuotePhase('SCANNING');
-        for (let i = 0; i < finalBatchSorted.length; i++) { setActiveScanIndex(i); await new Promise(r => setTimeout(r, 200)); }
-        setQuotePhase('FINAL_SELECTED'); const best = finalBatchSorted.find(q => q.isBest); setSelectedQuoteId(best?.id || null); await new Promise(r => setTimeout(r, 1200)); setQuotePhase('FADING_OUT');
-        for (let i = 0; i < finalBatchSorted.length; i++) { setFadedIndices(prev => new Set(prev).add(i)); await new Promise(r => setTimeout(r, 100)); }
-        setQuotePhase('SHOW_VISUAL'); await new Promise(r => setTimeout(r, 3500)); setQuotePhase('COMPLETED');
-      } catch (e: any) { setFetchError("Market Sync Interrupted. Re-initializing institutional routes..."); setQuotePhase('IDLE'); } finally { setIsQuoteLoading(false); }
+
+        // RACE CONDITION GUARD
+        if (currentQuoteId !== quoteIdRef.current) return;
+
+        const best = batch[0];
+        if (!best) throw new Error("NO_ROUTES");
+
+        // 2. MATH SANITY CHECK (Protect against impossible gains)
+        const outputUsd = best.receiveAmount * toTokenPrice;
+        if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
+            throw new Error("Market Anomaly Detected: Quote output value exceeds institutional sanity limit.");
+        }
+
+        setQuotes(batch); 
+        setIsQuoteLoading(false); 
+        setQuotePhase('SHOW_ALL'); 
+        await new Promise(r => setTimeout(r, 600)); 
+        
+        setQuotePhase('SCANNING');
+        for (let i = 0; i < batch.length; i++) { 
+            if (currentQuoteId !== quoteIdRef.current) return;
+            setActiveScanIndex(i); 
+            await new Promise(r => setTimeout(r, 200)); 
+        }
+
+        // 3. TRADE GUARDIAN AI VALIDATION
+        setQuotePhase('GUARDIAN_SCAN');
+        const aiValidation = await currencyConversionWithLLMValidation({
+            fromCurrency: fromToken.symbol,
+            toCurrency: toToken.symbol,
+            amount: parseFloat(debouncedAmount),
+            convertedAmount: best.receiveAmount,
+            priceImpact: tradeValueUsd > 0 ? ((outputUsd - tradeValueUsd) / tradeValueUsd) * 100 : 0,
+            gasFeeUsd: best.fee,
+            chainName: sourceChainConfig?.name || 'Unknown'
+        });
+
+        if (currentQuoteId !== quoteIdRef.current) return;
+
+        if (!aiValidation.isValid) {
+            setGuardianWarning(aiValidation.validationReason || "The Trade Guardian AI has flagged this swap as high-risk.");
+            setQuotePhase('IDLE');
+            return;
+        }
+
+        setQuotePhase('FINAL_SELECTED'); 
+        setSelectedQuoteId(best.id); 
+        await new Promise(r => setTimeout(r, 1000)); 
+        
+        setQuotePhase('FADING_OUT');
+        for (let i = 0; i < batch.length; i++) { 
+            if (currentQuoteId !== quoteIdRef.current) return;
+            setFadedIndices(prev => new Set(prev).add(i)); 
+            await new Promise(r => setTimeout(r, 100)); 
+        }
+        
+        setQuotePhase('SHOW_VISUAL'); 
+        await new Promise(r => setTimeout(r, 2500)); 
+        setQuotePhase('COMPLETED');
+
+      } catch (e: any) { 
+        if (currentQuoteId === quoteIdRef.current) {
+            setFetchError(e.message || "Market Sync Interrupted."); 
+            setQuotePhase('IDLE'); 
+        }
+      } finally { 
+        if (currentQuoteId === quoteIdRef.current) setIsQuoteLoading(false); 
+      }
     };
     runSequence();
-  }, [debouncedAmount, fromToken, toToken, wallets, allChainsMap, prices, fromTokenPrice, toTokenPrice, infuraApiKey]);
+  }, [debouncedAmount, fromToken, toToken, prices, fromTokenPrice, toTokenPrice, infuraApiKey, allChainsMap]);
 
   const selectedQuote = useMemo(() => quotes.find(q => q.id === selectedQuoteId), [quotes, selectedQuoteId]);
 
@@ -222,14 +283,14 @@ function SwapClient() {
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
     const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
     setRotation(prev => prev + 180); setFromToken(oldTo); setToToken(oldFrom);
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   /**
@@ -243,12 +304,10 @@ function SwapClient() {
     setExecutionPhase('VERIFYING');
     
     try {
-      // 1. BALANCE VERIFICATION
       const balance = parseFloat(fromToken.balance || '0');
       if (balance < parseFloat(amount)) throw new Error("Insufficient Balance for Swap.");
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 1200));
 
-      // 2. LIQUIDITY VERIFICATION
       setExecutionPhase('LIQUIDITY');
       const handshakeRes = await fetch('/api/swap/execute', {
         method: 'POST',
@@ -264,9 +323,8 @@ function SwapClient() {
       });
       const handshake = await handshakeRes.json();
       if (!handshake.success) throw new Error(handshake.error || "Liquidity Node Reject.");
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 1200));
 
-      // 3. EXECUTE USER LEG (SEND TO ADMIN)
       setExecutionPhase('SENDING');
       const chainConfig = allChainsMap[fromToken.chainId];
       const evmWallet = wallets.find(w => w.type === 'evm');
@@ -281,7 +339,6 @@ function SwapClient() {
         userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
       }
       
-      // 4. TRIGGER ADMIN SETTLEMENT
       setExecutionPhase('SETTLING');
       await new Promise(r => setTimeout(r, 3000));
       
@@ -296,7 +353,6 @@ function SwapClient() {
       }, 4000);
 
     } catch (e: any) {
-      console.error("[SWAP_EXEC_FAIL]", e);
       setExecutionError(e.message || "Institutional Handshake Aborted.");
       setExecutionPhase('FAILED');
       setTimeout(() => { setIsExecuting(false); setExecutionPhase('IDLE'); }, 5000);
@@ -309,20 +365,9 @@ function SwapClient() {
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
-    { label: 'Institutional Slippage', value: '0.5%', icon: TrendingUp },
+    { label: 'Guardian Status', value: 'Verified', icon: ShieldCheck },
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
-
-  const rowVariants = {
-    hidden: { opacity: 0, scale: 0.95, y: 10 },
-    visible: { opacity: 1, scale: 1, y: 0, borderColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)', transition: { duration: 0.4 } },
-    pending: { opacity: 0.3, scale: 0.98, transition: { duration: 0.3 } },
-    scanning: { opacity: 1, scale: 1.05, borderColor: 'rgba(59, 130, 246, 0.8)', backgroundColor: 'rgba(59, 130, 246, 0.15)', boxShadow: '0 0 30px rgba(59, 130, 246, 0.4)', zIndex: 20, transition: { duration: 0.1 } },
-    accepted: { opacity: 0.8, scale: 1, borderColor: 'rgba(34, 197, 94, 0.4)', backgroundColor: 'rgba(34, 197, 94, 0.05)', transition: { duration: 0.3 } },
-    best: { opacity: 1, scale: 1.08, borderColor: 'rgba(59, 130, 246, 1)', backgroundColor: 'rgba(59, 130, 246, 0.2)', boxShadow: '0 0 40px rgba(59, 130, 246, 0.6)', zIndex: 30, transition: { duration: 0.4, repeat: Infinity, repeatType: 'reverse' } as any },
-    rejected: { scale: 0.92, opacity: 0.2, filter: 'grayscale(1)', borderColor: 'rgba(239, 68, 68, 0.2)', transition: { duration: 0.5 } },
-    fading: { opacity: 0, y: -10, transition: { duration: 0.3 } }
-  };
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
@@ -340,17 +385,14 @@ function SwapClient() {
         {isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
             <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-primary/20 rounded-[2rem] p-5 shadow-2xl overflow-hidden relative">
-              <div className={cn("absolute -right-10 -top-10 w-32 h-32 blur-3xl opacity-20 transition-colors duration-1000", executionPhase === 'SUCCESS' ? "bg-green-500" : executionPhase === 'FAILED' ? "bg-red-500" : "bg-primary")} />
-              
               <div className="relative z-10 flex items-center gap-4">
                 <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
                   {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
                 </div>
-                
                 <div className="flex-1 space-y-1">
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">
                     {executionPhase === 'VERIFYING' && 'Verifying Balances...'}
-                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Liquidity...'}
+                    {executionPhase === 'LIQUIDITY' && 'Checking Admin Pool...'}
                     {executionPhase === 'SENDING' && 'Executing Transfer...'}
                     {executionPhase === 'SETTLING' && 'SmarterSeller Payout...'}
                     {executionPhase === 'SUCCESS' && 'Swap Secured'}
@@ -358,24 +400,9 @@ function SwapClient() {
                   </h3>
                   <div className="flex items-center gap-2">
                     <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", executionPhase === 'SUCCESS' ? "bg-green-500" : executionPhase === 'FAILED' ? "bg-red-500" : "bg-primary")} />
-                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">
-                      {executionError || 'Watchdog Sync Active'}
-                    </span>
+                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Watchdog Sync Active'}</span>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg">
-                  <Activity className="w-3 h-3 text-primary animate-pulse" />
-                  <span className="text-[10px] font-mono text-white/60">LIVE</span>
-                </div>
-              </div>
-
-              <div className="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: executionPhase === 'VERIFYING' ? '20%' : executionPhase === 'LIQUIDITY' ? '40%' : executionPhase === 'SENDING' ? '60%' : executionPhase === 'SETTLING' ? '85%' : '100%' }}
-                  className="h-full bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-                />
               </div>
             </div>
           </motion.div>
@@ -385,8 +412,7 @@ function SwapClient() {
       <AnimatePresence>
         {quotePhase === 'COMPLETED' && !fetchError && !isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-0 inset-x-0 z-[110] p-4 flex justify-center pointer-events-none">
-            <motion.button onClick={handleExecuteSwap} animate={{ boxShadow: ["0 0 15px rgba(139,92,246,0.3)", "0 0 45px rgba(139,92,246,0.7)", "0 0 15px rgba(139,92,246,0.3)"] }} transition={{ boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto active:scale-95 transition-transform">
-              <motion.div animate={{ x: ['-150%', '300%'] }} transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 1.5 }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12" />
+            <motion.button onClick={handleExecuteSwap} className="w-fit px-10 h-14 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] relative overflow-hidden shadow-2xl bg-primary text-white border border-primary/50 pointer-events-auto active:scale-95 transition-transform">
               <div className="flex items-center justify-center gap-3 relative z-10"><Zap className="w-4 h-4 fill-current animate-pulse" /> Execute Swap</div>
             </motion.button>
           </motion.div>
@@ -394,47 +420,53 @@ function SwapClient() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
+        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError || guardianWarning) && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none">
             <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-purple-500/10 opacity-50" />
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <AlertCircle className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{fetchError ? 'Sync Failure' : 'Market Analysis'}</h3>
+                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : (fetchError || guardianWarning) ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <TrendingUp className="w-4 h-4 text-primary" />}
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">{(fetchError || guardianWarning) ? 'Safety Rejection' : 'Market Analysis'}</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {fetchError ? (
+                  {fetchError || guardianWarning ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
-                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
-                        {!fetchError.includes("unavailable") && (
-                          <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
-                        )}
+                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{guardianWarning || fetchError}</p>
+                        <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Routes</Button>
                     </div>
                   ) : isQuoteLoading ? (
                     <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />)}</div>
                   ) : (
                     <div className="space-y-2 min-h-[200px]">
-                      {quotes.map((quote, idx) => {
+                      {quotePhase === 'GUARDIAN_SCAN' && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-10 gap-4">
+                            <div className="relative p-4 rounded-full bg-primary/10 border border-primary/20">
+                                <ShieldQuestion className="w-8 h-8 text-primary animate-pulse" />
+                                <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} className="absolute -inset-2 border-2 border-dashed border-primary/20 rounded-full" />
+                            </div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Quote...</p>
+                        </motion.div>
+                      )}
+                      {quotePhase !== 'GUARDIAN_SCAN' && quotes.map((quote, idx) => {
                         const isScanning = quotePhase === 'SCANNING' && idx === activeScanIndex;
                         const isAccepted = quotePhase === 'SCANNING' && idx < activeScanIndex;
                         const isPending = quotePhase === 'SCANNING' && idx > activeScanIndex;
                         const isBest = quotePhase === 'FINAL_SELECTED' && quote.id === selectedQuoteId;
                         const isRejected = quotePhase === 'FINAL_SELECTED' && quote.id !== selectedQuoteId;
                         const isFading = fadedIndices.has(idx);
-                        let variant = isFading ? 'fading' : isBest ? 'best' : isRejected ? 'rejected' : isScanning ? 'scanning' : isAccepted ? 'accepted' : isPending ? 'pending' : 'visible';
+                        
                         return (
-                          <motion.div key={quote.id} variants={rowVariants} initial="hidden" animate={variant} className="w-full flex items-center justify-between p-4 rounded-2xl border relative overflow-hidden">
+                          <motion.div key={quote.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: isFading ? 0 : 1 }} className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300", isBest ? "border-primary bg-primary/10 scale-105" : "border-white/5 bg-white/[0.02]")}>
                             <div className="flex items-center gap-3 relative z-10">
-                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-blue-600 scale-110 shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
+                              <div className={cn("w-9 h-9 rounded-xl border border-white/10 flex items-center justify-center font-black text-xs text-white uppercase", isBest ? "bg-primary shadow-lg" : "bg-zinc-900")}>{isBest ? <CheckCircle2 className="w-5 h-5" /> : quote.provider[0]}</div>
                               <div className="text-left">
                                 <p className="text-xs font-black text-white">{quote.provider}</p>
                                 <div className="flex items-center gap-2 text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest mt-0.5"><span className="flex items-center gap-1"><Fuel className="w-2.5 h-2.5" /> ${quote.fee.toFixed(2)}</span><span className="flex items-center gap-1"><Timer className="w-2.5 h-2.5" /> {quote.eta}</span></div>
                               </div>
                             </div>
-                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-blue-400" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
+                            <div className="text-right relative z-10"><p className={cn("text-sm font-black tabular-nums transition-colors", isBest ? "text-primary" : "text-white")}>{quote.receiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</p><p className="text-[8px] font-bold text-muted-foreground uppercase">{toToken?.symbol}</p></div>
                           </motion.div>
                         );
                       })}
@@ -476,7 +508,7 @@ function SwapClient() {
 
         <div className="relative h-6 flex items-center justify-center z-20">
           <motion.button animate={{ rotate: rotation }} transition={{ type: 'spring', damping: 15 }} onClick={handleSwapTokens} className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-primary shadow-2xl active:scale-90 transition-transform relative">
-            <div className="absolute inset-0 rounded-full bg-primary/5 animate-pulse" /><Zap className="w-5 h-5 fill-current relative z-10" />
+            <Zap className="w-5 h-5 fill-current relative z-10" />
           </motion.button>
         </div>
 
@@ -535,7 +567,6 @@ function SwapClient() {
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
               <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-5 bg-white/[0.03] border border-white/5 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-50" />
                 <div className="flex items-center justify-between gap-2 relative z-10 py-1">
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
@@ -551,11 +582,11 @@ function SwapClient() {
                     </svg>
                   </div>
                   <div className="flex flex-col items-center gap-2">
-                    <div className="relative p-3 rounded-full bg-purple-500/10 border border-purple-500/20">
-                      <Bot className="w-6 h-6 text-purple-500" />
-                      <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-purple-500/30" />
+                    <div className="relative p-3 rounded-full bg-primary/10 border border-primary/20">
+                      <Bot className="w-6 h-6 text-primary" />
+                      <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" />
                     </div>
-                    <span className="text-[7px] font-black text-purple-400 uppercase tracking-widest">Routing</span>
+                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">Routing</span>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
