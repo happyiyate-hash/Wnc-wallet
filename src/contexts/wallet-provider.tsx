@@ -221,6 +221,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("Registry node missing.");
     
     setIsWalletLoading(true);
+    setIsInitialized(false);
     onStatusUpdate?.('Accessing Cloud Vault...');
     
     try {
@@ -234,26 +235,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
         const { text: mnemonic } = await res.json();
         
-        if (mnemonic) {
-          onStatusUpdate?.('Deriving Multi-Chain Nodes...');
-          localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
-          const derived = await deriveAllWallets(mnemonic);
-          
-          const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
-          const targetAcc = profile.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
-          
-          await registryDb.saveVault({ 
-            id: fingerprint, 
-            wallets: derived, 
-            accountNumber: targetAcc, 
-            timestamp: Date.now() 
-          });
-          
-          // ATOMIC STATE UPDATE
-          setWallets(derived);
-          setAccountNumber(targetAcc);
-          localStorage.setItem(`account_number_${user.id}`, targetAcc);
-        }
+        if (!mnemonic) throw new Error("DECRYPTION_FAILED");
+
+        onStatusUpdate?.('Deriving Multi-Chain Nodes...');
+        localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
+        const derived = await deriveAllWallets(mnemonic);
+        
+        const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
+        const targetAcc = profile.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
+        
+        // ATOMIC SAVE TO LOCAL REGISTRY
+        await registryDb.saveVault({ 
+          id: fingerprint, 
+          wallets: derived, 
+          accountNumber: targetAcc, 
+          timestamp: Date.now() 
+        });
+        
+        localStorage.setItem(`account_number_${user.id}`, targetAcc);
+        
+        // ATOMIC STATE UPDATE
+        setWallets(derived);
+        setAccountNumber(targetAcc);
       } 
       // 2. RECOVER ACCOUNT ONLY (If no phrase backup)
       else if (profile.account_number) {
@@ -261,15 +264,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(`account_number_${user.id}`, profile.account_number);
       }
 
-      toast({ title: "Node Reclaimed", description: "Identity registry successfully restored." });
       onStatusUpdate?.('Verifying Integrity...');
+      toast({ title: "Node Reclaimed", description: "Identity registry successfully restored." });
+      
+      // FINAL HANDSHAKE
+      setIsInitialized(true);
+      setIsWalletLoading(false);
+      
+      // Trigger background verification
       setTimeout(() => runCloudDiagnostic(), 1000);
       
     } catch (e: any) { 
       console.error("[RECOVERY_CRITICAL]", e);
+      setIsWalletLoading(false);
+      setIsInitialized(true);
       throw new Error("Institutional recovery failed. Handshake interrupted."); 
-    } finally { 
-      setIsWalletLoading(false); 
     }
   }, [user, profile, toast, runCloudDiagnostic]);
 

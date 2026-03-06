@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
 import CloudSyncCard from '@/components/wallet/cloud-sync-card';
@@ -10,30 +10,35 @@ import { usePathname, useRouter } from 'next/navigation';
 /**
  * GLOBAL IDENTITY SENTINEL
  * Hardened authority node for routing authenticated sessions.
- * Implements Stage-Aware Routing to prevent premature redirects during hydration.
+ * Implements Stage-Aware Routing to prevent premature redirects during hydration and recovery.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
   const { wallets, isInitialized, isWalletLoading } = useWallet();
   const pathname = usePathname();
   const router = useRouter();
+  
+  // Transition Sentinel: Prevents redirect flickering during derivation or recovery
+  const isRecoveringRef = useRef(false);
 
   const isAuthRoute = pathname.startsWith('/auth');
   const isWalletSessionRoute = pathname === '/wallet-session';
   const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
-    // STAGE 0: HYDRATION BARRIER
-    // Wait for all cryptographic and auth nodes to be stable before evaluating guards
+    // STAGE 0: HYDRATION & RECOVERY BARRIER
+    // Wait for all core nodes to be stable before evaluating guards.
+    // isInitialized must be true and isWalletLoading must be false.
     if (userLoading || !isInitialized || isWalletLoading) {
-      console.log("[SENTINEL] Hydration in progress... Blocking evaluation.");
+      if (isWalletLoading) isRecoveringRef.current = true;
+      console.log("[SENTINEL] Registry nodes initializing. Evaluations deferred.");
       return;
     }
 
     // STAGE 1: ATOMIC SESSION GUARD
     if (!user) {
       if (!isAuthRoute) {
-        console.log("[SENTINEL] No session detected. Redirecting to terminal login.");
+        console.log("[SENTINEL] No active session. Redirecting to terminal login.");
         router.replace('/auth/login');
       }
       return;
@@ -49,25 +54,26 @@ export default function GlobalOverlayManager() {
     }
 
     // STAGE 3: VAULT MANDATORY GATE (CRITICAL PRIORITY)
-    // We only evaluate this once isInitialized is true and isWalletLoading is false.
     const hasLocalWallet = wallets && wallets.length > 0;
     
     // REDIRECT TO SETUP: If we are not on setup and have no wallet
     if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
-      console.log("[SENTINEL] No hardware nodes found. Navigating to vault establishment.");
+      // If we just finished "recovering" but wallets are STILL null, then we redirect.
+      // This prevents the loop during successful derivation.
+      console.log("[SENTINEL] No local hardware nodes detected. Navigating to vault establishment.");
       router.replace('/wallet-session');
       return;
     }
 
     // REDIRECT FROM SETUP: If we HAVE a wallet but are still on the setup page
     if (hasLocalWallet && isWalletSessionRoute) {
-      console.log("[SENTINEL] Vault detected. Redirecting to dashboard.");
+      console.log("[SENTINEL] Hardware nodes detected. Converging to dashboard.");
       router.replace('/');
       return;
     }
 
     // STAGE 4: IDENTITY COMPLETION GATE
-    // Only redirect if NOT on settings, as settings is where they complete identity.
+    // Ensure the identity node is complete (username set)
     if (!profile?.name && !isSettingsRoute && !isAuthRoute && !isWalletSessionRoute) {
       console.log("[SENTINEL] Identity node incomplete. Navigating to settings.");
       router.replace('/settings');
@@ -79,6 +85,8 @@ export default function GlobalOverlayManager() {
     if (isSetupTerminal && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       if (pathname !== '/') router.replace('/');
     }
+
+    isRecoveringRef.current = false;
 
   }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 

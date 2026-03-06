@@ -7,7 +7,7 @@ import { registryDb } from '@/lib/storage/registry-db';
 
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
- * Version: 3.2.0 (Persistent Registry Cleanup)
+ * Version: 3.3.0 (Persistent Registry Cleanup)
  */
 
 export async function syncAddressesToCloud(
