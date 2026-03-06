@@ -1,13 +1,12 @@
+'use server';
 
-'use client';
-
-import { logoSupabase } from './supabase/logo-client';
+import { logoSupabase } from './supabase/logo-server';
 
 /**
- * WEVINA TOKEN LOGO RESOLUTION SYSTEM
- * Version: 4.1.0 (Name-Priority Handshake)
+ * WEVINA TOKEN LOGO RESOLUTION SYSTEM (SERVER ACTION)
+ * Version: 5.1.0 (Hardened Name-Priority Handshake)
  * 
- * Specifically optimized to prevent symbol collisions (e.g., ETH on Blast vs ETH on Mainnet).
+ * Executes discovery on the backend to protect registry keys.
  * Priorities: Specific Name > Cleaned Name > Symbol.
  */
 
@@ -25,7 +24,8 @@ function cleanTokenName(name: string): string {
 }
 
 /**
- * Fetches a token's direct logo URL from Supabase storage with Name-Priority logic.
+ * Fetches a token's direct logo URL from Supabase storage.
+ * Executed as a Server Action to ensure keys remain hidden from the browser.
  */
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
@@ -35,7 +35,6 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
     const searchSymbol = tokenSymbol?.trim();
 
     // 1. PRIMARY HANDSHAKE: Exact Full Name Match (Highest Precision)
-    // This ensures "Blast" or "Base" is found even if the symbol is just "ETH"
     if (searchName && searchName.length > 2) {
         const { data: nameData } = await logoSupabase
           .from('token_logos')
@@ -61,7 +60,6 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
     }
 
     // 3. FALLBACK HANDSHAKE: Exact Symbol Match
-    // Only used if name resolution fails to prevent ETH collisions
     if (searchSymbol && searchSymbol.length > 1) {
         const { data: symbolData } = await logoSupabase
           .from('token_logos')
@@ -75,19 +73,18 @@ export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): 
 
     return null;
   } catch (error) {
-    console.warn("[LOGO_RESOLVER_ADVISORY] Registry lookup deferred:", error);
+    console.warn("[LOGO_SERVER_ADVISORY] Backend registry lookup deferred:", error);
     return null;
   }
 }
 
 /**
  * Prepares a logo path prediction for the internal CDN layer.
- * Prioritizes name slug for the path.
  */
-export function getTokenLogoUrl(
+export async function getTokenLogoUrl(
     symbol?: string | null,
     name?: string | null,
-): string | null {
+): Promise<string | null> {
     if (!symbol && !name) return null;
     const identifier = (name || symbol || '').toLowerCase().replace(/\s+/g, '-');
     const sym = (symbol || '').toLowerCase();

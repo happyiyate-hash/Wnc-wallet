@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -21,9 +20,10 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
- * Version: 4.2.0 (Environment Synced CDN)
- * Features immediate localStorage resolution to eliminate UI flickering.
- * Optimized to differentiate between assets sharing symbols (e.g., Blast ETH).
+ * Version: 5.0.0 (Server-Handshake Sync)
+ * 
+ * Re-engineered to utilize Server Actions for registry lookups,
+ * ensuring no Supabase keys are exposed to the browser.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -34,14 +34,12 @@ export default function TokenLogoDynamic({
   symbol,
   name,
 }: TokenLogoDynamicProps) {
-  // 1. DETERMINISTIC NAME-FIRST CACHE KEY
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v4.2_${slug}_${sym}`;
+    return `logo_v5.0_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
-  // 2. SYNCHRONOUS HYDRATION
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(cacheKey);
@@ -65,9 +63,10 @@ export default function TokenLogoDynamic({
       setIsLoading(true);
       setHasError(false);
 
-      // A. Perform Name-Priority Registry Lookup
+      // A. SERVER HANDSHAKE: Resolve via Backend Registry
       if (name || symbol) {
         try {
+          // This calls the 'use server' action securely
           const direct = await getDirectLogoUrl(name || '', symbol || '');
           if (direct) {
             setResolvedUrl(direct);
@@ -76,17 +75,16 @@ export default function TokenLogoDynamic({
             return;
           }
         } catch (e) {
-          console.warn("[LOGO_CACHE_ADVISORY] Registry lookup deferred.");
+          console.warn("[LOGO_CLIENT_ADVISORY] Server handshake deferred.");
         }
       }
 
-      // B. Fallback to provided URL nodes
+      // B. FALLBACK: Direct CDN Link
       if (logoUrl) {
         let finalUrl = logoUrl;
         if (logoUrl.startsWith('http')) {
           finalUrl = logoUrl;
         } else if (logoUrl.startsWith('/')) {
-          // Sync with the strictly initialized LOGO_CDN_URL from the provider
           finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
         }
         
