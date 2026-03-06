@@ -15,35 +15,31 @@ interface MarketContextType {
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
 
-/**
- * HIGH-FREQUENCY MARKET UPDATE INTERVAL
- * 15 seconds ensures live UI feel without redundant network pressure.
- */
-const PRICE_UPDATE_INTERVAL = 15000;
+const PRICE_UPDATE_INTERVAL = 30000; // 30 seconds
+const PRICE_CACHE_KEY = 'ss-price-cache-global';
 
+/**
+ * INSTITUTIONAL INDEPENDENT MARKET ENGINE
+ * Version: 5.0.0 (Zero-Dependency Discovery)
+ * 
+ * Operates independently of Auth and Wallet state.
+ * Loads cached global prices instantly on boot.
+ */
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
   const [prices, setPrices] = useState<PriceResult>({});
   const [isMarketLoading, setIsMarketLoading] = useState(true);
   
-  // High-performance custom token registry for background polling
   const customTokensRef = useRef<AssetRow[]>([]);
 
   const registerCustomTokens = useCallback((tokens: AssetRow[]) => {
     customTokensRef.current = tokens;
   }, []);
 
-  // STABLE PRICE MERGER
   const updatePrices = useCallback((newPrices: PriceResult) => {
     setPrices(prev => {
-      // Deep equality check to prevent redundant re-renders if values are unchanged
-      const hasChanged = Object.keys(newPrices).some(
-        key => !prev[key] || prev[key].price !== newPrices[key].price || prev[key].change !== newPrices[key].change
-      );
-      if (!hasChanged) return prev;
-      
       const merged = { ...prev, ...newPrices };
-      localStorage.setItem('price_cache_global', JSON.stringify({ 
+      localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({ 
         data: merged, 
         timestamp: Date.now() 
       }));
@@ -51,43 +47,34 @@ export function MarketProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const refreshPrices = useCallback(async (chains: ChainConfig[], customTokens: AssetRow[]) => {
+  const refreshPrices = useCallback(async () => {
     try {
-      const newPrices = await fetchGlobalMarketData(chains, customTokens, rates);
+      const allChains = Object.values(evmNetworks) as ChainConfig[];
+      const newPrices = await fetchGlobalMarketData(allChains, customTokensRef.current, rates);
       updatePrices(newPrices);
     } catch (e) {
-      console.warn("[MARKET_ENGINE_ADVISORY] Price sync interrupted.");
+      console.warn("[MARKET_ENGINE_ADVISORY] Global price handshake deferred.");
     } finally {
       setIsMarketLoading(false);
     }
   }, [rates, updatePrices]);
 
-  // INITIAL HYDRATION
+  // INITIAL HYDRATION: Immediate Cache Load
   useEffect(() => {
-    const cached = localStorage.getItem('price_cache_global');
+    if (typeof window === 'undefined') return;
+
+    const cached = localStorage.getItem(PRICE_CACHE_KEY);
     if (cached) {
       try {
-        const { data, timestamp } = JSON.parse(cached);
-        // Using cached data if it's less than 5 minutes old to prevent "0.0%" flash
-        if (Date.now() - timestamp < 300000) { 
-          setPrices(data);
-          setIsMarketLoading(false);
-        }
+        const { data } = JSON.parse(cached);
+        setPrices(data);
+        setIsMarketLoading(false);
       } catch (e) {}
     }
-  }, []);
 
-  // AUTONOMOUS POLLING LOOP
-  useEffect(() => {
-    const allChains = Object.values(evmNetworks) as ChainConfig[];
-    
-    const execute = () => {
-        refreshPrices(allChains, customTokensRef.current);
-    };
-
-    execute(); // Initial boot refresh
-
-    const interval = setInterval(execute, PRICE_UPDATE_INTERVAL);
+    // Start background polling immediately
+    refreshPrices();
+    const interval = setInterval(refreshPrices, PRICE_UPDATE_INTERVAL);
     return () => clearInterval(interval);
   }, [refreshPrices]);
 

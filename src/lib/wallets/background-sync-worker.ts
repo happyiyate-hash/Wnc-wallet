@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { WalletWithMetadata, UserProfile, ChainConfig } from '@/lib/types';

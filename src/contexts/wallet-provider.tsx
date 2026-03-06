@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -95,12 +94,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  // 1. Resolve Effective Network Node
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
-  // 2. Map Unified Assets
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
 
