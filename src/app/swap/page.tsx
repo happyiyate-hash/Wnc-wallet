@@ -110,7 +110,7 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
-  // AUTO-HIDE ERROR SENTINEL
+  // AUTO-HIDE ERROR SENTINEL (5 Seconds)
   useEffect(() => {
     if (fetchError) {
       const timer = setTimeout(() => {
@@ -141,23 +141,39 @@ function SwapClient() {
     return prices[priceId]?.price || 0;
   }, [toToken, prices]);
 
+  // INSTITUTIONAL LIQUIDITY SENTINEL
   useEffect(() => {
     if (!toToken || !selectedQuoteId) return;
     
     const checkLiquidity = async () => {
-      const quote = quotes.find(q => q.id === selectedQuoteId);
-      if (!quote) return;
+      const currentQuote = quotes.find(q => q.id === selectedQuoteId);
+      if (!currentQuote) return;
+
+      /**
+       * INSTITUTIONAL BYPASS PROTOCOL
+       * LI.FI and 0x manage their own decentralized liquidity.
+       * Admin checks are strictly reserved for internal P2P engine routes.
+       */
+      if (currentQuote.swapProvider !== 'INTERNAL') {
+        setIsAdminLiquidityValid(true);
+        return;
+      }
 
       setIsCheckingLiquidity(true);
-      const targetChain = allChainsMap[toToken.chainId];
-      const isValid = await swapExecutionService.checkAdminLiquidity(
-        targetChain, 
-        toToken, 
-        quote.receiveAmount, 
-        infuraApiKey
-      );
-      setIsAdminLiquidityValid(isValid);
-      setIsCheckingLiquidity(false);
+      try {
+        const targetChain = allChainsMap[toToken.chainId];
+        const isValid = await swapExecutionService.checkAdminLiquidity(
+          targetChain, 
+          toToken, 
+          currentQuote.receiveAmount, 
+          infuraApiKey
+        );
+        setIsAdminLiquidityValid(isValid);
+      } catch (e) {
+        setIsAdminLiquidityValid(false);
+      } finally {
+        setIsCheckingLiquidity(false);
+      }
     };
 
     checkLiquidity();
@@ -218,9 +234,9 @@ function SwapClient() {
         if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             
-            // INSTITUTIONAL SYMBOL MAPPING: 0x v1 Price Discovery prefers symbols for native assets
-            const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
-            const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+            // 0x ETH Sync Node: Requires chain-specific symbol or 0xeee for non-ETH native
+            const sellId = fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address;
+            const buyId = toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address;
 
             const p = await zeroXService.getPrice(fromToken.chainId ?? 1, sellId, buyId, sellAmount, userAddress);
             
@@ -342,8 +358,8 @@ function SwapClient() {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
           
-          const sellId = fromToken.isNative ? fromToken.symbol : fromToken.address;
-          const buyId = toToken.isNative ? toToken.symbol : toToken.address;
+          const sellId = fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address;
+          const buyId = toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address;
 
           const q = await zeroXService.getQuote(fromToken.chainId ?? 1, sellId, buyId, sellAmount, wallet.address);
           
@@ -479,14 +495,15 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* INSTITUTIONAL LIQUIDITY WARNING */}
+      {/* INSTITUTIONAL LIQUIDITY WARNING (TOP-DOWN) */}
       <AnimatePresence>
         {isAdminLiquidityValid === false && !isExecuting && (
           <motion.div 
             initial={{ y: -150, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: -150, opacity: 0 }}
-            className="fixed top-0 left-0 right-0 z-[110] p-4 bg-black/90 backdrop-blur-3xl border-b border-red-500/30 shadow-2xl"
+            transition={{ type: 'spring', damping: 25, stiffness: 150 }}
+            className="fixed top-0 left-0 right-0 z-[120] p-4 bg-black/90 backdrop-blur-3xl border-b border-red-500/30 shadow-2xl"
           >
             <div className="max-w-lg mx-auto flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/30">
@@ -506,14 +523,15 @@ function SwapClient() {
         )}
       </AnimatePresence>
 
-      {/* EXECUTE SWAP BUTTON */}
+      {/* EXECUTE SWAP BUTTON (TOP-DOWN) */}
       <AnimatePresence>
         {canExecute && (
           <motion.div 
             initial={{ y: -150, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: -150, opacity: 0 }} 
-            className="fixed top-0 left-0 right-0 z-[120] p-4 bg-black/80 backdrop-blur-2xl border-b border-primary/20 shadow-2xl"
+            transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+            className="fixed top-0 left-0 right-0 z-[130] p-4 bg-black/80 backdrop-blur-2xl border-b border-primary/20 shadow-2xl"
           >
             <div className="max-w-lg mx-auto">
               <Button 
