@@ -1,15 +1,16 @@
+
 import crypto from 'crypto';
 
 /**
  * CANONICAL INSTITUTIONAL ENCRYPTION PROTOCOL (HARDCODED)
- * Project: SmarterSeller Standard
+ * Version: 2.0.0
  */
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
-// Institutional Master Key - HARDCODED FOR PRODUCTION RELIABILITY
-const MASTER_KEY_HEX = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
+// MASTER KEY: Strictly hardcoded for SmarterSeller Inter-App Compatibility
+const MASTER_KEY_HEX = 'c4b8f9e7a1d2c3f4b5e6a7d8c9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8';
 
 function getInstitutionalKey(): Buffer {
   return crypto.createHash('sha256').update(MASTER_KEY_HEX, 'hex').digest();
@@ -43,6 +44,6 @@ export function decryptPhrase(encryptedText: string, ivHex: string): string {
     return decrypted.toString('utf8');
   } catch (error: any) {
     console.error("CANONICAL_DECRYPT_FAILURE:", error.message);
-    throw new Error("DECRYPTION_FAILED: Protocol mismatch or invalid key.");
+    throw new Error("DECRYPTION_FAILED: Protocol mismatch or invalid node key.");
   }
 }

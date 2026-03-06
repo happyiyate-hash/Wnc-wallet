@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -5,7 +6,6 @@ import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
-import { LOGO_CDN_URL } from '@/lib/supabase/logo-client';
 import { registryDb } from '@/lib/storage/registry-db';
 
 interface TokenLogoDynamicProps {
@@ -19,6 +19,10 @@ interface TokenLogoDynamicProps {
   name?: string;
 }
 
+/**
+ * INSTITUTIONAL LOGO ENGINE
+ * Version: 3.0.0 (IndexedDB Supported)
+ */
 export default function TokenLogoDynamic({
   logoUrl,
   alt,
@@ -31,7 +35,7 @@ export default function TokenLogoDynamic({
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v7_${slug}_${sym}`;
+    return `logo_v8_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -51,12 +55,11 @@ export default function TokenLogoDynamic({
         return;
       }
 
-      // 2. PRIMARY: Direct Path Resolution from Database
+      // 2. PRIMARY: Direct Path Resolution
       if (typeof logoUrl === 'string' && logoUrl.length > 0) {
         let finalUrl = logoUrl;
         if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
-          // Prepend Institutional CDN URL for relative paths
-          const base = 'https://lbltgeldesxkgdrblfxj.supabase.co';
+          const base = 'https://gcghriodmljkusdduhzl.supabase.co';
           finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
         }
         

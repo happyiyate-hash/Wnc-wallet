@@ -1,12 +1,12 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser } from './user-provider';
-import { useCurrency } from './currency-provider';
 import { useMarket } from './market-provider';
-import { useWalletEngine } from '@/lib/wallets/hooks/useWalletEngine';
+import { useWalletEngine } from './hooks/useWalletEngine';
 import { deriveAllWallets } from '@/lib/wallets/derive';
 import { getAddressForChain as getAddressForChainUtil } from '@/lib/wallets/utils';
 import { 
@@ -95,9 +95,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     status: 'idle', chain: null, localValue: null, cloudValue: null, progress: 0
   });
 
-  const isAuditRunningRef = useRef(false);
-  const hasTriggeredAuditInSessionRef = useRef(false);
-
+  // VARIABLE INITIALIZATION PRIORITY: Defined before hooks that use them
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
@@ -130,7 +128,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       fiatValueUsd: (profile?.wnc_earnings || 0) * wncPrice,
       pctChange24h: wncChange,
       decimals: 0
-    };
+    } as AssetRow;
 
     const chainBalances = balances[effectiveViewingNetwork.chainId] || [];
     const onChainAssets = registry.map(asset => {
@@ -148,7 +146,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         priceUsd: livePrice,
         fiatValueUsd: balNum * livePrice,
         pctChange24h: marketData?.change || 0
-      };
+      } as AssetRow;
     });
 
     return [wncAsset, ...onChainAssets]
@@ -177,51 +175,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsRefreshing, 
     setHasFetchedInitialData
   });
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) { setIsWalletLoading(false); setIsInitialized(true); return; }
-
-    const hydrate = async () => {
-      try {
-        const savedInfura = localStorage.getItem(`ss-infura-key-${user.id}`);
-        if (savedInfura) setInfuraApiKeyState(savedInfura);
-
-        const savedAcc = localStorage.getItem(`account_number_${user.id}`);
-        if (savedAcc) setAccountNumber(savedAcc);
-
-        const savedNetworkId = localStorage.getItem(`active_network_id_${user.id}`);
-        if (savedNetworkId && chainsWithLogos.length > 0) {
-          const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
-          if (found) setViewingNetwork(found);
-        }
-
-        const savedMnemonic = localStorage.getItem(`ss-mnemonic-${user.id}`);
-        if (savedMnemonic) {
-          const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
-          const cached = await registryDb.getVault(fingerprint);
-          
-          if (cached) { setWallets(cached.wallets); } else {
-            const derived = await deriveAllWallets(savedMnemonic);
-            setWallets(derived);
-            await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: savedAcc || '', timestamp: Date.now() });
-          }
-        }
-
-        const cachedBalances = localStorage.getItem(`ss-wallet-balances-${user.id}`);
-        if (cachedBalances) { try { const { data } = JSON.parse(cachedBalances); setBalances(data); } catch (e) {} }
-
-        const savedHidden = localStorage.getItem(`hidden_tokens_${user.id}`);
-        if (savedHidden) setHiddenTokenKeys(new Set(JSON.parse(savedHidden)));
-
-        const savedCustom = localStorage.getItem(`custom_tokens_${user.id}`);
-        if (savedCustom) { const tokens = JSON.parse(savedCustom); setUserAddedTokens(tokens); registerCustomTokens(tokens); }
-
-        setIsInitialized(true);
-      } catch (e) { setIsInitialized(true); } finally { setIsWalletLoading(false); }
-    };
-    hydrate();
-  }, [authLoading, user?.id, registerCustomTokens, chainsWithLogos.length]);
 
   const deleteWalletPermanently = useCallback(async () => {
     if (!user) return;
@@ -259,7 +212,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Authentication required");
     const { validateMnemonic } = await import('bip39');
-    if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
+    if (!validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic protocol.");
     localStorage.setItem(`ss-mnemonic-${user.id}`, mnemonic);
     const derived = await deriveAllWallets(mnemonic);
     setWallets(derived);
@@ -273,11 +226,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user?.id, profile?.account_number]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
-    if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No backup found.");
+    if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("No backup node detected.");
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error("Authentication required.");
+    if (!session) throw new Error("Unauthorized: Session missing.");
     setIsWalletLoading(true);
-    onStatusUpdate?.('Decrypting Vault...');
+    onStatusUpdate?.('Decrypting Vault Node...');
     try {
       if (profile.vault_phrase && profile.iv) {
         const res = await fetch('/api/wallet/decrypt-phrase', {
@@ -295,9 +248,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setWallets(derived);
         } else { throw new Error("Decryption handshake failed."); }
       }
-      if (profile.account_number) { localStorage.setItem(`account_number_${user.id}`, profile.account_number); setAccountNumber(profile.account_number); }
-      toast({ title: "Identity Recovered" });
-    } catch (e: any) { throw new Error(e.message || "Handshake failed."); } finally { setIsWalletLoading(false); }
+      if (profile.account_number) { 
+        localStorage.setItem(`account_number_${user.id}`, profile.account_number); 
+        setAccountNumber(profile.account_number); 
+      }
+      toast({ title: "Identity Reclaimed" });
+    } catch (e: any) { throw new Error(e.message || "Cloud Handshake failed."); } finally { setIsWalletLoading(false); }
   }, [user, profile, toast]);
 
   const logout = useCallback(async () => {
@@ -306,6 +262,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (signOut) await signOut();
     window.location.href = '/auth/login';
   }, [signOut, user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) { setIsWalletLoading(false); setIsInitialized(true); return; }
+
+    const hydrate = async () => {
+      try {
+        const userId = user.id;
+        const savedInfura = localStorage.getItem(`ss-infura-key-${userId}`);
+        if (savedInfura) setInfuraApiKeyState(savedInfura);
+
+        const savedAcc = localStorage.getItem(`account_number_${userId}`);
+        if (savedAcc) setAccountNumber(savedAcc);
+
+        const savedNetworkId = localStorage.getItem(`active_network_id_${userId}`);
+        if (savedNetworkId && chainsWithLogos.length > 0) {
+          const found = chainsWithLogos.find(c => c.chainId === parseInt(savedNetworkId));
+          if (found) setViewingNetwork(found);
+        }
+
+        const savedMnemonic = localStorage.getItem(`ss-mnemonic-${userId}`);
+        if (savedMnemonic) {
+          const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
+          const cached = await registryDb.getVault(fingerprint);
+          if (cached) { setWallets(cached.wallets); } else {
+            const derived = await deriveAllWallets(savedMnemonic);
+            setWallets(derived);
+            await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: savedAcc || '', timestamp: Date.now() });
+          }
+        }
+
+        const cachedBalances = localStorage.getItem(`ss-wallet-balances-${userId}`);
+        if (cachedBalances) { try { const { data } = JSON.parse(cachedBalances); setBalances(data); } catch (e) {} }
+
+        setIsInitialized(true);
+      } catch (e) { setIsInitialized(true); } finally { setIsWalletLoading(false); }
+    };
+    hydrate();
+  }, [authLoading, user?.id, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications,

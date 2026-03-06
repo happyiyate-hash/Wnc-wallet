@@ -3,7 +3,7 @@
 
 import { useRef, useCallback } from 'react';
 import type { ChainConfig, WalletWithMetadata, AssetRow } from '@/lib/types';
-import { fetchBalancesForChain } from '../services/balance-service';
+import { fetchBalancesForChain } from '@/lib/wallets/services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (FAIL-FAST)
@@ -47,7 +47,6 @@ export function useWalletEngine({
     setIsRefreshing(true);
     
     // SAFETY TIMEOUT: Force-release loading barrier after 8 seconds
-    // Ensures the terminal doesn't hang forever if RPCs are slow
     const safetyTimer = setTimeout(() => {
         console.log("[DATA_ENGINE] Safety Sentinel triggered. Dropping barrier.");
         setHasFetchedInitialData(true);
@@ -67,7 +66,7 @@ export function useWalletEngine({
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
       lastSyncTimestampRef.current[viewingNetwork.chainId] = Date.now();
       
-      // ACTIVE NODE VERIFIED: Immediate release
+      // ACTIVE NODE VERIFIED
       clearTimeout(safetyTimer);
       setHasFetchedInitialData(true);
 

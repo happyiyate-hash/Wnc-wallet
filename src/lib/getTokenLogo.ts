@@ -1,13 +1,12 @@
+
 'use server';
 
 import { logoSupabase } from './supabase/logo-server';
 
 /**
- * WEVINA INSTITUTIONAL REGISTRY SERVICE
- * Implementation based on Developer API Guide: Direct Supabase Access
+ * INSTITUTIONAL REGISTRY SERVICE
+ * Implementation: Direct Supabase Access (Hardened)
  */
-
-const CDN_BASE_URL = 'https://lbltgeldesxkgdrblfxj.supabase.co';
 
 export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
   if (!logoSupabase) return null;
@@ -55,7 +54,7 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
       decimals: token.token_details.decimals || 18,
       network: token.network,
       contract: token.contract_address,
-      logo_url: token.logo_url, // Relative path from DB
+      logo_url: token.logo_url,
       priceSource: token.token_details.priceSource,
       priceId: token.token_details.priceId || token.token_details.coingeckoId,
     }));
@@ -82,5 +81,6 @@ export async function getTokenLogoUrl(symbol?: string | null, name?: string | nu
     if (!symbol && !name) return null;
     const identifier = (name || symbol || '').toLowerCase().replace(/\s+/g, '-');
     const sym = (symbol || '').toLowerCase();
-    return `/api/cdn/logo/${identifier}/${sym}`;
+    // Prepend institutional CDN base
+    return `https://gcghriodmljkusdduhzl.supabase.co/api/cdn/logo/${identifier}/${sym}`;
 }

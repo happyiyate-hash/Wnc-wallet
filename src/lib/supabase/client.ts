@@ -1,9 +1,10 @@
+
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * PRIMARY AUTHENTICATION SUPABASE CLIENT (HARDCODED PRODUCTION)
+ * PRIMARY AUTHENTICATION & PROFILE REGISTRY (HARDCODED PRODUCTION)
  * Project: lbltgeldesxkgdrblfxj
  */
 
