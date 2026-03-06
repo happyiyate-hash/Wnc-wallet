@@ -60,11 +60,6 @@ interface SwapQuote {
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
 type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED' | 'PIVOT_CONVERTING' | 'PIVOT_BRIDGING' | 'PIVOT_FINALIZING';
 
-const formatExactCrypto = (val: number): string => {
-  if (!val || val <= 0) return '0';
-  return val.toFixed(18).replace(/\.?0+$/, "");
-};
-
 function SwapClient() {
   const { viewingNetwork, wallets, allAssets, allChainsMap = {}, prices, infuraApiKey, refresh } = useWallet();
   const { user, profile, refreshProfile } = useUser();
@@ -92,12 +87,9 @@ function SwapClient() {
 
   // EXECUTION ENGINE
   const [executionPhase, setExecutionPhase] = useState<ExecutionPhase>('IDLE');
-  const [currentPivotStep, setCurrentPivotStep] = useState<1 | 2 | 3>(1);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const [showPrecision, setShowPrecision] = useState(false);
-  const [showOutputPrecision, setShowOutputPrecision] = useState(false);
   const [rotation, setRotation] = useState(0);
   
   const lastFetchedAmountRef = useRef<string>('');
@@ -163,12 +155,18 @@ function SwapClient() {
         const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
         // 1. RESOLVE PROVIDER VIA CENTRAL ROUTER
-        const providerType = determineSwapProvider(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol);
-        const isPivotRequired = needsPivotRoute(
+        const providerType = determineSwapProvider(
             fromToken.chainId ?? 1, 
             toToken.chainId ?? 1, 
             fromToken.symbol, 
-            toToken.symbol, 
+            toToken.symbol
+        );
+
+        const isPivotRequired = needsPivotRoute(
+            fromToken.chainId ?? 1,
+            toToken.chainId ?? 1,
+            fromToken.symbol,
+            toToken.symbol,
             providerType,
             fromToken.isNative,
             toToken.isNative
@@ -204,7 +202,10 @@ function SwapClient() {
             });
             
             const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-            if (!res.ok) throw new Error("Bridge route temporarily offline.");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.details || errData.error || "Bridge route temporarily offline.");
+            }
 
             const q = await res.json();
             if (q.error) throw new Error(q.error || "Bridge handshake failed.");
@@ -278,7 +279,6 @@ function SwapClient() {
     setIsExecuting(true);
     setExecutionError(null);
     setExecutionPhase('VERIFYING');
-    setCurrentPivotStep(1);
     
     try {
       const balance = parseFloat(fromToken.balance || '0');
@@ -330,13 +330,9 @@ function SwapClient() {
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
-          if (selectedQuote.isPivotRoute) {
-              setExecutionPhase('PIVOT_CONVERTING');
-              setCurrentPivotStep(1);
-              await new Promise(r => setTimeout(r, 2000));
-          }
+          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_CONVERTING');
+          else setExecutionPhase('LIQUIDITY');
 
-          setExecutionPhase('LIQUIDITY');
           const handshakeRes = await fetch('/api/swap/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -352,13 +348,9 @@ function SwapClient() {
           const handshake = await handshakeRes.json();
           if (!handshake.success) throw new Error(handshake.error || "Handshake Rejected.");
 
-          if (selectedQuote.isPivotRoute) {
-              setExecutionPhase('PIVOT_BRIDGING');
-              setCurrentPivotStep(2);
-              await new Promise(r => setTimeout(r, 2000));
-          }
+          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_BRIDGING');
+          else setExecutionPhase('SENDING');
 
-          setExecutionPhase('SENDING');
           let userTx;
           if (fromToken.isNative) {
             userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
@@ -370,11 +362,7 @@ function SwapClient() {
           setExecutionPhase('SETTLING');
           const receipt = await userTx.wait();
           
-          if (selectedQuote.isPivotRoute) {
-              setExecutionPhase('PIVOT_FINALIZING');
-              setCurrentPivotStep(3);
-              await new Promise(r => setTimeout(r, 2500));
-          }
+          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_FINALIZING');
 
           await fetch('/api/swap/finalize', {
             method: 'POST',
@@ -463,7 +451,9 @@ function SwapClient() {
                       {executionPhase === 'APPROVING' && 'Authorizing Asset...'}
                       {executionPhase === 'SENDING' && 'Executing Leg 1...'}
                       {executionPhase === 'SETTLING' && 'Settling Leg 2...'}
-                      {executionPhase.startsWith('PIVOT') && 'Multi-Step Pivot Active'}
+                      {executionPhase === 'PIVOT_CONVERTING' && 'Converting to USDC...'}
+                      {executionPhase === 'PIVOT_BRIDGING' && 'Bridging Assets...'}
+                      {executionPhase === 'PIVOT_FINALIZING' && 'Finalizing Swap...'}
                       {executionPhase === 'SUCCESS' && 'Swap Secured'}
                       {executionPhase === 'FAILED' && 'Handshake Aborted'}
                     </h3>
