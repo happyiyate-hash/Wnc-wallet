@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -27,7 +26,8 @@ import {
   Cpu,
   Activity,
   Globe,
-  Repeat
+  Repeat,
+  ArrowRight
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -38,7 +38,7 @@ import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
-import { determineSwapProvider, type SwapProvider } from '@/lib/services/swap-router';
+import { determineSwapProvider, needsPivotRoute, type SwapProvider } from '@/lib/services/swap-router';
 import { zeroXService } from '@/lib/services/zerox-service';
 
 interface SwapQuote {
@@ -51,6 +51,7 @@ interface SwapQuote {
   isBest?: boolean;
   rawQuote?: any;
   swapProvider: SwapProvider;
+  isPivotRoute?: boolean;
 }
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
@@ -105,11 +106,8 @@ function SwapClient() {
   // HYBRID INIT: Filter by whitelist context
   useEffect(() => {
     if (allAssets.length === 0 || hasInitializedRef.current) return;
-    
-    // Whitelisted tokens are provided by context already
     const initialFrom = allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
     const initialTo = allAssets.find(a => a.symbol !== initialFrom?.symbol && a.symbol !== 'WNC') || allAssets[allAssets.length - 1];
-    
     if (initialFrom) setFromToken({ ...initialFrom });
     if (initialTo) setToToken({ ...initialTo });
     hasInitializedRef.current = true;
@@ -128,7 +126,7 @@ function SwapClient() {
   }, [toToken, prices]);
 
   /**
-   * INSTITUTIONAL HYBRID QUOTE ENGINE
+   * INSTITUTIONAL HYBRID QUOTE ENGINE (PIVOT-AWARE)
    */
   useEffect(() => {
     const runSequence = async () => {
@@ -164,6 +162,7 @@ function SwapClient() {
         
         // HYBRID ROUTE SELECTION
         const providerType = determineSwapProvider(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol);
+        const isPivotRequired = needsPivotRoute(fromToken.chainId ?? 1, toToken.chainId ?? 1, fromToken.symbol, toToken.symbol, providerType);
         
         let quote: SwapQuote | null = null;
 
@@ -207,18 +206,19 @@ function SwapClient() {
             };
         }
         else {
-            // INTERNAL LIQUIDITY NODE
+            // INTERNAL LIQUIDITY NODE (PIVOT HANDSHAKE)
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
             const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
             quote = {
                 id: 'internal-vault',
-                provider: 'Wevina Settle Node',
+                provider: isPivotRequired ? 'USDT Pivot Handshake' : 'Wevina Settle Node',
                 logo: null,
                 receiveAmount: (estAmt - (feeData.networkFee / divisor)),
                 fee: feeData.networkFee,
-                eta: '~5s',
-                swapProvider: 'INTERNAL'
+                eta: isPivotRequired ? '~30s' : '~5s',
+                swapProvider: 'INTERNAL',
+                isPivotRoute: isPivotRequired
             };
         }
 
@@ -584,39 +584,62 @@ function SwapClient() {
           <AnimatePresence>
             {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && (
               <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="p-5 bg-white/[0.03] border border-white/5 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+                {/* 3-NODE PIVOT PATH ANIMATION */}
                 <div className="flex items-center justify-between gap-2 relative z-10 py-1">
+                  {/* FROM NODE */}
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center">
+                        <TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} />
+                      </div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{fromToken?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p></div>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden">
+
+                  {/* LEG 1: From -> Pivot */}
+                  <div className="flex-1 px-1 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
                       <motion.line x1="0" y1="1" x2="100%" y2="1" stroke={fromChainColor} strokeWidth="1" strokeDasharray="12" animate={{ strokeDashoffset: [24, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} />
                     </svg>
                   </div>
+
+                  {/* PIVOT NODE (USDT) */}
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-primary/10 border border-primary/20">
-                      <Activity className="w-6 h-6 text-primary" />
-                      <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" />
+                      {selectedQuote?.isPivotRoute ? (
+                        <div className="relative">
+                          <TokenLogoDynamic symbol="USDT" name="Tether" logoUrl={null} size={24} className="opacity-80" alt="pivot" />
+                          <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute -inset-2 rounded-full border border-dashed border-primary/30" />
+                        </div>
+                      ) : (
+                        <>
+                          <Activity className="w-6 h-6 text-primary" />
+                          <motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" />
+                        </>
+                      )}
                     </div>
-                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">Routing</span>
+                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'USDT Pivot' : 'Routing'}</span>
                   </div>
-                  <div className="flex-1 px-2 relative h-3 overflow-hidden">
+
+                  {/* LEG 2: Pivot -> To */}
+                  <div className="flex-1 px-1 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
                       <line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeOpacity="0.2" strokeWidth="1" strokeDasharray="6" />
                       <motion.line x1="0" y1="1" x2="100%" y2="1" stroke={toChainColor} strokeWidth="1" strokeDasharray="12" animate={{ strokeDashoffset: [24, 0] }} transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }} />
                     </svg>
                   </div>
+
+                  {/* TO NODE */}
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-1.5">
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
-                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
+                      <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center">
+                        <TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} />
+                      </div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{toToken?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p></div>
                   </div>
                 </div>
               </motion.div>
