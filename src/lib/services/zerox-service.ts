@@ -5,14 +5,14 @@ import { FEE_RECIPIENTS } from '../wallets/services/fee-recipients';
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE
- * Version: 1.5.0 (Sustainability Update)
+ * Version: 2.0.0 (Revenue Update)
  * 
- * Increased fee to 0.30% (30 BPS) to cover operational and gas buffer costs.
+ * Increased fee to 1.00% (100 BPS) for platform sustainability.
  */
 
 const ZEROX_API_KEY = process.env.NEXT_PUBLIC_ZEROX_API_KEY || '5eebaf6f-e024-41d2-a18f-e05c241129c3';
 const ADMIN_VAULT = FEE_RECIPIENTS.evm; 
-const FEE_PERCENTAGE = '0.003'; // 0.30% Institutional Integrator Fee (30 BPS)
+const FEE_PERCENTAGE = '0.01'; // 1.00% Institutional Integrator Fee (100 BPS)
 
 const ZEROX_BASE_URLS: { [chainId: number]: string } = {
   1: 'https://api.0x.org',

@@ -4,10 +4,10 @@ import { getFeeRecipient } from "../wallets/services/fee-recipients";
 
 /**
  * INSTITUTIONAL FEE & VALIDATION ENGINE
- * Version: 3.0.0 (Liquidity Protection Update)
+ * Version: 4.0.0 (Revenue Update)
  * 
  * Implements real-time gas discovery with a $0.10 volatility buffer
- * and an increased 0.30% (30 BPS) institutional system fee.
+ * and an increased 1.00% (100 BPS) institutional system fee.
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; 
@@ -70,8 +70,7 @@ export async function calculateSendFees(amountUsd: number, chain: string) {
 
 /**
  * Calculate system and network fees for a swap.
- * Version 3.0: Includes delivery gas and 0.10 buffer.
- * Standardized at 0.30% (30 BPS).
+ * Version 4.0: Standardized at 1.00% (100 BPS).
  */
 export async function calculateSwapFees(
   rawAmountUsd: number,
@@ -95,8 +94,8 @@ export async function calculateSwapFees(
   // 3. Add Institutional Volatility Buffer (0.10)
   totalGasUsd += GAS_BUFFER_USD;
 
-  // 4. Calculate System Fee (0.30%)
-  const percentage = adminFeePercentage ?? 0.003; 
+  // 4. Calculate System Fee (1.00%)
+  const percentage = adminFeePercentage ?? 0.01; 
   let adminFee = rawAmountUsd * percentage;
 
   // Swap Floor: $0.05

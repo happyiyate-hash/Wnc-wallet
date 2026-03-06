@@ -4,9 +4,9 @@ import { getQuote } from '@lifi/sdk'
 
 /**
  * LI.FI BRIDGE QUOTE API
- * Version: 3.1.0 (Sustainability Update)
+ * Version: 4.0.0 (Revenue Update)
  * 
- * Increased revenue share to 0.30% (30 BPS).
+ * Increased revenue share to 1.00% (100 BPS).
  */
 
 export async function GET(req: Request) {
@@ -38,9 +38,9 @@ export async function GET(req: Request) {
       fromAmount,
       fromAddress,
       slippage: Number(slippage) || 0.005,
-      // INSTITUTIONAL REVENUE PARAMS (30 BPS)
+      // INSTITUTIONAL REVENUE PARAMS (100 BPS)
       integrator: 'wevina-terminal',
-      fee: 0.003, 
+      fee: 0.01, 
     })
 
     return NextResponse.json(quote)
