@@ -21,8 +21,7 @@ interface TokenManagerProps {
 
 /**
  * INSTITUTIONAL ASSET MANAGER
- * Version: 3.1.0 (Non-Blocking Silent Discovery)
- * Independent of auth process. Prioritizes hardcoded nodes.
+ * Version: 4.0.0 (The FAST Discovery Node)
  */
 export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps) {
   const { viewingNetwork, hiddenTokenKeys, toggleTokenVisibility, addUserToken, userAddedTokens, refresh } = useWallet();
@@ -36,9 +35,8 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
       
       setIsSearching(true);
       try {
-        const networkSlug = viewingNetwork.name.toLowerCase();
-        // SEARCH DIRECTLY FROM LOGO CDN REGISTRY (Server Action)
-        const tokens = await fetchNetworkTokens(networkSlug);
+        // USE THE FAST WAY: Fetch all tokens for network directly
+        const tokens = await fetchNetworkTokens(viewingNetwork.name);
 
         if (tokens && tokens.length > 0) {
           const formatted = tokens.map(t => ({
@@ -47,7 +45,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             symbol: t.symbol,
             name: t.name,
             decimals: t.decimals || 18,
-            iconUrl: t.logo_url,
+            iconUrl: t.logo_url, // Relative path from FAST cache
             balance: '0',
             isNative: false,
             priceSource: t.priceSource || 'coingecko',
@@ -56,7 +54,7 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
           setDbTokens(formatted);
         }
       } catch (e) {
-        // Handshake deferred
+        console.warn("[TOKEN_MANAGER_ADVISORY]: Metadata handshake deferred.");
       } finally {
         setIsSearching(false);
       }
@@ -68,13 +66,13 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
   const mergedTokens = useMemo(() => {
     if (!viewingNetwork) return [];
     
-    // 1. Load Hardcoded Assets (Instant Handshake)
+    // 1. Initial/Whitelisted Assets (Instant)
     const hardcoded = getInitialAssets(viewingNetwork.chainId).map(a => ({
         ...a,
         balance: '0'
     } as AssetRow));
 
-    // 2. Merge with Registry Discovered Assets
+    // 2. Merge with Discovered Assets
     const combined = [...hardcoded, ...dbTokens];
     return combined.reduce((acc, curr) => {
         const identifier = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
@@ -125,9 +123,9 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
             <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
             
             <SheetHeader className="px-6 mb-4">
-              <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center">Registry Assets</SheetTitle>
+              <SheetTitle className="text-2xl font-black uppercase tracking-widest text-center">Asset Discovery</SheetTitle>
               <SheetDescription className="text-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-                {viewingNetwork?.name} Node Handshake
+                Institutional Metadata Synchronization
               </SheetDescription>
             </SheetHeader>
 
@@ -141,7 +139,11 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                {isSearching && <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>}
+                {isSearching && (
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    </div>
+                )}
             </div>
 
             <ScrollArea className="flex-1 px-6">
@@ -155,8 +157,20 @@ export default function TokenManager({ isOpen, onOpenChange }: TokenManagerProps
                     return (
                         <div key={token.isNative ? token.symbol : token.address} className="flex items-center justify-between p-4 rounded-3xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
                             <div className="flex items-center gap-4">
-                                <TokenLogoDynamic logoUrl={token.iconUrl} alt={token.symbol} size={44} chainId={token.chainId} symbol={token.symbol} name={token.name} />
-                                <div className="text-left"><p className="font-bold text-base text-white">{token.symbol}</p><p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-40">{token.isNative ? 'Native Gas Node' : token.name}</p></div>
+                                <TokenLogoDynamic 
+                                    logoUrl={token.iconUrl} 
+                                    alt={token.symbol} 
+                                    size={44} 
+                                    chainId={token.chainId} 
+                                    symbol={token.symbol} 
+                                    name={token.name} 
+                                />
+                                <div className="text-left">
+                                    <p className="font-bold text-base text-white">{token.symbol}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-40">
+                                        {token.isNative ? 'Native Gas Node' : token.name}
+                                    </p>
+                                </div>
                             </div>
                             <Switch checked={isOn} onCheckedChange={(checked) => handleToggle(token, checked)} className="data-[state=checked]:bg-primary" />
                         </div>

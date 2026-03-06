@@ -1,29 +1,28 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import type { ChainConfig } from '@/lib/types';
-import { getTokenLogoUrl } from '@/lib/getTokenLogo';
 import evmNetworks from '@/lib/evmNetworks.json';
 
 const ALL_CHAINS_LIST: Omit<ChainConfig, 'iconUrl'>[] = Object.values(evmNetworks).map(n => ({ ...n, currencySymbol: n.symbol }));
 
 /**
- * Hook to resolve network logos and provide a high-performance indexed registry.
+ * Hook to resolve network metadata and provide a high-performance indexed registry.
+ * Decoupled from direct logo URL resolution to allow TokenLogoDynamic to handle async hydration.
  */
 export function useNetworkLogos() {
-    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: ''})));
-    const [areLogosLoading, setAreLogosLoading] = useState(true);
+    const [chainsWithLogos, setChainsWithLogos] = useState<ChainConfig[]>(ALL_CHAINS_LIST.map(c => ({...c, iconUrl: null})));
+    const [areLogosLoading, setAreLogosLoading] = useState(false);
 
     useEffect(() => {
-        const chainsWithFetchedLogos = ALL_CHAINS_LIST.map((chain) => {
-            const logoUrl = getTokenLogoUrl(chain.symbol, chain.name);
-            return {
-                ...chain,
-                iconUrl: logoUrl ?? undefined,
-            };
-        });
+        // Initialize chains with null iconUrls; the branding engine will resolve them via IndexedDB/CDN
+        const chains = ALL_CHAINS_LIST.map((chain) => ({
+            ...chain,
+            iconUrl: null,
+        }));
         
-        setChainsWithLogos(chainsWithFetchedLogos);
+        setChainsWithLogos(chains);
         setAreLogosLoading(false);
     }, []);
 

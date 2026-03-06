@@ -1,10 +1,10 @@
+
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import CachedImage from '../CachedImage';
-import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
-import { getDirectLogoUrl } from '@/lib/getTokenLogo';
+import { getDirectLogoUrl, getFullLogoUrl } from '@/lib/getTokenLogo';
 import { registryDb } from '@/lib/storage/registry-db';
 import { cn } from '@/lib/utils';
 
@@ -21,14 +21,8 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 7.0.0 (Cache-Strict Independent Discovery)
- * 
- * Logic:
- * 1. Calculate persistent cache key from asset signature.
- * 2. Check IndexedDB registry immediately.
- * 3. Serve cached URL instantly if found.
- * 4. Perform silent background discovery if cache miss.
- * 5. Decorate relative paths with institutional CDN base.
+ * Version: 10.0.0 (Async Action Handshake)
+ * Decoupled from Auth and environment variables.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -51,7 +45,7 @@ export default function TokenLogoDynamic({
 
   useEffect(() => {
     async function resolve() {
-      // 1. INSTANT REGISTRY CHECK
+      // 1. INSTANT REGISTRY CHECK (IndexedDB)
       try {
         const cached = await registryDb.getLogo(cacheKey);
         if (cached) {
@@ -59,31 +53,25 @@ export default function TokenLogoDynamic({
           setIsInitializing(false);
           return;
         }
-      } catch (e) {
-        // DB Handshake deferred
-      }
+      } catch (e) {}
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
-      // 2. SILENT BACKGROUND DISCOVERY
+      // 2. RESOLVE FINAL URL
       let finalUrl: string | null = null;
 
-      // Normalize provided URL
-      if (typeof logoUrl === 'string' && logoUrl.length > 0) {
-        finalUrl = logoUrl;
-        if (logoUrl.startsWith('/api/cdn') || !logoUrl.startsWith('http')) {
-          const base = 'https://gcghriodmljkusdduhzl.supabase.co';
-          finalUrl = `${base}${logoUrl.startsWith('/') ? logoUrl : '/' + logoUrl}`;
-        }
-      } 
-      // Fallback: Global Registry Handshake
-      else if (name || symbol) {
-        try {
+      try {
+        // Check relative paths from metadata (The FAST Way)
+        if (typeof logoUrl === 'string' && logoUrl.length > 0) {
+          finalUrl = await getFullLogoUrl(logoUrl);
+        } 
+        // Fallback: Direct Storage Lookup
+        else if (name || symbol) {
           finalUrl = await getDirectLogoUrl(name || '', symbol || '');
-        } catch (e) {
-          finalUrl = null;
         }
+      } catch (e) {
+        finalUrl = null;
       }
 
       if (finalUrl) {
@@ -99,7 +87,6 @@ export default function TokenLogoDynamic({
     resolve();
   }, [logoUrl, symbol, name, cacheKey]);
 
-  // NON-BLOCKING UI: Show fallback while cache is priming
   if (isInitializing && !resolvedUrl) {
     return (
       <div style={{ width: size, height: size }} className={cn("shrink-0 flex items-center justify-center", className)}>
@@ -130,7 +117,6 @@ export default function TokenLogoDynamic({
         }}
         onError={() => {
           setResolvedUrl(null);
-          // Mark as invalid node in cache to prevent repeated failing handshakes
           registryDb.saveLogo(cacheKey, ''); 
         }}
       />

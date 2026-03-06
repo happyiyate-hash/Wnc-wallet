@@ -6,38 +6,15 @@ import { logoSupabase } from './supabase/logo-server';
 /**
  * INSTITUTIONAL REGISTRY SERVICE
  * Implementation: Direct Supabase Access (Hardened Server Action)
- * Version: 5.1.0 (Zero-latency metadata flattening)
+ * Version: 8.0.0 (Hardened Production Sync)
  */
 
-export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
-  if (!logoSupabase) return null;
+const LOGO_CDN_BASE = 'https://gcghriodmljkusdduhzl.supabase.co';
 
-  try {
-    // 1. Prioritize lookup by the full token name for accuracy (Developer Guide Protocol)
-    const { data: nameData } = await logoSupabase
-      .from('token_logos')
-      .select('public_url')
-      .ilike('name', tokenName)
-      .limit(1)
-      .maybeSingle();
-
-    if (nameData?.public_url) return nameData.public_url;
-
-    // 2. Fall back to symbol search
-    const { data: symbolData } = await logoSupabase
-      .from('token_logos')
-      .select('public_url')
-      .ilike('symbol', tokenSymbol)
-      .limit(1)
-      .maybeSingle();
-
-    return symbolData?.public_url || null;
-  } catch (error) {
-    console.warn("[REGISTRY_LOGO_FAIL]: Handshake deferred.");
-    return null;
-  }
-}
-
+/**
+ * Fetches all tokens for a given network directly from the metadata registry.
+ * This is the recommended and fastest method for bulk discovery.
+ */
 export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
   if (!logoSupabase) return [];
 
@@ -47,9 +24,11 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
       .select('token_details, contract_address, network, logo_url')
       .eq('network', networkName.toLowerCase());
 
-    if (error || !data) return [];
+    if (error || !data) {
+      console.warn(`[REGISTRY_FETCH_FAIL] ${networkName}:`, error?.message);
+      return [];
+    }
 
-    // Flatten token_details JSON object as per Developer Guide
     return data.map(token => ({
       symbol: token.token_details.symbol,
       name: token.token_details.name,
@@ -66,6 +45,38 @@ export async function fetchNetworkTokens(networkName: string): Promise<any[]> {
   }
 }
 
+/**
+ * Fetches a specific token's direct logo URL from the registry.
+ */
+export async function getDirectLogoUrl(tokenName: string, tokenSymbol: string): Promise<string | null> {
+  if (!logoSupabase) return null;
+
+  try {
+    const { data: nameData } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('name', tokenName)
+      .limit(1)
+      .maybeSingle();
+
+    if (nameData?.public_url) return nameData.public_url;
+
+    const { data: symbolData } = await logoSupabase
+      .from('token_logos')
+      .select('public_url')
+      .ilike('symbol', tokenSymbol)
+      .limit(1)
+      .maybeSingle();
+
+    return symbolData?.public_url || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Bulk fetch prices for a list of contract addresses from the metadata registry.
+ */
 export async function fetchTokenPricesFromMetadata(contracts: string[]): Promise<any[]> {
   if (!logoSupabase || contracts.length === 0) return [];
   try {
@@ -79,10 +90,13 @@ export async function fetchTokenPricesFromMetadata(contracts: string[]): Promise
   }
 }
 
-export async function getTokenLogoUrl(symbol?: string | null, name?: string | null): Promise<string | null> {
-    if (!symbol && !name) return null;
-    const identifier = (name || symbol || '').toLowerCase().replace(/\s+/g, '-');
-    const sym = (symbol || '').toLowerCase();
-    // Prepend institutional CDN base
-    return `https://gcghriodmljkusdduhzl.supabase.co/api/cdn/logo/${identifier}/${sym}`;
+/**
+ * Prepares a full URL from a relative CDN path.
+ * Must be async to comply with Next.js Server Action standards.
+ */
+export async function getFullLogoUrl(relativeUrl: string | null | undefined): Promise<string | null> {
+    if (!relativeUrl || typeof relativeUrl !== 'string') return null;
+    if (relativeUrl.startsWith('http')) return relativeUrl;
+    
+    return `${LOGO_CDN_BASE}${relativeUrl.startsWith('/') ? relativeUrl : '/' + relativeUrl}`;
 }

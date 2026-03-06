@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,12 +7,14 @@ import { useWallet } from '@/contexts/wallet-provider';
 
 /**
  * GLOBAL LOADING BARRIER
- * Version: 5.1.0 (8s Unified Safety Sentinel)
- * Strictly visual. Guaranteed release within 8 seconds.
+ * Version: 7.0.0 (Instant-Hydration Sentinel)
+ * 
+ * Releases as soon as core configuration and local identity nodes are initialized.
+ * Does not wait for blockchain RPC balance fetches.
  */
 export default function GlobalLoadingBarrier() {
-  const { user, loading: authLoading } = useUser();
-  const { isInitialized, wallets, hasFetchedInitialData } = useWallet();
+  const { loading: authLoading } = useUser();
+  const { isInitialized } = useWallet();
   const [hasMounted, setHasMounted] = useState(false);
   const hasHydratedOnceRef = useRef(false);
   const [isVisible, setIsVisible] = useState(true);
@@ -19,7 +22,7 @@ export default function GlobalLoadingBarrier() {
   useEffect(() => {
     setHasMounted(true);
     
-    // SAFETY SENTINEL: Drop barrier after 8 seconds no matter what
+    // SAFETY SENTINEL: Hard drop after 8 seconds
     const timer = setTimeout(() => {
       hasHydratedOnceRef.current = true;
       setIsVisible(false);
@@ -28,7 +31,8 @@ export default function GlobalLoadingBarrier() {
     return () => clearTimeout(timer);
   }, []);
 
-  const isAppReady = hasMounted && (!authLoading && isInitialized && (!user || !wallets || wallets.length === 0 || hasFetchedInitialData));
+  // INSTANT HYDRATION: Release barrier once session and wallet nodes are initialized
+  const isAppReady = hasMounted && !authLoading && isInitialized;
 
   useEffect(() => {
     if (isAppReady && !hasHydratedOnceRef.current) {
