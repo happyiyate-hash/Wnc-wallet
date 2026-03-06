@@ -6,6 +6,7 @@ import CachedImage from '../CachedImage';
 import { Skeleton } from '../ui/skeleton';
 import GenericCoinIcon from '../icons/GenericCoinIcon';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
+import { LOGO_CDN_URL } from '@/lib/supabase/logo-client';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
@@ -18,11 +19,9 @@ interface TokenLogoDynamicProps {
   name?: string;
 }
 
-const CDN_BASE_URL = 'https://gcghriodmljkusdduhzl.supabase.co';
-
 /**
  * INSTITUTIONAL TOKEN LOGO ENGINE (CACHED)
- * Version: 4.1.0 (Name-Priority Cache)
+ * Version: 4.2.0 (Environment Synced CDN)
  * Features immediate localStorage resolution to eliminate UI flickering.
  * Optimized to differentiate between assets sharing symbols (e.g., Blast ETH).
  */
@@ -36,11 +35,10 @@ export default function TokenLogoDynamic({
   name,
 }: TokenLogoDynamicProps) {
   // 1. DETERMINISTIC NAME-FIRST CACHE KEY
-  // Leading with the name ensures "Base" vs "Blast" vs "Ethereum" doesn't collide on "ETH"
   const cacheKey = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
-    return `logo_v4.1_${slug}_${sym}`;
+    return `logo_v4.2_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
   // 2. SYNCHRONOUS HYDRATION
@@ -68,7 +66,6 @@ export default function TokenLogoDynamic({
       setHasError(false);
 
       // A. Perform Name-Priority Registry Lookup
-      // Passing both ensures the resolver can prioritize the full name (e.g. "Blast")
       if (name || symbol) {
         try {
           const direct = await getDirectLogoUrl(name || '', symbol || '');
@@ -89,7 +86,8 @@ export default function TokenLogoDynamic({
         if (logoUrl.startsWith('http')) {
           finalUrl = logoUrl;
         } else if (logoUrl.startsWith('/')) {
-          finalUrl = `${CDN_BASE_URL}${logoUrl}`;
+          // Sync with the strictly initialized LOGO_CDN_URL from the provider
+          finalUrl = `${LOGO_CDN_URL}${logoUrl}`;
         }
         
         setResolvedUrl(finalUrl);
