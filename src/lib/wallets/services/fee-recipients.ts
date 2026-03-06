@@ -1,21 +1,20 @@
 
 /**
  * INSTITUTIONAL FEE RECIPIENT REGISTRY
- * Version: 1.0.0
+ * Version: 2.0.0 (Unified Mapping)
  * 
  * Centralized node for managing fee targets across 39 blockchain ecosystems.
- * EVM chains are merged into a single vault, while others remain discrete.
+ * EVM chains are merged into a single vault, while others maintain discrete nodes.
  */
-
-const PRIMARY_VAULT = process.env.NEXT_PUBLIC_ADMIN_VAULT_ADDRESS || '0x144F9E614c094ADDA010A27c254faDeFF390A3B2';
 
 export const FEE_RECIPIENTS = {
     // --- EVM COMPATIBLE GROUP (19 Chains) ---
-    evm: PRIMARY_VAULT,
+    // Ethereum, Polygon, Base, Linea, Optimism, Arbitrum, Blast, Avalanche, BSC, Celo, zkSync, Scroll, Sei, Mantle, opBNB, Palm, Hemi, Swellchain, Unichain
+    evm: '0x144F9E614c094ADDA010A27c254faDeFF390A3B2',
 
     // --- LEDGER / ACCOUNT NODES ---
     xrpLedger: "rHb9CJAWyUMayX9V8Gu89FWJCoDYHnC4n",
-    polkadot: "126uFrKy6yuX9S7yY6YVf6YVf6YVf6YVf6YVf6YVf6YVf6YV",
+    polkadot: "126uFrKy6yuX9S7yY6YVf6YVf6YVf6YVf6YVf6YVf6YV",
     kusama: "E6YVf6YVf6YVf6YVf6YVf6YVf6YVf6YVf6YVf6YVf6YV",
 
     // --- SOLANA-LIKE / SMART CONTRACT NODES ---
@@ -27,7 +26,7 @@ export const FEE_RECIPIENTS = {
     injective: "inj1adminvaultplaceholder",
     celestia: "celestia1adminvaultplaceholder",
     cardano: "addr1adminvaultplaceholder",
-    tron: "TNV9Z6XYnZAnvXAnvXAnvXAnvXAnvXAnvX",
+    tron: "TNV9Z6XYnZAnvXAnvXAnvXAnvXAnvX",
     algorand: "ADMINALGOVAULTPH",
     hedera: "0.0.123456",
     tezos: "tz1adminvaultplaceholder",
@@ -42,7 +41,6 @@ export const FEE_RECIPIENTS = {
 
 /**
  * Resolves the institutional fee recipient address for any supported chain.
- * @param chainName The display name or symbol of the blockchain.
  */
 export function getFeeRecipient(chainName: string): string {
     const name = chainName.toLowerCase();
