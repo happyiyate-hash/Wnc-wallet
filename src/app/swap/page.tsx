@@ -110,6 +110,11 @@ function SwapClient() {
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
 
+  const handleOpenSelector = (type: 'from' | 'to') => {
+    setSelectionType(type);
+    setIsSelectorOpen(true);
+  };
+
   /**
    * INITIAL HANDSHAKE PROTOCOL
    */
@@ -178,10 +183,9 @@ function SwapClient() {
         const sourceChainConfig = allChainsMap[fromToken.chainId ?? 1];
         const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
         
-        // 1. DISPATCH PARALLEL QUOTES (0x, LI.FI, Internal)
         const quotePromises: Promise<SwapQuote | null>[] = [];
 
-        // Candidate A: 0x Aggregator (Same chain EVM)
+        // Candidate A: 0x Aggregator
         if (fromToken.chainId === toToken.chainId && fromToken.chainId !== 0) {
             quotePromises.push((async () => {
                 try {
@@ -201,7 +205,7 @@ function SwapClient() {
             })());
         }
 
-        // Candidate B: LI.FI Bridge/Swap (Cross-chain or fallback)
+        // Candidate B: LI.FI Bridge/Swap
         if (fromToken.chainId !== 0 && toToken.chainId !== 0) {
             quotePromises.push((async () => {
                 try {
@@ -231,7 +235,7 @@ function SwapClient() {
             })());
         }
 
-        // Candidate C: Internal Settle Node (Always available)
+        // Candidate C: Internal Settle Node
         quotePromises.push((async () => {
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
@@ -250,13 +254,11 @@ function SwapClient() {
         const batchResults = (await Promise.all(quotePromises)).filter(q => q !== null) as SwapQuote[];
         if (currentQuoteId !== quoteIdRef.current) return;
 
-        // 2. SORT & SELECT BEST
         batchResults.sort((a, b) => b.receiveAmount - a.receiveAmount);
         const best = batchResults[0];
         
         if (!best) throw new Error("NO_ROUTES_FOUND");
 
-        // 3. QUOTE GUARD: Hardened Sanity Check
         const outputUsd = best.receiveAmount * toTokenPrice;
         if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
             throw new Error("Market Anomaly Detected: Quote output value exceeds institutional sanity limit.");
@@ -267,7 +269,6 @@ function SwapClient() {
         setQuotePhase('SHOW_ALL'); 
         await new Promise(r => setTimeout(r, 600)); 
         
-        // 4. CINEMATIC SCANNING SEQUENCE
         setQuotePhase('SCANNING');
         for (let i = 0; i < batchResults.length; i++) { 
             if (currentQuoteId !== quoteIdRef.current) return;
@@ -275,7 +276,6 @@ function SwapClient() {
             await new Promise(r => setTimeout(r, 300)); 
         }
 
-        // 5. TRADE GUARDIAN AI VALIDATION
         setQuotePhase('GUARDIAN_SCAN');
         const aiValidation = await currencyConversionWithLLMValidation({
             fromCurrency: fromToken.symbol,
@@ -295,7 +295,6 @@ function SwapClient() {
             return;
         }
 
-        // 6. FINALIZE SELECTION
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(best.id); 
         await new Promise(r => setTimeout(r, 1000)); 
@@ -330,11 +329,6 @@ function SwapClient() {
   /**
    * ACTION HANDLERS
    */
-  const handleOpenSelector = (type: 'from' | 'to') => {
-    setSelectionType(type);
-    setIsSelectorOpen(true);
-  };
-
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
@@ -344,12 +338,16 @@ function SwapClient() {
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
     const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
-    setRotation(prev => prev + 180); setFromToken(oldTo); setToToken(oldFrom);
+    setRotation(prev => prev + 180); setFromToken(oldTo); setFromToken(oldTo); setFromToken(oldTo);
+    // Explicit selection refresh
+    setFromToken({ ...oldTo });
+    setToToken({ ...oldFrom });
     setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   /**
    * INSTITUTIONAL EXECUTION HANDSHAKE
+   * Handles 0x Aggregator trades and Internal Vault settlements.
    */
   const handleExecuteSwap = async () => {
     if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
@@ -412,8 +410,16 @@ function SwapClient() {
             const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
             userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
           }
+          
           setExecutionPhase('SETTLING');
-          await userTx.wait();
+          const receipt = await userTx.wait();
+          
+          // Trigger the second leg payout
+          await fetch('/api/swap/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ swapId: handshake.swapId, txHash: receipt.hash })
+          });
       }
 
       setExecutionPhase('SUCCESS');
@@ -547,7 +553,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{fromToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {allChainsMap?.[fromToken?.chainId ?? 1]?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">FROM {fromToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
           </div>
           
           <div className="relative flex-1 flex flex-col justify-center">
@@ -579,7 +585,7 @@ function SwapClient() {
                 <span className="font-black text-[10px] text-white uppercase tracking-tighter">{toToken?.symbol}</span>
                 <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
             </button>
-            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {allChainsMap?.[toToken?.chainId ?? 1]?.name}</span>
+            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">TO {toToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
             <AnimatePresence>{showOutputPrecision && (<motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: -40, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }} className="absolute left-0 bg-black/90 border border-blue-500/30 px-3 py-1 rounded-xl z-[80] shadow-2xl backdrop-blur-xl"><p className="text-[10px] font-mono text-blue-400 font-black uppercase tracking-widest flex items-center gap-2"><CheckCircle2 className="w-3 h-3" /> Exact: {selectedQuote?.receiveAmount ? formatExactCrypto(selectedQuote.receiveAmount) : '0'} {toToken?.symbol}</p></motion.div>)}</AnimatePresence>
@@ -615,7 +621,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${fromChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={fromToken?.iconUrl} alt="from" size={32} chainId={fromToken?.chainId} symbol={fromToken?.symbol} name={fromToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[fromToken?.chainId ?? 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{fromToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{fromToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[fromToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
                   </div>
                   <div className="flex-1 px-2 relative h-3 overflow-hidden">
                     <svg width="100%" height="2" className="absolute top-1/2 -translate-y-1/2">
@@ -641,7 +647,7 @@ function SwapClient() {
                       <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} style={{ borderColor: `${toChainColor}66` }} className="absolute inset-0 rounded-full border border-dashed" />
                       <div className="relative z-[70] bg-black rounded-full p-1 border border-white/5 overflow-hidden w-10 h-10 flex items-center justify-center"><TokenLogoDynamic logoUrl={toToken?.iconUrl} alt="to" size={32} chainId={toToken?.chainId} symbol={toToken?.symbol} name={toToken?.name} /></div>
                     </div>
-                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{allChainsMap?.[toToken?.chainId ?? 1]?.name}</p></div>
+                    <div className="text-center"><p className="text-[9px] font-black text-white uppercase">{toToken?.symbol}</p><p className="text-[6px] font-bold text-muted-foreground uppercase opacity-60 truncate w-14">{toToken?.chainId === 0 ? 'Bitcoin' : (allChainsMap?.[toToken?.chainId ?? 1]?.name || 'Ethereum')}</p></div>
                   </div>
                 </div>
               </motion.div>

@@ -3,8 +3,8 @@
 
 /**
  * INSTITUTIONAL 0X AGGREGATOR SERVICE
- * Version: 1.0.0
- * Handles same-chain EVM swap discovery and quote generation.
+ * Version: 1.1.0 (Hardened Error Handling)
+ * Handles same-chain EVM swap discovery and signed quote generation.
  */
 
 const ZEROX_API_KEY = process.env.NEXT_PUBLIC_ZEROX_API_KEY || '5eebaf6f-e024-41d2-a18f-e05c241129c3';
@@ -71,6 +71,11 @@ export const zeroXService = {
 
     if (!response.ok) {
         const error = await response.json();
+        // Extract specific 0x validation errors
+        if (error.validationErrors) {
+            const firstErr = error.validationErrors[0];
+            throw new Error(`0x Validation: ${firstErr.reason} (${firstErr.field})`);
+        }
         throw new Error(error.reason || '0x Quote Handshake Failed');
     }
 
