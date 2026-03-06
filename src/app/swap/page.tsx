@@ -32,7 +32,8 @@ import {
   Lock,
   Globe,
   Database,
-  Search
+  Search,
+  Info
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -88,7 +89,9 @@ function SwapClient() {
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [guardianWarning, setGuardianWarning] = useState<string | null>(null);
+  
+  // AI ADVISORY STATE
+  const [guardianAnalysis, setGuardianAnalysis] = useState<any>(null);
 
   const [quotePhase, setQuotePhase] = useState<QuotePhase>('IDLE');
   const [activeScanIndex, setActiveScanIndex] = useState<number>(-1);
@@ -148,14 +151,14 @@ function SwapClient() {
   }, [toToken, prices]);
 
   /**
-   * MULTI-AGGREGATOR QUOTE ENGINE
+   * MULTI-AGGREGATOR QUOTE ENGINE (APP-DRIVEN SELECTION)
    */
   useEffect(() => {
     const runSequence = async () => {
       const currentQuoteId = ++quoteIdRef.current;
 
       if (!debouncedAmount || parseFloat(debouncedAmount) <= 0) {
-        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
+        setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1);
         lastFetchedAmountRef.current = ''; return;
       }
       if (!fromToken || !toToken) return;
@@ -174,7 +177,7 @@ function SwapClient() {
       setIsQuoteLoading(true); 
       setQuotePhase('FETCHING'); 
       setFetchError(null); 
-      setGuardianWarning(null);
+      setGuardianAnalysis(null);
       setFadedIndices(new Set()); 
       setActiveScanIndex(-1); 
       setSelectedQuoteId(null);
@@ -185,7 +188,7 @@ function SwapClient() {
         
         const quotePromises: Promise<SwapQuote | null>[] = [];
 
-        // Candidate A: 0x Aggregator
+        // 1. APP FETCH: 0x Aggregator
         if (fromToken.chainId === toToken.chainId && fromToken.chainId !== 0) {
             quotePromises.push((async () => {
                 try {
@@ -205,7 +208,7 @@ function SwapClient() {
             })());
         }
 
-        // Candidate B: LI.FI Bridge/Swap
+        // 2. APP FETCH: LI.FI Bridge/Swap
         if (fromToken.chainId !== 0 && toToken.chainId !== 0) {
             quotePromises.push((async () => {
                 try {
@@ -235,7 +238,7 @@ function SwapClient() {
             })());
         }
 
-        // Candidate C: Internal Settle Node
+        // 3. APP FETCH: Internal Settle Node
         quotePromises.push((async () => {
             const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId ?? 1]?.type || 'evm');
             const divisor = toTokenPrice || 1;
@@ -254,14 +257,16 @@ function SwapClient() {
         const batchResults = (await Promise.all(quotePromises)).filter(q => q !== null) as SwapQuote[];
         if (currentQuoteId !== quoteIdRef.current) return;
 
+        // APP SELECTS BEST QUOTE DETERMINISTICALLY
         batchResults.sort((a, b) => b.receiveAmount - a.receiveAmount);
         const best = batchResults[0];
         
         if (!best) throw new Error("NO_ROUTES_FOUND");
 
+        // HARD SANITY CHECK (App Gate)
         const outputUsd = best.receiveAmount * toTokenPrice;
         if (tradeValueUsd > 0.1 && outputUsd > tradeValueUsd * 1.5) {
-            throw new Error("Market Anomaly Detected: Quote output value exceeds institutional sanity limit.");
+            throw new Error("Market Anomaly Detected: Output exceeds sanity limit.");
         }
 
         setQuotes(batchResults); 
@@ -276,8 +281,9 @@ function SwapClient() {
             await new Promise(r => setTimeout(r, 300)); 
         }
 
+        // AI IS SUPPLEMENTARY ONLY
         setQuotePhase('GUARDIAN_SCAN');
-        const aiValidation = await currencyConversionWithLLMValidation({
+        const aiAnalysis = await currencyConversionWithLLMValidation({
             fromCurrency: fromToken.symbol,
             toCurrency: toToken.symbol,
             amount: parseFloat(debouncedAmount),
@@ -288,13 +294,9 @@ function SwapClient() {
         });
 
         if (currentQuoteId !== quoteIdRef.current) return;
+        setGuardianAnalysis(aiAnalysis);
 
-        if (!aiValidation.isValid) {
-            setGuardianWarning(aiValidation.validationReason || "The Trade Guardian AI has flagged this swap as high-risk.");
-            setQuotePhase('IDLE');
-            return;
-        }
-
+        // PROCEDURE: Select Best and proceed regardless of AI sentiment (Advisor Role)
         setQuotePhase('FINAL_SELECTED'); 
         setSelectedQuoteId(best.id); 
         await new Promise(r => setTimeout(r, 1000)); 
@@ -332,22 +334,20 @@ function SwapClient() {
   const handleTokenSelect = (token: AssetRow) => {
     if (selectionType === 'from') setFromToken({ ...token });
     else setToToken({ ...token });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   const handleSwapTokens = () => {
     if (!fromToken || !toToken) return;
     const oldFrom = { ...fromToken }; const oldTo = { ...toToken };
-    setRotation(prev => prev + 180); setFromToken(oldTo); setFromToken(oldTo); setFromToken(oldTo);
-    // Explicit selection refresh
+    setRotation(prev => prev + 180); 
     setFromToken({ ...oldTo });
     setToToken({ ...oldFrom });
-    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianWarning(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
+    setQuotes([]); setQuotePhase('IDLE'); setSelectedQuoteId(null); setFetchError(null); setGuardianAnalysis(null); setFadedIndices(new Set()); setActiveScanIndex(-1); lastFetchedAmountRef.current = '';
   };
 
   /**
-   * INSTITUTIONAL EXECUTION HANDSHAKE
-   * Handles 0x Aggregator trades and Internal Vault settlements.
+   * EXECUTION HANDSHAKE
    */
   const handleExecuteSwap = async () => {
     if (!selectedQuote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
@@ -414,7 +414,6 @@ function SwapClient() {
           setExecutionPhase('SETTLING');
           const receipt = await userTx.wait();
           
-          // Trigger the second leg payout
           await fetch('/api/swap/finalize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -439,7 +438,7 @@ function SwapClient() {
   const infoItems = [
     { label: 'Network Speed', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Network Fee', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
-    { label: 'Guardian Status', value: 'Verified', icon: ShieldCheck },
+    { label: 'Guardian Analysis', value: guardianAnalysis?.riskLevel || 'Verified', icon: ShieldCheck },
     { label: 'Market Route', value: selectedQuote?.provider || 'Aggregator', icon: Workflow }
   ];
 
@@ -454,7 +453,6 @@ function SwapClient() {
         <Button variant="ghost" size="icon"><Settings2 className="w-5 h-5 text-muted-foreground" /></Button>
       </header>
 
-      {/* EXECUTION OVERLAY */}
       <AnimatePresence>
         {isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
@@ -482,20 +480,20 @@ function SwapClient() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError || guardianWarning) && (
+        {(quotePhase !== 'IDLE' && quotePhase !== 'SHOW_VISUAL' && quotePhase !== 'COMPLETED' || fetchError) && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-24 left-4 right-4 z-[100] max-w-lg mx-auto pointer-events-none">
             <div className="bg-black/80 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative pointer-events-auto">
               <div className="relative z-10 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : (fetchError || guardianWarning) ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
+                    {isQuoteLoading ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : fetchError ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Globe className="w-4 h-4 text-primary" />}
                     <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Market Discovery</h3>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {fetchError || guardianWarning ? (
+                  {fetchError ? (
                     <div className="p-6 rounded-[2rem] bg-[#050505] border border-red-500/40 text-center space-y-4">
-                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{guardianWarning || fetchError}</p>
+                        <p className="text-xs font-bold text-red-400 leading-relaxed px-2">{fetchError}</p>
                         <Button size="sm" variant="ghost" className="h-9 rounded-xl text-[10px] uppercase tracking-widest bg-white/5 border border-white/10 text-white" onClick={() => { lastFetchedAmountRef.current = ''; setAmount(amount); }}>Re-sync Market</Button>
                     </div>
                   ) : isQuoteLoading ? (
@@ -508,7 +506,7 @@ function SwapClient() {
                                 <ShieldQuestion className="w-8 h-8 text-primary animate-pulse" />
                                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} className="absolute -inset-2 border-2 border-dashed border-primary/20 rounded-full" />
                             </div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Best Quote...</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trade Guardian Scrutinizing Market Route...</p>
                         </motion.div>
                       )}
                       {quotePhase !== 'GUARDIAN_SCAN' && quotes.map((quote, idx) => {
@@ -601,6 +599,40 @@ function SwapClient() {
             </div>
           </div>
         </section>
+
+        {/* ADVISORY NODE */}
+        <AnimatePresence>
+          {guardianAnalysis && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6 px-2">
+              <div className={cn(
+                "p-4 rounded-[2rem] border backdrop-blur-xl flex gap-4 shadow-2xl relative overflow-hidden",
+                guardianAnalysis.riskLevel === 'HIGH' ? "bg-red-500/5 border-red-500/20" : "bg-primary/5 border-primary/20"
+              )}>
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                  guardianAnalysis.riskLevel === 'HIGH' ? "bg-red-500/10 text-red-400" : "bg-primary/10 text-primary"
+                )}>
+                  {guardianAnalysis.riskLevel === 'HIGH' ? <ShieldAlert className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/80">Guardian Insights</p>
+                    <span className={cn(
+                      "text-[7px] font-black px-1.5 py-0.5 rounded-md uppercase",
+                      guardianAnalysis.riskLevel === 'LOW' ? "bg-green-500/20 text-green-400" : 
+                      guardianAnalysis.riskLevel === 'MEDIUM' ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"
+                    )}>Risk: {guardianAnalysis.riskLevel}</span>
+                  </div>
+                  <p className="text-[11px] font-bold text-white/60 leading-relaxed">{guardianAnalysis.analysis}</p>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Zap className="w-3 h-3 text-primary" />
+                    <p className="text-[10px] font-black text-primary uppercase">{guardianAnalysis.advice}</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="mt-6 px-4 grid grid-cols-2 gap-3 relative min-h-[100px]">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (

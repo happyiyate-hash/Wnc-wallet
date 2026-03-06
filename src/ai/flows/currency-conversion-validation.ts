@@ -1,15 +1,15 @@
-
 'use server';
 
 /**
- * @fileOverview A Trade Guardian AI agent that validates swap quotes.
- * It analyzes price impact, gas fees, and liquidity to prevent bad trades.
+ * @fileOverview A Trade Guardian AI agent that analyzes swap quotes.
+ * It provides supplementary market advice and explanations to the user.
+ * It does NOT decide whether a trade is allowed to proceed.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const SwapValidationInputSchema = z.object({
+const SwapAnalysisInputSchema = z.object({
   fromCurrency: z.string(),
   toCurrency: z.string(),
   amount: z.number(),
@@ -19,24 +19,37 @@ const SwapValidationInputSchema = z.object({
   chainName: z.string(),
 });
 
-export type SwapValidationInput = z.infer<typeof SwapValidationInputSchema>;
+export type SwapAnalysisInput = z.infer<typeof SwapAnalysisInputSchema>;
 
-const SwapValidationOutputSchema = z.object({
-  isValid: z.boolean().describe('Whether the trade is considered healthy.'),
-  validationReason: z.string().describe('Explanation of the health status or warnings.'),
-  suggestion: z.string().optional().describe('Actionable advice (e.g., "Wait for gas to drop").'),
+const SwapAnalysisOutputSchema = z.object({
+  analysis: z.string().describe('A professional summary of the trade conditions.'),
+  advice: z.string().describe('Actionable advice for the user (e.g., "Optimal conditions" or "High gas alert").'),
+  riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']).describe('The calculated risk level based on price impact and fees.'),
 });
 
-export type SwapValidationOutput = z.infer<typeof SwapValidationOutputSchema>;
+export type SwapAnalysisOutput = z.infer<typeof SwapAnalysisOutputSchema>;
 
-const swapValidationPrompt = ai.definePrompt({
-  name: 'swapValidationPrompt',
-  input: {schema: SwapValidationInputSchema},
-  output: {schema: SwapValidationOutputSchema},
-  prompt: 'You are an expert Crypto Trade Guardian. Analyze the following swap quote on the {{{chainName}}} network.\n\nTrade Details:\n- Swap: {{{amount}}} {{{fromCurrency}}} -> {{{convertedAmount}}} {{{toCurrency}}}\n- Price Impact: {{{priceImpact}}}%\n- Gas Fee: ${{{gasFeeUsd}}}\n\nYour Task:\n1. Check if the price impact is too high (usually < -2% is bad).\n2. Check if the gas fee is disproportionate to the trade amount (e.g., $20 gas for a $50 trade).\n3. Determine if the trade is "Valid" (safe/healthy) or has warnings.\n\nProvide a clear validationReason and a helpful suggestion.\nIf impact is < -3%, mark isValid: false.\nIf gas is > 20% of trade value, warn the user.',
+const swapAnalysisPrompt = ai.definePrompt({
+  name: 'swapAnalysisPrompt',
+  input: {schema: SwapAnalysisInputSchema},
+  output: {schema: SwapAnalysisOutputSchema},
+  prompt: `You are an expert Crypto Trade Analyst. Analyze the following swap quote on the {{{chainName}}} network.
+
+Trade Details:
+- Swap: {{{amount}}} {{{fromCurrency}}} -> {{{convertedAmount}}} {{{toCurrency}}}
+- Price Impact: {{{priceImpact}}}%
+- Gas Fee: \${{{gasFeeUsd}}}
+
+Your Task:
+1. Explain the market conditions for this trade in simple but professional language.
+2. Evaluate the gas fee relative to the trade size.
+3. Provide helpful advice (e.g., "This is a highly efficient route" or "Consider a larger swap to offset the gas cost").
+4. Assign a risk level based on slippage and fee overhead.
+
+Do NOT block the trade. Your role is purely advisory. Provide clear, concise insights for the user's information.`,
 });
 
-export async function validateSwapHealth(input: SwapValidationInput): Promise<SwapValidationOutput> {
-  const {output} = await swapValidationPrompt(input);
+export async function analyzeSwapConditions(input: SwapAnalysisInput): Promise<SwapAnalysisOutput> {
+  const {output} = await swapAnalysisPrompt(input);
   return output!;
 }

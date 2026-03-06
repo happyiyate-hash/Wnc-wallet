@@ -1,11 +1,11 @@
 'use server';
 
 import { 
-  validateSwapHealth,
-  type SwapValidationInput,
+  analyzeSwapConditions,
+  type SwapAnalysisInput,
 } from '@/ai/flows/currency-conversion-validation';
 
-export async function currencyConversionWithLLMValidation(input: SwapValidationInput) {
-  // Trade Guardian AI check
-  return await validateSwapHealth(input);
+export async function currencyConversionWithLLMValidation(input: SwapAnalysisInput) {
+  // Trade Guardian AI Analysis (Advisory Only)
+  return await analyzeSwapConditions(input);
 }
