@@ -1,9 +1,9 @@
-
 /**
  * INSTITUTIONAL REGISTRY DATABASE (IndexedDB)
- * Version: 1.1.0 (High-Speed Cryptographic Cache & Logo Node)
+ * Version: 1.2.0 (High-Speed Cryptographic Cache & Logo Node)
  * 
  * Provides persistent storage for derived identity nodes and asset branding.
+ * Optimized for high-volume binary and string storage.
  */
 
 const DB_NAME = 'wevina_registry_v1';
@@ -19,7 +19,6 @@ export interface CachedWallet {
 export interface CachedLogo {
   id: string; // identifier slug
   url: string;
-  blob?: Blob; // Optional: Store raw blob for instant display
   timestamp: number;
 }
 
@@ -73,41 +72,49 @@ class RegistryDB {
   }
 
   async getLogo(id: string): Promise<string | null> {
-    const db = await this.init();
-    return new Promise((resolve) => {
-      const transaction = db.transaction('logo_registry', 'readonly');
-      const store = transaction.objectStore('logo_registry');
-      const request = store.get(id);
-      request.onsuccess = () => {
-        const result = request.result;
-        if (result && result.url) {
-          resolve(result.url);
-        } else {
-          resolve(null);
-        }
-      };
-      request.onerror = () => resolve(null);
-    });
+    try {
+      const db = await this.init();
+      return new Promise((resolve) => {
+        const transaction = db.transaction('logo_registry', 'readonly');
+        const store = transaction.objectStore('logo_registry');
+        const request = store.get(id);
+        request.onsuccess = () => {
+          const result = request.result;
+          resolve(result && result.url ? result.url : null);
+        };
+        request.onerror = () => resolve(null);
+      });
+    } catch (e) {
+      return null;
+    }
   }
 
   async saveLogo(id: string, url: string) {
-    const db = await this.init();
-    return new Promise((resolve) => {
-      const transaction = db.transaction('logo_registry', 'readwrite');
-      const store = transaction.objectStore('logo_registry');
-      store.put({ id, url, timestamp: Date.now() });
-      transaction.oncomplete = () => resolve(true);
-    });
+    try {
+      const db = await this.init();
+      return new Promise((resolve) => {
+        const transaction = db.transaction('logo_registry', 'readwrite');
+        const store = transaction.objectStore('logo_registry');
+        store.put({ id, url, timestamp: Date.now() });
+        transaction.oncomplete = () => resolve(true);
+      });
+    } catch (e) {
+      return false;
+    }
   }
 
   async purgeAll() {
-    const db = await this.init();
-    const transaction = db.transaction(['vault_cache', 'logo_registry'], 'readwrite');
-    transaction.objectStore('vault_cache').clear();
-    transaction.objectStore('logo_registry').clear();
-    return new Promise((resolve) => {
-      transaction.oncomplete = () => resolve(true);
-    });
+    try {
+      const db = await this.init();
+      const transaction = db.transaction(['vault_cache', 'logo_registry'], 'readwrite');
+      transaction.objectStore('vault_cache').clear();
+      transaction.objectStore('logo_registry').clear();
+      return new Promise((resolve) => {
+        transaction.oncomplete = () => resolve(true);
+      });
+    } catch (e) {
+      return false;
+    }
   }
 }
 

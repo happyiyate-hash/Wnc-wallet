@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
@@ -21,8 +20,10 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 10.0.0 (Async Action Handshake)
- * Decoupled from Auth and environment variables.
+ * Version: 11.0.0 (Persistent Cache Handshake)
+ * 
+ * Strictly utilizes the local IndexedDB Registry for zero-latency rendering.
+ * Performs background restoration if the local node is empty.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -53,20 +54,22 @@ export default function TokenLogoDynamic({
           setIsInitializing(false);
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Fallback to fetch if DB fails
+      }
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
-      // 2. RESOLVE FINAL URL
+      // 2. RESOLVE FINAL URL (Handshake Node)
       let finalUrl: string | null = null;
 
       try {
-        // Check relative paths from metadata (The FAST Way)
+        // Strategy A: Relative CDN paths from metadata
         if (typeof logoUrl === 'string' && logoUrl.length > 0) {
           finalUrl = await getFullLogoUrl(logoUrl);
         } 
-        // Fallback: Direct Storage Lookup
+        // Strategy B: Direct Registry Lookup
         else if (name || symbol) {
           finalUrl = await getDirectLogoUrl(name || '', symbol || '');
         }
@@ -76,7 +79,7 @@ export default function TokenLogoDynamic({
 
       if (finalUrl) {
         setResolvedUrl(finalUrl);
-        // Persist for zero-latency next reload
+        // Persist for zero-latency next session
         await registryDb.saveLogo(cacheKey, finalUrl);
       }
 
@@ -90,7 +93,7 @@ export default function TokenLogoDynamic({
   if (isInitializing && !resolvedUrl) {
     return (
       <div style={{ width: size, height: size }} className={cn("shrink-0 flex items-center justify-center", className)}>
-        <div className="w-full h-full rounded-full bg-white/[0.03] animate-pulse border border-white/5" />
+        <div className="w-full h-full rounded-full bg-white/[0.05] animate-pulse border border-white/5" />
       </div>
     );
   }
@@ -117,6 +120,7 @@ export default function TokenLogoDynamic({
         }}
         onError={() => {
           setResolvedUrl(null);
+          // Purge corrupted node from registry
           registryDb.saveLogo(cacheKey, ''); 
         }}
       />
