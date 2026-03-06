@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -27,7 +28,8 @@ import {
   Activity,
   Globe,
   Repeat,
-  ArrowRight
+  ArrowRight,
+  Clock
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { cn } from '@/lib/utils';
@@ -55,7 +57,7 @@ interface SwapQuote {
 }
 
 type QuotePhase = 'IDLE' | 'FETCHING' | 'SHOW_ALL' | 'SCANNING' | 'FINAL_SELECTED' | 'FADING_OUT' | 'SHOW_VISUAL' | 'COMPLETED';
-type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED';
+type ExecutionPhase = 'IDLE' | 'VERIFYING' | 'LIQUIDITY' | 'APPROVING' | 'SENDING' | 'SETTLING' | 'SUCCESS' | 'FAILED' | 'PIVOT_CONVERTING' | 'PIVOT_BRIDGING' | 'PIVOT_FINALIZING';
 
 const formatExactCrypto = (val: number): string => {
   if (!val || val <= 0) return '0';
@@ -90,6 +92,7 @@ function SwapClient() {
 
   // EXECUTION ENGINE
   const [executionPhase, setExecutionPhase] = useState<ExecutionPhase>('IDLE');
+  const [currentPivotStep, setCurrentPivotStep] = useState<1 | 2 | 3>(1);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
@@ -263,6 +266,7 @@ function SwapClient() {
     setIsExecuting(true);
     setExecutionError(null);
     setExecutionPhase('VERIFYING');
+    setCurrentPivotStep(1);
     
     try {
       const balance = parseFloat(fromToken.balance || '0');
@@ -321,6 +325,13 @@ function SwapClient() {
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
+          // PIVOT ORCHESTRATION
+          if (selectedQuote.isPivotRoute) {
+              setExecutionPhase('PIVOT_CONVERTING');
+              setCurrentPivotStep(1);
+              await new Promise(r => setTimeout(r, 2000));
+          }
+
           setExecutionPhase('LIQUIDITY');
           const handshakeRes = await fetch('/api/swap/execute', {
             method: 'POST',
@@ -337,6 +348,12 @@ function SwapClient() {
           const handshake = await handshakeRes.json();
           if (!handshake.success) throw new Error(handshake.error || "Handshake Rejected.");
 
+          if (selectedQuote.isPivotRoute) {
+              setExecutionPhase('PIVOT_BRIDGING');
+              setCurrentPivotStep(2);
+              await new Promise(r => setTimeout(r, 2000));
+          }
+
           setExecutionPhase('SENDING');
           let userTx;
           if (fromToken.isNative) {
@@ -349,6 +366,12 @@ function SwapClient() {
           setExecutionPhase('SETTLING');
           const receipt = await userTx.wait();
           
+          if (selectedQuote.isPivotRoute) {
+              setExecutionPhase('PIVOT_FINALIZING');
+              setCurrentPivotStep(3);
+              await new Promise(r => setTimeout(r, 2500));
+          }
+
           await fetch('/api/swap/finalize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -397,6 +420,12 @@ function SwapClient() {
     { label: 'Handshake Route', value: selectedQuote?.provider || 'Hybrid', icon: Workflow }
   ];
 
+  const pivotSteps = [
+    { id: 1, label: `Converting ${fromToken?.symbol} to USDT (Source)`, icon: Zap },
+    { id: 2, label: `Bridging USDT to ${toToken?.name}`, icon: Globe },
+    { id: 3, label: `Converting USDT to ${toToken?.symbol} (Destination)`, icon: Repeat }
+  ];
+
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative overflow-hidden">
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-black/50 backdrop-blur-2xl sticky top-0 z-50">
@@ -439,23 +468,45 @@ function SwapClient() {
       <AnimatePresence>
         {isExecuting && (
           <motion.div initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -100, opacity: 0 }} className="fixed top-4 inset-x-4 z-[200] max-w-lg mx-auto">
-            <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-primary/20 rounded-[2rem] p-5 shadow-2xl overflow-hidden relative">
-              <div className="relative z-10 flex items-center gap-4">
-                <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
-                  {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
+            <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-primary/20 rounded-[2rem] p-6 shadow-2xl overflow-hidden relative">
+              <div className="relative z-10 space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg", executionPhase === 'FAILED' ? "bg-red-500/20 text-red-500" : "bg-primary/10 text-primary")}>
+                    {executionPhase === 'SUCCESS' ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : executionPhase === 'FAILED' ? <ShieldAlert className="w-6 h-6" /> : <Loader2 className="w-6 h-6 animate-spin" />}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white">
+                      {executionPhase === 'VERIFYING' && 'Verifying Nodes...'}
+                      {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
+                      {executionPhase === 'APPROVING' && 'Authorizing Token...'}
+                      {executionPhase === 'SENDING' && 'Executing Handshake...'}
+                      {executionPhase === 'SETTLING' && 'Settling Ledger...'}
+                      {executionPhase.startsWith('PIVOT') && 'Multi-Step Pivot Active'}
+                      {executionPhase === 'SUCCESS' && 'Handshake Secured'}
+                      {executionPhase === 'FAILED' && 'Handshake Aborted'}
+                    </h3>
+                    <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Hybrid Protocol v5.1 Active'}</span>
+                  </div>
                 </div>
-                <div className="flex-1 space-y-1">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-white">
-                    {executionPhase === 'VERIFYING' && 'Verifying Nodes...'}
-                    {executionPhase === 'LIQUIDITY' && 'Sourcing Liquidity...'}
-                    {executionPhase === 'APPROVING' && 'Authorizing Token...'}
-                    {executionPhase === 'SENDING' && 'Executing Handshake...'}
-                    {executionPhase === 'SETTLING' && 'Settling Ledger...'}
-                    {executionPhase === 'SUCCESS' && 'Handshake Secured'}
-                    {executionPhase === 'FAILED' && 'Handshake Aborted'}
-                  </h3>
-                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">{executionError || 'Hybrid Protocol v5.0 Active'}</span>
-                </div>
+
+                {selectedQuote?.isPivotRoute && executionPhase !== 'SUCCESS' && executionPhase !== 'FAILED' && (
+                  <div className="space-y-3 pt-2">
+                    {pivotSteps.map((step) => {
+                      const isActive = currentPivotStep === step.id;
+                      const isCompleted = currentPivotStep > step.id;
+                      return (
+                        <div key={step.id} className={cn("flex items-center gap-3 transition-opacity duration-500", !isActive && !isCompleted && "opacity-20")}>
+                          <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center border", isCompleted ? "bg-green-500/20 border-green-500/40 text-green-500" : isActive ? "bg-primary/20 border-primary/40 text-primary animate-pulse" : "bg-white/5 border-white/10 text-muted-foreground")}>
+                            {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <step.icon className="w-3.5 h-3.5" />}
+                          </div>
+                          <span className={cn("text-[10px] font-black uppercase tracking-widest", isCompleted ? "text-green-500/60" : isActive ? "text-white" : "text-muted-foreground")}>
+                            {step.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
