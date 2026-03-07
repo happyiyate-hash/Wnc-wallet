@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -235,11 +234,9 @@ function SwapClient() {
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1,
             toToken.chainId ?? 1,
-            fromToken.symbol,
-            toToken.symbol,
-            providerType,
-            fromToken.isNative,
-            toToken.isNative
+            fromSymbol,
+            toSymbol,
+            providerType
         );
         
         let quote: SwapQuote | null = null;
@@ -345,7 +342,7 @@ function SwapClient() {
 
             quote = {
                 id: 'internal-vault',
-                provider: isPivotRequired ? 'USDC Bridge' : 'Sync Node',
+                provider: isPivotRequired ? 'USDT Bridge' : 'Sync Node',
                 logo: null,
                 receiveAmount: result.receiveAmount,
                 fee: feeData.networkFee,
@@ -631,6 +628,52 @@ function SwapClient() {
           </div>
         </section>
 
+        {/* EXECUTION STATUS OVERLAY */}
+        <AnimatePresence>
+          {isExecuting && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-10 space-y-6">
+              <div className="p-6 bg-white/[0.03] border border-white/10 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+                <div className="flex flex-col items-center gap-6 text-center">
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 flex items-center justify-center bg-black/40">
+                      <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                    </div>
+                    {executionPhase === 'SUCCESS' && (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -inset-1 bg-green-500 rounded-[2.5rem] flex items-center justify-center z-20">
+                        <CheckCircle2 className="w-12 h-12 text-white" />
+                      </motion.div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-black uppercase tracking-tight text-white">
+                      {executionPhase === 'VERIFYING' && 'Auditing Identity'}
+                      {executionPhase === 'LIQUIDITY' && 'Locking Node'}
+                      {executionPhase === 'APPROVING' && 'Approving Asset'}
+                      {executionPhase === 'SENDING' && 'Broadcasting Leg 1'}
+                      {executionPhase === 'SETTLING' && 'Clearing Ledger'}
+                      {executionPhase === 'PIVOT_CONVERTING' && 'Swapping to Intermediary'}
+                      {executionPhase === 'PIVOT_BRIDGING' && 'Crossing Bridge Node'}
+                      {executionPhase === 'PIVOT_FINALIZING' && 'Fulfilling Target Node'}
+                      {executionPhase === 'SUCCESS' && 'Settlement Verified'}
+                      {executionPhase === 'FAILED' && 'Handshake Failed'}
+                    </h3>
+                    <p className="text-[9px] font-black uppercase text-primary tracking-[0.2em] animate-pulse">
+                      {executionPhase === 'SUCCESS' ? 'Ledger Updated' : 'Registry Protocol Active'}
+                    </p>
+                  </div>
+
+                  {executionError && (
+                    <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold uppercase leading-relaxed">
+                      {executionError}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="mt-6 px-4 grid grid-cols-2 gap-2">
           {(quotePhase === 'SHOW_VISUAL' || quotePhase === 'COMPLETED') && infoItems.map((item, idx) => (
             <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
@@ -660,12 +703,12 @@ function SwapClient() {
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative p-3 rounded-full bg-primary/10 border border-primary/20">
                       {selectedQuote?.isPivotRoute ? (
-                        <div className="relative"><TokenLogoDynamic symbol="USDC" name="USD Coin" logoUrl={null} size={24} className="opacity-80" alt="pivot" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute -inset-2 rounded-full border border-dashed border-primary/30" /></div>
+                        <div className="relative"><TokenLogoDynamic symbol="USDT" name="Tether USD" logoUrl={null} size={24} className="opacity-80" alt="pivot" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute -inset-2 rounded-full border border-dashed border-primary/30" /></div>
                       ) : (
                         <><Activity className="w-6 h-6 text-primary" /><motion.div animate={{ scale: [1, 1.15, 1], rotate: [0, 180, 360] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} className="absolute inset-0 rounded-full border border-dashed border-primary/30" /></>
                       )}
                     </div>
-                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'Bridge' : 'Sync'}</span>
+                    <span className="text-[7px] font-black text-primary uppercase tracking-widest">{selectedQuote?.isPivotRoute ? 'Automatic Pivot' : 'Verified Route'}</span>
                   </div>
 
                   <div className="flex-1 px-1 relative h-3 overflow-hidden">
