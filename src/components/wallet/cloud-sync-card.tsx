@@ -3,25 +3,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Cloud, 
   Database, 
   CheckCircle2, 
-  AlertCircle, 
   RefreshCw, 
   Cpu, 
   Zap, 
-  ShieldCheck,
-  Search
+  Search,
+  Check
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
  * INSTITUTIONAL SYNC SENTINEL
- * Version: 6.0.0 (Stable Pop-Layout Protocol)
+ * Version: 7.0.0 (Weighted Narrative Protocol)
  * 
- * Implements a strictly sequenced "Slide-In -> Verify -> Slide-Out" animation.
- * Optimized to prevent flickering and reverse-animation glitches.
+ * Implements a strict "Slide Right -> Focus Center -> Success Pop -> Slide Left" sequence.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -94,8 +91,11 @@ export default function CloudSyncCard() {
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Registry Sentinel</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[8px] font-black uppercase text-primary tracking-widest animate-pulse">
-                      {status === 'completed' ? 'Synchronization Nominal' : 'Hardware Audit Active'}
+                    <span className={cn(
+                        "text-[8px] font-black uppercase tracking-widest",
+                        isVerified ? "text-green-500" : "text-primary animate-pulse"
+                    )}>
+                      {status === 'completed' ? 'Vault Nominal' : `Auditing ${chain || 'Node'}...`}
                     </span>
                   </div>
                 </div>
@@ -103,7 +103,7 @@ export default function CloudSyncCard() {
 
               <div className="bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-2">
                   <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
-                  <span className="text-[10px] font-black text-white">{chain || '---'}</span>
+                  <span className="text-[10px] font-black text-white">{chain || 'BOOT'}</span>
               </div>
             </div>
 
@@ -112,10 +112,10 @@ export default function CloudSyncCard() {
               <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
                   <motion.div 
                       animate={{ width: `${progress}%` }}
-                      transition={{ type: 'spring', damping: 20 }}
+                      transition={{ type: 'spring', damping: 25, stiffness: 100 }}
                       className={cn(
-                          "h-full bg-primary transition-colors duration-500",
-                          status === 'mismatch' ? "bg-red-500" : "bg-primary"
+                          "h-full transition-colors duration-500",
+                          status === 'mismatch' ? "bg-red-500" : isVerified ? "bg-green-500" : "bg-primary"
                       )}
                   />
               </div>
@@ -129,7 +129,7 @@ export default function CloudSyncCard() {
                   initial={{ x: 300, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: -300, opacity: 0 }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 150 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 120 }}
                   className="w-full grid grid-cols-2 gap-3"
                 >
                   {/* CLOUD SLOT */}
@@ -145,25 +145,29 @@ export default function CloudSyncCard() {
 
                   {/* LOCAL SLOT */}
                   <div className={cn(
-                      "p-4 rounded-2xl border transition-all duration-500 flex flex-col justify-center space-y-1 relative",
+                      "p-4 rounded-2xl border transition-all duration-700 flex flex-col justify-center space-y-1 relative",
                       isVerified ? "bg-green-500/10 border-green-500/40" : "bg-primary/5 border-primary/20"
                   )}>
                     <div className="flex items-center gap-1.5">
                         <Cpu className="w-3 h-3 text-primary" />
                         <span className="text-[8px] font-black text-primary uppercase tracking-tighter">Hardware</span>
                     </div>
-                    <p className="text-[10px] font-mono text-white/90 truncate">
+                    <p className={cn(
+                        "text-[10px] font-mono transition-colors duration-500",
+                        isVerified ? "text-green-400 font-bold" : "text-white/90"
+                    )}>
                         {truncateAddress(localValue)}
                     </p>
                     
+                    {/* SUCCESS POP CHECKMARK */}
                     <AnimatePresence>
                       {isVerified && (
                           <motion.div 
-                              initial={{ scale: 0, rotate: -45 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              className="absolute top-2 right-2"
+                              initial={{ scale: 0, opacity: 0, rotate: -45 }}
+                              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                              className="absolute top-2 right-2 bg-green-500 rounded-full p-0.5 border border-white/20 shadow-lg"
                           >
-                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                              <Check className="w-2.5 h-2.5 text-white stroke-[4]" />
                           </motion.div>
                       )}
                     </AnimatePresence>
@@ -175,14 +179,14 @@ export default function CloudSyncCard() {
             {/* STATUS FEEDBACK */}
             <div className="text-center pt-1">
                 <p className={cn(
-                    "text-[9px] font-black uppercase tracking-[0.25em]",
+                    "text-[9px] font-black uppercase tracking-[0.25em] transition-colors duration-500",
                     status === 'mismatch' ? "text-red-500" : isVerified ? "text-green-500" : "text-white/40"
                 )}>
-                    {status === 'checking' && `Auditing ${chain} Registry Node...`}
-                    {status === 'mismatch' && 'Registry Mismatch Detected'}
+                    {status === 'checking' && `Auditing ${chain} Node...`}
+                    {status === 'mismatch' && 'Registry Collision'}
                     {status === 'syncing' && 'Repairing Cloud Node...'}
-                    {status === 'success' && `${chain} Handshake Verified`}
-                    {status === 'completed' && 'Institutional Vault Secured'}
+                    {status === 'success' && 'Handshake Verified'}
+                    {status === 'completed' && 'Vault Secured'}
                 </p>
             </div>
           </div>
