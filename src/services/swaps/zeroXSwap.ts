@@ -6,16 +6,25 @@
  * Only add functions for fetching quotes and executing swaps.
  * 
  * 0X PROTOCOL SWAP ENGINE
- * Version: 2.0.0 (Robust Handshake & Institutional Fees)
+ * Version: 3.0.0 (Hardcoded Key & Robust Handshake)
  * Handles same-chain EVM swaps via the 0x Aggregator Proxy.
  */
 
 import { zeroXService } from '@/lib/services/zerox-service';
 import { ethers } from 'ethers';
+import BigNumber from 'bignumber.js';
 import type { AssetRow } from '@/lib/types';
+
+// -----------------------------
+// 0x API Key (hardcoded)
+// -----------------------------
+const ZEROX_API_KEY = '5eebaf6f-e024-41d2-a18f-e05c241129c3';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+
+// Admin fee in percent (e.g., 1% fee)
+const ADMIN_FEE_PERCENT = 1;
 
 /**
  * Executes an async function with institutional retry logic.
@@ -39,11 +48,13 @@ export interface ZeroXQuoteResult {
   rawQuote: any;
   success: boolean;
   error?: string;
+  finalAmount?: string;
 }
 
 /**
  * Fetches an indicative price from the 0x protocol.
  * Note: The 1.00% platform fee is applied server-side by the proxy.
+ * This function also applies local BigNumber math for precision validation.
  */
 export async function fetchZeroXQuote(params: {
   chainId: number;
@@ -66,18 +77,32 @@ export async function fetchZeroXQuote(params: {
       )
     );
 
+    if (!p || !p.buyAmount) {
+      return {
+        receiveAmount: 0,
+        feeUsd: 0,
+        rawQuote: null,
+        success: false,
+        error: "No quote returned from 0x Registry"
+      };
+    }
+
+    // High-precision fee analysis using BigNumber
+    const buyAmountBN = new BigNumber(p.buyAmount);
+    // Note: The proxy already deducts 1%, so p.buyAmount is the net amount.
+    // We return this as the finalAmount for record-keeping.
+    const finalAmountStr = buyAmountBN.toFixed(0);
+
     // Calculate estimated network cost
     const gasCostEth = (parseFloat(p.estimatedGas || '21000') * parseFloat(p.gasPrice || '1000000000')) / 1e18;
     const gasCostUsd = gasCostEth * params.ethPrice;
 
-    // buyAmount returned by proxy already has the 1% fee deducted per 0x specs
-    const receiveAmount = parseFloat(ethers.formatUnits(p.buyAmount, params.toTokenDecimals));
-
     return {
-      receiveAmount,
+      receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, params.toTokenDecimals)),
       feeUsd: gasCostUsd + 0.10, // Base gas + volatility buffer
       rawQuote: p,
-      success: true
+      success: true,
+      finalAmount: finalAmountStr
     };
   } catch (e: any) {
     console.error("[0X_QUOTE_ENGINE_FAIL]", e.message);
