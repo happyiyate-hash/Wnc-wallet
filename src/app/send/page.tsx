@@ -48,10 +48,11 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { calculateSendFees } from '@/lib/services/swap-fee-calculator';
 import { getRPC } from '@/lib/wallets/services/rpc-service';
 import { prepareSplitTransaction } from '@/lib/services/split-transaction-service';
+import { getFeeRecipient } from '@/lib/wallets/services/fee-recipients';
 
 /**
  * INSTITUTIONAL ADDRESS DETECTION ENGINE
- * Version: 5.0.0 (Polkadot/BTC Conflict Resolution)
+ * Version: 5.1.0 (Polkadot/BTC Precision & MODERN BTC SYNC)
  */
 const detectAddressType = (input: string) => {
   if (!input) return 'invalid';
@@ -61,7 +62,6 @@ const detectAddressType = (input: string) => {
   if (/^835\d{7}$/.test(clean)) return 'account-id';
 
   // 2. HIGH PRIORITY POLKADOT (Resolves '1' prefix collision with BTC)
-  // Polkadot addresses are length 47-48. Legacy BTC addresses are < 35.
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
         const [isValidPolkadot] = checkAddress(clean, 0);
@@ -188,6 +188,49 @@ function SendClient() {
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // LIVE SCANNER SENTINEL
+  useEffect(() => {
+    let html5QrCode: Html5Qrcode | null = null;
+
+    if (isScannerOpen) {
+      // Delay to ensure the "reader" element is rendered in the DOM
+      const timer = setTimeout(async () => {
+        try {
+          const element = document.getElementById("reader");
+          if (!element) return;
+
+          html5QrCode = new Html5Qrcode("reader");
+          const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              // Success Node
+              setRecipientInput(decodedText);
+              handleRecipientInputChange(decodedText);
+              setIsScannerOpen(false);
+              
+              if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(() => {});
+              }
+            },
+            () => {} // Silent on parse errors
+          );
+        } catch (err) {
+          console.warn("[SCANNER_INIT_FAIL]", err);
+        }
+      }, 300);
+
+      return () => {
+        clearTimeout(timer);
+        if (html5QrCode && html5QrCode.isScanning) {
+          html5QrCode.stop().catch(() => {});
+        }
+      };
+    }
+  }, [isScannerOpen]);
 
   useEffect(() => {
     if (allAssets.length === 0 || hasInitialized.current) return;
