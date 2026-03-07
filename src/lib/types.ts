@@ -141,7 +141,7 @@ export interface Notification {
   user_id: string;
   from_user_id?: string;
   transaction_id?: string;
-  type: 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REWARD' | 'REQUEST';
+  type: 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REWARD' | 'REQUEST' | 'QR_SCAN' | 'CROSS_CHAIN';
   title: string;
   message: string;
   amount?: number;

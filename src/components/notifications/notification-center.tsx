@@ -3,10 +3,11 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { ShieldAlert, Info, Bell, Loader2, X, CheckCircle2, ChevronRight, Zap, ArrowDownLeft, ArrowUpRight, User } from 'lucide-react';
+import { ShieldAlert, Info, Bell, Loader2, X, CheckCircle2, ChevronRight, Zap, ArrowDownLeft, ArrowUpRight, User, QrCode, Workflow } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@/contexts/wallet-provider';
+import { useUser } from '@/contexts/user-provider';
 import { ScrollArea } from '../ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -14,15 +15,16 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER
- * Version: 5.0.0 (Supabase Real-Time Optimized)
+ * Version: 6.0.0 (Reactive Supabase Real-Time)
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setHasNewNotifications } = useWallet();
+  const { user } = useUser();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!supabase || !isNotificationsOpen) return;
+    if (!supabase || !user || !isNotificationsOpen) return;
 
     const fetchNotifications = async () => {
       setLoading(true);
@@ -36,6 +38,7 @@ export default function NotificationCenter() {
               photo_url
             )
           `)
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(25);
 
@@ -56,7 +59,53 @@ export default function NotificationCenter() {
     };
 
     fetchNotifications();
-  }, [isNotificationsOpen, setHasNewNotifications]);
+
+    // REAL-TIME REACTIVE REGISTRY
+    const channel = supabase
+      .channel(`notifications-ui-sync-${user.id}`)
+      .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'notifications', 
+          filter: `user_id=eq.${user.id}` 
+      }, (payload) => {
+          const newNode = payload.new as Notification;
+          setNotifications((prev) => [newNode, ...prev].slice(0, 25));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isNotificationsOpen, user, setHasNewNotifications]);
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'TRANSFER_IN':
+      case 'REWARD':
+        return <ArrowDownLeft className="w-6 h-6" />;
+      case 'TRANSFER_OUT':
+        return <ArrowUpRight className="w-6 h-6" />;
+      case 'QR_SCAN':
+        return <QrCode className="w-6 h-6" />;
+      case 'CROSS_CHAIN':
+        return <Workflow className="w-6 h-6" />;
+      default:
+        return <Zap className="w-6 h-6" />;
+    }
+  };
+
+  const getIconColor = (type: string) => {
+    switch (type) {
+      case 'TRANSFER_IN':
+      case 'REWARD':
+        return 'bg-green-500/10 text-green-500';
+      case 'TRANSFER_OUT':
+        return 'bg-red-500/10 text-red-400';
+      default:
+        return 'bg-primary/10 text-primary';
+    }
+  };
 
   if (!isNotificationsOpen) return null;
 
@@ -76,7 +125,7 @@ export default function NotificationCenter() {
           animate={{ y: 0 }}
           exit={{ y: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute top-0 inset-x-0 bg-[#0a0a0c] border-b border-white/10 rounded-b-[3.5rem] shadow-2xl h-[70vh] flex flex-col overflow-hidden"
+          className="absolute top-0 inset-x-0 bg-[#0a0a0c] border-b border-white/10 rounded-b-[3.5rem] shadow-2xl h-[75vh] flex flex-col overflow-hidden"
         >
           <div className="p-8 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -85,7 +134,7 @@ export default function NotificationCenter() {
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Registry Handshakes</h3>
-                <p className="text-[9px] font-black uppercase text-primary opacity-60">Real-Time Ledger Sync v5.0</p>
+                <p className="text-[9px] font-black uppercase text-primary opacity-60">Reactive Sync v6.0</p>
               </div>
             </div>
             <button 
@@ -104,68 +153,59 @@ export default function NotificationCenter() {
                   <p className="text-[10px] font-black uppercase tracking-widest text-white">Auditing Registry...</p>
                 </div>
               ) : notifications.length > 0 ? (
-                notifications.map((n, i) => {
-                  const isIn = n.type === 'TRANSFER_IN' || n.type === 'REWARD';
-                  const isOut = n.type === 'TRANSFER_OUT';
-                  
-                  return (
-                    <motion.div 
-                      key={n.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className={cn(
-                        "p-5 rounded-[2rem] border flex gap-4 transition-all group hover:bg-white/[0.04] relative overflow-hidden",
-                        n.read ? "bg-white/[0.01] border-white/5" : "bg-primary/[0.03] border-primary/20 shadow-xl"
-                      )}
-                    >
-                      {!n.read && (
-                        <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      )}
-                      
-                      <div className="relative shrink-0">
-                        <div className={cn(
-                          "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
-                          isIn ? 'bg-green-500/10 text-green-500' : 
-                          isOut ? 'bg-red-500/10 text-red-400' : 
-                          'bg-primary/10 text-primary'
-                        )}>
-                          {isIn ? <ArrowDownLeft className="w-6 h-6" /> : 
-                           isOut ? <ArrowUpRight className="w-6 h-6" /> : 
-                           <Zap className="w-6 h-6" />}
-                        </div>
-                        {n.sender && (
-                          <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full">
-                            <Avatar className="w-5 h-5">
-                              <AvatarImage src={n.sender.photo_url} />
-                              <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name[0]}</AvatarFallback>
-                            </Avatar>
-                          </div>
-                        )}
+                notifications.map((n, i) => (
+                  <motion.div 
+                    key={n.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className={cn(
+                      "p-5 rounded-[2rem] border flex gap-4 transition-all group hover:bg-white/[0.04] relative overflow-hidden",
+                      n.read ? "bg-white/[0.01] border-white/5" : "bg-primary/[0.03] border-primary/20 shadow-xl"
+                    )}
+                  >
+                    {!n.read && (
+                      <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary animate-pulse" />
+                    )}
+                    
+                    <div className="relative shrink-0">
+                      <div className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+                        getIconColor(n.type)
+                      )}>
+                        {getIcon(n.type)}
                       </div>
-                      
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-black text-white uppercase tracking-tight">{n.title}</p>
-                          <span className="text-[8px] font-black text-muted-foreground uppercase opacity-40">
-                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                      {n.sender && (
+                        <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full">
+                          <Avatar className="w-5 h-5">
+                            <AvatarImage src={n.sender.photo_url} />
+                            <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name[0]}</AvatarFallback>
+                          </Avatar>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-black text-white uppercase tracking-tight">{n.title}</p>
+                        <span className="text-[8px] font-black text-muted-foreground uppercase opacity-40">
+                          {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed font-medium">
+                        {n.message}
+                      </p>
+                      {n.amount && (
+                        <div className="pt-1 flex items-center gap-1.5">
+                          <Zap className="w-3 h-3 text-primary fill-primary opacity-40" />
+                          <span className="text-[10px] font-black text-white tabular-nums">
+                            {n.type === 'TRANSFER_IN' || n.type === 'REWARD' ? '+' : '-'}{n.amount} {n.token || 'WNC'}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed font-medium">
-                          {n.message}
-                        </p>
-                        {n.amount && (
-                          <div className="pt-1 flex items-center gap-1.5">
-                            <Zap className="w-3 h-3 text-primary fill-primary opacity-40" />
-                            <span className="text-[10px] font-black text-white tabular-nums">
-                              {isIn ? '+' : '-'}{n.amount} {n.token || 'WNC'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })
+                      )}
+                    </div>
+                  </motion.div>
+                ))
               ) : (
                 <div className="py-32 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
                   <div className="w-20 h-20 rounded-[2.5rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center">
