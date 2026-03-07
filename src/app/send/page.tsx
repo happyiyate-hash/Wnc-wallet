@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -14,7 +13,6 @@ import {
   Loader2, 
   Fuel,
   ShieldCheck,
-  Timer,
   Search,
   ArrowRight,
   ShieldAlert,
@@ -29,10 +27,6 @@ import {
   Repeat
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
-import { ethers } from 'ethers';
-import * as xrpl from 'xrpl';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { checkAddress } from '@polkadot/util-crypto';
 import { useToast } from '@/hooks/use-toast';
 import type { AssetRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -46,113 +40,15 @@ import TransactionReceiptSheet from '@/components/wallet/transaction-receipt-she
 import GlobalTokenSelector from '@/components/shared/global-token-selector';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
-import { calculateSendFees } from '@/lib/services/swap-fee-calculator';
-import { getRPC } from '@/lib/wallets/services/rpc-service';
-import { prepareSplitTransaction } from '@/lib/services/split-transaction-service';
-import { getFeeRecipient } from '@/lib/wallets/services/fee-recipients';
 
-/**
- * INSTITUTIONAL ADDRESS DETECTION ENGINE
- * Version: 5.1.0 (Polkadot/BTC Precision & MODERN BTC SYNC)
- */
-const detectAddressType = (input: string) => {
-  if (!input) return 'invalid';
-  const clean = input.trim();
-  
-  // 1. REGISTRY LOOKUP (Institutional ID)
-  if (/^835\d{7}$/.test(clean)) return 'account-id';
-
-  // 2. HIGH PRIORITY POLKADOT (Resolves '1' prefix collision with BTC)
-  if (clean.length >= 47 && !clean.includes('0x')) {
-    try {
-        const [isValidPolkadot] = checkAddress(clean, 0);
-        const [isValidKusama] = checkAddress(clean, 2);
-        const [isValidGeneric] = checkAddress(clean, 42);
-        
-        if (isValidPolkadot || isValidGeneric) return 'polkadot';
-        if (isValidKusama) return 'kusama';
-    } catch (e) {}
-  }
-
-  // 3. MODERN BITCOIN (BECH32) - The "Exact Difference"
-  if (clean.startsWith('bc1')) return 'btc';
-
-  // 4. EVM COMPATIBLE
-  if (clean.startsWith('0x')) {
-    const formatRegex = /^0x[a-fA-F0-9]{40}$/;
-    const moveChainRegex = /^0x[a-fA-F0-9]{64}$/;
-    if (moveChainRegex.test(clean)) return 'move-chain'; 
-    if (!formatRegex.test(clean)) return 'invalid-evm-format';
-    try {
-        if (ethers.isAddress(clean)) return 'evm';
-        return 'invalid-evm-checksum';
-    } catch(e) { return 'invalid-evm-format'; }
-  }
-  
-  // 5. OTHER PROTOCOLS
-  if (clean.startsWith('r')) {
-    if (xrpl.isValidClassicAddress(clean)) return 'xrp';
-    return 'invalid-xrp';
-  }
-
-  if (clean.length === 58 && /^[A-Z2-7]{58}$/.test(clean)) return 'algorand';
-  if (clean.startsWith('T') && clean.length === 34) return 'tron';
-  if (clean.startsWith('D') && clean.length === 34) return 'doge';
-  
-  // 6. LEGACY BTC (Only if not already identified as DOT)
-  if (clean.startsWith('1') || clean.startsWith('3')) return 'btc';
-  
-  if (clean.startsWith('ltc1') || clean.startsWith('L') || clean.startsWith('M')) return 'ltc';
-  if (clean.startsWith('cosmos1')) return 'cosmos';
-  if (clean.startsWith('osmo1')) return 'osmosis';
-  if (clean.startsWith('secret1')) return 'secret';
-  if (clean.startsWith('inj1')) return 'injective';
-  if (clean.startsWith('celestia1')) return 'celestia';
-  if (clean.startsWith('addr1')) return 'cardano';
-
-  if (clean.endsWith('.near') || clean.endsWith('.testnet') || /^[a-f0-9]{64}$/.test(clean)) {
-    return 'near';
-  }
-
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(clean)) {
-    return 'solana';
-  }
-  
-  return 'invalid';
-};
-
-const getDetectedNetworkMeta = (type: string) => {
-    if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
-    if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
-    if (type === 'kusama') return { name: 'Kusama', symbol: 'KSM' };
-    if (type === 'evm' || type === 'invalid-evm-checksum' || type === 'invalid-evm-format') return { name: 'Ethereum', symbol: 'ETH' };
-    if (type === 'near') return { name: 'NEAR Protocol', symbol: 'NEAR' };
-    if (type === 'btc') return { name: 'Bitcoin', symbol: 'BTC' };
-    if (type === 'ltc') return { name: 'Litecoin', symbol: 'LTC' };
-    if (type === 'doge') return { name: 'Dogecoin', symbol: 'DOGE' };
-    if (type === 'solana') return { name: 'Solana', symbol: 'SOL' };
-    if (type === 'cosmos') return { name: 'Cosmos Hub', symbol: 'ATOM' };
-    if (type === 'osmosis') return { name: 'Osmosis', symbol: 'OSMO' };
-    if (type === 'secret') return { name: 'Secret Network', symbol: 'SCRT' };
-    if (type === 'injective') return { name: 'Injective', symbol: 'INJ' };
-    if (type === 'celestia') return { name: 'Celestia', symbol: 'TIA' };
-    if (type === 'cardano') return { name: 'Cardano', symbol: 'ADA' };
-    if (type === 'tron') return { name: 'TRON', symbol: 'TRX' };
-    if (type === 'algorand') return { name: 'Algorand', symbol: 'ALGO' };
-    if (type === 'hedera') return { name: 'Hedera', symbol: 'HBAR' };
-    if (type === 'tezos') return { name: 'Tezos', symbol: 'XTZ' };
-    if (type === 'move-chain') return { name: 'Move Chain', symbol: 'MOVE' };
-    if (type === 'account-id') return { name: 'Internal Registry', symbol: 'ID' };
-    return null;
-};
-
-const mapTechnicalError = (err: any): string => {
-  const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('insufficient funds') || msg.includes('insufficient balance')) return "Insufficient Funds: Your node balance is too low to authorize this dispatch.";
-  if (msg.includes('user rejected')) return "Transaction Cancelled: You rejected the request in your terminal.";
-  if (err.message) return `System Advisory: ${err.message}`;
-  return "Dispatch Error: The transaction was rejected by the network protocol.";
-};
+// IMPORTING LOGIC FROM SHARED LAYER
+import { 
+  detectAddressType, 
+  getDetectedNetworkMeta, 
+  mapTechnicalError, 
+  performTransactionDispatch,
+  calculateTransactionFees
+} from '@/components/wallet/send/WalletComponents';
 
 function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh, setActiveFulfillmentId } = useWallet();
@@ -193,6 +89,7 @@ function SendClient() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // QR CODE SCANNING LOGIC (Maintained in page.tsx)
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
 
@@ -277,31 +174,24 @@ function SendClient() {
     const rate = rates[selectedCurrency] || 1;
     
     if (inputType === 'token') {
-      // Tokens -> Fiat
       const fiatVal = val * livePrice * rate;
       setDisplayAmount(fiatVal > 0 ? fiatVal.toFixed(2) : '');
       setInputType('fiat');
     } else {
-      // Fiat -> Tokens
       const tokenVal = val / (livePrice * rate || 1);
       setDisplayAmount(tokenVal > 0 ? tokenVal.toFixed(6) : '');
       setInputType('token');
     }
   };
 
+  // Fee logic using the logic service
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
     const resolveFees = async () => {
-        try {
-            const chainKey = activeNetwork.name || 'Ethereum';
-            const feeData = await calculateSendFees(0, chainKey);
-            setTotalFeeUsd(feeData.totalProtocolFee);
-            setAdminFeeUsd(feeData.adminFee);
-        } catch (e) {
-            setTotalFeeUsd(0.05);
-            setAdminFeeUsd(0.05);
-        }
+        const fees = await calculateTransactionFees(activeNetwork);
+        setTotalFeeUsd(fees.total);
+        setAdminFeeUsd(fees.admin);
     };
     resolveFees();
   }, [isConfirmOpen, amount, activeNetwork]);
@@ -318,11 +208,10 @@ function SendClient() {
   }, [debouncedRecipient, accountNumber, wallets]);
 
   const isWnc = selectedToken?.symbol === 'WNC';
-  
   const isWncAddressError = isWnc && debouncedRecipient.length > 0 && addrType !== 'account-id';
 
   const validationError = useMemo(() => {
-    if (isSelfTransfer) return null;
+    if (isSelfTransfer) return { title: "Self-Reflect Detected", message: "Dispatches to your own node are blocked to prevent redundancy." };
     if (isWncAddressError) return { title: "Registry Guard", message: "Sorry, we can't send WNC to raw addresses. You need to paste a unique ID number for any recipient." };
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
@@ -370,7 +259,6 @@ function SendClient() {
       if (addrType === 'account-id') {
         setRecipientProfile(null); setIsResolving(true); setResolutionError(null);
         try {
-          if (!supabase) throw new Error("Registry offline.");
           const { data: userRecord, error: fetchErr } = await supabase.from('profiles').select('*').eq('account_number', input).maybeSingle();
           if (currentId !== resolutionCounter.current) return;
           if (fetchErr) throw fetchErr;
@@ -389,79 +277,35 @@ function SendClient() {
         finally { if (currentId === resolutionCounter.current) setIsResolving(false); }
         return;
       }
-      if (currentId === resolutionCounter.current) { setResolvedAddress(''); setRecipientProfile(null); setIsResolving(false); setResolutionError("Unknown node standard."); }
     }
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork, isSelfTransfer, selectedToken, isNetworkMismatch, validationError]);
 
+  // Main UI Action wrapper calling the Logic layer
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
     
     try {
-      const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
-      const amountNum = parseFloat(amount);
-      const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
+      const hash = await performTransactionDispatch({
+        wallets,
+        selectedToken,
+        resolvedAddress,
+        profile,
+        activeNetwork,
+        amount,
+        prices,
+        recipientProfile,
+        infuraApiKey
+      });
       
-      const feeInToken = 0.05 / (tokenPrice || 1);
-
-      if (selectedToken.symbol === 'WNC') {
-        const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
-          p_receiver_id: recipientProfile!.id, 
-          p_destination_type: 'user',
-          p_amount: Math.floor(amountNum),
-          p_reference: `Institutional P2P Transfer: ${amount} WNC`
-        });
-        if (rpcError) throw new Error(rpcError.message);
-        if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
-        setTxHash(`int_${Math.random().toString(36).substring(7)}`);
-      } 
-      else if (activeNetwork.type === 'solana') {
-        const solWalletData = wallets.find(w => w.type === 'solana');
-        if (!solWalletData?.privateKey) throw new Error("Signing authority missing.");
-        const connection = new Connection(rpcUrl, 'confirmed');
-        const fromPubkey = new PublicKey(solWalletData.address);
-        const toPubkey = new PublicKey(resolvedAddress);
-        const feeRecipientPubkey = new PublicKey(getFeeRecipient(activeNetwork.name));
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports: Math.floor(amountNum * LAMPORTS_PER_SOL) }),
-          SystemProgram.transfer({ fromPubkey, toPubkey: feeRecipientPubkey, lamports: Math.floor(feeInToken * LAMPORTS_PER_SOL) })
-        );
-        setTxHash(`sol_batch_${Math.random().toString(36).substring(7)}`);
-      }
-      else if (activeNetwork.type === 'evm' || !activeNetwork.type) {
-        const evmWalletData = wallets.find(w => w.type === 'evm');
-        if (!evmWalletData?.privateKey) throw new Error("Signing authority missing.");
-        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
-        const wallet = new ethers.Wallet(evmWalletData.privateKey, provider);
-        const decimals = selectedToken.decimals || 18;
-        const mainAmount = ethers.parseUnits(amountNum.toString(), decimals);
-        const feeAmount = ethers.parseUnits(feeInToken.toFixed(decimals), decimals);
-        const feeRecipient = getFeeRecipient(activeNetwork.name);
-        let tx;
-        if (selectedToken.isNative) { tx = await wallet.sendTransaction({ to: resolvedAddress, value: mainAmount }); } 
-        else { const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet); tx = await contract.transfer(resolvedAddress, mainAmount); }
-        setTxHash(tx.hash);
-        if (selectedToken.isNative) { await wallet.sendTransaction({ to: feeRecipient, value: feeAmount }).catch(() => {}); } 
-        else { const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet); await contract.transfer(feeRecipient, feeAmount).catch(() => {}); }
-      } else if (activeNetwork.type === 'xrp') {
-        const xrpWalletData = wallets.find(w => w.type === 'xrp');
-        const client = new xrpl.Client(rpcUrl);
-        await client.connect();
-        const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
-        const feeRecipient = getFeeRecipient(activeNetwork.name);
-        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountNum.toString()), Destination: resolvedAddress });
-        const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-        if ((result.result.meta as any).TransactionResult === "tesSUCCESS") {
-            setTxHash(result.result.hash);
-            const feePrepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(feeInToken.toFixed(6)), Destination: feeRecipient });
-            await client.submit(wallet.sign(feePrepared).tx_blob).catch(() => {});
-        } else throw new Error("XRPL Error");
-        await client.disconnect();
-      }
+      setTxHash(hash);
       setTxStatus('success');
       await refreshProfile(); refresh();
-    } catch (e: any) { setTxStatus('error'); setReceiptError(mapTechnicalError(e)); }
+    } catch (e: any) { 
+      setTxStatus('error'); 
+      setReceiptError(mapTechnicalError(e)); 
+    }
     finally { setIsSubmitting(false); setTimeout(() => { setIsStatusVisible(false); setIsReceiptOpen(true); }, 3000); }
   };
 
@@ -483,9 +327,7 @@ function SendClient() {
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
-  
   const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
-
   const hasInsufficientFunds = (amountNum + (0.05 / (livePrice || 1))) > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isWncAddressError;
 
@@ -522,14 +364,14 @@ function SendClient() {
                         <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>{isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}</div>
                         {resolvedAddress && !isResolving && <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" /></div>}
                     </div>
-                    <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'NODE REFLECTION' : recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
+                    <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'SELF-REFLECT' : recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
                 </div>
             </section>
 
             <section className="space-y-3">
                 <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => handleRecipientInputChange(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
                 <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}><div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => handleRecipientInputChange(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div></div>
-                {(resolutionError || validationError) && !isResolving && !isSelfTransfer && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || validationError?.message}</p></div>}
+                {(resolutionError || (validationError && (debouncedRecipient || isSelfTransfer))) && !isResolving && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || (validationError as any)?.message}</p></div>}
                 {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}
             </section>
 
@@ -541,7 +383,6 @@ function SendClient() {
                     <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => handleAmountChange(balance.toString())}>MAX</button>
                   </div>
                 </div>
-                {/* SLIM AMOUNT CARD WITH CURRENCY SELECTOR */}
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-5 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4">
                     <Input 
@@ -574,7 +415,6 @@ function SendClient() {
                   </div>
                 </div>
 
-                {/* SIDE-BY-SIDE FEE CARDS */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 space-y-1">
                     <div className="flex items-center justify-between">
