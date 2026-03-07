@@ -36,9 +36,13 @@ import type { AssetRow } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
 import { determineSwapProvider, needsPivotRoute, getRouteDescription, type SwapProvider } from '@/lib/services/swap-router';
-import { zeroXService } from '@/lib/services/zerox-service';
 import { swapExecutionService } from '@/lib/services/swap-execution-service';
 import { getSolanaSwapQuote, buildSolanaSwapTransaction, executeSolanaSwap } from '@/services/solanaSwap';
+
+// SWAP ENGINE IMPORTS
+import { fetchZeroXQuote, executeZeroXSwap } from '@/services/swaps/zeroXSwap';
+import { fetchLifiQuote, executeLifiSwap } from '@/services/swaps/lifiSwap';
+import { fetchLiquidityQuote, executeLiquiditySwap } from '@/services/swaps/liquidityProviderSwap';
 
 interface SwapQuote {
   id: string;
@@ -161,11 +165,6 @@ function SwapClient() {
       const currentQuote = quotes.find(q => q.id === selectedQuoteId);
       if (!currentQuote) return;
 
-      /**
-       * INSTITUTIONAL BYPASS PROTOCOL
-       * LI.FI and 0x manage their own decentralized liquidity.
-       * Admin checks are strictly reserved for internal P2P engine routes.
-       */
       if (currentQuote.swapProvider !== 'INTERNAL') {
         setIsAdminLiquidityValid(true);
         return;
@@ -263,74 +262,68 @@ function SwapClient() {
             };
         }
         else if (providerType === 'ZEROX') {
-            const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
-            
-            // 0x ETH Sync Node: Requires chain-specific symbol or 0xeee for non-ETH native
-            const sellId = fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address;
-            const buyId = toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address;
-
-            const p = await zeroXService.getPrice(fromToken.chainId ?? 1, sellId, buyId, sellAmount, userAddress);
-            
-            const gasCostEth = (parseFloat(p.estimatedGas || '21000') * parseFloat(p.gasPrice || '1000000000')) / 1e18;
-            const gasCostUsd = gasCostEth * (prices['ethereum']?.price || 2500);
+            const result = await fetchZeroXQuote({
+              chainId: fromToken.chainId ?? 1,
+              sellToken: fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address,
+              buyToken: toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address,
+              sellAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(),
+              takerAddress: userAddress,
+              priceUsd: fromTokenPrice,
+              toTokenDecimals: toToken.decimals || 18,
+              ethPrice: prices['ethereum']?.price || 2500
+            });
 
             quote = {
                 id: '0x-node',
                 provider: '0x Node',
                 logo: null,
-                receiveAmount: parseFloat(ethers.formatUnits(p.buyAmount, toToken.decimals || 18)),
-                fee: gasCostUsd + 0.10,
+                receiveAmount: result.receiveAmount,
+                fee: result.feeUsd,
                 eta: '~10s',
-                rawQuote: p,
+                rawQuote: result.rawQuote,
                 swapProvider: 'ZEROX',
                 routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'ZEROX', false)
             };
         } 
         else if (providerType === 'LIFI') {
-            const params = new URLSearchParams({ 
-                fromChain: (fromToken.chainId ?? 1).toString(), 
-                toChain: (toToken.chainId ?? 1).toString(), 
-                fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address, 
-                toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address, 
-                fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(), 
-                fromAddress: userAddress, 
-                slippage: '0.005' 
+            const result = await fetchLifiQuote({
+              fromChain: fromToken.chainId ?? 1,
+              toChain: toToken.chainId ?? 1,
+              fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address,
+              toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address,
+              fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(),
+              fromAddress: userAddress,
+              toTokenPriceUsd: toTokenPrice,
+              tradeValueUsd: tradeValueUsd,
+              toTokenDecimals: toToken.decimals || 18
             });
-            
-            const res = await fetch(`/api/bridge/quote?${params.toString()}`);
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.details || err.error || "Bridge Protocol Failed.");
-            }
-            const q = await res.json();
-
-            const platformFeeUsd = tradeValueUsd * 0.01;
-            const receiveAmountReduction = platformFeeUsd / (toTokenPrice || 1);
-            const rawReceive = parseFloat(ethers.formatUnits(q.estimate.toAmount, toToken.decimals || 18));
 
             quote = {
                 id: 'lifi-node',
-                provider: q.tool?.toUpperCase().slice(0, 10) || 'Bridge',
+                provider: result.rawQuote.tool?.toUpperCase().slice(0, 10) || 'Bridge',
                 logo: null,
-                receiveAmount: Math.max(0, rawReceive - receiveAmountReduction),
-                fee: parseFloat(q.estimate.feeCosts?.[0]?.amountUsd || '2.00') + 0.10 + platformFeeUsd,
-                eta: `~${Math.ceil((q.estimate.executionDuration || 60) / 60)}m`,
-                rawQuote: q,
+                receiveAmount: result.receiveAmount,
+                fee: result.feeUsd,
+                eta: `~${Math.ceil((result.rawQuote.estimate.executionDuration || 60) / 60)}m`,
+                rawQuote: result.rawQuote,
                 swapProvider: 'LIFI',
                 routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'LIFI', false)
             };
         }
         else {
             const feeData = await calculateSwapFees(tradeValueUsd, fromToken.name, toToken.name);
-            const divisor = toTokenPrice || 1;
-            const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-            const finalReceive = Math.max(0, estAmt - (feeData.networkFee / divisor));
+            const result = await fetchLiquidityQuote({
+              amount: debouncedAmount,
+              fromTokenPrice: fromTokenPrice,
+              toTokenPrice: toTokenPrice,
+              networkFeeUsd: feeData.networkFee
+            });
 
             quote = {
                 id: 'internal-vault',
                 provider: isPivotRequired ? 'USDC Bridge' : 'Sync Node',
                 logo: null,
-                receiveAmount: finalReceive,
+                receiveAmount: result.receiveAmount,
                 fee: feeData.networkFee,
                 eta: isPivotRequired ? '~45s' : '~10s',
                 swapProvider: 'INTERNAL',
@@ -385,12 +378,9 @@ function SwapClient() {
           if (!solWallet?.privateKey) throw new Error("Solana signing authority missing.");
           
           const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
-          
-          // Build
           const swapTx = await buildSolanaSwapTransaction(selectedQuote.rawQuote, solWallet.address);
           
           setExecutionPhase('SENDING');
-          // Execute
           const signature = await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
           
           setTxHash(signature);
@@ -402,28 +392,15 @@ function SwapClient() {
           const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
           const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
-          setExecutionPhase('LIQUIDITY');
-          const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
-          
-          const sellId = fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address;
-          const buyId = toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address;
-
-          const q = await zeroXService.getQuote(fromToken.chainId ?? 1, sellId, buyId, sellAmount, wallet.address);
-          
-          if (!fromToken.isNative) {
-              setExecutionPhase('APPROVING');
-              const tokenContract = new ethers.Contract(fromToken.address, ["function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)"], wallet);
-              const allowance = await tokenContract.allowance(wallet.address, q.allowanceTarget);
-              if (allowance < ethers.parseUnits(amount, fromToken.decimals || 18)) {
-                  const approveTx = await tokenContract.approve(q.allowanceTarget, ethers.MaxUint256);
-                  await approveTx.wait();
-              }
-          }
-
-          setExecutionPhase('SENDING');
-          const tx = await wallet.sendTransaction({ to: q.to, data: q.data, value: q.value, gasLimit: q.gas });
+          await executeZeroXSwap({
+            chainId: fromToken.chainId ?? 1,
+            rawQuote: selectedQuote.rawQuote,
+            wallet: wallet,
+            fromToken: fromToken,
+            amount: amount,
+            setPhase: setExecutionPhase
+          });
           setExecutionPhase('SETTLING');
-          await tx.wait();
       } 
       else if (selectedQuote.swapProvider === 'LIFI') {
           const chainConfig = allChainsMap[fromToken.chainId ?? 1];
@@ -431,24 +408,14 @@ function SwapClient() {
           const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
           const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
-          setExecutionPhase('LIQUIDITY');
-          const q = selectedQuote.rawQuote;
-          if (q.transactionRequest) {
-              setExecutionPhase('APPROVING');
-              const approvalAddress = q.estimate.approvalAddress;
-              if (approvalAddress && !fromToken.isNative) {
-                  const tokenContract = new ethers.Contract(fromToken.address, ["function allowance(address owner, address spender) view returns (uint256)", "function approve(address spender, uint256 amount) returns (bool)"], wallet);
-                  const allowance = await tokenContract.allowance(wallet.address, approvalAddress);
-                  if (allowance < ethers.parseUnits(amount, fromToken.decimals || 18)) {
-                      const approveTx = await tokenContract.approve(approvalAddress, ethers.MaxUint256);
-                      await approveTx.wait();
-                  }
-              }
-              setExecutionPhase('SENDING');
-              const tx = await wallet.sendTransaction({ to: q.transactionRequest.to, data: q.transactionRequest.data, value: q.transactionRequest.value, gasLimit: q.transactionRequest.gasLimit });
-              setExecutionPhase('SETTLING');
-              await tx.wait();
-          }
+          await executeLifiSwap({
+            rawQuote: selectedQuote.rawQuote,
+            wallet: wallet,
+            fromToken: fromToken,
+            amount: amount,
+            setPhase: setExecutionPhase
+          });
+          setExecutionPhase('SETTLING');
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
           const chainConfig = allChainsMap[fromToken.chainId ?? 1];
@@ -456,44 +423,18 @@ function SwapClient() {
           const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
           const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
-          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_CONVERTING');
-          else setExecutionPhase('LIQUIDITY');
-
-          const handshakeRes = await fetch('/api/swap/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fromChain: fromToken.name, toChain: toToken.name,
-              fromSymbol: fromToken.symbol, toSymbol: toToken.symbol,
-              fromAmount: parseFloat(amount), fromTokenPriceUsd: fromTokenPrice,
-              toAmountExpected: selectedQuote.receiveAmount,
-              adminFeeUsd: selectedQuote.fee * 0.5, networkFeeUsd: selectedQuote.fee * 0.5,
-              recipientAddress: profile?.evm_address || ''
-            })
-          });
-          const handshake = await handshakeRes.json();
-          if (!handshake.success) throw new Error(handshake.error || "Denied.");
-
-          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_BRIDGING');
-          else setExecutionPhase('SENDING');
-
-          let userTx;
-          if (fromToken.isNative) {
-            userTx = await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
-          } else {
-            const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-            userTx = await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
-          }
-          
-          setExecutionPhase('SETTLING');
-          const receipt = await userTx.wait();
-          
-          if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_FINALIZING');
-
-          await fetch('/api/swap/finalize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ swapId: handshake.swapId, txHash: receipt.hash })
+          await executeLiquiditySwap({
+            amount: amount,
+            fromToken: fromToken,
+            toToken: toToken,
+            fromTokenPrice: fromTokenPrice,
+            receiveAmount: selectedQuote.receiveAmount,
+            totalFeeUsd: selectedQuote.fee,
+            userId: user.id,
+            recipientAddress: profile?.evm_address || '',
+            wallet: wallet,
+            isPivot: !!selectedQuote.isPivotRoute,
+            setPhase: setExecutionPhase
           });
       }
 
@@ -534,7 +475,6 @@ function SwapClient() {
 
   const infoItems = [
     { label: 'Route', value: selectedQuote?.provider || 'Sync', icon: Workflow },
-    // REPLACE TRANSACTION FEE DISPLAY WITH GAS SERVICE CALL
     { label: 'Gas', value: `$${(gasDataFromService?.usdFee || selectedQuote?.fee || 0.10).toFixed(2)}`, icon: Fuel },
     { label: 'Time', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Safe', value: 'Yes', icon: ShieldCheck }
