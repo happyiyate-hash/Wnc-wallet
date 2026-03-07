@@ -62,7 +62,7 @@ interface WalletContextType {
   setActiveFulfillmentId: (id: string | null) => void;
   hasFetchedInitialData: boolean;
   syncDiagnostic: AuditState;
-  runCloudDiagnostic: (options?: { forceUI: boolean }) => Promise<void>;
+  runCloudDiagnostic: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -169,9 +169,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   });
 
   const runCloudDiagnostic = useCallback(async () => {
-    if (!user || !wallets) return;
-    await backgroundSyncWorker.performCloudAudit(user.id, wallets, profile, setSyncDiagnostic);
-  }, [user, wallets, profile]);
+    if (!user || !wallets || !chainsWithLogos.length) return;
+    
+    // START 24/7 CORRECTED BACKGROUND AUDIT
+    backgroundSyncWorker.performCloudAudit(
+      user.id, 
+      wallets, 
+      profile, 
+      accountNumber || profile?.account_number || null,
+      chainsWithLogos,
+      (update) => setSyncDiagnostic(prev => ({ ...prev, ...update }))
+    );
+  }, [user, wallets, profile, accountNumber, chainsWithLogos]);
 
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Auth required");
@@ -192,7 +201,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     syncAddressesToCloud(user.id, derived, targetAcc);
     saveVaultToCloud(user.id, mnemonic);
     
-    // Immediate Audit
+    // Immediate Audit Start
     setTimeout(runCloudDiagnostic, 1000);
     
     return mnemonic;
@@ -217,7 +226,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     syncAddressesToCloud(user.id, derived, targetAcc);
     saveVaultToCloud(user.id, mnemonic);
 
-    // Immediate Audit
+    // Immediate Audit Start
     setTimeout(runCloudDiagnostic, 1000);
   }, [user, profile, runCloudDiagnostic]);
 
@@ -263,7 +272,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
       setIsWalletLoading(false);
       
-      // Immediate Audit
+      // Immediate Audit Start
       setTimeout(runCloudDiagnostic, 1500);
     } catch (e: any) { 
       setIsWalletLoading(false);
@@ -331,12 +340,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [authLoading, user?.id, chainsWithLogos]);
 
   useEffect(() => {
-    if (isInitialized && wallets && user) {
+    if (isInitialized && wallets && user && chainsWithLogos.length > 0) {
       refresh();
-      // Auto-trigger diagnostic on session boot
+      // Auto-trigger persistent background audit on session boot
       setTimeout(runCloudDiagnostic, 2000);
     }
-  }, [isInitialized, wallets, viewingNetwork, user, refresh, runCloudDiagnostic]);
+  }, [isInitialized, wallets, viewingNetwork, user, refresh, runCloudDiagnostic, chainsWithLogos]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active_network_id_${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet: () => { if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } }, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, getAvailableAssetsForChain: (cid: number) => getInitialAssets(cid).map(a => ({ ...a, balance: '0' } as AssetRow)), isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic
