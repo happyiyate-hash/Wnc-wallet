@@ -14,7 +14,7 @@ import { supabase } from '@/lib/supabase/client';
  * INSTITUTIONAL ADDRESS DETECTION ENGINE
  */
 export const detectAddressType = (input: string) => {
-  if (!input) return 'invalid';
+  if (!input || typeof input !== 'string') return 'invalid';
   const clean = input.trim();
   
   // 1. REGISTRY LOOKUP (Institutional ID)
@@ -23,12 +23,15 @@ export const detectAddressType = (input: string) => {
   // 2. HIGH PRIORITY POLKADOT
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        const [isValidPolkadot] = checkAddress(clean, 0);
-        const [isValidKusama] = checkAddress(clean, 2);
-        const [isValidGeneric] = checkAddress(clean, 42);
-        
-        if (isValidPolkadot || isValidGeneric) return 'polkadot';
-        if (isValidKusama) return 'kusama';
+        // Institutional Guard: Polkadot SDK check
+        if (typeof checkAddress === 'function') {
+            const [isValidPolkadot] = checkAddress(clean, 0);
+            const [isValidKusama] = checkAddress(clean, 2);
+            const [isValidGeneric] = checkAddress(clean, 42);
+            
+            if (isValidPolkadot || isValidGeneric) return 'polkadot';
+            if (isValidKusama) return 'kusama';
+        }
     } catch (e) {}
   }
 
@@ -49,7 +52,9 @@ export const detectAddressType = (input: string) => {
   
   // 5. OTHER PROTOCOLS
   if (clean.startsWith('r')) {
-    if (xrpl.isValidClassicAddress(clean)) return 'xrp';
+    try {
+        if (xrpl.isValidClassicAddress(clean)) return 'xrp';
+    } catch(e) {}
     return 'invalid-xrp';
   }
 
@@ -83,6 +88,7 @@ export const detectAddressType = (input: string) => {
  * RESOLVE NETWORK METADATA
  */
 export const getDetectedNetworkMeta = (type: string) => {
+    if (!type) return null;
     if (type === 'xrp' || type === 'invalid-xrp') return { name: 'XRP Ledger', symbol: 'XRP' };
     if (type === 'polkadot') return { name: 'Polkadot', symbol: 'DOT' };
     if (type === 'kusama') return { name: 'Kusama', symbol: 'KSM' };
@@ -122,6 +128,7 @@ export const mapTechnicalError = (err: any): string => {
  * CALCULATE TRANSACTION FEES
  */
 export async function calculateTransactionFees(activeNetwork: any) {
+    if (!activeNetwork) return { total: 0.05, admin: 0.05 };
     try {
         const chainKey = activeNetwork.name || 'Ethereum';
         const feeData = await calculateSendFees(0, chainKey);
@@ -151,16 +158,20 @@ export async function performTransactionDispatch(params: {
 }) {
   const { wallets, selectedToken, resolvedAddress, profile, activeNetwork, amount, prices, recipientProfile, infuraApiKey } = params;
   
+  if (!activeNetwork || !selectedToken) throw new Error("Registry node data incomplete.");
+
   const amountNum = parseFloat(amount);
-  const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
+  const priceId = (selectedToken?.priceId || selectedToken?.address || '').toLowerCase();
+  const tokenPrice = (prices && prices[priceId]) ? prices[priceId].price : (selectedToken?.priceUsd || 0);
   const feeInToken = 0.05 / (tokenPrice || 1);
 
   let txHash = '';
 
   // 1. INTERNAL REGISTRY TRANSFER (WNC)
   if (selectedToken.symbol === 'WNC') {
+    if (!recipientProfile) throw new Error("Recipient identity required for WNC transfer.");
     const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
-      p_receiver_id: recipientProfile!.id, 
+      p_receiver_id: recipientProfile.id, 
       p_destination_type: 'user',
       p_amount: Math.floor(amountNum),
       p_reference: `Institutional P2P Transfer: ${amount} WNC`
@@ -173,7 +184,7 @@ export async function performTransactionDispatch(params: {
     // ATOMIC NOTIFICATION HANDSHAKE
     await supabase!.from('notifications').insert([
       {
-        user_id: recipientProfile!.id,
+        user_id: recipientProfile.id,
         from_user_id: profile.id,
         transaction_id: txHash,
         type: 'TRANSFER_IN',
@@ -184,13 +195,13 @@ export async function performTransactionDispatch(params: {
       },
       {
         user_id: profile.id,
-        from_user_id: recipientProfile!.id,
+        from_user_id: recipientProfile.id,
         transaction_id: txHash,
         type: 'TRANSFER_OUT',
         amount: Math.floor(amountNum),
         token: 'WNC',
         title: 'WNC Dispatched',
-        message: `You sent ${amountNum} WNC to @${recipientProfile!.name}`
+        message: `You sent ${amountNum} WNC to @${recipientProfile.name}`
       }
     ]);
   } 

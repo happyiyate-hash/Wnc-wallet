@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -101,6 +102,14 @@ function SendClient() {
     });
   }, [allChainsMap, infuraApiKey]);
 
+  const activeNetwork = useMemo(() => {
+    if (selectedToken?.symbol === 'WNC') return { name: 'Wevina Internal', symbol: 'WNC', type: 'internal', chainId: 0 } as any;
+    const chainId = selectedToken?.chainId ?? 1;
+    // CRITICAL FIX: Ensure allChainsMap exists and provides a valid fallback
+    const resolved = (allChainsMap && allChainsMap[chainId]) ? allChainsMap[chainId] : viewingNetwork;
+    return resolved || { name: 'Ethereum', symbol: 'ETH', chainId: 1, type: 'evm' };
+  }, [selectedToken, viewingNetwork, allChainsMap]);
+
   const gasDataFromService = gasService.getGasPrice(activeNetwork?.name || '');
 
   // QR CODE SCANNING LOGIC
@@ -120,7 +129,6 @@ function SendClient() {
             { facingMode: "environment" },
             config,
             (decodedText) => {
-              // 1. DETECT PAYMENT REQUEST URL
               if (decodedText.includes('/request/')) {
                 const parts = decodedText.split('/request/');
                 const reqId = parts[parts.length - 1].split('?')[0];
@@ -135,7 +143,6 @@ function SendClient() {
                 }
               }
 
-              // 2. DETECT WNC DEEP LINK (wnc://pay?account=...)
               if (decodedText.startsWith('wnc://')) {
                 try {
                   const url = new URL(decodedText);
@@ -152,7 +159,6 @@ function SendClient() {
                 } catch(e) {}
               }
 
-              // 3. DETECT RAW ACCOUNT ID (835...)
               if (/^835\d{7}$/.test(decodedText.trim())) {
                 setRecipientInput(decodedText.trim());
                 handleRecipientInputChange(decodedText.trim());
@@ -163,7 +169,6 @@ function SendClient() {
                 return;
               }
 
-              // DEFAULT: Standard Resolve (Addresses, etc.)
               setRecipientInput(decodedText);
               handleRecipientInputChange(decodedText);
               setIsScannerOpen(false);
@@ -200,16 +205,10 @@ function SendClient() {
     if (target) { setSelectedToken({ ...target }); hasInitialized.current = true; }
   }, [allAssets, searchParams, viewingNetwork]);
 
-  const activeNetwork = useMemo(() => {
-    if (selectedToken?.symbol === 'WNC') return { name: 'Wevina Internal', symbol: 'WNC', type: 'internal', chainId: 0 } as any;
-    const chainId = selectedToken?.chainId ?? 1;
-    return allChainsMap[chainId] || viewingNetwork;
-  }, [selectedToken, viewingNetwork, allChainsMap]);
-
-  const gasPriceData = useGasPrice(activeNetwork?.chainId);
+  const useGasPriceHook = useGasPrice(activeNetwork?.chainId);
 
   const livePrice = useMemo(() => {
-    if (!selectedToken) return 0;
+    if (!selectedToken || !prices) return 0;
     const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
     return prices[priceId]?.price || selectedToken.priceUsd || 0;
   }, [selectedToken, prices]);
@@ -242,7 +241,6 @@ function SendClient() {
     }
   };
 
-  // Fee logic using the logic service
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
@@ -252,7 +250,7 @@ function SendClient() {
         setAdminFeeUsd(0.05);
     };
     resolveFees();
-  }, [isConfirmOpen, amount, activeNetwork, gasDataFromService]);
+  }, [isConfirmOpen, amount, activeNetwork]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -291,7 +289,6 @@ function SendClient() {
   }, [addrType, activeNetwork.type, isSelfTransfer, isWnc, debouncedRecipient]);
 
   const handleRecipientInputChange = (val: string) => {
-    // 1. DETECT PAYMENT REQUEST NODE PASTE
     if (val.includes('/request/')) {
       const parts = val.split('/request/');
       const reqId = parts[parts.length - 1].split('?')[0];
@@ -350,7 +347,6 @@ function SendClient() {
     resolve();
   }, [debouncedRecipient, addrType, activeNetwork, isSelfTransfer, selectedToken, isNetworkMismatch, validationError]);
 
-  // Main UI Action wrapper calling the Logic layer
   const handleSendRequest = async () => {
     if (!wallets || !selectedToken || !resolvedAddress || !profile) return;
     setIsConfirmOpen(false); setIsStatusVisible(true); setTxStatus('pending'); setIsSubmitting(true);
@@ -385,7 +381,6 @@ function SendClient() {
     try {
       const result = await reader.scanFile(file, true);
       if (result) {
-        // DETECT REQUEST NODE IN FILE
         if (result.includes('/request/')) {
           const parts = result.split('/request/');
           const reqId = parts[parts.length - 1].split('?')[0];
@@ -397,7 +392,6 @@ function SendClient() {
           }
         }
 
-        // DETECT WNC DEEP LINK IN FILE
         if (result.startsWith('wnc://')) {
           try {
             const url = new URL(result);
@@ -411,7 +405,6 @@ function SendClient() {
           } catch(e) {}
         }
 
-        // DETECT RAW ACCOUNT ID
         if (/^835\d{7}$/.test(result.trim())) {
           setRecipientInput(result.trim());
           handleRecipientInputChange(result.trim());
@@ -443,7 +436,7 @@ function SendClient() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-xl"><ArrowLeft className="w-5 h-5" /></Button>
         <button onClick={() => setIsSelectorOpen(true)} className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full hover:bg-primary/20 transition-all">
             <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="token" size={20} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} />
-            <div className="flex items-start leading-none"><span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span><span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork.name}</span></div>
+            <div className="flex items-start leading-none"><span className="text-[10px] font-black uppercase text-white">{selectedToken?.symbol || 'Select'}</span><span className="text-[7px] font-bold text-primary uppercase opacity-60 ml-1">{activeNetwork?.name || 'Network'}</span></div>
             <ChevronDown className="w-3 h-3 text-primary" />
         </button>
         <Button variant="ghost" size="icon" onClick={() => setIsScannerOpen(true)} className="rounded-xl"><QrCode className="w-5 h-5 text-primary" /></Button>
@@ -454,7 +447,7 @@ function SendClient() {
             <section className="flex items-center justify-between">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black relative z-10"><AvatarImage src={profile?.photo_url} /><AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0]}</AvatarFallback></Avatar>
+                        <Avatar className="w-20 h-20 rounded-[2.5rem] border-2 border-primary/30 shadow-2xl bg-black relative z-10"><AvatarImage src={profile?.photo_url} /><AvatarFallback className="bg-primary/20 text-primary font-black text-xl">{profile?.name?.[0] || 'U'}</AvatarFallback></Avatar>
                         <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" /></div>
                     </div>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">FROM YOU</span>
@@ -467,10 +460,10 @@ function SendClient() {
                 </div>
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>{isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{recipientProfile.name[0]?.toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}</div>
+                        <div className={cn("w-20 h-20 rounded-[2.5rem] border-2 flex items-center justify-center transition-all duration-500 bg-black relative overflow-hidden z-10", (!resolvedAddress && !isNetworkMismatch && !validationError && !isSelfTransfer) ? "border-dashed border-white/10" : (isNetworkMismatch || (resolvedAddress && validationError) || isSelfTransfer) ? "border-red-500 bg-red-500/10 border-dashed" : "border-primary/50 shadow-[0_0_30px_rgba(139,92,246,0.15)]")}>{isResolving ? <Loader2 className="w-8 h-8 animate-spin text-primary opacity-40" /> : isSelfTransfer ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={profile?.photo_url} /><AvatarFallback>{profile?.name?.[0]}</AvatarFallback></Avatar> : recipientProfile ? <Avatar className="w-full h-full rounded-none"><AvatarImage src={recipientProfile.avatar} /><AvatarFallback>{(recipientProfile.name?.[0] || 'U').toUpperCase()}</AvatarFallback></Avatar> : (isNetworkMismatch || validationError) ? <TokenLogoDynamic logoUrl={null} alt="Err" size={40} symbol={detectedMeta?.symbol} name={detectedMeta?.name} /> : resolvedAddress ? <TokenLogoDynamic logoUrl={selectedToken?.iconUrl} alt="Token" size={40} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} /> : <Search className="w-8 h-8 text-white/10" />}</div>
                         {resolvedAddress && !isResolving && <div className="absolute -bottom-2 -right-2 bg-black rounded-xl p-1 border border-white/10 shadow-xl z-20"><TokenLogoDynamic logoUrl={selectedToken?.iconUrl} size={24} chainId={selectedToken?.chainId} symbol={selectedToken?.symbol} name={selectedToken?.name} alt="token badge" /></div>}
                     </div>
-                    <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'SELF-REFLECT' : recipientProfile ? `TO @${recipientProfile.name.toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
+                    <span className={cn("text-[8px] font-black uppercase tracking-widest truncate w-20 text-center", (isNetworkMismatch || validationError || isSelfTransfer) ? "text-red-500" : "text-white/40")}>{isSelfTransfer ? 'SELF-REFLECT' : recipientProfile ? `TO @${(recipientProfile.name || 'Unknown').toUpperCase()}` : isNetworkMismatch ? `${detectedMeta?.name || 'UNKNOWN'} DETECTED` : (validationError || (debouncedRecipient && addrType === 'invalid')) ? 'NODE INVALID' : resolvedAddress ? 'NETWORK NODE' : 'TO RECIPIENT'}</span>
                 </div>
             </section>
 
@@ -478,7 +471,7 @@ function SendClient() {
                 <div className="flex justify-between items-center px-2"><Label className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Recipient Target</Label><button onClick={async () => handleRecipientInputChange(await navigator.clipboard.readText())} className="text-[9px] font-black text-primary uppercase tracking-widest bg-primary/10 px-2.5 py-1 rounded-lg">PASTE</button></div>
                 <div className={cn("bg-white/[0.03] border border-white/10 rounded-[2rem] p-2", (isNetworkMismatch || validationError || isSelfTransfer) && "border-red-500/50 bg-red-500/5")}><div className="flex items-center gap-2 px-2"><Input placeholder="Account ID or Address" value={recipientInput} onChange={(e) => handleRecipientInputChange(e.target.value)} className="h-12 bg-transparent border-none text-sm font-mono focus-visible:ring-0 text-white flex-1" />{isResolving && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</div></div>
                 {(resolutionError || (validationError && (debouncedRecipient || isSelfTransfer))) && !isResolving && !isNetworkMismatch && <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 flex items-center gap-3"><AlertCircle className="w-4 h-4 text-red-500 opacity-60" /><p className="text-[10px] font-black text-red-500/80 uppercase leading-relaxed">{resolutionError || (validationError as any)?.message}</p></div>}
-                {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork.name}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}
+                {isNetworkMismatch && !isSelfTransfer && <div className="p-5 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex gap-4"><div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center shrink-0"><ShieldAlert className="w-6 h-6 text-red-500" /></div><div className="space-y-1.5"><p className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Security Alert: {detectedMeta?.name} Address Detected</p><p className="text-xs font-bold text-red-400 leading-relaxed">You are currently trying to send <span className="text-white font-black underline">{activeNetwork?.name || 'Network'}</span>. Sending to a different network will result in permanent loss of funds.</p></div></div>}
             </section>
 
             <div className="space-y-3">
@@ -531,7 +524,7 @@ function SendClient() {
                       {!gasDataFromService ? (
                         <div className="h-4 w-12 bg-white/5 animate-pulse rounded" />
                       ) : (
-                        <p className="text-xs font-bold text-white truncate">{gasDataFromService.nativeFee} {activeNetwork.symbol}</p>
+                        <p className="text-xs font-bold text-white truncate">{gasDataFromService.nativeFee || '0'} {activeNetwork?.symbol || ''}</p>
                       )}
                     </div>
                   </div>
@@ -561,7 +554,7 @@ function SendClient() {
       <GlobalTokenSelector isOpen={isSelectorOpen} onOpenChange={setIsSelectorOpen} onSelect={(token) => { setSelectedToken({ ...token }); }} title="Select Asset" />
       <TransactionConfirmationSheet isOpen={isConfirmOpen} onOpenChange={setIsConfirmOpen} onConfirm={handleSendRequest} isSubmitting={isSubmitting} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || (resolvedAddress ? `${resolvedAddress.slice(0,6)}...${resolvedAddress.slice(-4)}` : 'Unknown')} recipientAddress={resolvedAddress} recipientAvatar={recipientProfile?.avatar} totalFeeUsd={totalFeeUsd} />
       <TransactionStatusCard isVisible={isStatusVisible} status={txStatus} senderName="You" senderAvatar={profile?.photo_url} recipientName={recipientProfile?.name || 'Network Node'} recipientAvatar={recipientProfile?.avatar} token={{ symbol: selectedToken?.symbol || '', iconUrl: selectedToken?.iconUrl, chainId: selectedToken?.chainId || 1, name: selectedToken?.name }} isRawAddress={!recipientProfile} />
-      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={formatFiat(totalFeeUsd)} networkName={activeNetwork.name} />
+      <TransactionReceiptSheet isOpen={isReceiptOpen} onOpenChange={setIsReceiptOpen} status={txStatus === 'error' ? 'error' : 'success'} amount={amount} token={selectedToken} recipientName={recipientProfile?.name || 'Network Node'} recipientAddress={resolvedAddress} txHash={txHash} errorReason={receiptError} fee={formatFiat(totalFeeUsd)} networkName={activeNetwork?.name || 'Blockchain'} />
     </div>
   );
 }
