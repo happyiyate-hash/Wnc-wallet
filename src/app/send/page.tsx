@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -89,7 +90,7 @@ function SendClient() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // QR CODE SCANNING LOGIC (Maintained in page.tsx)
+  // QR CODE SCANNING LOGIC
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
 
@@ -106,6 +107,39 @@ function SendClient() {
             { facingMode: "environment" },
             config,
             (decodedText) => {
+              // 1. DETECT PAYMENT REQUEST URL
+              if (decodedText.includes('/request/')) {
+                const parts = decodedText.split('/request/');
+                const reqId = parts[parts.length - 1].split('?')[0];
+                if (reqId) {
+                  setActiveFulfillmentId(reqId);
+                  setIsScannerOpen(false);
+                  if (html5QrCode && html5QrCode.isScanning) {
+                    html5QrCode.stop().catch(() => {});
+                  }
+                  router.push('/');
+                  return;
+                }
+              }
+
+              // 2. DETECT WNC DEEP LINK (wnc://pay?account=...)
+              if (decodedText.startsWith('wnc://')) {
+                try {
+                  const url = new URL(decodedText);
+                  const acc = url.searchParams.get('account');
+                  if (acc) {
+                    setRecipientInput(acc);
+                    handleRecipientInputChange(acc);
+                    setIsScannerOpen(false);
+                    if (html5QrCode && html5QrCode.isScanning) {
+                      html5QrCode.stop().catch(() => {});
+                    }
+                    return;
+                  }
+                } catch(e) {}
+              }
+
+              // DEFAULT: Standard Resolve
               setRecipientInput(decodedText);
               handleRecipientInputChange(decodedText);
               setIsScannerOpen(false);
@@ -233,6 +267,17 @@ function SendClient() {
   }, [addrType, activeNetwork.type, isSelfTransfer, isWnc, debouncedRecipient]);
 
   const handleRecipientInputChange = (val: string) => {
+    // 1. DETECT PAYMENT REQUEST NODE PASTE
+    if (val.includes('/request/')) {
+      const parts = val.split('/request/');
+      const reqId = parts[parts.length - 1].split('?')[0];
+      if (reqId) {
+        setActiveFulfillmentId(reqId);
+        router.push('/');
+        return;
+      }
+    }
+
     setRecipientInput(val);
     const type = detectAddressType(val);
     if (type === 'account-id') setIsResolving(true);
@@ -316,6 +361,32 @@ function SendClient() {
     try {
       const result = await reader.scanFile(file, true);
       if (result) {
+        // DETECT REQUEST NODE IN FILE
+        if (result.includes('/request/')) {
+          const parts = result.split('/request/');
+          const reqId = parts[parts.length - 1].split('?')[0];
+          if (reqId) {
+            setActiveFulfillmentId(reqId);
+            setIsScannerOpen(false);
+            router.push('/');
+            return;
+          }
+        }
+
+        // DETECT WNC DEEP LINK IN FILE
+        if (result.startsWith('wnc://')) {
+          try {
+            const url = new URL(result);
+            const acc = url.searchParams.get('account');
+            if (acc) {
+              setRecipientInput(acc);
+              handleRecipientInputChange(acc);
+              setIsScannerOpen(false);
+              return;
+            }
+          } catch(e) {}
+        }
+
         setRecipientInput(result);
         handleRecipientInputChange(result);
         setIsScannerOpen(false);
