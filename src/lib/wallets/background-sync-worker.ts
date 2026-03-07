@@ -7,10 +7,10 @@ import evmNetworks from '@/lib/evmNetworks.json';
 
 /**
  * INSTITUTIONAL REGISTRY AUDIT WORKER
- * Version: 5.0.0 (Sequential Narrative Protocol)
+ * Version: 6.0.0 (Sequential Heartbeat Protocol)
  * 
  * Orchestrates a chain-by-chain audit of the local hardware node vs the cloud registry.
- * Drives the UI heartbeat via a granular progress callback.
+ * Each chain follows a strict 0-100% "Scanning" lifecycle for visual logical flow.
  */
 
 export interface AuditState {
@@ -28,7 +28,10 @@ export const backgroundSyncWorker = {
     profile: any,
     onProgress: (state: AuditState) => void
   ) {
-    if (!supabase || !wallets || wallets.length === 0) return;
+    if (!supabase || !wallets || wallets.length === 0) {
+        console.log("[AUDIT_ENGINE] Deferred: Hardware nodes not yet derived.");
+        return;
+    }
 
     const allChains = Object.values(evmNetworks) as ChainConfig[];
     const totalChains = allChains.length;
@@ -44,7 +47,7 @@ export const backgroundSyncWorker = {
       const localAddr = localWallet?.address || null;
       const cloudAddr = profile?.[fieldName] || null;
 
-      // 1. STAGE: Incoming (Set Node Context)
+      // 1. PHASE: INCOMING (Prepare Data Node)
       onProgress({
         status: 'scanning',
         chain: chain.symbol,
@@ -53,23 +56,29 @@ export const backgroundSyncWorker = {
         progress: 0
       });
 
-      // 2. STAGE: Processing (Simulated Heartbeat for 1200ms)
-      const steps = 10;
-      for (let s = 1; s <= steps; s++) {
+      // Give the slide animation a moment to settle
+      await new Promise(r => setTimeout(r, 200));
+
+      // 2. PHASE: SCANNING (Heartbeat Progress 0 -> 100)
+      const scanSteps = 10;
+      for (let s = 1; s <= scanSteps; s++) {
+        // Human-readable scan pace
         await new Promise(r => setTimeout(r, 120));
+        
         onProgress({
           status: 'scanning',
           chain: chain.symbol,
           localValue: localAddr,
           cloudValue: cloudAddr,
-          progress: (s / steps) * 100
+          progress: (s / scanSteps) * 100
         });
       }
 
-      // 3. STAGE: Verification Pause (Dopamine Hit)
-      await new Promise(r => setTimeout(r, 400));
+      // 3. PHASE: VERIFICATION PAUSE (Visual Validation)
+      // This is the "Dopamine Pause" where the checkmark appears
+      await new Promise(r => setTimeout(r, 450));
 
-      // 4. OPTIONAL: Repair Mismatch
+      // 4. OPTIONAL: REPAIR
       if (localAddr && localAddr !== cloudAddr) {
         try {
           await supabase
@@ -80,9 +89,12 @@ export const backgroundSyncWorker = {
           console.warn(`[AUDIT_REPAIR_FAIL] ${chain.symbol}`);
         }
       }
+
+      // Final wait before sliding to next chain
+      await new Promise(r => setTimeout(r, 200));
     }
 
-    // 5. STAGE: Finalization
+    // 5. PHASE: FINALIZATION
     onProgress({
       status: 'completed',
       chain: 'Sync',
