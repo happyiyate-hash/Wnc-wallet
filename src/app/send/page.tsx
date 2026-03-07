@@ -25,7 +25,8 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   Copy,
-  ChevronDown
+  ChevronDown,
+  Repeat
 } from 'lucide-react';
 import TokenLogoDynamic from '@/components/shared/TokenLogoDynamic';
 import { ethers } from 'ethers';
@@ -155,7 +156,7 @@ const mapTechnicalError = (err: any): string => {
 
 function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh, setActiveFulfillmentId } = useWallet();
-  const { formatFiat, rates } = useCurrency();
+  const { formatFiat, rates, selectedCurrency } = useCurrency();
   const { profile, refreshProfile } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -176,6 +177,9 @@ function SendClient() {
   const debouncedRecipient = useDebounce(recipientInput, 300);
 
   const [amount, setAmount] = useState('');
+  const [inputType, setInputType] = useState<'token' | 'fiat'>('token');
+  const [displayAmount, setDisplayAmount] = useState('');
+  
   const [totalFeeUsd, setTotalFeeUsd] = useState(0);
   const [adminFeeUsd, setAdminFeeUsd] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -249,6 +253,42 @@ function SendClient() {
 
   const gasPriceData = useGasPrice(activeNetwork?.chainId);
 
+  const livePrice = useMemo(() => {
+    if (!selectedToken) return 0;
+    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
+    return prices[priceId]?.price || selectedToken.priceUsd || 0;
+  }, [selectedToken, prices]);
+
+  const handleAmountChange = (val: string) => {
+    setDisplayAmount(val);
+    const num = parseFloat(val) || 0;
+    const rate = rates[selectedCurrency] || 1;
+    
+    if (inputType === 'token') {
+      setAmount(val);
+    } else {
+      const tokenVal = num / (livePrice * rate || 1);
+      setAmount(tokenVal.toString());
+    }
+  };
+
+  const toggleInputType = () => {
+    const val = parseFloat(displayAmount) || 0;
+    const rate = rates[selectedCurrency] || 1;
+    
+    if (inputType === 'token') {
+      // Tokens -> Fiat
+      const fiatVal = val * livePrice * rate;
+      setDisplayAmount(fiatVal > 0 ? fiatVal.toFixed(2) : '');
+      setInputType('fiat');
+    } else {
+      // Fiat -> Tokens
+      const tokenVal = val / (livePrice * rate || 1);
+      setDisplayAmount(tokenVal > 0 ? tokenVal.toFixed(6) : '');
+      setInputType('token');
+    }
+  };
+
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
@@ -279,7 +319,6 @@ function SendClient() {
 
   const isWnc = selectedToken?.symbol === 'WNC';
   
-  // WNC REGISTRY GUARD: Force Account ID for internal transfers
   const isWncAddressError = isWnc && debouncedRecipient.length > 0 && addrType !== 'account-id';
 
   const validationError = useMemo(() => {
@@ -444,15 +483,10 @@ function SendClient() {
 
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
-  const livePrice = useMemo(() => {
-    if (!selectedToken) return 0;
-    const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
-    return prices[priceId]?.price || selectedToken.priceUsd || 0;
-  }, [selectedToken, prices]);
-
+  
   const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
 
-  const hasInsufficientFunds = (amountNum + (totalFeeUsd / (livePrice || 1))) > balance;
+  const hasInsufficientFunds = (amountNum + (0.05 / (livePrice || 1))) > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isWncAddressError;
 
   return (
@@ -504,21 +538,39 @@ function SendClient() {
                   <Label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Transfer Amount</Label>
                   <div className="flex items-center gap-2">
                     <span className={cn("text-[9px] font-bold uppercase", hasInsufficientFunds ? "text-red-400 animate-pulse" : "text-white/40")}>Bal: {balance.toFixed(2)} {selectedToken?.symbol}</span>
-                    <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button>
+                    <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => handleAmountChange(balance.toString())}>MAX</button>
                   </div>
                 </div>
-                {/* SLIM AMOUNT CARD */}
+                {/* SLIM AMOUNT CARD WITH CURRENCY SELECTOR */}
                 <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-5 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
                   <div className="flex items-baseline justify-between gap-4">
-                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
-                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                    <Input 
+                      type="number" 
+                      placeholder="0.00" 
+                      value={displayAmount} 
+                      onChange={(e) => handleAmountChange(e.target.value)} 
+                      className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,2.5rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} 
+                    />
+                    <button 
+                      onClick={toggleInputType}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all active:scale-95 shrink-0"
+                    >
+                      <span className="text-sm font-black text-primary uppercase">
+                        {inputType === 'token' ? selectedToken?.symbol : selectedCurrency}
+                      </span>
+                      <Repeat className="w-3 h-3 text-primary opacity-40" />
+                    </button>
                   </div>
-                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic">
-                    {hasInsufficientFunds ? (
-                      <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance</span>
-                    ) : (
-                      <span>≈ {formatFiat(amountNum * livePrice)}</span>
-                    )}
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="text-[10px] font-bold text-muted-foreground/40 uppercase italic">
+                      {hasInsufficientFunds ? (
+                        <span className="text-red-400/60 font-black">Insufficient Balance</span>
+                      ) : (
+                        <span>
+                          ≈ {inputType === 'token' ? formatFiat(amountNum * livePrice) : `${amountNum.toFixed(6)} ${selectedToken?.symbol}`}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
