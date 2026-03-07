@@ -257,7 +257,7 @@ export default function ProfilePage() {
                                     <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Node</span>
                                 </div>
                                 <Button 
-                                    onClick={() => runCloudDiagnostic()}
+                                    onClick={() => runCloudDiagnostic(true)}
                                     variant="ghost" 
                                     className="h-8 px-3 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 gap-2"
                                 >

@@ -100,21 +100,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   });
 
   const hasRunAuditRef = useRef(false);
+  const isAuditAbortedRef = useRef(false);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
   }, [viewingNetwork, chainsWithLogos]);
 
+  /**
+   * DASHBOARD ASSET RESOLUTION
+   * Strictly enforces visibility: only Native tokens or User-Enabled tokens appear on the main dashboard.
+   */
   const allAssets = useMemo(() => {
     if (!isInitialized) return [];
 
     const base = getInitialAssets(effectiveViewingNetwork.chainId);
     const custom = userAddedTokens.filter(t => t.chainId === effectiveViewingNetwork.chainId);
+    
+    // Registry contains everything we know about for this chain
     const registry = [...base, ...custom].reduce((acc, curr) => {
       const id = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
       if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === id)) acc.push(curr);
       return acc;
-    }, [] as any[]);
+    }, [] as AssetRow[]);
 
     const wncPrice = prices['internal:wnc']?.price || 0.0006;
     const wncAsset = { 
@@ -131,7 +138,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } as AssetRow;
 
     const chainBalances = balances[effectiveViewingNetwork.chainId] || [];
-    const onChainAssets = registry.map(asset => {
+    const mappedAssets = registry.map(asset => {
       const balDoc = chainBalances.find(b => asset.isNative ? b.symbol === asset.symbol : b.address?.toLowerCase() === asset.address?.toLowerCase());
       const p = prices[(asset.priceId || asset.coingeckoId || asset.address || '').toLowerCase()];
       const livePrice = p?.price || 0;
@@ -144,8 +151,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } as AssetRow;
     });
 
-    return [wncAsset, ...onChainAssets]
-      .filter(a => !hiddenTokenKeys.has(`${effectiveViewingNetwork.chainId}:${a.symbol}`))
+    // DASHBOARD FILTER: Hide non-native tokens that aren't explicitly enabled by the user
+    return [wncAsset, ...mappedAssets]
+      .filter(a => {
+        const key = `${effectiveViewingNetwork.chainId}:${a.symbol}`;
+        const isHidden = hiddenTokenKeys.has(key);
+        const isUserAdded = userAddedTokens.some(t => t.chainId === effectiveViewingNetwork.chainId && t.symbol === a.symbol);
+        
+        // Always show WNC and Native Gas Tokens unless explicitly hidden
+        if (a.symbol === 'WNC' || a.isNative) return !isHidden;
+        
+        // Only show hardcoded whitelisted tokens if they were toggled ON (which adds them to userAddedTokens)
+        return isUserAdded && !isHidden;
+      })
       .sort((a, b) => (b.fiatValueUsd || 0) - (a.fiatValueUsd || 0));
   }, [isInitialized, effectiveViewingNetwork, profile, balances, prices, hiddenTokenKeys, userAddedTokens]);
 
@@ -170,23 +188,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   });
 
   const dismissSyncCard = useCallback(() => {
+    isAuditAbortedRef.current = true;
     setSyncDiagnostic(prev => ({ ...prev, status: 'idle' }));
   }, []);
 
   const runCloudDiagnostic = useCallback(async (force: boolean = false) => {
     if (!user || !wallets || !chainsWithLogos.length || !accountNumber) return;
     
-    // PERSISTENCE GATE: Check if audit has run for this user session across refreshes
     const auditKey = `ss-audit-completed-${user.id}`;
     const hasAlreadyRun = localStorage.getItem(auditKey) === 'true';
 
     if (hasAlreadyRun && !force && !hasRunAuditRef.current) {
-        console.log("[REGISTRY_SENTINEL] Audit bypassed for active session.");
         return;
     }
 
     if (hasRunAuditRef.current && !force) return;
     hasRunAuditRef.current = true;
+    isAuditAbortedRef.current = false;
 
     await backgroundSyncWorker.performCloudAudit(
       user.id, 
@@ -199,9 +217,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           if (update.status === 'completed') {
               localStorage.setItem(auditKey, 'true');
           }
-      }
+      },
+      () => isAuditAbortedRef.current
     );
   }, [user, wallets, profile, accountNumber, chainsWithLogos]);
+
+  // GLOBAL DOUBLE-TAP DISMISSAL
+  useEffect(() => {
+    const handleDblClick = () => {
+      if (syncDiagnostic.status !== 'idle') {
+        dismissSyncCard();
+      }
+    };
+    window.addEventListener('dblclick', handleDblClick);
+    return () => window.removeEventListener('dblclick', handleDblClick);
+  }, [syncDiagnostic.status, dismissSyncCard]);
 
   const generateWallet = useCallback(async (): Promise<string> => {
     if (!user) throw new Error("Auth required");
@@ -216,7 +246,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
-    // CLEAR PERSISTENCE: New vault requires fresh sync
     localStorage.removeItem(`ss-audit-completed-${user.id}`);
     
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
@@ -244,7 +273,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAccountNumber(targetAcc);
     localStorage.setItem(`account_number_${user.id}`, targetAcc);
     
-    // CLEAR PERSISTENCE: Imported vault requires fresh sync
     localStorage.removeItem(`ss-audit-completed-${user.id}`);
     
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
@@ -368,6 +396,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
         const cachedBalances = localStorage.getItem(`ss-wallet-balances-${uid}`);
         if (cachedBalances) { try { const { data } = JSON.parse(cachedBalances); setBalances(data); } catch (e) {} }
+        
+        const hidden = localStorage.getItem(`hidden_tokens_${uid}`);
+        if (hidden) setHiddenTokenKeys(new Set(JSON.parse(hidden)));
+
+        const custom = localStorage.getItem(`custom_tokens_${uid}`);
+        if (custom) setUserAddedTokens(JSON.parse(custom));
+
         setIsInitialized(true);
       } catch (e) { setIsInitialized(true); } finally { setIsWalletLoading(false); }
     };
@@ -382,7 +417,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, wallets, viewingNetwork, user, refresh, runCloudDiagnostic, chainsWithLogos, accountNumber]);
 
   const contextValue = useMemo(() => ({
-    isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active_network_id_${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet: () => { if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } }, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, getAvailableAssetsForChain: (cid: number) => getInitialAssets(cid).map(a => ({ ...a, balance: '0' } as AssetRow)), isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard
+    isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active_network_id_${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet: () => { if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } }, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, 
+    getAvailableAssetsForChain: (cid: number) => {
+        const base = getInitialAssets(cid);
+        const custom = userAddedTokens.filter(t => t.chainId === cid);
+        return [...base, ...custom].reduce((acc, curr) => {
+            const id = curr.isNative ? curr.symbol : curr.address?.toLowerCase();
+            if (!acc.find(a => (a.isNative ? a.symbol : a.address?.toLowerCase()) === id)) acc.push(curr);
+            return acc;
+        }, [] as any[]).map(a => ({ ...a, balance: '0' } as AssetRow));
+    }, 
+    isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard
   }), [isInitialized, isWalletLoading, hasNewNotifications, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, deleteWalletPermanently, logout, registerCustomTokens, dismissSyncCard]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
