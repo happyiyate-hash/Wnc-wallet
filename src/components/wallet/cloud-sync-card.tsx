@@ -16,12 +16,6 @@ import {
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
-/**
- * INSTITUTIONAL CLOUD SYNC CARD
- * Version: 1.0.0 (User Provided Hardware Node)
- * 
- * Displays the real-time background audit of the multi-chain registry.
- */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
