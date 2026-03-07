@@ -16,8 +16,13 @@ import {
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
+/**
+ * INSTITUTIONAL CLOUD SYNC CARD
+ * Hardware-grade status overlay for registry handshakes.
+ * Features: Double-tap to dismiss interaction.
+ */
 export default function CloudSyncCard() {
-  const { syncDiagnostic } = useWallet();
+  const { syncDiagnostic, dismissSyncCard } = useWallet();
   const { status, chain, localValue, cloudValue, progress } = syncDiagnostic;
 
   if (status === 'idle') return null;
@@ -57,7 +62,9 @@ export default function CloudSyncCard() {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: -150, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-      className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto"
+      onDoubleClick={dismissSyncCard}
+      className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto cursor-pointer"
+      title="Double-tap to dismiss"
     >
       <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
         {/* Background Animation Node (Scanning Pulse) */}
