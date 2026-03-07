@@ -38,6 +38,7 @@ import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee
 import { determineSwapProvider, needsPivotRoute, getRouteDescription, type SwapProvider } from '@/lib/services/swap-router';
 import { zeroXService } from '@/lib/services/zerox-service';
 import { swapExecutionService } from '@/lib/services/swap-execution-service';
+import { getSolanaSwapQuote, buildSolanaSwapTransaction, executeSolanaSwap } from '@/services/solanaSwap';
 
 interface SwapQuote {
   id: string;
@@ -221,7 +222,7 @@ function SwapClient() {
 
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1,
-            toToken.chainId ?? 1,
+            toChainId ?? 1,
             fromToken.symbol,
             toToken.symbol,
             providerType,
@@ -231,7 +232,26 @@ function SwapClient() {
         
         let quote: SwapQuote | null = null;
 
-        if (providerType === 'ZEROX') {
+        if (providerType === 'SOLANA') {
+            const inputMint = fromToken.isNative ? 'So11111111111111111111111111111111111111112' : fromToken.address;
+            const outputMint = toToken.isNative ? 'So11111111111111111111111111111111111111112' : toToken.address;
+            const amountInUnits = ethers.parseUnits(debouncedAmount, fromToken.decimals || 9).toString();
+            
+            const q = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            
+            quote = {
+                id: 'jupiter-node',
+                provider: 'Jupiter',
+                logo: null,
+                receiveAmount: parseFloat(ethers.formatUnits(q.outAmount, toToken.decimals || 9)),
+                fee: 0.000005 * (prices['solana']?.price || 150),
+                eta: '~10s',
+                rawQuote: q,
+                swapProvider: 'SOLANA',
+                routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'SOLANA', false)
+            };
+        }
+        else if (providerType === 'ZEROX') {
             const sellAmount = ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString();
             
             // 0x ETH Sync Node: Requires chain-specific symbol or 0xeee for non-ETH native
@@ -348,13 +368,29 @@ function SwapClient() {
       const balance = parseFloat(fromToken.balance || '0');
       if (balance < parseFloat(amount)) throw new Error("Funds low.");
       
-      const chainConfig = allChainsMap[fromToken.chainId ?? 1];
-      const evmWallet = wallets.find(w => w.type === 'evm');
-      
-      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
-      const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+      if (selectedQuote.swapProvider === 'SOLANA') {
+          setExecutionPhase('LIQUIDITY');
+          const solWallet = wallets.find(w => w.type === 'solana');
+          if (!solWallet?.privateKey) throw new Error("Solana signing authority missing.");
+          
+          const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
+          
+          // Build
+          const swapTx = await buildSolanaSwapTransaction(selectedQuote.rawQuote, solWallet.address);
+          
+          setExecutionPhase('SENDING');
+          // Execute
+          const signature = await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+          
+          setTxHash(signature);
+          setExecutionPhase('SETTLING');
+      }
+      else if (selectedQuote.swapProvider === 'ZEROX') {
+          const chainConfig = allChainsMap[fromToken.chainId ?? 1];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
 
-      if (selectedQuote.swapProvider === 'ZEROX') {
           setExecutionPhase('LIQUIDITY');
           const sellAmount = ethers.parseUnits(amount, fromToken.decimals || 18).toString();
           
@@ -379,6 +415,11 @@ function SwapClient() {
           await tx.wait();
       } 
       else if (selectedQuote.swapProvider === 'LIFI') {
+          const chainConfig = allChainsMap[fromToken.chainId ?? 1];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+
           setExecutionPhase('LIQUIDITY');
           const q = selectedQuote.rawQuote;
           if (q.transactionRequest) {
@@ -399,6 +440,11 @@ function SwapClient() {
           }
       }
       else if (selectedQuote.swapProvider === 'INTERNAL') {
+          const chainConfig = allChainsMap[fromToken.chainId ?? 1];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+
           if (selectedQuote.isPivotRoute) setExecutionPhase('PIVOT_CONVERTING');
           else setExecutionPhase('LIQUIDITY');
 

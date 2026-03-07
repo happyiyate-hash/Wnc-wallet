@@ -1,18 +1,20 @@
+
 'use client';
 
 import { LIFI_SUPPORTED_CHAINS } from '../lifiSupportedChains';
 
 /**
  * INSTITUTIONAL HYBRID SWAP ROUTER
- * Version: 6.0.0 (Pivot Logic Update)
+ * Version: 6.1.0 (Jupiter Solana Integration)
  * 
  * Strictly enforces routing logic based on chain type:
  * 1. Same-Chain EVM -> 0x Protocol
  * 2. Cross-EVM -> LI.FI API
- * 3. Hybrid/Non-EVM -> Sync Node (Multi-Step Pivot Bridge)
+ * 3. Solana -> Jupiter API
+ * 4. Hybrid/Non-EVM -> Sync Node (Multi-Step Pivot Bridge)
  */
 
-export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL';
+export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL' | 'SOLANA';
 
 const isEVM = (chainId: number) => {
     const nonEvm = [0, 144, 501, 1000, 2]; // BTC, XRP, SOL, DOT, KSM
@@ -25,15 +27,20 @@ export function determineSwapProvider(
     fromSymbol: string, 
     toSymbol: string
 ): SwapProvider {
+    // 1. Solana Native -> Jupiter Optimization
+    if (fromChainId === 501 && toChainId === 501) {
+        return 'SOLANA';
+    }
+
     const fromEVM = isEVM(fromChainId);
     const toEVM = isEVM(toChainId);
 
-    // 1. Same Chain EVM -> High speed 0x
+    // 2. Same Chain EVM -> High speed 0x
     if (fromChainId === toChainId && fromEVM) {
         return 'ZEROX';
     }
 
-    // 2. Cross-EVM -> LI.FI Aggregator
+    // 3. Cross-EVM -> LI.FI Aggregator
     const isFromLifiSupported = LIFI_SUPPORTED_CHAINS.includes(fromChainId);
     const isToLifiSupported = LIFI_SUPPORTED_CHAINS.includes(toChainId);
     
@@ -41,7 +48,7 @@ export function determineSwapProvider(
         return 'LIFI';
     }
 
-    // 3. All other routes (SOL, BTC, XRP, etc) -> Internal Liquidity Node
+    // 4. All other routes (SOL, BTC, XRP, etc) -> Internal Liquidity Node
     return 'INTERNAL';
 }
 
@@ -79,6 +86,7 @@ export function getRouteDescription(
 ): string {
     if (provider === 'ZEROX') return `${fromSymbol}→${toSymbol} (0x)`;
     if (provider === 'LIFI') return `${fromSymbol}→${toSymbol} (Bridge)`;
+    if (provider === 'SOLANA') return `${fromSymbol}→${toSymbol} (Jupiter)`;
     if (isPivot) return `${fromSymbol}→USDC→${toSymbol}`;
     return `${fromSymbol}→${toSymbol} (Sync)`;
 }
