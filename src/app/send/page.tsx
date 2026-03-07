@@ -155,7 +155,7 @@ const mapTechnicalError = (err: any): string => {
 
 function SendClient() {
   const { viewingNetwork, wallets, infuraApiKey, allAssets, prices, allChainsMap, accountNumber, refresh, setActiveFulfillmentId } = useWallet();
-  const { formatFiat } = useCurrency();
+  const { formatFiat, rates } = useCurrency();
   const { profile, refreshProfile } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -189,12 +189,10 @@ function SendClient() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // LIVE SCANNER SENTINEL
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
 
     if (isScannerOpen) {
-      // Delay to ensure the "reader" element is rendered in the DOM
       const timer = setTimeout(async () => {
         try {
           const element = document.getElementById("reader");
@@ -207,16 +205,14 @@ function SendClient() {
             { facingMode: "environment" },
             config,
             (decodedText) => {
-              // Success Node
               setRecipientInput(decodedText);
               handleRecipientInputChange(decodedText);
               setIsScannerOpen(false);
-              
               if (html5QrCode && html5QrCode.isScanning) {
                 html5QrCode.stop().catch(() => {});
               }
             },
-            () => {} // Silent on parse errors
+            () => {}
           );
         } catch (err) {
           console.warn("[SCANNER_INIT_FAIL]", err);
@@ -250,6 +246,9 @@ function SendClient() {
     const chainId = selectedToken?.chainId ?? 1;
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
+
+  // CALL GAS PRICE HOOK FOR DYNAMIC DATA
+  const gasPriceData = useGasPrice(activeNetwork?.chainId);
 
   useEffect(() => {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
@@ -376,82 +375,46 @@ function SendClient() {
       else if (activeNetwork.type === 'solana') {
         const solWalletData = wallets.find(w => w.type === 'solana');
         if (!solWalletData?.privateKey) throw new Error("Signing authority missing.");
-        
         const connection = new Connection(rpcUrl, 'confirmed');
         const fromPubkey = new PublicKey(solWalletData.address);
         const toPubkey = new PublicKey(resolvedAddress);
         const feeRecipientPubkey = new PublicKey(getFeeRecipient(activeNetwork.name));
-        
         const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey,
-            toPubkey,
-            lamports: Math.floor(amountNum * LAMPORTS_PER_SOL),
-          }),
-          SystemProgram.transfer({
-            fromPubkey,
-            toPubkey: feeRecipientPubkey,
-            lamports: Math.floor(feeInToken * LAMPORTS_PER_SOL),
-          })
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports: Math.floor(amountNum * LAMPORTS_PER_SOL) }),
+          SystemProgram.transfer({ fromPubkey, toPubkey: feeRecipientPubkey, lamports: Math.floor(feeInToken * LAMPORTS_PER_SOL) })
         );
-
         setTxHash(`sol_batch_${Math.random().toString(36).substring(7)}`);
       }
       else if (activeNetwork.type === 'evm' || !activeNetwork.type) {
         const evmWalletData = wallets.find(w => w.type === 'evm');
         if (!evmWalletData?.privateKey) throw new Error("Signing authority missing.");
-        
         const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
         const wallet = new ethers.Wallet(evmWalletData.privateKey, provider);
-        
         const decimals = selectedToken.decimals || 18;
         const mainAmount = ethers.parseUnits(amountNum.toString(), decimals);
         const feeAmount = ethers.parseUnits(feeInToken.toFixed(decimals), decimals);
         const feeRecipient = getFeeRecipient(activeNetwork.name);
-        
         let tx;
-        if (selectedToken.isNative) {
-          tx = await wallet.sendTransaction({ to: resolvedAddress, value: mainAmount });
-        } else {
-          const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-          tx = await contract.transfer(resolvedAddress, mainAmount);
-        }
+        if (selectedToken.isNative) { tx = await wallet.sendTransaction({ to: resolvedAddress, value: mainAmount }); } 
+        else { const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet); tx = await contract.transfer(resolvedAddress, mainAmount); }
         setTxHash(tx.hash);
-
-        if (selectedToken.isNative) {
-            await wallet.sendTransaction({ to: feeRecipient, value: feeAmount }).catch(() => {});
-        } else {
-            const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-            await contract.transfer(feeRecipient, feeAmount).catch(() => {});
-        }
+        if (selectedToken.isNative) { await wallet.sendTransaction({ to: feeRecipient, value: feeAmount }).catch(() => {}); } 
+        else { const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet); await contract.transfer(feeRecipient, feeAmount).catch(() => {}); }
       } else if (activeNetwork.type === 'xrp') {
         const xrpWalletData = wallets.find(w => w.type === 'xrp');
         const client = new xrpl.Client(rpcUrl);
         await client.connect();
         const wallet = xrpl.Wallet.fromSeed(xrpWalletData!.seed!);
         const feeRecipient = getFeeRecipient(activeNetwork.name);
-        
-        const prepared = await client.autofill({ 
-            TransactionType: "Payment", 
-            Account: wallet.address, 
-            Amount: xrpl.xrpToDrops(amountNum.toString()), 
-            Destination: resolvedAddress 
-        });
+        const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountNum.toString()), Destination: resolvedAddress });
         const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-        
         if ((result.result.meta as any).TransactionResult === "tesSUCCESS") {
             setTxHash(result.result.hash);
-            const feePrepared = await client.autofill({ 
-                TransactionType: "Payment", 
-                Account: wallet.address, 
-                Amount: xrpl.xrpToDrops(feeInToken.toFixed(6)), 
-                Destination: feeRecipient 
-            });
+            const feePrepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(feeInToken.toFixed(6)), Destination: feeRecipient });
             await client.submit(wallet.sign(feePrepared).tx_blob).catch(() => {});
         } else throw new Error("XRPL Error");
         await client.disconnect();
       }
-      
       setTxStatus('success');
       await refreshProfile(); refresh();
     } catch (e: any) { setTxStatus('error'); setReceiptError(mapTechnicalError(e)); }
@@ -481,6 +444,9 @@ function SendClient() {
     const priceId = (selectedToken.priceId || selectedToken.coingeckoId || selectedToken.address || '').toLowerCase();
     return prices[priceId]?.price || selectedToken.priceUsd || 0;
   }, [selectedToken, prices]);
+
+  const isWnc = selectedToken?.symbol === 'WNC';
+  const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
 
   const hasInsufficientFunds = (amountNum + (totalFeeUsd / (livePrice || 1))) > balance;
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
@@ -537,9 +503,46 @@ function SendClient() {
                     <button className="h-6 px-2 text-[9px] font-black text-primary uppercase bg-primary/10 rounded-md transition-all active:scale-90" onClick={() => setAmount(balance.toString())}>MAX</button>
                   </div>
                 </div>
-                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-6 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
-                  <div className="flex items-baseline justify-between gap-4"><Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} /><span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span></div>
-                  <div className="mt-4 flex items-center justify-between"><div className="text-xs font-bold text-muted-foreground/40 italic flex items-center gap-1.5">{hasInsufficientFunds ? <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance (Inc. Service Fee)</span> : <>≈ {formatFiat(amountNum * livePrice)} <span className="opacity-50">Estimated Value</span></>}</div><div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20"><Zap className="w-3 h-3 text-primary fill-primary animate-pulse" /><span className="text-[9px] font-black text-primary uppercase tracking-widest">Fixed $0.05 Fee</span></div></div>
+                {/* SLIM AMOUNT CARD */}
+                <div className={cn("bg-white/[0.03] border rounded-[2.5rem] p-5 transition-all", hasInsufficientFunds ? "border-red-500/30 ring-4 ring-red-500/5" : "border-white/10")}>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={cn("bg-transparent border-none text-[clamp(1.5rem,8vw,3rem)] font-black p-0 h-auto focus-visible:ring-0 tracking-tighter", hasInsufficientFunds ? "text-red-400" : "text-white")} />
+                    <span className="text-xl font-black text-white/20 uppercase">{selectedToken?.symbol}</span>
+                  </div>
+                  <div className="mt-2 text-xs font-bold text-muted-foreground/40 italic">
+                    {hasInsufficientFunds ? (
+                      <span className="text-red-400/60 font-black text-[9px] uppercase">Insufficient Balance</span>
+                    ) : (
+                      <span>≈ {formatFiat(amountNum * livePrice)}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* SIDE-BY-SIDE FEE CARDS */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em]">Network Gas</p>
+                      <Fuel className="w-3 h-3 text-primary opacity-40" />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      {gasPriceData.status === 'loading' ? (
+                        <div className="h-4 w-12 bg-white/5 animate-pulse rounded" />
+                      ) : (
+                        <p className="text-xs font-bold text-white truncate">{gasPriceData.nativeFee} {activeNetwork.symbol}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em]">Institutional Fee</p>
+                      <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
+                    </div>
+                    <p className="text-xs font-bold text-white">
+                      {isWnc ? '50 WNC' : formatFiat(0.05)}
+                    </p>
+                  </div>
                 </div>
             </div>
           </div>
