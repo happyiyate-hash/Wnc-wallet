@@ -1,107 +1,105 @@
+
 'use client';
 
-import type { WalletWithMetadata, UserProfile, ChainConfig } from '@/lib/types';
-import { syncAddressesToCloud } from './services/wallet-actions';
+import { supabase } from '@/lib/supabase/client';
+import type { WalletWithMetadata, ChainConfig } from '@/lib/types';
+import evmNetworks from '@/lib/evmNetworks.json';
 
 /**
- * INSTITUTIONAL BACKGROUND SYNC WORKER
- * Version: 7.0.0 (Sequential Narrative Protocol)
+ * INSTITUTIONAL REGISTRY AUDIT WORKER
+ * Version: 5.0.0 (Sequential Narrative Protocol)
+ * 
+ * Orchestrates a chain-by-chain audit of the local hardware node vs the cloud registry.
+ * Drives the UI heartbeat via a granular progress callback.
  */
 
-export interface SyncDiagnostic {
-  status: 'idle' | 'checking' | 'mismatch' | 'syncing' | 'success' | 'completed';
-  chain: string | null;
+export interface AuditState {
+  status: 'idle' | 'scanning' | 'repairing' | 'completed';
+  chain: string;
   localValue: string | null;
   cloudValue: string | null;
   progress: number;
 }
 
 export const backgroundSyncWorker = {
-  /**
-   * Performs a strictly sequenced audit of the vault registry.
-   * Tells a story of "Scanning -> Verification -> Result".
-   */
   async performCloudAudit(
-    userId: string,
-    wallets: WalletWithMetadata[] | null,
-    profile: UserProfile | null,
-    accountNumber: string | null,
-    allChains: ChainConfig[],
-    onUpdate: (update: Partial<SyncDiagnostic>) => void
+    userId: string, 
+    wallets: WalletWithMetadata[], 
+    profile: any,
+    onProgress: (state: AuditState) => void
   ) {
-    // GUARD: Ensure hardware nodes are fully derived before auditing
-    if (!userId || !wallets || wallets.length === 0 || !accountNumber) {
-        onUpdate({ status: 'idle', progress: 0, chain: null });
-        return;
-    }
+    if (!supabase || !wallets || wallets.length === 0) return;
 
-    const breathe = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const allChains = Object.values(evmNetworks) as ChainConfig[];
+    const totalChains = allChains.length;
+    
+    console.log(`[AUDIT_ENGINE] Starting institutional audit for ${totalChains} nodes.`);
 
-    // 1. CONSTRUCT EXHAUSTIVE AUDIT NODES
-    const uniqueTypes = Array.from(new Set(allChains.map(c => c.type || 'evm')));
-    const auditNodes = uniqueTypes.map(type => {
-      const localWallet = wallets.find(w => w.type === type);
-      const fieldName = `${type}_address`;
+    for (let i = 0; i < totalChains; i++) {
+      const chain = allChains[i];
+      const walletType = chain.type || 'evm';
+      const localWallet = wallets.find(w => w.type === walletType);
       
-      const chainSample = allChains.find(c => (c.type || 'evm') === type);
-      const label = chainSample?.symbol.toUpperCase() || type.toUpperCase();
+      const fieldName = `${walletType}_address`;
+      const localAddr = localWallet?.address || null;
+      const cloudAddr = profile?.[fieldName] || null;
 
-      return {
-        label,
-        type,
-        local: localWallet?.address || null,
-        cloud: profile ? (profile as any)[fieldName] || null : null
-      };
-    }).filter(node => node.local !== null);
-
-    const totalSteps = auditNodes.length;
-    let completed = 0;
-
-    // 2. EXECUTE SEQUENTIAL AUDIT
-    for (const node of auditNodes) {
-      if (!wallets || wallets.length === 0) break;
-
-      // STAGE 1: INCOMING & CHECKING
-      // The card enters from the right
-      onUpdate({ 
-        status: 'checking',
-        chain: node.label, 
-        localValue: node.local, 
-        cloudValue: node.cloud,
-        progress: (completed / totalSteps) * 100
+      // 1. STAGE: Incoming (Set Node Context)
+      onProgress({
+        status: 'scanning',
+        chain: chain.symbol,
+        localValue: localAddr,
+        cloudValue: cloudAddr,
+        progress: 0
       });
 
-      await breathe(1500); // Audit duration (Processing)
-
-      // STAGE 2: VALIDATION (Repair if necessary)
-      const isMismatch = node.local && node.local !== node.cloud;
-
-      if (isMismatch) {
-        onUpdate({ status: 'mismatch' });
-        await breathe(800); 
-
-        onUpdate({ status: 'syncing' });
-        try {
-          await syncAddressesToCloud(userId, wallets, accountNumber!);
-          onUpdate({ cloudValue: node.local });
-          await breathe(1000); 
-        } catch (e) {
-          console.warn("[AUDIT_SYNC_FAIL]", e);
-        }
+      // 2. STAGE: Processing (Simulated Heartbeat for 1200ms)
+      const steps = 10;
+      for (let s = 1; s <= steps; s++) {
+        await new Promise(r => setTimeout(r, 120));
+        onProgress({
+          status: 'scanning',
+          chain: chain.symbol,
+          localValue: localAddr,
+          cloudValue: cloudAddr,
+          progress: (s / steps) * 100
+        });
       }
 
-      // STAGE 3: SUCCESS (Trigger Checkmark)
-      onUpdate({ status: 'success' });
-      await breathe(1500); // Finality Pause (Dopamine hit)
-      
-      completed++;
-      // Update progress for the NEXT slide
-      onUpdate({ progress: (completed / totalSteps) * 100 });
+      // 3. STAGE: Verification Pause (Dopamine Hit)
+      await new Promise(r => setTimeout(r, 400));
+
+      // 4. OPTIONAL: Repair Mismatch
+      if (localAddr && localAddr !== cloudAddr) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ [fieldName]: localAddr })
+            .eq('id', userId);
+        } catch (e) {
+          console.warn(`[AUDIT_REPAIR_FAIL] ${chain.symbol}`);
+        }
+      }
     }
 
-    // STAGE 4: TERMINATION
-    onUpdate({ status: 'completed', chain: 'VAULT SECURED', progress: 100 });
-    await breathe(2500);
-    onUpdate({ status: 'idle', progress: 0, chain: null });
+    // 5. STAGE: Finalization
+    onProgress({
+      status: 'completed',
+      chain: 'Sync',
+      localValue: null,
+      cloudValue: null,
+      progress: 100
+    });
+
+    // Auto-idle after 3 seconds
+    setTimeout(() => {
+      onProgress({
+        status: 'idle',
+        chain: '',
+        localValue: null,
+        cloudValue: null,
+        progress: 0
+      });
+    }, 3000);
   }
 };
