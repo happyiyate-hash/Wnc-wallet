@@ -136,7 +136,7 @@ export async function calculateTransactionFees(activeNetwork: any) {
 
 /**
  * PERFORM TRANSACTION DISPATCH (Core Logic)
- * Version: 5.0.0 (Notification Integrated)
+ * Version: 5.1.0 (Full Schema Handshake)
  */
 export async function performTransactionDispatch(params: {
   wallets: any[];
@@ -168,11 +168,14 @@ export async function performTransactionDispatch(params: {
     if (rpcError) throw new Error(rpcError.message);
     if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
     
+    txHash = `int_${Math.random().toString(36).substring(7)}`;
+
     // ATOMIC NOTIFICATION HANDSHAKE
     await supabase!.from('notifications').insert([
       {
         user_id: recipientProfile!.id,
         from_user_id: profile.id,
+        transaction_id: txHash,
         type: 'TRANSFER_IN',
         amount: Math.floor(amountNum),
         token: 'WNC',
@@ -182,6 +185,7 @@ export async function performTransactionDispatch(params: {
       {
         user_id: profile.id,
         from_user_id: recipientProfile!.id,
+        transaction_id: txHash,
         type: 'TRANSFER_OUT',
         amount: Math.floor(amountNum),
         token: 'WNC',
@@ -189,8 +193,6 @@ export async function performTransactionDispatch(params: {
         message: `You sent ${amountNum} WNC to @${recipientProfile!.name}`
       }
     ]);
-
-    txHash = `int_${Math.random().toString(36).substring(7)}`;
   } 
   // 2. SOLANA DISPATCH
   else if (activeNetwork.type === 'solana') {

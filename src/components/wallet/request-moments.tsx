@@ -287,6 +287,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
     try {
       const chainType = request.chain_type;
       const amountStr = request.amount.toString();
+      let finalTxHash = '';
 
       if (request.token_symbol === 'WNC') {
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
@@ -298,11 +299,15 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
         
+        finalTxHash = `int_req_${Math.random().toString(36).substring(7)}`;
+        setTxHash(finalTxHash);
+
         // ATOMIC NOTIFICATION HANDSHAKE
         await supabase!.from('notifications').insert([
           {
             user_id: requester.id,
             from_user_id: currentUserProfile.id,
+            transaction_id: finalTxHash,
             type: 'TRANSFER_IN',
             amount: Math.floor(request.amount),
             token: 'WNC',
@@ -312,6 +317,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
           {
             user_id: currentUserProfile.id,
             from_user_id: requester.id,
+            transaction_id: finalTxHash,
             type: 'TRANSFER_OUT',
             amount: Math.floor(request.amount),
             token: 'WNC',
@@ -319,8 +325,6 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
             message: `You fulfilled a request from @${requester.name} for ${request.amount} WNC`
           }
         ]);
-
-        setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
       } 
       else if (chainType === 'btc' || chainType === 'ltc') {
           throw new Error("BTC/LTC Signing restricted to hardware modules.");
@@ -340,7 +344,10 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
           const wallet = xrpl.Wallet.fromSeed(xrpWallet!.seed!);
           const prepared = await client.autofill({ TransactionType: "Payment", Account: wallet.address, Amount: xrpl.xrpToDrops(amountStr), Destination: recipientAddress });
           const result = await client.submitAndWait(wallet.sign(prepared).tx_blob);
-          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") setTxHash(result.result.hash);
+          if (result.result.meta && typeof result.result.meta !== 'string' && (result.result.meta as any).TransactionResult === "tesSUCCESS") {
+            finalTxHash = result.result.hash;
+            setTxHash(finalTxHash);
+          }
           else throw new Error("XRPL Fail");
         } finally {
           if (client.isConnected()) await client.disconnect();
@@ -360,7 +367,8 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
           const contract = new ethers.Contract(request.token_address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
           tx = await contract.transfer(recipientAddress, ethers.parseUnits(amountStr, decimals));
         }
-        setTxHash(tx.hash);
+        finalTxHash = tx.hash;
+        setTxHash(finalTxHash);
       }
 
       await supabase?.from('payment_requests').update({ status: 'paid' }).eq('id', requestId);

@@ -74,6 +74,7 @@
         "id": { "type": "string" },
         "user_id": { "type": "string" },
         "from_user_id": { "type": "string" },
+        "transaction_id": { "type": "string" },
         "type": { "enum": ["TRANSFER_IN", "TRANSFER_OUT", "REWARD", "REQUEST"], "type": "string" },
         "amount": { "type": "number" },
         "token": { "type": "string" },
