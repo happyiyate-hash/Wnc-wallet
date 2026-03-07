@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -43,6 +44,7 @@ import { getSolanaSwapQuote, buildSolanaSwapTransaction, executeSolanaSwap } fro
 import { fetchZeroXQuote, executeZeroXSwap } from '@/services/swaps/zeroXSwap';
 import { fetchLifiQuote, executeLifiSwap } from '@/services/swaps/lifiSwap';
 import { fetchLiquidityQuote, executeLiquiditySwap } from '@/services/swaps/liquidityProviderSwap';
+import { fetchTronQuote, executeTronSwap } from '@/services/swaps/tronSwap';
 
 interface SwapQuote {
   id: string;
@@ -232,7 +234,7 @@ function SwapClient() {
 
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1,
-            toToken.chainId ?? 1,
+            toChainId: toToken.chainId ?? 1,
             fromToken.symbol,
             toToken.symbol,
             providerType,
@@ -259,6 +261,26 @@ function SwapClient() {
                 rawQuote: q,
                 swapProvider: 'SOLANA',
                 routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'SOLANA', false)
+            };
+        }
+        else if (providerType === 'TRON') {
+            const result = await fetchTronQuote({
+              amount: debouncedAmount,
+              fromToken: fromToken,
+              toToken: toToken,
+              fromTokenPrice: fromTokenPrice,
+              toTokenPrice: toTokenPrice
+            });
+
+            quote = {
+                id: 'tron-node',
+                provider: result.provider,
+                logo: null,
+                receiveAmount: result.receiveAmount,
+                fee: result.feeUsd,
+                eta: result.eta,
+                swapProvider: 'TRON',
+                routeDescription: getRouteDescription(fromToken.symbol, toToken.symbol, 'TRON', false)
             };
         }
         else if (providerType === 'ZEROX') {
@@ -382,6 +404,24 @@ function SwapClient() {
           
           setExecutionPhase('SENDING');
           const signature = await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+          
+          setTxHash(signature);
+          setExecutionPhase('SETTLING');
+      }
+      else if (selectedQuote.swapProvider === 'TRON') {
+          setExecutionPhase('LIQUIDITY');
+          const tronWallet = wallets.find(w => w.type === 'tron');
+          if (!tronWallet?.privateKey) throw new Error("TRON signing authority missing.");
+          
+          const rpcUrl = allChainsMap[728126428]?.rpcUrl || 'https://api.trongrid.io';
+          const signature = await executeTronSwap({
+            amount: amount,
+            fromToken: fromToken,
+            toToken: toToken,
+            privateKey: tronWallet.privateKey,
+            rpcUrl: rpcUrl,
+            setPhase: setExecutionPhase
+          });
           
           setTxHash(signature);
           setExecutionPhase('SETTLING');

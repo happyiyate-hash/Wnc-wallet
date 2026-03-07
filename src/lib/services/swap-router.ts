@@ -5,19 +5,20 @@ import { LIFI_SUPPORTED_CHAINS } from '../lifiSupportedChains';
 
 /**
  * INSTITUTIONAL HYBRID SWAP ROUTER
- * Version: 6.1.0 (Jupiter Solana Integration)
+ * Version: 7.0.0 (TRON Protocol Integration)
  * 
  * Strictly enforces routing logic based on chain type:
  * 1. Same-Chain EVM -> 0x Protocol
  * 2. Cross-EVM -> LI.FI API
  * 3. Solana -> Jupiter API
- * 4. Hybrid/Non-EVM -> Sync Node (Multi-Step Pivot Bridge)
+ * 4. TRON -> TRC20 Engine
+ * 5. Hybrid/Non-EVM -> Sync Node (Multi-Step Pivot Bridge)
  */
 
-export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL' | 'SOLANA';
+export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL' | 'SOLANA' | 'TRON';
 
 const isEVM = (chainId: number) => {
-    const nonEvm = [0, 144, 501, 1000, 2]; // BTC, XRP, SOL, DOT, KSM
+    const nonEvm = [0, 144, 501, 1000, 2, 728126428]; // BTC, XRP, SOL, DOT, KSM, TRON
     return !nonEvm.includes(chainId);
 };
 
@@ -32,15 +33,20 @@ export function determineSwapProvider(
         return 'SOLANA';
     }
 
+    // 2. TRON Native/TRC20 -> SunSwap Optimization
+    if (fromChainId === 728126428 && toChainId === 728126428) {
+        return 'TRON';
+    }
+
     const fromEVM = isEVM(fromChainId);
     const toEVM = isEVM(toChainId);
 
-    // 2. Same Chain EVM -> High speed 0x
+    // 3. Same Chain EVM -> High speed 0x
     if (fromChainId === toChainId && fromEVM) {
         return 'ZEROX';
     }
 
-    // 3. Cross-EVM -> LI.FI Aggregator
+    // 4. Cross-EVM -> LI.FI Aggregator
     const isFromLifiSupported = LIFI_SUPPORTED_CHAINS.includes(fromChainId);
     const isToLifiSupported = LIFI_SUPPORTED_CHAINS.includes(toChainId);
     
@@ -48,14 +54,12 @@ export function determineSwapProvider(
         return 'LIFI';
     }
 
-    // 4. All other routes (SOL, BTC, XRP, etc) -> Internal Liquidity Node
+    // 5. All other routes (SOL, BTC, XRP, etc) -> Internal Liquidity Node
     return 'INTERNAL';
 }
 
 /**
  * Detects if a "Pivot Route" is required.
- * A pivot is needed if the transfer is cross-chain and neither asset is a stablecoin (USDC/USDT).
- * Path: Token A -> USDC (Source) -> USDC (Dest) -> Token B
  */
 export function needsPivotRoute(
     fromChainId: number,
@@ -68,13 +72,10 @@ export function needsPivotRoute(
 ): boolean {
     if (provider !== 'INTERNAL') return false;
     
-    // Internal swaps on same chain or simple native-to-native don't need pivot
     if (fromChainId === toChainId) return false;
     if (fromIsNative && toIsNative) return false;
 
     const isStable = (s: string) => ['USDT', 'USDC'].includes(s.toUpperCase());
-    
-    // If we are cross-chain and moving between non-stables, pivot is mandatory for liquidity
     return !isStable(fromSymbol) && !isStable(toSymbol);
 }
 
@@ -87,6 +88,7 @@ export function getRouteDescription(
     if (provider === 'ZEROX') return `${fromSymbol}→${toSymbol} (0x)`;
     if (provider === 'LIFI') return `${fromSymbol}→${toSymbol} (Bridge)`;
     if (provider === 'SOLANA') return `${fromSymbol}→${toSymbol} (Jupiter)`;
+    if (provider === 'TRON') return `${fromSymbol}→${toSymbol} (SunSwap)`;
     if (isPivot) return `${fromSymbol}→USDC→${toSymbol}`;
     return `${fromSymbol}→${toSymbol} (Sync)`;
 }

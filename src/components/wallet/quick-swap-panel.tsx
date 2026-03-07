@@ -34,6 +34,7 @@ import { fetchZeroXQuote, executeZeroXSwap } from '@/services/swaps/zeroXSwap';
 import { fetchLifiQuote, executeLifiSwap } from '@/services/swaps/lifiSwap';
 import { fetchLiquidityQuote, executeLiquiditySwap } from '@/services/swaps/liquidityProviderSwap';
 import { getSolanaSwapQuote, buildSolanaSwapTransaction, executeSolanaSwap } from '@/services/solanaSwap';
+import { fetchTronQuote, executeTronSwap } from '@/services/swaps/tronSwap';
 
 interface QuickSwapPanelProps {
     isOpen: boolean;
@@ -42,7 +43,7 @@ interface QuickSwapPanelProps {
 
 /**
  * INSTITUTIONAL QUICK SWAP PANEL
- * Version: 3.0.0 (Unified Engine Sync)
+ * Version: 4.0.0 (TRON Protocol Sync)
  * 
  * Features exactly the same routing logic as the main swap page.
  * Respects all warnings: No UI/CSS/Animation changes.
@@ -138,6 +139,16 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
                 swapProvider: 'SOLANA'
             };
         }
+        else if (providerType === 'TRON') {
+            const res = await fetchTronQuote({
+              amount: debouncedAmount,
+              fromToken: fromToken,
+              toToken: toToken,
+              fromTokenPrice: fromTokenPrice,
+              toTokenPrice: toTokenPrice
+            });
+            result = { ...res, swapProvider: 'TRON' };
+        }
         else if (providerType === 'ZEROX') {
             const res = await fetchZeroXQuote({
               chainId: fromToken.chainId ?? 1,
@@ -208,6 +219,19 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
           const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
           const swapTx = await buildSolanaSwapTransaction(quote.rawQuote, solWallet.address);
           await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+      }
+      else if (quote.swapProvider === 'TRON') {
+          const tronWallet = wallets.find(w => w.type === 'tron');
+          if (!tronWallet?.privateKey) throw new Error("Signing authority missing.");
+          const rpcUrl = allChainsMap[728126428]?.rpcUrl || 'https://api.trongrid.io';
+          await executeTronSwap({
+            amount: amount,
+            fromToken: fromToken,
+            toToken: toToken,
+            privateKey: tronWallet.privateKey,
+            rpcUrl: rpcUrl,
+            setPhase: () => {}
+          });
       }
       else if (quote.swapProvider === 'ZEROX') {
           const chainConfig = allChainsMap[fromToken.chainId];
