@@ -29,6 +29,11 @@ import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee
 import { determineSwapProvider, needsPivotRoute } from '@/lib/services/swap-router';
 import { useToast } from '@/hooks/use-toast';
 
+/**
+ * WARNING: Do NOT modify UI in this file.
+ * Only add functions for fetching quotes and executing swaps.
+ */
+
 // SWAP ENGINE IMPORTS
 import { fetchZeroXQuote, executeZeroXSwap } from '@/services/swaps/zeroXSwap';
 import { fetchLifiQuote, executeLifiSwap } from '@/services/swaps/lifiSwap';
@@ -43,9 +48,9 @@ interface QuickSwapPanelProps {
 
 /**
  * INSTITUTIONAL QUICK SWAP PANEL
- * Version: 4.5.0 (Robust Solana Node Handshake)
+ * Version: 5.0.0 (Unified Engine Controller)
  * 
- * Features exactly the same routing logic as the main swap page.
+ * Behave exactly like the main swap page.
  * Respects all warnings: No UI/CSS/Animation changes.
  */
 export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelProps) {
@@ -74,7 +79,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     if (isOpen && allAssets.length >= 2 && !fromToken) {
         const initialFrom = allAssets.find(a => a.symbol !== 'WNC') || allAssets[0];
         setFromToken(initialFrom);
-        setToToken(allAssets.find(a => a.symbol !== initialFrom.symbol && a.symbol !== 'WNC') || allAssets[1]);
+        const initialTo = allAssets.find(a => a.symbol !== initialFrom.symbol && a.symbol !== 'WNC') || allAssets[1];
+        setToToken(initialTo);
     }
   }, [isOpen, allAssets, fromToken]);
 
@@ -91,7 +97,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   }, [toToken, prices]);
 
   /**
-   * ATOMIC QUOTE HANDSHAKE (Engine-Aware)
+   * ATOMIC QUOTE HANDSHAKE (Mirroring main swap page)
    */
   useEffect(() => {
     const fetchQuickQuote = async () => {
@@ -206,7 +212,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   }, [debouncedAmount, fromToken, toToken, allChainsMap, fromTokenPrice, toTokenPrice, wallets, prices]);
 
   /**
-   * INSTITUTIONAL EXECUTION HANDSHAKE (Engine-Aware)
+   * INSTITUTIONAL EXECUTION HANDSHAKE
    */
   const handleExecuteSwap = async () => {
     if (!quote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
