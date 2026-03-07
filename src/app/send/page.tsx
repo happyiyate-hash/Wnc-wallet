@@ -247,7 +247,6 @@ function SendClient() {
     return allChainsMap[chainId] || viewingNetwork;
   }, [selectedToken, viewingNetwork, allChainsMap]);
 
-  // CALL GAS PRICE HOOK FOR DYNAMIC DATA
   const gasPriceData = useGasPrice(activeNetwork?.chainId);
 
   useEffect(() => {
@@ -278,17 +277,23 @@ function SendClient() {
     return false;
   }, [debouncedRecipient, accountNumber, wallets]);
 
+  const isWnc = selectedToken?.symbol === 'WNC';
+  
+  // WNC REGISTRY GUARD: Force Account ID for internal transfers
+  const isWncAddressError = isWnc && debouncedRecipient.length > 0 && addrType !== 'account-id';
+
   const validationError = useMemo(() => {
     if (isSelfTransfer) return null;
+    if (isWncAddressError) return { title: "Registry Guard", message: "Sorry, we can't send WNC to raw addresses. You need to paste a unique ID number for any recipient." };
     if (addrType === 'invalid-evm-format') return { title: "Invalid Format", message: "This doesn't look like a valid address." };
     if (addrType === 'invalid-evm-checksum') return { title: "Checksum Fail", message: "Address failed cryptographic validation." };
     if (addrType === 'invalid-xrp') return { title: "Invalid XRP", message: "Address failed Base58 validation." };
     if (debouncedRecipient.length > 0 && addrType === 'invalid') return { title: "Unknown Format", message: "I could not find any account or blockchain related to this symbol." };
     return null;
-  }, [addrType, isSelfTransfer, debouncedRecipient]);
+  }, [addrType, isSelfTransfer, debouncedRecipient, isWncAddressError]);
 
   const isNetworkMismatch = useMemo(() => {
-    if (isSelfTransfer || selectedToken?.symbol === 'WNC' || !debouncedRecipient) return false;
+    if (isSelfTransfer || isWnc || !debouncedRecipient) return false;
     if (addrType === 'invalid' || addrType.includes('invalid-')) return false;
     if (addrType === 'account-id') return false; 
     const activeType = activeNetwork.type || 'evm';
@@ -297,7 +302,7 @@ function SendClient() {
     if (cosmosVariants.includes(activeType)) return !cosmosVariants.includes(addrType);
     if (activeType === 'polkadot' || activeType === 'kusama') return !['polkadot', 'kusama'].includes(addrType);
     return activeType !== addrType;
-  }, [addrType, activeNetwork.type, isSelfTransfer, selectedToken, debouncedRecipient]);
+  }, [addrType, activeNetwork.type, isSelfTransfer, isWnc, debouncedRecipient]);
 
   const handleRecipientInputChange = (val: string) => {
     setRecipientInput(val);
@@ -445,11 +450,10 @@ function SendClient() {
     return prices[priceId]?.price || selectedToken.priceUsd || 0;
   }, [selectedToken, prices]);
 
-  const isWnc = selectedToken?.symbol === 'WNC';
   const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
 
   const hasInsufficientFunds = (amountNum + (totalFeeUsd / (livePrice || 1))) > balance;
-  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer;
+  const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isWncAddressError;
 
   return (
     <div className="flex flex-col min-h-full bg-[#050505] text-foreground relative">
@@ -540,7 +544,7 @@ function SendClient() {
                       <Zap className="w-3 h-3 text-primary fill-primary animate-pulse" />
                     </div>
                     <p className="text-xs font-bold text-white">
-                      {isWnc ? '50 WNC' : formatFiat(0.05)}
+                      {isWnc ? formatFiat(wncFeeValue) : formatFiat(0.05)}
                     </p>
                   </div>
                 </div>
