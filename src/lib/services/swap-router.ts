@@ -4,14 +4,14 @@ import { LIFI_SUPPORTED_CHAINS } from '../lifiSupportedChains';
 
 /**
  * INSTITUTIONAL HYBRID SWAP ROUTER
- * Version: 8.0.0 (Pivot Standardization Update)
+ * Version: 9.0.0 (Automatic Decision Engine)
  * 
- * Strictly enforces routing logic based on chain type:
+ * Formalized mapping based on institutional selection protocol:
  * 1. Same-Chain EVM -> 0x Protocol
  * 2. Cross-EVM -> LI.FI API
  * 3. Solana -> Jupiter API
- * 4. TRON -> TRC20 Engine
- * 5. Hybrid/Non-EVM -> Sync Node (Automatic USDT/USDC Pivot Bridge)
+ * 4. TRON -> TRC20 Engine (SunSwap)
+ * 5. Hybrid/Non-EVM/Other -> Internal Liquidity Node (Automatic Pivot)
  */
 
 export type SwapProvider = 'ZEROX' | 'LIFI' | 'INTERNAL' | 'SOLANA' | 'TRON';
@@ -21,18 +21,22 @@ const isEVM = (chainId: number) => {
     return !nonEvm.includes(chainId);
 };
 
+/**
+ * AUTOMATIC SWAP DECISION NODE
+ * Resolves the correct engine based on the token selection.
+ */
 export function determineSwapProvider(
     fromChainId: number, 
     toChainId: number, 
     fromSymbol: string, 
     toSymbol: string
 ): SwapProvider {
-    // 1. Solana Native -> Jupiter Optimization
+    // 1. Solana (SPL) -> Jupiter Optimization
     if (fromChainId === 501 && toChainId === 501) {
         return 'SOLANA';
     }
 
-    // 2. TRON Native/TRC20 -> SunSwap Optimization
+    // 2. TRON (TRC20) -> SunSwap Optimization
     if (fromChainId === 728126428 && toChainId === 728126428) {
         return 'TRON';
     }
@@ -40,7 +44,7 @@ export function determineSwapProvider(
     const fromEVM = isEVM(fromChainId);
     const toEVM = isEVM(toChainId);
 
-    // 3. Same Chain EVM -> High speed 0x
+    // 3. Same Chain EVM -> 0x Protocol
     if (fromChainId === toChainId && fromEVM) {
         return 'ZEROX';
     }
@@ -53,14 +57,13 @@ export function determineSwapProvider(
         return 'LIFI';
     }
 
-    // 5. All other routes (SOL -> EVM, BTC -> SOL, etc) -> Internal Liquidity Node
+    // 5. Hybrid / Non-EVM / Other -> Internal Liquidity Provider
     return 'INTERNAL';
 }
 
 /**
- * Detects if a "USDT/USDC Pivot Route" is required for stability.
- * Standardization Rule: Any cross-chain swap involving non-EVM nodes
- * should pivot through a stable token to ensure liquidity and price safety.
+ * PIVOT ROUTE DETECTOR
+ * Enforces USDT/USDC stabilization for volatile or hybrid pairs.
  */
 export function needsPivotRoute(
     fromChainId: number,
@@ -71,10 +74,10 @@ export function needsPivotRoute(
 ): boolean {
     if (provider !== 'INTERNAL') return false;
     
-    // Always pivot if chains are different
+    // Always pivot if bridging between different chains via internal node
     if (fromChainId !== toChainId) return true;
 
-    // Pivot if swapping between two volatile non-stable tokens on the same chain (Internal only)
+    // Pivot if swapping between two volatile assets on the same non-standard chain
     const isStable = (s: string) => ['USDT', 'USDC', 'DAI'].includes(s.toUpperCase());
     return !isStable(fromSymbol) && !isStable(toSymbol);
 }
