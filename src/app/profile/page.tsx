@@ -40,7 +40,6 @@ import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 
 // BUILD FIX: Force dynamic rendering to prevent crypto derivation errors during static build
 export const dynamic = 'force-dynamic';
@@ -228,9 +227,6 @@ export default function ProfilePage() {
                             )}
                         </div>
                     </section>
-
-                    {/* PERSISTENT INLINE REGISTRY SENTINEL */}
-                    <CloudSyncCard />
 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl">
