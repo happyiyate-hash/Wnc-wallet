@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -374,8 +373,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isInitialized && wallets && user) {
       refresh();
+      // IMMEDIATE TRIGGER: Start audit immediately after hydration
+      setTimeout(() => runCloudDiagnostic(), 2000);
     }
-  }, [isInitialized, wallets, viewingNetwork, user, refresh]);
+  }, [isInitialized, wallets, viewingNetwork, user, refresh, runCloudDiagnostic]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, hasNewNotifications, setHasNewNotifications, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active_network_id_${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet: () => { if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } }, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, getAvailableAssetsForChain: (cid: number) => getInitialAssets(cid).map(a => ({ ...a, balance: '0' } as AssetRow)), isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic
