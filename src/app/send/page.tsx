@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -6,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useCurrency } from '@/contexts/currency-provider';
 import { useGasPrice } from '@/hooks/useGasPrice';
+import { gasService } from '@/services/gasService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -89,6 +89,19 @@ function SendClient() {
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // INSTITUTIONAL GAS HANDSHAKE
+  const [, setGasUpdate] = useState(0);
+  useEffect(() => {
+    if (allChainsMap) {
+      gasService.startGasUpdater(Object.values(allChainsMap), infuraApiKey);
+    }
+    return gasService.subscribe(() => {
+      setGasUpdate(prev => prev + 1);
+    });
+  }, [allChainsMap, infuraApiKey]);
+
+  const gasDataFromService = gasService.getGasPrice(activeNetwork?.name || '');
 
   // QR CODE SCANNING LOGIC
   useEffect(() => {
@@ -223,12 +236,12 @@ function SendClient() {
     if (!isConfirmOpen || !amount || !activeNetwork) return;
     
     const resolveFees = async () => {
-        const fees = await calculateTransactionFees(activeNetwork);
-        setTotalFeeUsd(fees.total);
-        setAdminFeeUsd(fees.admin);
+        const fees = gasService.getEstimatedTransactionFee(activeNetwork.name, 'send');
+        setTotalFeeUsd(fees);
+        setAdminFeeUsd(0.05);
     };
     resolveFees();
-  }, [isConfirmOpen, amount, activeNetwork]);
+  }, [isConfirmOpen, amount, activeNetwork, gasDataFromService]);
 
   const addrType = useMemo(() => detectAddressType(debouncedRecipient), [debouncedRecipient]);
   const detectedMeta = useMemo(() => getDetectedNetworkMeta(addrType), [addrType]);
@@ -399,7 +412,11 @@ function SendClient() {
   const balance = parseFloat(selectedToken?.balance || '0');
   const amountNum = parseFloat(amount) || 0;
   const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
-  const hasInsufficientFunds = (amountNum + (0.05 / (livePrice || 1))) > balance;
+  
+  // REPLACE INTERNAL GAS CALCULATION LOGIC
+  const currentGasFeeUsd = gasDataFromService?.usdFee || 0.05;
+  const hasInsufficientFunds = (amountNum + (currentGasFeeUsd / (livePrice || 1))) > balance;
+  
   const canSend = resolvedAddress.length > 0 && !isNetworkMismatch && !validationError && amountNum > 0 && !hasInsufficientFunds && !isSubmitting && !isSelfTransfer && !isWncAddressError;
 
   return (
@@ -493,10 +510,11 @@ function SendClient() {
                       <Fuel className="w-3 h-3 text-primary opacity-40" />
                     </div>
                     <div className="flex items-baseline gap-1">
-                      {gasPriceData.status === 'loading' ? (
+                      {/* CONNECT TO GAS SERVICE */}
+                      {!gasDataFromService ? (
                         <div className="h-4 w-12 bg-white/5 animate-pulse rounded" />
                       ) : (
-                        <p className="text-xs font-bold text-white truncate">{gasPriceData.nativeFee} {activeNetwork.symbol}</p>
+                        <p className="text-xs font-bold text-white truncate">{gasDataFromService.nativeFee} {activeNetwork.symbol}</p>
                       )}
                     </div>
                   </div>

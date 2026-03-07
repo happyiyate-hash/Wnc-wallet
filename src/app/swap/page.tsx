@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react';
@@ -6,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/wallet-provider';
 import { useUser } from '@/contexts/user-provider';
 import { useCurrency } from '@/contexts/currency-provider';
+import { gasService } from '@/services/gasService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -110,6 +110,17 @@ function SwapClient() {
   const quoteIdRef = useRef<number>(0);
 
   const isCrossChain = fromToken && toToken && (fromToken.chainId ?? 1) !== (toToken.chainId ?? 1);
+
+  // INSTITUTIONAL GAS HANDSHAKE
+  const [, setGasUpdate] = useState(0);
+  useEffect(() => {
+    if (allChainsMap) {
+      gasService.startGasUpdater(Object.values(allChainsMap), infuraApiKey);
+    }
+    return gasService.subscribe(() => setGasUpdate(c => c + 1));
+  }, [allChainsMap, infuraApiKey]);
+
+  const gasDataFromService = gasService.getGasPrice(fromToken?.name || '');
 
   // AUTO-HIDE ERROR SENTINEL (5 Seconds)
   useEffect(() => {
@@ -222,7 +233,7 @@ function SwapClient() {
 
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1,
-            toChainId ?? 1,
+            toToken.chainId ?? 1,
             fromToken.symbol,
             toToken.symbol,
             providerType,
@@ -523,7 +534,8 @@ function SwapClient() {
 
   const infoItems = [
     { label: 'Route', value: selectedQuote?.provider || 'Sync', icon: Workflow },
-    { label: 'Gas', value: `$${selectedQuote?.fee.toFixed(2) || '0.10'}`, icon: Fuel },
+    // REPLACE TRANSACTION FEE DISPLAY WITH GAS SERVICE CALL
+    { label: 'Gas', value: `$${(gasDataFromService?.usdFee || selectedQuote?.fee || 0.10).toFixed(2)}`, icon: Fuel },
     { label: 'Time', value: selectedQuote?.eta || '~15s', icon: History },
     { label: 'Safe', value: 'Yes', icon: ShieldCheck }
   ];
