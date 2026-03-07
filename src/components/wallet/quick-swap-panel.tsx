@@ -43,7 +43,7 @@ interface QuickSwapPanelProps {
 
 /**
  * INSTITUTIONAL QUICK SWAP PANEL
- * Version: 4.0.0 (TRON Protocol Sync)
+ * Version: 4.5.0 (Robust Solana Node Handshake)
  * 
  * Features exactly the same routing logic as the main swap page.
  * Respects all warnings: No UI/CSS/Animation changes.
@@ -130,7 +130,11 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
             const inputMint = fromToken.isNative ? 'So11111111111111111111111111111111111111112' : fromToken.address;
             const outputMint = toToken.isNative ? 'So11111111111111111111111111111111111111112' : toToken.address;
             const amountInUnits = ethers.parseUnits(debouncedAmount, fromToken.decimals || 9).toString();
-            const q = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            
+            const qRes = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            if (!qRes.success) throw new Error(qRes.error);
+            const q = qRes.data;
+            
             result = {
                 receiveAmount: parseFloat(ethers.formatUnits(q.outAmount, toToken.decimals || 9)),
                 feeUsd: 0.000005 * (prices['solana']?.price || 150),
@@ -217,8 +221,9 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
           const solWallet = wallets.find(w => w.type === 'solana');
           if (!solWallet?.privateKey) throw new Error("Signing authority missing.");
           const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
-          const swapTx = await buildSolanaSwapTransaction(quote.rawQuote, solWallet.address);
-          await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+          const buildRes = await buildSolanaSwapTransaction(quote.rawQuote, solWallet.address);
+          if (!buildRes.success) throw new Error(buildRes.error);
+          await executeSolanaSwap(buildRes.data!, solWallet.privateKey, rpcUrl);
       }
       else if (quote.swapProvider === 'TRON') {
           const tronWallet = wallets.find(w => w.type === 'tron');
@@ -244,7 +249,7 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
             wallet: wallet,
             fromToken: fromToken,
             amount: amount,
-            setPhase: () => {} // Simplified for Quick Panel
+            setPhase: () => {} 
           });
       } 
       else if (quote.swapProvider === 'LIFI') {

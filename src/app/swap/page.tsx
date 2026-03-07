@@ -234,7 +234,7 @@ function SwapClient() {
 
         const isPivotRequired = needsPivotRoute(
             fromToken.chainId ?? 1,
-            toChainId: toToken.chainId ?? 1,
+            toToken.chainId ?? 1,
             fromToken.symbol,
             toToken.symbol,
             providerType,
@@ -249,7 +249,9 @@ function SwapClient() {
             const outputMint = toToken.isNative ? 'So11111111111111111111111111111111111111112' : toToken.address;
             const amountInUnits = ethers.parseUnits(debouncedAmount, fromToken.decimals || 9).toString();
             
-            const q = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            const qRes = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            if (!qRes.success) throw new Error(qRes.error);
+            const q = qRes.data;
             
             quote = {
                 id: 'jupiter-node',
@@ -400,10 +402,11 @@ function SwapClient() {
           if (!solWallet?.privateKey) throw new Error("Solana signing authority missing.");
           
           const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
-          const swapTx = await buildSolanaSwapTransaction(selectedQuote.rawQuote, solWallet.address);
+          const buildRes = await buildSolanaSwapTransaction(selectedQuote.rawQuote, solWallet.address);
+          if (!buildRes.success) throw new Error(buildRes.error);
           
           setExecutionPhase('SENDING');
-          const signature = await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+          const signature = await executeSolanaSwap(buildRes.data!, solWallet.privateKey, rpcUrl);
           
           setTxHash(signature);
           setExecutionPhase('SETTLING');
@@ -594,7 +597,7 @@ function SwapClient() {
             <span className="text-[7px] font-black text-muted-foreground uppercase opacity-40 tracking-widest">{fromToken?.name}</span>
           </div>
           <div className="relative flex-1 flex flex-col justify-center">
-            <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white" />
+            <input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-2xl font-black bg-transparent border-none p-0 h-auto focus-visible:ring-0 placeholder:text-zinc-800 tracking-tighter text-white outline-none" />
             <div className="mt-0.5"><span className="text-[9px] font-black text-white/40 uppercase tracking-widest">≈ {formatFiat(parseFloat(amount || '0') * fromTokenPrice)}</span></div>
           </div>
         </section>
