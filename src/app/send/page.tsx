@@ -152,7 +152,18 @@ function SendClient() {
                 } catch(e) {}
               }
 
-              // DEFAULT: Standard Resolve
+              // 3. DETECT RAW ACCOUNT ID (835...)
+              if (/^835\d{7}$/.test(decodedText.trim())) {
+                setRecipientInput(decodedText.trim());
+                handleRecipientInputChange(decodedText.trim());
+                setIsScannerOpen(false);
+                if (html5QrCode && html5QrCode.isScanning) {
+                  html5QrCode.stop().catch(() => {});
+                }
+                return;
+              }
+
+              // DEFAULT: Standard Resolve (Addresses, etc.)
               setRecipientInput(decodedText);
               handleRecipientInputChange(decodedText);
               setIsScannerOpen(false);
@@ -400,6 +411,14 @@ function SendClient() {
           } catch(e) {}
         }
 
+        // DETECT RAW ACCOUNT ID
+        if (/^835\d{7}$/.test(result.trim())) {
+          setRecipientInput(result.trim());
+          handleRecipientInputChange(result.trim());
+          setIsScannerOpen(false);
+          return;
+        }
+
         setRecipientInput(result);
         handleRecipientInputChange(result);
         setIsScannerOpen(false);
@@ -413,7 +432,6 @@ function SendClient() {
   const amountNum = parseFloat(amount) || 0;
   const wncFeeValue = 50 * (1 / (rates['NGN'] || 1650));
   
-  // REPLACE INTERNAL GAS CALCULATION LOGIC
   const currentGasFeeUsd = gasDataFromService?.usdFee || 0.05;
   const hasInsufficientFunds = (amountNum + (currentGasFeeUsd / (livePrice || 1))) > balance;
   
@@ -510,7 +528,6 @@ function SendClient() {
                       <Fuel className="w-3 h-3 text-primary opacity-40" />
                     </div>
                     <div className="flex items-baseline gap-1">
-                      {/* CONNECT TO GAS SERVICE */}
                       {!gasDataFromService ? (
                         <div className="h-4 w-12 bg-white/5 animate-pulse rounded" />
                       ) : (

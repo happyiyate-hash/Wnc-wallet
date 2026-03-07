@@ -31,7 +31,8 @@ import {
   Settings2,
   Gift,
   Ticket,
-  X
+  X,
+  Share2
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import QRCode from "react-qr-code";
 
 // BUILD FIX: Force dynamic rendering to prevent crypto derivation errors during static build
 export const dynamic = 'force-dynamic';
@@ -63,6 +65,9 @@ export default function ProfilePage() {
     const [isIdCopied, copyId] = useCopyToClipboard();
     const [isSyncing, setIsSyncing] = useState(false);
 
+    // QR CODE DISPLAY STATE
+    const [isQrOpen, setIsQrOpen] = useState(false);
+
     // GIFT CARD REDEMPTION STATE
     const [isRedeemOpen, setIsRedeemOpen] = useState(false);
     const [giftCode, setGiftCode] = useState('');
@@ -73,6 +78,11 @@ export default function ProfilePage() {
     const displayAccountNumber = walletAccountNumber || profile?.account_number;
     const displayName = profile?.name || 'Institutional User';
     const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
+
+    const qrValue = useMemo(() => {
+        if (!displayAccountNumber) return "";
+        return `wnc://pay?account=${displayAccountNumber}&symbol=WNC`;
+    }, [displayAccountNumber]);
 
     const totalPortfolioValue = useMemo(() => {
         return allAssets.reduce((sum, asset) => sum + (asset.fiatValueUsd ?? 0), 0);
@@ -95,9 +105,6 @@ export default function ProfilePage() {
         }
     };
 
-    /**
-     * INSTITUTIONAL REDEMPTION HANDSHAKE
-     */
     const handleRedeemCode = async () => {
         const cleanCode = giftCode.trim().toUpperCase();
         if (!cleanCode || !user || !supabase) return;
@@ -174,6 +181,9 @@ export default function ProfilePage() {
                     <h1 className="text-xs font-black uppercase tracking-[0.2em] text-white/90">Identity Vault</h1>
                 </div>
                 <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => setIsQrOpen(true)} className="rounded-xl hover:bg-primary/10 text-primary transition-all">
+                        <QrCode className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => setIsRedeemOpen(true)} className="rounded-xl hover:bg-primary/10 text-primary transition-all">
                         <Gift className="w-4 h-4" />
                     </Button>
@@ -320,6 +330,89 @@ export default function ProfilePage() {
                         <p className="text-[8px] text-muted-foreground/20 uppercase font-black tracking-widest text-center max-w-[200px] leading-relaxed">Secured by Master Wevina Cloud Protocol v3.0</p>
                     </div>
             </main>
+
+            {/* IDENTITY QR DIALOG */}
+            <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
+                <DialogContent className="bg-[#0a0a0c] border-white/10 rounded-[3rem] p-8 max-w-[95vw] sm:max-w-[400px] overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary via-purple-500 to-primary animate-gradient-flow" />
+                    
+                    <DialogHeader className="space-y-4 items-center text-center">
+                        <div className="w-16 h-16 rounded-[2rem] bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-lg shadow-primary/20">
+                            <QrCode className="w-8 h-8" />
+                        </div>
+                        <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Identity Node</DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground uppercase tracking-widest font-black opacity-60">
+                            Scan to send WNC or Resolve Identity
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col items-center gap-8 py-6">
+                        <div className="bg-white p-6 rounded-[3rem] shadow-[0_0_50px_rgba(139,92,246,0.3)] relative group">
+                            {qrValue ? (
+                                <QRCode 
+                                    value={qrValue} 
+                                    size={200} 
+                                    level="H" 
+                                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                />
+                            ) : (
+                                <div className="w-[200px] h-[200px] flex items-center justify-center bg-zinc-100 rounded-2xl animate-pulse">
+                                    <Loader2 className="w-8 h-8 animate-spin text-zinc-300" />
+                                </div>
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="p-2 bg-white rounded-xl shadow-xl border border-zinc-100">
+                                    <Avatar className="w-10 h-10 rounded-lg">
+                                        <AvatarImage src={profile?.photo_url} />
+                                        <AvatarFallback className="bg-primary text-white font-black text-xl">
+                                            {displayName.slice(0, 1)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="w-full space-y-4">
+                            <div 
+                                onClick={() => copyId(displayAccountNumber || '')}
+                                className="flex flex-col items-center gap-1 p-4 rounded-2xl bg-white/[0.03] border border-white/10 cursor-pointer active:scale-95 transition-all group"
+                            >
+                                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Account ID</span>
+                                <p className="text-2xl font-mono font-black text-white tracking-[0.1em]">{displayAccountNumber}</p>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <Button 
+                                    variant="outline" 
+                                    className="flex-1 h-14 rounded-2xl bg-white/5 border-white/10 gap-2 font-black uppercase text-xs"
+                                    onClick={() => {
+                                        if (typeof window !== 'undefined') {
+                                            navigator.share({
+                                                title: 'My Wevina Identity Node',
+                                                text: `Send WNC to my node: ${displayAccountNumber}`,
+                                                url: `${window.location.origin}/auth/signup?ref=${displayAccountNumber?.slice(-6).toUpperCase()}`
+                                            }).catch(() => {});
+                                        }
+                                    }}
+                                >
+                                    <Share2 className="w-4 h-4" /> Share
+                                </Button>
+                                <Button 
+                                    className="flex-1 h-14 rounded-2xl bg-primary hover:bg-primary/90 gap-2 font-black uppercase text-xs"
+                                    onClick={() => setIsQrOpen(false)}
+                                >
+                                    Done
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-center gap-2 opacity-20">
+                        <ShieldCheck className="w-3 h-3" />
+                        <span className="text-[8px] font-black uppercase tracking-widest">Protocol Handshake v3.2 Verified</span>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* GIFT CARD REDEMPTION DIALOG */}
             <Dialog open={isRedeemOpen} onOpenChange={(o) => !o && resetRedeem()}>
