@@ -1,10 +1,13 @@
+
 'use client';
+
+import { fetchChainFees } from '@/lib/wallets/services/fee-service';
 
 /**
  * INSTITUTIONAL GAS PRICE SERVICE
- * Version: 1.0.0
+ * Version: 2.0.0
  * Centralized registry for multi-chain gas discovery and caching.
- * Exposes real-time price data and estimated fees for terminal dispatches.
+ * Exposes real-time price data and estimated fees for all 39 blockchains.
  */
 
 export interface GasData {
@@ -26,19 +29,15 @@ class GasService {
   async fetchGas(chain: any, apiKey: string | null) {
     if (!chain || !chain.rpcUrl) return;
     try {
-      const params = new URLSearchParams({
-        chainType: chain.type || 'evm',
-        rpcUrl: chain.rpcUrl,
-        symbol: chain.symbol,
-        apiKey: apiKey || ''
-      });
-      
-      const response = await fetch(`/api/fees?${params.toString()}`);
-      if (!response.ok) return;
-      const result = await response.json();
+      const result = await fetchChainFees(
+        chain.type || 'evm',
+        chain.rpcUrl,
+        chain.symbol,
+        apiKey
+      );
       
       this.cache[chain.name] = {
-        priceGwei: result.gasPriceGwei || '0',
+        priceGwei: result.gasPriceGwei || (result.satPerVByte ? `${result.satPerVByte} sat/vB` : '0'),
         nativeFee: result.nativeFee || '0',
         usdFee: result.usdFee || 0.05
       };
@@ -75,7 +74,7 @@ class GasService {
   getEstimatedTransactionFee(chainName: string, txType: 'send' | 'swap'): number {
     const data = this.getGasPrice(chainName);
     if (!data) return 0.05;
-    // Multi-step swaps typically consume 2x basic transfer gas
+    // Multi-step swaps typically consume more gas
     return txType === 'send' ? data.usdFee : data.usdFee * 2;
   }
 
@@ -86,6 +85,7 @@ class GasService {
     if (this.interval || chains.length === 0) return;
     
     const run = () => {
+      // Batch refresh all 39 chains in the registry
       chains.forEach(c => this.fetchGas(c, apiKey));
     };
     
