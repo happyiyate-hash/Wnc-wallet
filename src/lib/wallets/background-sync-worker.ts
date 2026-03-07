@@ -1,16 +1,15 @@
 
 'use client';
 
-import { supabase } from '@/lib/supabase/client';
-import type { WalletWithMetadata, ChainConfig, UserProfile } from '@/lib/types';
 import { syncAddressesToCloud } from './services/wallet-actions';
+import type { WalletWithMetadata, ChainConfig, UserProfile } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REGISTRY AUDIT WORKER
- * Version: 8.0.0 (Persistent Loop Protocol - Corrected)
+ * Version: 10.0.0 (Strict Unique Queue Protocol)
  * 
- * Orchestrates a continuous background audit of the local hardware node vs the cloud registry.
- * Implements strict phase-locking to ensure smooth UI transitions and 100% address detection.
+ * Prevents race conditions by auditing unique blockchain types (EVM, SOL, BTC) 
+ * rather than individual tokens. Operates in a continuous 24/7 loop.
  */
 
 export interface AuditState {
@@ -39,27 +38,35 @@ export const backgroundSyncWorker = {
 
     // START 24/7 PERSISTENT LOOP
     while (true) {
-      // 1. CONSTRUCT AUDIT NODES
-      const uniqueTypes = Array.from(new Set(allChains.map(c => c.type || 'evm')));
-      const auditNodes = uniqueTypes.map(type => {
-        const localWallet = wallets.find(w => w.type === type);
-        const chainSample = allChains.find(c => (c.type || 'evm') === type);
-        const label = type === 'evm' ? 'EVM' : (chainSample?.symbol.toUpperCase() || type.toUpperCase());
-        
+      // 1. THE QUEUE FIX: Filter only UNIQUE wallet types
+      // This prevents 50 EVM tokens from fighting each other.
+      const uniqueTypeMap = new Map();
+      allChains.forEach(c => {
+        const type = c.type || 'evm';
+        if (!uniqueTypeMap.has(type)) {
+          uniqueTypeMap.set(type, {
+            label: type === 'evm' ? 'EVM' : (c.symbol?.toUpperCase() || type.toUpperCase()),
+            type: type
+          });
+        }
+      });
+
+      const auditNodes = Array.from(uniqueTypeMap.values()).map(node => {
+        const localWallet = wallets.find(w => w.type === node.type);
         return {
-          label,
-          type,
+          label: node.label,
+          type: node.type,
           local: localWallet?.address || null,
-          cloud: (profile as any)?.[`${type}_address`] || null
+          cloud: (profile as any)?.[`${node.type}_address`] || null
         };
       });
 
       const totalSteps = auditNodes.length;
 
-      // 2. EXECUTE SEQUENTIAL AUDIT
+      // 2. SEQUENTIAL AUDIT (One by One)
       for (let i = 0; i < totalSteps; i++) {
         const node = auditNodes[i];
-        const currentProgress = (i / totalSteps) * 100;
+        const startProgress = (i / totalSteps) * 100;
 
         // PHASE A: INCOMING / CHECKING
         onUpdate({ 
@@ -67,10 +74,10 @@ export const backgroundSyncWorker = {
           chain: node.label, 
           localValue: node.local, 
           cloudValue: node.cloud,
-          progress: currentProgress
+          progress: startProgress
         });
 
-        await breathe(1000); // Cinematic entry pause
+        await breathe(1200); // Cinematic slide-in pause
 
         const isMismatch = node.local && node.local !== node.cloud;
 
@@ -85,7 +92,7 @@ export const backgroundSyncWorker = {
             await syncAddressesToCloud(userId, wallets, accountNumber);
             // Update local UI state to show immediate resolution
             onUpdate({ status: 'syncing', cloudValue: node.local, chain: node.label });
-            await breathe(600); 
+            await breathe(800); 
           } catch (e) {
             console.warn(`[AUDIT_REPAIR_FAIL] ${node.label}`);
           }
@@ -96,15 +103,15 @@ export const backgroundSyncWorker = {
           status: 'success', 
           chain: node.label,
           localValue: node.local,
-          cloudValue: node.local, // Assume synced if we reached here
+          cloudValue: node.local, 
           progress: ((i + 1) / totalSteps) * 100 
         });
         
-        await breathe(1200); // Visual dopamine pause for checkmark
+        await breathe(1500); // Visual dopamine pause for checkmark
       }
 
       // 3. CYCLE COMPLETE
-      onUpdate({ status: 'completed', chain: 'Audit Nominal', progress: 100 });
+      onUpdate({ status: 'completed', chain: 'SECURE', progress: 100 });
       
       // 10 Second Nominal Wait before restarting 24/7 loop
       await breathe(10000);

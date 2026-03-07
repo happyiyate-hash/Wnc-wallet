@@ -10,17 +10,17 @@ import {
   Activity,
   ShieldCheck,
   RefreshCw,
-  AlertCircle
+  Search
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
  * INSTITUTIONAL INLINE REGISTRY AUDIT (TICKER)
- * Version: 11.0.0 (Advertisement Marquee Style)
+ * Version: 10.0.0 (Wait-and-Slide Protocol)
  * 
- * Embedded directly within the Profile page as a slim, non-intrusive monitoring node.
- * Features a horizontal slide animation where Cloud and Local cards move together.
+ * Persistent monitoring node embedded in the Profile page.
+ * Uses mode="wait" to eliminate "dragging" overlapping glitches.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -75,7 +75,7 @@ export default function CloudSyncCard() {
           />
         </div>
 
-        {/* SLIDING HANDSHAKE PAIR (UNIFIED ROW) */}
+        {/* SLIDING HANDSHAKE PAIR (STRICT SEQUENTIAL) */}
         <div className="h-14 relative overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div 
