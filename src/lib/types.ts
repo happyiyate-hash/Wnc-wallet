@@ -139,10 +139,17 @@ export interface IWalletAdapter {
 export interface Notification {
   id: string;
   user_id: string;
-  type: string;
+  from_user_id?: string;
+  type: 'TRANSFER_IN' | 'TRANSFER_OUT' | 'REWARD' | 'REQUEST';
   title: string;
   message: string;
+  amount?: number;
+  token?: string;
   link_to?: string;
   read: boolean;
   created_at: string;
+  sender?: {
+    name: string;
+    photo_url?: string;
+  };
 }

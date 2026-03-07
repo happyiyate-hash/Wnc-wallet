@@ -279,8 +279,8 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
   }, [requestId]);
 
   const handlePay = async () => {
-    if (!wallets || !request || !requester) return;
-    setIsStatusVisible(true); // Status Card appears at z-500
+    if (!wallets || !request || !requester || !currentUserProfile) return;
+    setIsStatusVisible(true);
     setTxStatus('pending');
     setIsSubmitting(true);
 
@@ -297,6 +297,29 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         });
         if (rpcError) throw new Error(rpcError.message);
         if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
+        
+        // ATOMIC NOTIFICATION HANDSHAKE
+        await supabase!.from('notifications').insert([
+          {
+            user_id: requester.id,
+            from_user_id: currentUserProfile.id,
+            type: 'TRANSFER_IN',
+            amount: Math.floor(request.amount),
+            token: 'WNC',
+            title: 'Request Fulfilled',
+            message: `@${currentUserProfile.name} fulfilled your request for ${request.amount} WNC`
+          },
+          {
+            user_id: currentUserProfile.id,
+            from_user_id: requester.id,
+            type: 'TRANSFER_OUT',
+            amount: Math.floor(request.amount),
+            token: 'WNC',
+            title: 'Payment Dispatched',
+            message: `You fulfilled a request from @${requester.name} for ${request.amount} WNC`
+          }
+        ]);
+
         setTxHash(`int_req_${Math.random().toString(36).substring(7)}`);
       } 
       else if (chainType === 'btc' || chainType === 'ltc') {
@@ -344,11 +367,10 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
       setTxStatus('success');
       await refreshProfile(); refresh();
 
-      // AUTOMATIC TRANSITION: Once successful, hide the status and show receipt
       setTimeout(() => {
         setIsStatusVisible(false);
         setIsReceiptOpen(true);
-        setIsCardVisible(false); // Hide the main fulfillment card
+        setIsCardVisible(false);
       }, 3000);
 
     } catch (e: any) {
@@ -489,7 +511,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         isOpen={isReceiptOpen} 
         onOpenChange={(open) => {
           setIsReceiptOpen(open);
-          if (!open) onClose(); // Final cleanup: clear fulfillment state
+          if (!open) onClose();
         }} 
         status={txStatus === 'error' ? 'error' : 'success'} 
         amount={request.amount.toString()} 

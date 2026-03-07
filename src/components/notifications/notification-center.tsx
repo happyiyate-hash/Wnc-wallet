@@ -3,21 +3,22 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { ShieldAlert, Info, Bell, Loader2, X, CheckCircle2, ChevronRight, Zap, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ShieldAlert, Info, Bell, Loader2, X, CheckCircle2, ChevronRight, Zap, ArrowDownLeft, ArrowUpRight, User } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@/contexts/wallet-provider';
 import { ScrollArea } from '../ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER
- * Version: 4.0.0 (Real-Time Handshake)
- * Displays structured alerts from the public.notifications node.
+ * Version: 5.0.0 (Supabase Real-Time Optimized)
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setHasNewNotifications } = useWallet();
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,15 +29,20 @@ export default function NotificationCenter() {
       try {
         const { data, error } = await supabase
           .from('notifications')
-          .select('*')
+          .select(`
+            *,
+            sender:from_user_id (
+              name,
+              photo_url
+            )
+          `)
           .order('created_at', { ascending: false })
           .limit(25);
 
         if (!error && data) {
-          setNotifications(data);
+          setNotifications(data as Notification[]);
           setHasNewNotifications(false);
           
-          // Mark as read in registry
           const unreadIds = data.filter(n => !n.read).map(n => n.id);
           if (unreadIds.length > 0) {
             await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
@@ -79,7 +85,7 @@ export default function NotificationCenter() {
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Registry Handshakes</h3>
-                <p className="text-[9px] font-black uppercase text-primary opacity-60">Real-Time Ledger Sync v4.1</p>
+                <p className="text-[9px] font-black uppercase text-primary opacity-60">Real-Time Ledger Sync v5.0</p>
               </div>
             </div>
             <button 
@@ -117,15 +123,25 @@ export default function NotificationCenter() {
                         <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary animate-pulse" />
                       )}
                       
-                      <div className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg",
-                        isIn ? 'bg-green-500/10 text-green-500' : 
-                        isOut ? 'bg-red-500/10 text-red-400' : 
-                        'bg-primary/10 text-primary'
-                      )}>
-                        {isIn ? <ArrowDownLeft className="w-6 h-6" /> : 
-                         isOut ? <ArrowUpRight className="w-6 h-6" /> : 
-                         <Zap className="w-6 h-6" />}
+                      <div className="relative shrink-0">
+                        <div className={cn(
+                          "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+                          isIn ? 'bg-green-500/10 text-green-500' : 
+                          isOut ? 'bg-red-500/10 text-red-400' : 
+                          'bg-primary/10 text-primary'
+                        )}>
+                          {isIn ? <ArrowDownLeft className="w-6 h-6" /> : 
+                           isOut ? <ArrowUpRight className="w-6 h-6" /> : 
+                           <Zap className="w-6 h-6" />}
+                        </div>
+                        {n.sender && (
+                          <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full">
+                            <Avatar className="w-5 h-5">
+                              <AvatarImage src={n.sender.photo_url} />
+                              <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name[0]}</AvatarFallback>
+                            </Avatar>
+                          </div>
+                        )}
                       </div>
                       
                       <div className="flex-1 min-w-0 space-y-1">
@@ -138,6 +154,14 @@ export default function NotificationCenter() {
                         <p className="text-xs text-muted-foreground leading-relaxed font-medium">
                           {n.message}
                         </p>
+                        {n.amount && (
+                          <div className="pt-1 flex items-center gap-1.5">
+                            <Zap className="w-3 h-3 text-primary fill-primary opacity-40" />
+                            <span className="text-[10px] font-black text-white tabular-nums">
+                              {isIn ? '+' : '-'}{n.amount} {n.token || 'WNC'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   );

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { ethers } from 'ethers';
@@ -135,7 +136,7 @@ export async function calculateTransactionFees(activeNetwork: any) {
 
 /**
  * PERFORM TRANSACTION DISPATCH (Core Logic)
- * Version: 4.4.0 (Deferred RPC Handshake)
+ * Version: 5.0.0 (Notification Integrated)
  */
 export async function performTransactionDispatch(params: {
   wallets: any[];
@@ -166,6 +167,29 @@ export async function performTransactionDispatch(params: {
     });
     if (rpcError) throw new Error(rpcError.message);
     if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
+    
+    // ATOMIC NOTIFICATION HANDSHAKE
+    await supabase!.from('notifications').insert([
+      {
+        user_id: recipientProfile!.id,
+        from_user_id: profile.id,
+        type: 'TRANSFER_IN',
+        amount: Math.floor(amountNum),
+        token: 'WNC',
+        title: 'WNC Received',
+        message: `You received ${amountNum} WNC from @${profile.name}`
+      },
+      {
+        user_id: profile.id,
+        from_user_id: recipientProfile!.id,
+        type: 'TRANSFER_OUT',
+        amount: Math.floor(amountNum),
+        token: 'WNC',
+        title: 'WNC Dispatched',
+        message: `You sent ${amountNum} WNC to @${recipientProfile!.name}`
+      }
+    ]);
+
     txHash = `int_${Math.random().toString(36).substring(7)}`;
   } 
   // 2. SOLANA DISPATCH
