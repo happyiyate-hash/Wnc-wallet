@@ -1,16 +1,14 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
-import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * GLOBAL IDENTITY SENTINEL
  * Hardened authority node for routing authenticated sessions.
- * Implements Stage-Aware Routing to prevent premature redirects during hydration and recovery.
+ * Note: CloudSyncCard pop-up removed. Audit is now inline on /profile.
  */
 export default function GlobalOverlayManager() {
   const { user, profile, loading: userLoading } = useUser();
@@ -18,7 +16,6 @@ export default function GlobalOverlayManager() {
   const pathname = usePathname();
   const router = useRouter();
   
-  // Transition Sentinel: Prevents redirect flickering during derivation or recovery
   const isRecoveringRef = useRef(false);
 
   const isAuthRoute = pathname.startsWith('/auth');
@@ -26,25 +23,18 @@ export default function GlobalOverlayManager() {
   const isSettingsRoute = pathname === '/settings';
   
   useEffect(() => {
-    // STAGE 0: HYDRATION & RECOVERY BARRIER
-    // Wait for all core nodes to be stable before evaluating guards.
-    // isInitialized must be true and isWalletLoading must be false.
     if (userLoading || !isInitialized || isWalletLoading) {
       if (isWalletLoading) isRecoveringRef.current = true;
-      console.log("[SENTINEL] Registry nodes initializing. Evaluations deferred.");
       return;
     }
 
-    // STAGE 1: ATOMIC SESSION GUARD
     if (!user) {
       if (!isAuthRoute) {
-        console.log("[SENTINEL] No active session. Redirecting to terminal login.");
         router.replace('/auth/login');
       }
       return;
     }
 
-    // STAGE 2: EMAIL VERIFICATION NODE
     const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
     if (!user.email_confirmed_at && !isOAuth) {
       if (pathname !== '/auth/signup' || !pathname.includes('verify=true')) {
@@ -53,34 +43,23 @@ export default function GlobalOverlayManager() {
       return;
     }
 
-    // STAGE 3: VAULT MANDATORY GATE (CRITICAL PRIORITY)
     const hasLocalWallet = wallets && wallets.length > 0;
     
-    // REDIRECT TO SETUP: If we are not on setup and have no wallet
     if (!hasLocalWallet && !isWalletSessionRoute && !isAuthRoute) {
-      // If we just finished "recovering" but wallets are STILL null, then we redirect.
-      // This prevents the loop during successful derivation.
-      console.log("[SENTINEL] No local hardware nodes detected. Navigating to vault establishment.");
       router.replace('/wallet-session');
       return;
     }
 
-    // REDIRECT FROM SETUP: If we HAVE a wallet but are still on the setup page
     if (hasLocalWallet && isWalletSessionRoute) {
-      console.log("[SENTINEL] Hardware nodes detected. Converging to dashboard.");
       router.replace('/');
       return;
     }
 
-    // STAGE 4: IDENTITY COMPLETION GATE
-    // Ensure the identity node is complete (username set)
     if (!profile?.name && !isSettingsRoute && !isAuthRoute && !isWalletSessionRoute) {
-      console.log("[SENTINEL] Identity node incomplete. Navigating to settings.");
       router.replace('/settings');
       return;
     }
 
-    // STAGE 5: DASHBOARD CONVERGENCE
     const isSetupTerminal = isAuthRoute || isWalletSessionRoute;
     if (isSetupTerminal && hasLocalWallet && profile?.name && profile?.onboarding_completed) {
       if (pathname !== '/') router.replace('/');
@@ -90,12 +69,7 @@ export default function GlobalOverlayManager() {
 
   }, [userLoading, isInitialized, isWalletLoading, user, profile, wallets, pathname, router, isAuthRoute, isWalletSessionRoute, isSettingsRoute]);
 
-  // ZERO-FLICKER SENTINEL
   if (!user && !isAuthRoute) return null;
 
-  return (
-    <>
-      <CloudSyncCard />
-    </>
-  );
+  return null;
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -41,6 +40,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 
 // BUILD FIX: Force dynamic rendering to prevent crypto derivation errors during static build
 export const dynamic = 'force-dynamic';
@@ -98,7 +98,6 @@ export default function ProfilePage() {
 
     /**
      * INSTITUTIONAL REDEMPTION HANDSHAKE
-     * Resilient to backend type variances (BigInt vs UUID).
      */
     const handleRedeemCode = async () => {
         const cleanCode = giftCode.trim().toUpperCase();
@@ -230,6 +229,9 @@ export default function ProfilePage() {
                         </div>
                     </section>
 
+                    {/* PERSISTENT INLINE REGISTRY SENTINEL */}
+                    <CloudSyncCard />
+
                     <div className="grid grid-cols-2 gap-3">
                         <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent border border-emerald-500/30 relative overflow-hidden shadow-2xl">
                             <Coins className="w-5 h-5 text-emerald-400 mb-3" />
@@ -259,7 +261,7 @@ export default function ProfilePage() {
                                     <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{viewingNetwork.name} Node</span>
                                 </div>
                                 <Button 
-                                    onClick={() => runCloudDiagnostic({ forceUI: true })}
+                                    onClick={() => runCloudDiagnostic()}
                                     variant="ghost" 
                                     className="h-8 px-3 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 gap-2"
                                 >

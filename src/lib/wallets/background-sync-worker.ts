@@ -1,4 +1,3 @@
-
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -7,10 +6,10 @@ import evmNetworks from '@/lib/evmNetworks.json';
 
 /**
  * INSTITUTIONAL REGISTRY AUDIT WORKER
- * Version: 6.0.0 (Sequential Heartbeat Protocol)
+ * Version: 7.0.0 (Persistent Loop Protocol)
  * 
- * Orchestrates a chain-by-chain audit of the local hardware node vs the cloud registry.
- * Each chain follows a strict 0-100% "Scanning" lifecycle for visual logical flow.
+ * Orchestrates a continuous background audit of the local hardware node vs the cloud registry.
+ * This worker runs indefinitely, pausing for 10s between full registry cycles.
  */
 
 export interface AuditState {
@@ -28,90 +27,71 @@ export const backgroundSyncWorker = {
     profile: any,
     onProgress: (state: AuditState) => void
   ) {
-    if (!supabase || !wallets || wallets.length === 0) {
-        console.log("[AUDIT_ENGINE] Deferred: Hardware nodes not yet derived.");
-        return;
-    }
+    if (!supabase || !wallets || wallets.length === 0) return;
 
     const allChains = Object.values(evmNetworks) as ChainConfig[];
     const totalChains = allChains.length;
     
-    console.log(`[AUDIT_ENGINE] Starting institutional audit for ${totalChains} nodes.`);
-
-    for (let i = 0; i < totalChains; i++) {
-      const chain = allChains[i];
-      const walletType = chain.type || 'evm';
-      const localWallet = wallets.find(w => w.type === walletType);
-      
-      const fieldName = `${walletType}_address`;
-      const localAddr = localWallet?.address || null;
-      const cloudAddr = profile?.[fieldName] || null;
-
-      // 1. PHASE: INCOMING (Prepare Data Node)
-      onProgress({
-        status: 'scanning',
-        chain: chain.symbol,
-        localValue: localAddr,
-        cloudValue: cloudAddr,
-        progress: 0
-      });
-
-      // Give the slide animation a moment to settle
-      await new Promise(r => setTimeout(r, 200));
-
-      // 2. PHASE: SCANNING (Heartbeat Progress 0 -> 100)
-      const scanSteps = 10;
-      for (let s = 1; s <= scanSteps; s++) {
-        // Human-readable scan pace
-        await new Promise(r => setTimeout(r, 120));
+    // START PERSISTENT LOOP
+    while (true) {
+      for (let i = 0; i < totalChains; i++) {
+        const chain = allChains[i];
+        const walletType = chain.type || 'evm';
+        const localWallet = wallets.find(w => w.type === walletType);
         
+        const fieldName = `${walletType}_address`;
+        const localAddr = localWallet?.address || null;
+        const cloudAddr = profile?.[fieldName] || null;
+
+        // 1. INCOMING
         onProgress({
           status: 'scanning',
           chain: chain.symbol,
           localValue: localAddr,
           cloudValue: cloudAddr,
-          progress: (s / scanSteps) * 100
+          progress: 0
         });
-      }
 
-      // 3. PHASE: VERIFICATION PAUSE (Visual Validation)
-      // This is the "Dopamine Pause" where the checkmark appears
-      await new Promise(r => setTimeout(r, 450));
-
-      // 4. OPTIONAL: REPAIR
-      if (localAddr && localAddr !== cloudAddr) {
-        try {
-          await supabase
-            .from('profiles')
-            .update({ [fieldName]: localAddr })
-            .eq('id', userId);
-        } catch (e) {
-          console.warn(`[AUDIT_REPAIR_FAIL] ${chain.symbol}`);
+        // 2. SCANNING BEAT
+        const scanSteps = 8;
+        for (let s = 1; s <= scanSteps; s++) {
+          await new Promise(r => setTimeout(r, 100));
+          onProgress({
+            status: 'scanning',
+            chain: chain.symbol,
+            localValue: localAddr,
+            cloudValue: cloudAddr,
+            progress: (s / scanSteps) * 100
+          });
         }
+
+        // 3. REPAIR (SILENT)
+        if (localAddr && localAddr !== cloudAddr) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({ [fieldName]: localAddr })
+              .eq('id', userId);
+          } catch (e) {
+            console.warn(`[AUDIT_REPAIR_FAIL] ${chain.symbol}`);
+          }
+        }
+
+        // Wait for slide exit
+        await new Promise(r => setTimeout(r, 800));
       }
 
-      // Final wait before sliding to next chain
-      await new Promise(r => setTimeout(r, 200));
-    }
-
-    // 5. PHASE: FINALIZATION
-    onProgress({
-      status: 'completed',
-      chain: 'Sync',
-      localValue: null,
-      cloudValue: null,
-      progress: 100
-    });
-
-    // Auto-idle after 3 seconds
-    setTimeout(() => {
+      // 4. CYCLE COMPLETE: Institutional Wait (Nominal)
       onProgress({
-        status: 'idle',
-        chain: '',
+        status: 'completed',
+        chain: 'Audit',
         localValue: null,
         cloudValue: null,
-        progress: 0
+        progress: 100
       });
-    }, 3000);
+
+      // 10 Second Cooldown before next full registry check
+      await new Promise(r => setTimeout(r, 10000));
+    }
   }
 };
