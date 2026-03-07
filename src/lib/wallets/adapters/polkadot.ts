@@ -6,8 +6,10 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * POLKADOT (DOT) ADAPTER - HARDENED VERSION
- * Version: 4.5.0 (Resilient Socket Lifecycle)
- * Implements Fallback RPCs and strict socket lifecycle management.
+ * Version: 4.6.0 (Resilient Socket Lifecycle)
+ * 
+ * Implements strict provider-ready checks before API initialization
+ * to prevent "WebSocket is not connected" fatal errors.
  */
 
 const DOT_ENDPOINTS = [
@@ -35,13 +37,17 @@ class PolkadotAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                provider = new WsProvider(url, false); 
+                // 1. Establish Provider
+                provider = new WsProvider(url); 
                 
+                // 2. WAIT FOR PROVIDER READY (Critical Fix)
+                // This ensures the socket is OPEN before ApiPromise tries to getMetadata
                 await Promise.race([
-                    provider.connect(),
+                    provider.isReady,
                     new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 8000))
                 ]);
 
+                // 3. Initialize API
                 api = await Promise.race([
                     ApiPromise.create({ 
                         provider,
@@ -55,6 +61,7 @@ class PolkadotAdapter implements IWalletAdapter {
 
                 if (!api) throw new Error("INIT_FAILED");
 
+                // 4. Final Readiness Check
                 await api.isReadyOrError;
 
                 const { data: balance } = await api.query.system.account(ownerAddress) as any;
@@ -71,12 +78,13 @@ class PolkadotAdapter implements IWalletAdapter {
                 });
 
             } catch (error: any) {
-                // Silencing the expected noise from "Normal Closure" events
+                // Silencing the expected noise from "Normal Closure" events during workstation handshakes
                 if (!error.message?.includes('Normal Closure')) {
                     console.warn(`[DOT_ADAPTER_ADVISORY] Endpoint ${url} deferred:`, error.message);
                 }
-                continue;
+                continue; // Try next endpoint
             } finally {
+                // 5. Clean Lifecycle termination
                 try {
                     if (api) await api.disconnect();
                     if (provider) await provider.disconnect();
@@ -84,6 +92,7 @@ class PolkadotAdapter implements IWalletAdapter {
             }
         }
 
+        // Return zeros if all endpoints fail
         return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
     }
 }

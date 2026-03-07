@@ -6,7 +6,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * KUSAMA (KSM) ADAPTER - HARDENED VERSION
- * Version: 4.5.0 (Resilient Socket Lifecycle)
+ * Version: 4.6.0 (Resilient Socket Lifecycle)
  */
 
 const KSM_ENDPOINTS = [
@@ -34,13 +34,16 @@ class KusamaAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                provider = new WsProvider(url, false); 
+                // 1. Establish Provider
+                provider = new WsProvider(url); 
                 
+                // 2. WAIT FOR PROVIDER READY (Critical Fix)
                 await Promise.race([
-                    provider.connect(),
+                    provider.isReady,
                     new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 8000))
                 ]);
                 
+                // 3. Initialize API
                 api = await Promise.race([
                     ApiPromise.create({ 
                         provider,
@@ -54,6 +57,7 @@ class KusamaAdapter implements IWalletAdapter {
 
                 if (!api) throw new Error("INIT_FAILED");
 
+                // 4. Final Readiness Check
                 await api.isReadyOrError;
 
                 const { data: balance } = await api.query.system.account(ownerAddress) as any;
@@ -75,6 +79,7 @@ class KusamaAdapter implements IWalletAdapter {
                 }
                 continue;
             } finally {
+                // 5. Clean Lifecycle termination
                 try {
                     if (api) await api.disconnect();
                     if (provider) await provider.disconnect();
