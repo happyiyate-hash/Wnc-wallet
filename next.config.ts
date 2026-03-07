@@ -38,6 +38,22 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        crypto: 'crypto-browserify',
+        stream: 'stream-browserify',
+        url: 'url',
+        zlib: 'browserify-zlib',
+        http: 'stream-http',
+        https: 'https-browserify',
+        assert: 'assert',
+        os: 'os-browserify',
+        path: 'path-browserify',
+        process: 'process/browser',
+      },
+    },
+  },
   webpack: (config, { isServer }) => {
     config.experiments = {
       ...config.experiments,
