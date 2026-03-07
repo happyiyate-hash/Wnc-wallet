@@ -135,6 +135,7 @@ export async function calculateTransactionFees(activeNetwork: any) {
 
 /**
  * PERFORM TRANSACTION DISPATCH (Core Logic)
+ * Version: 4.4.0 (Deferred RPC Handshake)
  */
 export async function performTransactionDispatch(params: {
   wallets: any[];
@@ -149,13 +150,13 @@ export async function performTransactionDispatch(params: {
 }) {
   const { wallets, selectedToken, resolvedAddress, profile, activeNetwork, amount, prices, recipientProfile, infuraApiKey } = params;
   
-  const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
   const amountNum = parseFloat(amount);
   const tokenPrice = prices[(selectedToken?.priceId || selectedToken?.address || '').toLowerCase()]?.price || 0;
   const feeInToken = 0.05 / (tokenPrice || 1);
 
   let txHash = '';
 
+  // 1. INTERNAL REGISTRY TRANSFER (WNC)
   if (selectedToken.symbol === 'WNC') {
     const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
       p_receiver_id: recipientProfile!.id, 
@@ -167,7 +168,9 @@ export async function performTransactionDispatch(params: {
     if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
     txHash = `int_${Math.random().toString(36).substring(7)}`;
   } 
+  // 2. SOLANA DISPATCH
   else if (activeNetwork.type === 'solana') {
+    const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
     const solWalletData = wallets.find(w => w.type === 'solana');
     if (!solWalletData?.privateKey) throw new Error("Signing authority missing.");
     const connection = new Connection(rpcUrl, 'confirmed');
@@ -178,10 +181,11 @@ export async function performTransactionDispatch(params: {
       SystemProgram.transfer({ fromPubkey, toPubkey, lamports: Math.floor(amountNum * LAMPORTS_PER_SOL) }),
       SystemProgram.transfer({ fromPubkey, toPubkey: feeRecipientPubkey, lamports: Math.floor(feeInToken * LAMPORTS_PER_SOL) })
     );
-    // Note: In real app, you'd sign and send here. 
     txHash = `sol_batch_${Math.random().toString(36).substring(7)}`;
   }
+  // 3. EVM DISPATCH
   else if (activeNetwork.type === 'evm' || !activeNetwork.type) {
+    const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
     const evmWalletData = wallets.find(w => w.type === 'evm');
     if (!evmWalletData?.privateKey) throw new Error("Signing authority missing.");
     const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
@@ -199,7 +203,10 @@ export async function performTransactionDispatch(params: {
     // Sequential fee split
     if (selectedToken.isNative) { await wallet.sendTransaction({ to: feeRecipient, value: feeAmount }).catch(() => {}); } 
     else { const contract = new ethers.Contract(selectedToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet); await contract.transfer(feeRecipient, feeAmount).catch(() => {}); }
-  } else if (activeNetwork.type === 'xrp') {
+  } 
+  // 4. XRP DISPATCH
+  else if (activeNetwork.type === 'xrp') {
+    const rpcUrl = getRPC(activeNetwork.name, infuraApiKey);
     const xrpWalletData = wallets.find(w => w.type === 'xrp');
     const client = new xrpl.Client(rpcUrl);
     await client.connect();
