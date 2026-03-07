@@ -5,7 +5,8 @@ import { fetchChainFees } from '@/lib/wallets/services/fee-service';
 
 /**
  * INSTITUTIONAL GAS PRICE SERVICE
- * Version: 2.0.0
+ * Version: 3.0.0
+ * 
  * Centralized registry for multi-chain gas discovery and caching.
  * Exposes real-time price data and estimated fees for all 39 blockchains.
  */
@@ -16,8 +17,10 @@ export interface GasData {
   usdFee: number;
 }
 
+// Global Singleton Cache for direct property access if preferred
+export const gasCache: Record<string, GasData> = {};
+
 class GasService {
-  private cache: Record<string, GasData> = {};
   private interval: NodeJS.Timeout | null = null;
   private listeners: Set<() => void> = new Set();
 
@@ -36,12 +39,13 @@ class GasService {
         apiKey
       );
       
-      this.cache[chain.name] = {
+      const data: GasData = {
         priceGwei: result.gasPriceGwei || (result.satPerVByte ? `${result.satPerVByte} sat/vB` : '0'),
         nativeFee: result.nativeFee || '0',
         usdFee: result.usdFee || 0.05
       };
-      
+
+      gasCache[chain.name] = data;
       this.notify();
     } catch (e) {
       // Handshake deferred: node unreachable or rate limited
@@ -65,7 +69,7 @@ class GasService {
    */
   getGasPrice(chainName: string): GasData | null {
     if (!chainName) return null;
-    return this.cache[chainName] || null;
+    return gasCache[chainName] || null;
   }
 
   /**
@@ -74,7 +78,7 @@ class GasService {
   getEstimatedTransactionFee(chainName: string, txType: 'send' | 'swap'): number {
     const data = this.getGasPrice(chainName);
     if (!data) return 0.05;
-    // Multi-step swaps typically consume more gas
+    // Multi-step swaps typically consume more gas (estimated at 2x base send)
     return txType === 'send' ? data.usdFee : data.usdFee * 2;
   }
 
@@ -85,12 +89,20 @@ class GasService {
     if (this.interval || chains.length === 0) return;
     
     const run = () => {
-      // Batch refresh all 39 chains in the registry
+      // Batch refresh all chains in the registry
       chains.forEach(c => this.fetchGas(c, apiKey));
     };
     
     run();
     this.interval = setInterval(run, 10000);
+  }
+
+  /**
+   * Bulk fetch helper compatible with functional patterns.
+   */
+  async fetchAllGasFees(chains: any[], apiKey: string | null): Promise<GasData[]> {
+    await Promise.all(chains.map(c => this.fetchGas(c, apiKey)));
+    return Object.values(gasCache);
   }
 }
 
