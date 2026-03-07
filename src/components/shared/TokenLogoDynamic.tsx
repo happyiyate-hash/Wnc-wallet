@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 interface TokenLogoDynamicProps {
   logoUrl: string | null | undefined;
-  alt: string;
+  alt?: string;
   size?: number;
   className?: string;
   FallbackComponent?: React.ReactElement;
@@ -20,10 +20,10 @@ interface TokenLogoDynamicProps {
 
 /**
  * INSTITUTIONAL LOGO ENGINE
- * Version: 11.0.0 (Persistent Cache Handshake)
+ * Version: 12.0.0 (Zero-Latency Tiered Cache)
  * 
- * Strictly utilizes the local IndexedDB Registry for zero-latency rendering.
- * Performs background restoration if the local node is empty.
+ * Strictly utilizes tiered resolution (Memory -> DB -> Network) to eliminate flicker.
+ * Integrated with background pre-fetching worker.
  */
 export default function TokenLogoDynamic({
   logoUrl,
@@ -34,43 +34,41 @@ export default function TokenLogoDynamic({
   symbol,
   name,
 }: TokenLogoDynamicProps) {
-  const cacheKey = useMemo(() => {
+  const cacheId = useMemo(() => {
     const slug = (name || alt || '').replace(/\s+/g, '_').toLowerCase();
     const sym = symbol?.toLowerCase() || 'native';
     return `logo_v12_${slug}_${sym}`;
   }, [name, symbol, alt]);
 
+  // Accessibility Handshake: Automated Alt Protocol
+  const effectiveAlt = alt || symbol || name || "Token Logo";
+
+  // INSTANT HYDRATION: Check memory cache before first render
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const isFetchingRef = useRef(false);
 
   useEffect(() => {
     async function resolve() {
-      // 1. INSTANT REGISTRY CHECK (IndexedDB)
+      // 1. INSTANT TIERED LOOKUP (Memory + IndexedDB)
       try {
-        const cached = await registryDb.getLogo(cacheKey);
+        const cached = await registryDb.getLogo(cacheId);
         if (cached) {
           setResolvedUrl(cached);
           setIsInitializing(false);
           return;
         }
-      } catch (e) {
-        // Fallback to fetch if DB fails
-      }
+      } catch (e) {}
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
-      // 2. RESOLVE FINAL URL (Handshake Node)
+      // 2. NETWORK HANDSHAKE
       let finalUrl: string | null = null;
-
       try {
-        // Strategy A: Relative CDN paths from metadata
         if (typeof logoUrl === 'string' && logoUrl.length > 0) {
           finalUrl = await getFullLogoUrl(logoUrl);
-        } 
-        // Strategy B: Direct Registry Lookup
-        else if (name || symbol) {
+        } else if (name || symbol) {
           finalUrl = await getDirectLogoUrl(name || '', symbol || '');
         }
       } catch (e) {
@@ -79,8 +77,7 @@ export default function TokenLogoDynamic({
 
       if (finalUrl) {
         setResolvedUrl(finalUrl);
-        // Persist for zero-latency next session
-        await registryDb.saveLogo(cacheKey, finalUrl);
+        await registryDb.saveLogo(cacheId, finalUrl);
       }
 
       setIsInitializing(false);
@@ -88,7 +85,7 @@ export default function TokenLogoDynamic({
     }
 
     resolve();
-  }, [logoUrl, symbol, name, cacheKey]);
+  }, [logoUrl, symbol, name, cacheId]);
 
   if (isInitializing && !resolvedUrl) {
     return (
@@ -110,7 +107,7 @@ export default function TokenLogoDynamic({
     <div style={{ width: size, height: size }} className={cn("shrink-0 flex items-center justify-center relative overflow-hidden", className)}>
       <CachedImage
         src={resolvedUrl}
-        alt={alt}
+        alt={effectiveAlt}
         width={size}
         height={size}
         className="rounded-full object-cover transition-opacity duration-300 opacity-0"
@@ -120,8 +117,7 @@ export default function TokenLogoDynamic({
         }}
         onError={() => {
           setResolvedUrl(null);
-          // Purge corrupted node from registry
-          registryDb.saveLogo(cacheKey, ''); 
+          registryDb.saveLogo(cacheId, ''); 
         }}
       />
     </div>

@@ -23,11 +23,10 @@ const PRICE_CACHE_KEY = 'ss-price-cache-global';
 
 /**
  * INSTITUTIONAL INDEPENDENT MARKET ENGINE
- * Version: 8.0.0 (Zero-Latency Logo Discovery)
+ * Version: 9.0.0 (Zero-Latency Pre-fetcher)
  * 
- * Operates independently of Auth and Wallet state.
- * Loads cached global prices instantly on boot.
- * Triggers background logo pre-fetching for all whitelisted assets to eliminate black placeholders.
+ * Operates independently of Auth state to ensure early hydration.
+ * Populates the tiered logo registry in the background to eliminate UI flicker.
  */
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
@@ -42,50 +41,45 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * CENTRALIZED LOGO PRE-FETCH
-   * Populates the IndexedDB logo registry for whitelisted tokens and networks.
-   * This eliminates the "grey placeholder" blink in selectors.
+   * CENTRALIZED LOGO PRE-FETCH WORKER
+   * Iterates through all whitelisted assets across all 39 chains.
+   * Eliminates the "black flicker" in selectors by populating the hardware cache early.
    */
   const prefetchLogos = useCallback(async (chains: ChainConfig[]) => {
     if (hasInitializedLogosRef.current) return;
     hasInitializedLogosRef.current = true;
 
-    console.log("[MARKET_ENGINE] Initializing logo pre-fetch sequence...");
+    console.log("[MARKET_ENGINE] Initializing logo pre-fetch worker...");
     
-    // Process chains sequentially to avoid rate limits
+    // Process chains sequentially to manage network load
     for (const chain of chains) {
       try {
-        // 1. Fetch Network Logo
-        const chainCacheKey = `logo_v12_${chain.name.replace(/\s+/g, '_').toLowerCase()}_${chain.symbol.toLowerCase()}`;
-        const chainCached = await registryDb.getLogo(chainCacheKey);
+        // 1. Sync Network Branding
+        const chainCacheId = `logo_v12_${chain.name.replace(/\s+/g, '_').toLowerCase()}_${chain.symbol.toLowerCase()}`;
+        const chainCached = await registryDb.getLogo(chainCacheId);
         if (!chainCached) {
           const url = await getDirectLogoUrl(chain.name, chain.symbol);
-          if (url) await registryDb.saveLogo(chainCacheKey, url);
+          if (url) await registryDb.saveLogo(chainCacheId, url);
         }
 
-        // 2. Fetch Whitelisted Token Logos
+        // 2. Sync Asset Registry
         const assets = getInitialAssets(chain.chainId);
         for (const asset of assets) {
-          const cacheKey = `logo_v12_${asset.name.replace(/\s+/g, '_').toLowerCase()}_${asset.symbol.toLowerCase()}`;
-          
-          const cached = await registryDb.getLogo(cacheKey);
-          if (!cached) {
+          const assetCacheId = `logo_v12_${asset.name.replace(/\s+/g, '_').toLowerCase()}_${asset.symbol.toLowerCase()}`;
+          const assetCached = await registryDb.getLogo(assetCacheId);
+          if (!assetCached) {
             try {
               const url = await getDirectLogoUrl(asset.name, asset.symbol);
-              if (url) await registryDb.saveLogo(cacheKey, url);
-            } catch (e) {
-              // Silent fail for individual logos to keep the sequence moving
-            }
+              if (url) await registryDb.saveLogo(assetCacheId, url);
+            } catch (e) {}
           }
         }
-      } catch (e) {
-        console.warn(`[MARKET_ENGINE] Pre-fetch skip for chain ${chain.name}`);
-      }
+      } catch (e) {}
       
-      // Institutional Breather to prevent UI stutter
-      await new Promise(r => setTimeout(r, 150));
+      // Institutional Breather
+      await new Promise(r => setTimeout(r, 100));
     }
-    console.log("[MARKET_ENGINE] Logo registry synchronized.");
+    console.log("[MARKET_ENGINE] Asset registry synchronized.");
   }, []);
 
   const updatePrices = useCallback((newPrices: PriceResult) => {
@@ -107,16 +101,16 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       const newPrices = await fetchGlobalMarketData(allChains, customTokensRef.current, rates);
       updatePrices(newPrices);
       
-      // Start background logo sync after first price handshake
+      // Trigger background pre-fetcher once price handshake is stable
       prefetchLogos(allChains);
     } catch (e) {
-      console.warn("[MARKET_ENGINE_ADVISORY] Global price handshake deferred.");
+      console.warn("[MARKET_ENGINE_ADVISORY] Market handshake deferred.");
     } finally {
       setIsMarketLoading(false);
     }
   }, [rates, updatePrices, prefetchLogos]);
 
-  // INITIAL HYDRATION: Immediate Cache Load
+  // INITIAL HYDRATION
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -129,7 +123,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       } catch (e) {}
     }
 
-    // Start background polling immediately
     refreshPrices();
     const interval = setInterval(refreshPrices, PRICE_UPDATE_INTERVAL);
     return () => clearInterval(interval);

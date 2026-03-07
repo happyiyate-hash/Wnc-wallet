@@ -1,13 +1,16 @@
 /**
  * INSTITUTIONAL REGISTRY DATABASE (IndexedDB)
- * Version: 1.2.0 (High-Speed Cryptographic Cache & Logo Node)
+ * Version: 1.3.0 (Tiered Memory + Persistent Cache)
  * 
- * Provides persistent storage for derived identity nodes and asset branding.
- * Optimized for high-volume binary and string storage.
+ * Provides high-speed storage for identity nodes and asset branding.
+ * Includes an L1 Memory Cache to eliminate UI flicker during component mounting.
  */
 
 const DB_NAME = 'wevina_registry_v1';
 const DB_VERSION = 1;
+
+// L1 MEMORY CACHE: Synchronous lookup for active session
+const MEMORY_LOGO_CACHE = new Map<string, string>();
 
 export interface CachedWallet {
   id: string; // mnemonic fingerprint
@@ -71,7 +74,14 @@ class RegistryDB {
     });
   }
 
+  // TIRED LOGO LOOKUP (L1 Memory -> L2 DB)
   async getLogo(id: string): Promise<string | null> {
+    // 1. Check L1 Memory (Synchronous)
+    if (MEMORY_LOGO_CACHE.has(id)) {
+      return MEMORY_LOGO_CACHE.get(id)!;
+    }
+
+    // 2. Check L2 IndexedDB (Asynchronous)
     try {
       const db = await this.init();
       return new Promise((resolve) => {
@@ -80,7 +90,13 @@ class RegistryDB {
         const request = store.get(id);
         request.onsuccess = () => {
           const result = request.result;
-          resolve(result && result.url ? result.url : null);
+          if (result && result.url) {
+            // Update L1 for next synchronous access
+            MEMORY_LOGO_CACHE.set(id, result.url);
+            resolve(result.url);
+          } else {
+            resolve(null);
+          }
         };
         request.onerror = () => resolve(null);
       });
@@ -90,6 +106,10 @@ class RegistryDB {
   }
 
   async saveLogo(id: string, url: string) {
+    // Update L1
+    MEMORY_LOGO_CACHE.set(id, url);
+
+    // Update L2
     try {
       const db = await this.init();
       return new Promise((resolve) => {
@@ -104,6 +124,7 @@ class RegistryDB {
   }
 
   async purgeAll() {
+    MEMORY_LOGO_CACHE.clear();
     try {
       const db = await this.init();
       const transaction = db.transaction(['vault_cache', 'logo_registry'], 'readwrite');
