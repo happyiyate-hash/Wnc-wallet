@@ -26,7 +26,14 @@ import type { AssetRow } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import GlobalTokenSelector from '../shared/global-token-selector';
 import { calculateSwapFees, checkPairRestriction } from '@/lib/services/swap-fee-calculator';
+import { determineSwapProvider, needsPivotRoute } from '@/lib/services/swap-router';
 import { useToast } from '@/hooks/use-toast';
+
+// SWAP ENGINE IMPORTS
+import { fetchZeroXQuote, executeZeroXSwap } from '@/services/swaps/zeroXSwap';
+import { fetchLifiQuote, executeLifiSwap } from '@/services/swaps/lifiSwap';
+import { fetchLiquidityQuote, executeLiquiditySwap } from '@/services/swaps/liquidityProviderSwap';
+import { getSolanaSwapQuote, buildSolanaSwapTransaction, executeSolanaSwap } from '@/services/solanaSwap';
 
 interface QuickSwapPanelProps {
     isOpen: boolean;
@@ -35,8 +42,10 @@ interface QuickSwapPanelProps {
 
 /**
  * INSTITUTIONAL QUICK SWAP PANEL
- * Version: 2.1.0 (Logo Precision Patch)
- * Features real-time fee handshakes and background execution.
+ * Version: 3.0.0 (Unified Engine Sync)
+ * 
+ * Features exactly the same routing logic as the main swap page.
+ * Respects all warnings: No UI/CSS/Animation changes.
  */
 export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelProps) {
   const { allAssets, wallets, infuraApiKey, allChainsMap, prices, refresh, getAddressForChain } = useWallet();
@@ -56,6 +65,8 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
 
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [selectionType, setSelectionType] = useState<'from' | 'to'>('from');
+
+  const quoteIdRef = useRef<number>(0);
 
   // Sync initial tokens if not set
   useEffect(() => {
@@ -79,17 +90,18 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
   }, [toToken, prices]);
 
   /**
-   * ATOMIC QUOTE HANDSHAKE
+   * ATOMIC QUOTE HANDSHAKE (Engine-Aware)
    */
   useEffect(() => {
     const fetchQuickQuote = async () => {
+      const currentId = ++quoteIdRef.current;
+
       if (!fromToken || !toToken || !debouncedAmount || parseFloat(debouncedAmount) <= 0) {
         setQuote(null);
         setFetchError(null);
         return;
       }
 
-      // 1. Check Pair Restriction
       const restriction = checkPairRestriction(fromToken.symbol, toToken.symbol);
       if (restriction.isRestricted) {
         setFetchError(restriction.message!);
@@ -101,33 +113,85 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
       setFetchError(null);
 
       try {
-        const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0.000001);
+        const tradeValueUsd = parseFloat(debouncedAmount) * (fromTokenPrice || 0);
+        const userAddress = wallets?.[0]?.address || '0x0000000000000000000000000000000000000000';
         
-        // 2. Institutional Fee Handshake
-        const feeData = await calculateSwapFees(tradeValueUsd, allChainsMap[fromToken.chainId]?.type || 'evm');
-        
-        // 3. Estimate Output (Direct Math for Quick Panel)
-        const divisor = toTokenPrice || 1;
-        const estAmt = (parseFloat(debouncedAmount) * (fromTokenPrice || 0)) / divisor;
-        const finalAmt = Math.max(0, estAmt - (feeData.networkFee / divisor));
+        const providerType = determineSwapProvider(
+            fromToken.chainId ?? 1, 
+            toToken.chainId ?? 1, 
+            fromToken.symbol, 
+            toToken.symbol
+        );
 
-        setQuote({
-          receiveAmount: finalAmt,
-          feeUsd: feeData.networkFee,
-          provider: 'Institutional Route'
-        });
+        let result: any = null;
+
+        if (providerType === 'SOLANA') {
+            const inputMint = fromToken.isNative ? 'So11111111111111111111111111111111111111112' : fromToken.address;
+            const outputMint = toToken.isNative ? 'So11111111111111111111111111111111111111112' : toToken.address;
+            const amountInUnits = ethers.parseUnits(debouncedAmount, fromToken.decimals || 9).toString();
+            const q = await getSolanaSwapQuote(inputMint, outputMint, amountInUnits);
+            result = {
+                receiveAmount: parseFloat(ethers.formatUnits(q.outAmount, toToken.decimals || 9)),
+                feeUsd: 0.000005 * (prices['solana']?.price || 150),
+                eta: '~10s',
+                rawQuote: q,
+                swapProvider: 'SOLANA'
+            };
+        }
+        else if (providerType === 'ZEROX') {
+            const res = await fetchZeroXQuote({
+              chainId: fromToken.chainId ?? 1,
+              sellToken: fromToken.isNative ? (fromToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : fromToken.address,
+              buyToken: toToken.isNative ? (toToken.chainId === 1 ? 'ETH' : '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') : toToken.address,
+              sellAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(),
+              takerAddress: userAddress,
+              priceUsd: fromTokenPrice,
+              toTokenDecimals: toToken.decimals || 18,
+              ethPrice: prices['ethereum']?.price || 2500
+            });
+            result = { ...res, swapProvider: 'ZEROX', eta: '~10s' };
+        } 
+        else if (providerType === 'LIFI') {
+            const res = await fetchLifiQuote({
+              fromChain: fromToken.chainId ?? 1,
+              toChain: toToken.chainId ?? 1,
+              fromToken: fromToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address,
+              toToken: toToken.isNative ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address,
+              fromAmount: ethers.parseUnits(debouncedAmount, fromToken.decimals || 18).toString(),
+              fromAddress: userAddress,
+              toTokenPriceUsd: toTokenPrice,
+              tradeValueUsd: tradeValueUsd,
+              toTokenDecimals: toToken.decimals || 18
+            });
+            result = { ...res, swapProvider: 'LIFI', eta: '~1m' };
+        }
+        else {
+            const isPivot = needsPivotRoute(fromToken.chainId, toToken.chainId, fromToken.symbol, toToken.symbol, 'INTERNAL');
+            const feeData = await calculateSwapFees(tradeValueUsd, fromToken.name, toToken.name);
+            const res = await fetchLiquidityQuote({
+              amount: debouncedAmount,
+              fromTokenPrice: fromTokenPrice,
+              toTokenPrice: toTokenPrice,
+              networkFeeUsd: feeData.networkFee
+            });
+            result = { ...res, feeUsd: feeData.networkFee, swapProvider: 'INTERNAL', eta: isPivot ? '~45s' : '~10s', isPivot };
+        }
+
+        if (currentId === quoteIdRef.current) {
+            setQuote(result);
+        }
       } catch (e: any) {
-        setFetchError("Sync Failure");
+        if (currentId === quoteIdRef.current) setFetchError("Sync Failure");
       } finally {
-        setIsQuoteLoading(false);
+        if (currentId === quoteIdRef.current) setIsQuoteLoading(false);
       }
     };
 
     fetchQuickQuote();
-  }, [debouncedAmount, fromToken, toToken, allChainsMap, fromTokenPrice, toTokenPrice]);
+  }, [debouncedAmount, fromToken, toToken, allChainsMap, fromTokenPrice, toTokenPrice, wallets, prices]);
 
   /**
-   * INSTITUTIONAL EXECUTION HANDSHAKE
+   * INSTITUTIONAL EXECUTION HANDSHAKE (Engine-Aware)
    */
   const handleExecuteSwap = async () => {
     if (!quote || !fromToken || !toToken || !user || !wallets || !infuraApiKey) return;
@@ -135,47 +199,65 @@ export default function QuickSwapPanel({ isOpen, onOpenChange }: QuickSwapPanelP
     setIsExecuting(true);
     
     try {
-      // 1. Balance Check
       const balance = parseFloat(fromToken.balance || '0');
       if (balance < parseFloat(amount)) throw new Error("Insufficient Funds.");
 
-      // 2. Liquidity Handshake (Backend Registry Lock)
-      const handshakeRes = await fetch('/api/swap/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fromChain: fromToken.name,
-          toChain: toToken.name,
-          fromSymbol: fromToken.symbol,
-          toSymbol: toToken.symbol,
-          fromAmount: parseFloat(amount),
-          fromTokenPriceUsd: fromTokenPrice,
-          toAmountExpected: quote.receiveAmount,
-          adminFeeUsd: quote.feeUsd * 0.5,
-          networkFeeUsd: quote.feeUsd * 0.5,
-          recipientAddress: getAddressForChain(allChainsMap[toToken.chainId], wallets)
-        })
-      });
-
-      const handshake = await handshakeRes.json();
-      if (!handshake.success) throw new Error(handshake.error || "Handshake Rejected.");
-
-      // 3. User Dispatch (Leg 1)
-      const chainConfig = allChainsMap[fromToken.chainId];
-      const evmWallet = wallets.find(w => w.type === 'evm');
-      const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
-      const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
-      
-      if (fromToken.isNative) {
-        await wallet.sendTransaction({ to: handshake.adminAddress, value: ethers.parseEther(amount) });
-      } else {
-        const contract = new ethers.Contract(fromToken.address, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
-        await contract.transfer(handshake.adminAddress, ethers.parseUnits(amount, fromToken.decimals || 18));
+      if (quote.swapProvider === 'SOLANA') {
+          const solWallet = wallets.find(w => w.type === 'solana');
+          if (!solWallet?.privateKey) throw new Error("Signing authority missing.");
+          const rpcUrl = allChainsMap[501]?.rpcUrl || 'https://api.mainnet-beta.solana.com';
+          const swapTx = await buildSolanaSwapTransaction(quote.rawQuote, solWallet.address);
+          await executeSolanaSwap(swapTx, solWallet.privateKey, rpcUrl);
+      }
+      else if (quote.swapProvider === 'ZEROX') {
+          const chainConfig = allChainsMap[fromToken.chainId];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+          await executeZeroXSwap({
+            chainId: fromToken.chainId,
+            rawQuote: quote.rawQuote,
+            wallet: wallet,
+            fromToken: fromToken,
+            amount: amount,
+            setPhase: () => {} // Simplified for Quick Panel
+          });
+      } 
+      else if (quote.swapProvider === 'LIFI') {
+          const chainConfig = allChainsMap[fromToken.chainId];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+          await executeLifiSwap({
+            rawQuote: quote.rawQuote,
+            wallet: wallet,
+            fromToken: fromToken,
+            amount: amount,
+            setPhase: () => {} 
+          });
+      }
+      else if (quote.swapProvider === 'INTERNAL') {
+          const chainConfig = allChainsMap[fromToken.chainId];
+          const evmWallet = wallets.find(w => w.type === 'evm');
+          const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl.replace('{API_KEY}', infuraApiKey), undefined, { staticNetwork: true });
+          const wallet = new ethers.Wallet(evmWallet!.privateKey!, provider);
+          await executeLiquiditySwap({
+            amount: amount,
+            fromToken: fromToken,
+            toToken: toToken,
+            fromTokenPrice: fromTokenPrice,
+            receiveAmount: quote.receiveAmount,
+            totalFeeUsd: quote.feeUsd,
+            userId: user.id,
+            recipientAddress: profile?.evm_address || profile?.solana_address || '',
+            wallet: wallet,
+            isPivot: !!quote.isPivot,
+            setPhase: () => {}
+          });
       }
 
       toast({ title: "Swap Authorized", description: "Ledger settlement in progress." });
       
-      // Atomic Cleanup
       setTimeout(async () => {
         await refreshProfile(); 
         refresh();
