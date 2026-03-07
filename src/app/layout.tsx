@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Suspense } from 'react';
@@ -19,6 +18,7 @@ import RealtimeNotificationListener from '@/components/notifications/realtime-li
 import GlobalLoadingBarrier from '@/components/global-loading-barrier';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { GlobalErrorListener } from '@/components/global-error-listener';
+import CloudSyncCard from '@/components/wallet/cloud-sync-card';
 
 export const metadata: Metadata = {
   title: 'Wevina Terminal - Institutional Multi-Chain Vault',
@@ -76,6 +76,7 @@ export default function RootLayout({
                     
                     {/* CENTRAL SENTINELS, BARRIERS & OVERLAYS */}
                     <Suspense fallback={null}>
+                      <CloudSyncCard />
                       <GlobalLoadingBarrier />
                       <GlobalOverlayManager />
                       <NotificationCenter />

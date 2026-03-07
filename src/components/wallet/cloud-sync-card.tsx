@@ -1,26 +1,26 @@
-
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+  Cloud, 
   Database, 
   CheckCircle2, 
+  AlertCircle, 
+  RefreshCw, 
   Cpu, 
   Zap, 
-  Activity,
   ShieldCheck,
-  RefreshCw,
-  Search
+  Search,
+  ArrowRight
 } from 'lucide-react';
 import { useWallet } from '@/contexts/wallet-provider';
 import { cn } from '@/lib/utils';
 
 /**
- * INSTITUTIONAL INLINE REGISTRY AUDIT (TICKER)
- * Version: 10.0.0 (Wait-and-Slide Protocol)
+ * INSTITUTIONAL CLOUD SYNC CARD
+ * Version: 1.0.0 (User Provided Hardware Node)
  * 
- * Persistent monitoring node embedded in the Profile page.
- * Uses mode="wait" to eliminate "dragging" overlapping glitches.
+ * Displays the real-time background audit of the multi-chain registry.
  */
 export default function CloudSyncCard() {
   const { syncDiagnostic } = useWallet();
@@ -28,123 +28,206 @@ export default function CloudSyncCard() {
 
   if (status === 'idle') return null;
 
+  const getStatusColor = () => {
+    switch (status) {
+      case 'mismatch': return 'text-red-400';
+      case 'syncing': return 'text-primary';
+      case 'success':
+      case 'completed': return 'text-green-400';
+      default: return 'text-blue-400';
+    }
+  };
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'checking': return <Search className="w-4 h-4 animate-pulse" />;
+      case 'mismatch': return <AlertCircle className="w-4 h-4" />;
+      case 'syncing': return <RefreshCw className="w-4 h-4 animate-spin" />;
+      case 'success':
+      case 'completed': return <CheckCircle2 className="w-4 h-4" />;
+      default: return <Cloud className="w-4 h-4" />;
+    }
+  };
+
   const truncateAddress = (addr: string | null) => {
     if (!addr) return 'None';
+    if (addr === 'Encrypted Phrase') return addr;
+    if (addr === 'Stored') return addr;
+    if (addr === 'Missing') return addr;
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const isSuccess = status === 'success' || status === 'completed';
-  const isSyncing = status === 'syncing' || status === 'mismatch';
-
   return (
-    <div className="w-full">
-      <div className="bg-black/40 backdrop-blur-xl border border-white/5 rounded-[2rem] p-4 shadow-2xl relative overflow-hidden">
-        
-        {/* HEADER: ACTIVE SIGNATURE */}
-        <div className="flex items-center justify-between mb-4 px-1">
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Activity className={cn("w-3.5 h-3.5 text-primary", !isSuccess && "animate-pulse")} />
-              <div className="absolute inset-0 bg-primary/20 blur-sm rounded-full animate-pulse" />
-            </div>
-            <div className="flex flex-col">
-              <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-white/60 leading-none">
-                {status === 'completed' ? 'Registry Nominal' : 'Cloud Registry Active'}
-              </h3>
-              <p className="text-[7px] font-black text-primary/40 uppercase tracking-widest mt-1">
-                {status === 'syncing' ? 'Repairing Node...' : status === 'mismatch' ? 'Mismatch Detected' : '24/7 Security Audit'}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-white/30">{Math.round(progress)}%</span>
-            <div className="bg-primary/10 border border-primary/20 px-3 py-0.5 rounded-full flex items-center gap-1.5">
-              <Zap className={cn("w-2.5 h-2.5 text-primary fill-primary", !isSuccess && "animate-pulse")} />
-              <span className="text-[8px] font-black text-primary uppercase tracking-tighter">{chain || 'SYNC'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* PROGRESS TRACKER */}
-        <div className="h-0.5 w-full bg-white/5 rounded-full overflow-hidden mb-4">
-          <motion.div 
-            className="h-full bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.3 }}
-          />
-        </div>
-
-        {/* SLIDING HANDSHAKE PAIR (STRICT SEQUENTIAL) */}
-        <div className="h-14 relative overflow-hidden">
-          <AnimatePresence mode="wait">
+    <motion.div 
+      initial={{ y: -150, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -150, opacity: 0 }}
+      transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+      className="fixed top-20 left-4 right-4 z-[100] max-w-lg mx-auto"
+    >
+      <div className="bg-[#0a0a0c]/90 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-5 shadow-2xl overflow-hidden relative">
+        {/* Background Animation Node (Scanning Pulse) */}
+        <div className="absolute inset-0 pointer-events-none opacity-20">
             <motion.div 
-              key={chain}
-              initial={{ x: 150, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -150, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="grid grid-cols-2 gap-2 h-full"
-            >
-              {/* Cloud Node */}
-              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 flex flex-col justify-center">
-                <div className="flex items-center gap-1.5 mb-0.5 opacity-30">
-                  <Database className="w-2.5 h-2.5" />
-                  <span className="text-[6px] font-black uppercase tracking-tighter">Cloud Registry</span>
-                </div>
-                <p className="text-[9px] font-mono text-white/40 tracking-tight">{truncateAddress(cloudValue)}</p>
-              </div>
+                animate={{ 
+                    scale: [1, 1.4, 1],
+                    opacity: [0.2, 0.4, 0.2]
+                }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className={cn(
+                    "absolute -right-20 -top-20 w-64 h-64 blur-3xl rounded-full transition-colors duration-1000",
+                    status === 'mismatch' ? "bg-red-500" : status === 'success' || status === 'completed' ? "bg-green-500" : "bg-primary"
+                )}
+            />
+            {status === 'checking' && (
+                <motion.div 
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-primary/20 to-transparent skew-x-12"
+                />
+            )}
+        </div>
 
-              {/* Local Node */}
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <div className={cn(
-                "relative border rounded-xl p-2.5 flex flex-col justify-center transition-all duration-500",
-                isSuccess ? "bg-green-500/10 border-green-500/30" : isSyncing ? "bg-amber-500/10 border-amber-500/30" : "bg-primary/5 border-primary/20"
+                "w-10 h-10 rounded-2xl flex items-center justify-center transition-colors duration-500",
+                status === 'mismatch' ? "bg-red-500/20" : "bg-primary/10"
               )}>
-                <div className="flex items-center gap-1.5 mb-0.5 relative z-10">
-                  {isSyncing ? (
-                    <RefreshCw className="w-2.5 h-2.5 text-amber-500 animate-spin" />
-                  ) : (
-                    <Cpu className={cn("w-2.5 h-2.5", isSuccess ? "text-green-400" : "text-primary")} />
-                  )}
-                  <span className={cn("text-[6px] font-black uppercase tracking-tighter", isSuccess ? "text-green-400" : isSyncing ? "text-amber-500" : "text-primary")}>
-                    Local Node
+                {getStatusIcon()}
+              </div>
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  {status === 'completed' ? 'Registry Verified' : 'Cloud Sync Node'}
+                </h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className={cn(
+                    "w-1 h-1 rounded-full animate-pulse",
+                    status === 'completed' ? "bg-green-500" : "bg-primary"
+                  )} />
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">
+                    {status === 'completed' ? 'System Integrity: Locked' : 'Hardware Identity Handshake'}
                   </span>
                 </div>
-                <p className={cn("text-[9px] font-mono tracking-tight relative z-10", isSuccess ? "text-white" : "text-white/60")}>
-                  {truncateAddress(localValue)}
-                </p>
-
-                {/* SUCCESS POP */}
-                <AnimatePresence>
-                  {isSuccess && (
-                    <motion.div 
-                      initial={{ scale: 0, rotate: -45 }} 
-                      animate={{ scale: 1, rotate: 0 }}
-                      className="absolute top-1.5 right-1.5 z-20"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 fill-black" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
+            </div>
+            
+            <AnimatePresence mode="wait">
+                {chain && (
+                    <motion.div 
+                        key={chain}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="bg-white/5 border border-white/10 px-3 py-1 rounded-full flex items-center gap-2"
+                    >
+                        <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
+                        <span className="text-[9px] font-black text-white">{chain}</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-center px-1">
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", getStatusColor())}>
+                    {status === 'checking' && `Scanning ${chain} Registry...`}
+                    {status === 'mismatch' && 'Registry Conflict Detected'}
+                    {status === 'syncing' && 'Reconciling Identity Nodes...'}
+                    {status === 'success' && `${chain} Integrity Verified`}
+                    {status === 'completed' && 'Institutional Handshake Complete'}
+                </span>
+                <span className="text-[9px] font-mono text-muted-foreground">{Math.round(progress)}%</span>
+            </div>
+            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    className={cn(
+                        "h-full bg-gradient-to-r transition-colors duration-500",
+                        status === 'mismatch' ? "from-red-500 to-orange-500" : "from-primary to-purple-500"
+                    )}
+                />
+            </div>
+          </div>
+
+          <AnimatePresence mode="wait">
+            <motion.div 
+                key={chain}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="grid grid-cols-2 gap-2"
+            >
+                <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1 relative">
+                    <div className="flex items-center gap-1.5">
+                        <Database className="w-2.5 h-2.5 text-muted-foreground" />
+                        <span className="text-[7px] font-black text-muted-foreground uppercase">Cloud Registry</span>
+                    </div>
+                    <p className={cn(
+                        "text-[10px] font-mono truncate transition-all duration-500",
+                        status === 'mismatch' ? "text-red-400 line-through scale-95 opacity-50" : "text-white/60"
+                    )}>
+                        {truncateAddress(cloudValue)}
+                    </p>
+                    {status === 'syncing' && (
+                        <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: '100%' }}
+                            className="absolute bottom-0 left-0 h-[1px] bg-primary"
+                        />
+                    )}
+                </div>
+                <div className="p-3 rounded-2xl bg-primary/5 border border-primary/20 space-y-1 relative">
+                    <div className="flex items-center gap-1.5">
+                        <Cpu className="w-2.5 h-2.5 text-primary" />
+                        <span className="text-[7px] font-black text-primary uppercase">Local Node</span>
+                    </div>
+                    <p className="text-[10px] font-mono text-white truncate">
+                        {truncateAddress(localValue)}
+                    </p>
+                    {status === 'success' && (
+                        <motion.div 
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="absolute -top-1 -right-1"
+                        >
+                            <CheckCircle2 className="w-3 h-3 text-green-500 fill-black" />
+                        </motion.div>
+                    )}
+                </div>
             </motion.div>
           </AnimatePresence>
-        </div>
 
-        {/* STATUS FOOTER */}
-        <AnimatePresence>
-          {status === 'completed' && (
+          {status === 'mismatch' && (
             <motion.div 
-              initial={{ opacity: 0, y: 10 }} 
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-3 flex items-center justify-center gap-1.5"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-center gap-2 py-1.5 px-4 rounded-xl bg-red-500/10 border border-red-500/20 animate-pulse"
             >
-              <ShieldCheck className="w-2.5 h-2.5 text-green-500" />
-              <span className="text-[7px] font-black text-green-500 uppercase tracking-widest">Global Identity Synchronization Verified</span>
+                <AlertCircle className="w-3 h-3 text-red-500" />
+                <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">
+                    Outdated Registry Node Found - Reconciling...
+                </span>
             </motion.div>
           )}
-        </AnimatePresence>
+
+          {status === 'completed' && (
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center justify-center gap-2 py-1 px-4 rounded-xl bg-green-500/10 border border-green-500/20"
+            >
+                <ShieldCheck className="w-3 h-3 text-green-500" />
+                <span className="text-[8px] font-black text-green-500 uppercase tracking-widest">
+                    Institutional Vault Verified
+                </span>
+            </motion.div>
+          )}
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
