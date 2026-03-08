@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useUser } from '@/contexts/user-provider';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -10,82 +11,101 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 14.0.0 (Hardened Identity Join & Decimal Lock)
+ * Version: 15.0.0 (Lifecycle Integration & Balance Cross-Trigger)
+ * 
+ * Ensures notifications are fetched on app start and resume.
+ * Triggers WNC balance refresh upon relevant incoming events.
  */
 export default function RealtimeNotificationListener() {
-  const { user } = useUser();
+  const { user, refreshProfile } = useUser();
   const { setUnreadCount, refresh, setNotifications, setIsNotificationsLoaded } = useWallet();
   const { toast } = useToast();
   
   const lastUserIdRef = useRef<string | null>(null);
 
-  // 1. INSTITUTIONAL REGISTRY FETCH (Guaranteed Handshake)
+  /**
+   * REGISTRY HANDSHAKE (Initial & Resume Fetch)
+   */
+  const fetchInitialBatch = useCallback(async () => {
+    if (!user || !supabase) return;
+    
+    console.log("[SENTINEL] Syncing notification registry for node:", user.id);
+    
+    try {
+      // Attempt high-fidelity fetch with profile join
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*, sender:profiles!from_user_id(name, photo_url)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error) {
+        // Fallback Join logic
+        const { data: simpleJoin } = await supabase
+          .from('notifications')
+          .select('*, sender:profiles(name, photo_url)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(30);
+        
+        if (simpleJoin) {
+          setNotifications(simpleJoin as any[]);
+          setUnreadCount(simpleJoin.filter((n: any) => !n.read).length);
+        } else {
+          // Raw Fallback
+          const { data: rawData } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(30);
+          if (rawData) {
+            setNotifications(rawData as Notification[]);
+            setUnreadCount(rawData.filter(n => !n.read).length);
+          }
+        }
+      } else if (data) {
+        setNotifications(data as Notification[]);
+        setUnreadCount(data.filter(n => !n.read).length);
+      }
+    } catch (e) {
+      console.warn("[SENTINEL] Registry revalidation interrupted.");
+    } finally {
+      setIsNotificationsLoaded(true);
+    }
+  }, [user, setNotifications, setIsNotificationsLoaded, setUnreadCount]);
+
+  // 1. BOOT SYNC
   useEffect(() => {
     if (!user || !supabase || lastUserIdRef.current === user.id) {
       if (!user) setIsNotificationsLoaded(true);
       return;
     }
-    
     lastUserIdRef.current = user.id;
+    fetchInitialBatch();
+  }, [user, fetchInitialBatch, setIsNotificationsLoaded]);
 
-    const fetchInitialBatch = async () => {
-      console.log("[SENTINEL] Syncing notification registry for node:", user.id);
-      
-      try {
-        // Attempt high-fidelity fetch with explicit identity metadata join
-        // We use a broader select to allow Supabase to resolve the relationship automatically
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*, sender:profiles!from_user_id(name, photo_url)')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(30);
+  // 2. RESUME SYNC (App returned to foreground)
+  useEffect(() => {
+    if (!user) return;
 
-        if (error) {
-          console.warn("[SENTINEL] Join handshake deferred, attempting simpler join...");
-          // Try join without the explicit foreign key hint if standard fails
-          const { data: simpleJoin } = await supabase
-            .from('notifications')
-            .select('*, sender:profiles(name, photo_url)')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(30);
-          
-          if (simpleJoin) {
-            setNotifications(simpleJoin as any[]);
-            setUnreadCount(simpleJoin.filter((n: any) => !n.read).length);
-          } else {
-            // Raw fallback if all joins fail
-            const { data: rawData } = await supabase
-              .from('notifications')
-              .select('*')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .limit(30);
-            if (rawData) {
-              setNotifications(rawData as Notification[]);
-              setUnreadCount(rawData.filter(n => !n.read).length);
-            }
-          }
-        } else if (data) {
-          setNotifications(data as Notification[]);
-          setUnreadCount(data.filter(n => !n.read).length);
-        }
-      } catch (e) {
-        console.error("[SENTINEL] Registry fetch interrupted.");
-      } finally {
-        setIsNotificationsLoaded(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("[SENTINEL] App resumed - Revalidating alerts...");
+        fetchInitialBatch();
       }
     };
 
-    fetchInitialBatch();
-  }, [user, setNotifications, setIsNotificationsLoaded, setUnreadCount]);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, fetchInitialBatch]);
 
-  // 2. PERSISTENT SENTINEL STREAM (Filtered Subscription)
+  // 3. PERSISTENT SENTINEL STREAM (Filtered Subscription)
   useEffect(() => {
     if (!user || !supabase) return;
 
-    console.log("[SENTINEL] Establishing real-time channel for node:", user.id);
+    console.log("[SENTINEL] Establishing live registry channel for node:", user.id);
 
     const channel = supabase
       .channel(`registry-alerts-${user.id}`)
@@ -95,9 +115,9 @@ export default function RealtimeNotificationListener() {
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
       }, async (payload) => {
-          console.log("[SENTINEL] New ledger event detected:", payload.new.id);
+          console.log("[SENTINEL] Live ledger event detected.");
           
-          // Re-fetch with join to ensure peer name is populated
+          // Enrich data with identity join
           const { data: enriched } = await supabase
             .from('notifications')
             .select('*, sender:profiles!from_user_id(name, photo_url)')
@@ -110,7 +130,13 @@ export default function RealtimeNotificationListener() {
           setNotifications(prev => [newNode, ...prev].slice(0, 30));
           setUnreadCount(prev => prev + 1);
           
-          // Visual Handshake
+          // CROSS-NODE TRIGGER: If it's a transfer in or reward, refresh WNC balance instantly
+          if (newNode.type === 'TRANSFER_IN' || newNode.type === 'REWARD') {
+            console.log("[SENTINEL] Incoming credits detected - Forcing balance re-sync.");
+            refreshProfile();
+          }
+          
+          // Broadcast Visual Handshake
           const type = newNode.type;
           const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
                        type === 'TRANSFER_OUT' ? ArrowUpRight : 
@@ -126,14 +152,14 @@ export default function RealtimeNotificationListener() {
               )
           });
           
-          refresh(); 
+          refresh(); // Sync blockchain balances
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, setUnreadCount, refresh, toast, setNotifications]);
+  }, [user, setUnreadCount, refresh, toast, setNotifications, refreshProfile]);
 
   return null;
 }

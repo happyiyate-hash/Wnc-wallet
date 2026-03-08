@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
 import type { UserProfile } from '@/lib/types';
@@ -19,7 +19,9 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 /**
  * INSTITUTIONAL USER & IDENTITY PROVIDER
- * Version: 8.0.0 (Strict Persistence & Fast-Boot Sentinel)
+ * Version: 9.0.0 (Lifecycle & Heartbeat Logic)
+ * 
+ * Implements 5-second polling for WNC balance and App-Resume revalidation.
  */
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -28,7 +30,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isSettled, setIsSettled] = useState(false);
   const hasInitializedRef = useRef(false);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     if (!supabase) return null;
     
     try {
@@ -47,7 +49,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         console.warn("[REGISTRY_PROFILE_ADVISORY]", e);
     }
     return null;
-  };
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (user) await fetchProfile(user.id);
+  }, [user, fetchProfile]);
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -58,7 +64,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setIsSettled(true);
     }, 12000);
 
-    // 1. FAST HYDRATION: Check local cache for immediate UI responsiveness
+    // 1. FAST HYDRATION: Check local cache
     if (typeof window !== 'undefined') {
       try {
         const keys = Object.keys(localStorage);
@@ -101,8 +107,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // 3. REAL-TIME AUTHORITY LISTENER
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_PROTOCOL_EVENT] ${event}`);
-      
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
@@ -111,7 +115,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       } else if (event === 'SIGNED_OUT') {
         setProfile(null);
         setUser(null);
-        // Clear local caches on logout
         if (typeof window !== 'undefined') {
           Object.keys(localStorage).forEach(k => {
             if (k.startsWith('profile_cache_')) localStorage.removeItem(k);
@@ -127,7 +130,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       clearTimeout(safetyTimeout);
     };
-  }, []);
+  }, [fetchProfile]);
+
+  /**
+   * INSTITUTIONAL LIFECYCLE SENTINELS
+   * Version 9.0: Heartbeat + Visibility Triggers
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    // A. 5-SECOND WNC HEARTBEAT
+    // Constantly polls the profile for internal balance changes
+    const heartbeat = setInterval(() => {
+      refreshProfile();
+    }, 5000);
+
+    // B. APP RESUME SYNCHRONIZATION
+    // Revalidates immediately when user returns to app/tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("[LIFECYCLE] App resumed - Syncing Node Balance...");
+        refreshProfile();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, refreshProfile]);
 
   const signOut = async () => {
     if (supabase) {
@@ -135,10 +168,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setProfile(null);
     }
-  };
-
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
   };
 
   return (
