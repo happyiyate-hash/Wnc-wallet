@@ -1,4 +1,3 @@
-
 'use client';
 
 import { supabase } from '@/lib/supabase/client';
@@ -7,7 +6,7 @@ import { registryDb } from '@/lib/storage/registry-db';
 
 /**
  * INSTITUTIONAL WALLET ACTIONS SERVICE
- * Version: 3.3.0 (Persistent Registry Cleanup)
+ * Version: 4.0.0 (Strict Logic Separation)
  */
 
 export async function syncAddressesToCloud(
@@ -108,25 +107,36 @@ export async function saveInfuraToCloud(userId: string, apiKey: string) {
   }
 }
 
+/**
+ * PURGE LOCAL WALLET CACHE
+ * Version 4.0: Standardized key removal for local device only.
+ */
 export function purgeLocalWalletCache(userId: string) {
   const keys = [
     'ss-mnemonic', 
     'ss-infura-key', 
     'ss-wallet-balances',
-    'account_number', 
-    'custom_tokens', 
+    'account-number', 
+    'account_number',
+    'custom-tokens', 
+    'custom_tokens',
+    'hidden-tokens',
     'hidden_tokens',
+    'profile-cache',
     'profile_cache',
+    'wallet-addr-cache',
     'wallet_addr_cache',
-    'wallet_fingerprint',
-    'registry_audit_v2',
+    'ss-notifications-cache',
+    'ss-audit-completed',
+    'active-network-id',
     'active_network_id'
   ];
   keys.forEach(key => {
     localStorage.removeItem(`${key}-${userId}`);
+    localStorage.removeItem(`${key}_${userId}`);
     localStorage.removeItem(key);
   });
   
-  // Also clear persistent IndexedDB
+  // Also clear persistent IndexedDB (hardware cache)
   registryDb.purgeAll();
 }

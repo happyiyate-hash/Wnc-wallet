@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -60,8 +59,7 @@ export default function DesktopSidebar() {
     setIsLoggingOut(true);
     try {
         await logout();
-        toast({ title: "Session Terminated", description: "Identity and keys have been purged safely." });
-        router.push('/');
+        toast({ title: "Session Terminated", description: "Identity session has ended. Local keys preserved." });
     } catch (e) {
         toast({ title: "Logout Error", variant: "destructive" });
     } finally {
@@ -132,7 +130,7 @@ export default function DesktopSidebar() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-xl font-black text-white uppercase tracking-tight">Purge Node Cache?</AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
-                            This will permanently remove the secret phrase from this device. Access can only be restored via Cloud Vault.
+                            This will remove the secret phrase from this device only. Your cloud backup will remain active.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="mt-6">
@@ -147,7 +145,7 @@ export default function DesktopSidebar() {
                     <button className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-red-500/10 text-red-500/60 hover:text-red-500 transition-all group">
                         <div className="flex items-center gap-3">
                             {isLoggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldX className="w-4 h-4" />}
-                            <span className="text-[10px] font-black uppercase tracking-widest">Terminate Session</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Log Out</span>
                         </div>
                         <LogOut className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
@@ -156,12 +154,12 @@ export default function DesktopSidebar() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-xl font-black text-white uppercase tracking-tight">End Node Session?</AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
-                            This will clear your credentials and end your active SmarterSeller session.
+                            This will end your session. Local keys will be preserved for your next login.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="mt-6">
                         <AlertDialogCancel className="rounded-2xl h-12 bg-white/5 border-white/10">Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600 rounded-2xl h-12 font-black">Yes, Terminate</AlertDialogAction>
+                        <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600 rounded-2xl h-12 font-black">Yes, Log Out</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

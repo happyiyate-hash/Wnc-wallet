@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -43,7 +42,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Search
+  Search,
+  CloudOff
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -62,7 +62,6 @@ export default function SettingsPage() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // PROFILE EDIT STATE
     const [username, setUsername] = useState('');
     const [photoUrl, setPhotoUrl] = useState('');
     const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -70,7 +69,6 @@ export default function SettingsPage() {
     const [isValidating, setIsValidating] = useState(false);
     const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
 
-    // SECURITY PROTOCOL STATE
     const [mnemonic, setMnemonic] = useState<string | null>(null);
     const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState(false);
     const [currencySearch, setCurrencySearch] = useState('');
@@ -188,7 +186,7 @@ export default function SettingsPage() {
             
             if (error) throw error;
 
-            const saved = localStorage.getItem(`wallet_mnemonic_${user.id}`);
+            const saved = localStorage.getItem(`ss-mnemonic-${user.id}`);
             setMnemonic(saved);
             setIsVerified(true);
         } catch (e: any) {
@@ -209,7 +207,6 @@ export default function SettingsPage() {
         try {
             await deleteWalletPermanently();
             resetSecurityFlow();
-            router.push('/');
         } finally {
             setIsDestroying(false);
         }
@@ -366,27 +363,27 @@ export default function SettingsPage() {
                     </section>
 
                     <section className="space-y-3">
-                        <h2 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.2em] px-2">Session</h2>
+                        <h2 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.2em] px-2">Session & Registry</h2>
                         <div className="bg-red-500/[0.02] border border-red-500/10 rounded-[2.5rem] p-2 space-y-1">
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <button className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform"><Trash2 className="w-5 h-5" /></div>
-                                            <div className="text-left"><p className="text-sm font-bold text-red-500">Purge Local Keys</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Immediate Removal</p></div>
+                                            <div className="text-left"><p className="text-sm font-bold text-red-500">Purge Local Keys</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Remove from device only</p></div>
                                         </div>
                                     </button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent className="bg-black border-red-500/20 rounded-[2.5rem] shadow-2xl">
-                                    <AlertDialogHeader><AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle><AlertDialogDescription className="text-zinc-400">This will permanently remove the secret phrase from this device. Access can only be restored via Cloud Vault.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-2xl font-black text-white">Purge Local Cache?</AlertDialogTitle><AlertDialogDescription className="text-zinc-400">This will remove the secret phrase from this device only. Your cloud backup will remain active.</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter className="mt-6 gap-2"><AlertDialogCancel className="rounded-2xl h-14 bg-white/5">Cancel</AlertDialogCancel><AlertDialogAction onClick={deleteWallet} className="bg-red-500 rounded-2xl h-14 font-black">Yes, Purge Node</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
 
                             <button onClick={() => setSecurityMode('destroy')} className="flex w-full py-4 px-3 hover:bg-red-500/10 transition-all rounded-2xl group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform"><ShieldAlert className="w-5 h-5" /></div>
-                                    <div className="text-left"><p className="text-sm font-bold text-red-500">Destroy Cloud Vault</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Permanent Global Removal</p></div>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 group-hover:scale-110 transition-transform"><CloudOff className="w-5 h-5" /></div>
+                                    <div className="text-left"><p className="text-sm font-bold text-red-500">Clear Cloud Backups</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Registry deletion only</p></div>
                                 </div>
                             </button>
 
@@ -395,7 +392,7 @@ export default function SettingsPage() {
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500">
                                         {isLoggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldX className="w-5 h-5" />}
                                     </div>
-                                    <div className="text-left"><p className="text-sm font-bold text-red-500">Log Out & Terminate</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">End Node Session</p></div>
+                                    <div className="text-left"><p className="text-sm font-bold text-red-500">End Session (Log Out)</p><p className="text-[10px] text-red-500/60 uppercase tracking-widest font-black opacity-60">Keys are preserved</p></div>
                                 </div>
                             </button>
                         </div>
@@ -407,7 +404,7 @@ export default function SettingsPage() {
                 <AlertDialogContent className="bg-[#0a0a0c] border-white/10 rounded-[2.5rem] p-8 max-w-[95vw] sm:max-w-[400px]">
                     <AlertDialogHeader className="space-y-4">
                         <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center mx-auto", securityMode === 'destroy' ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary")}>
-                            {securityMode === 'destroy' ? <ShieldAlert className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+                            {securityMode === 'destroy' ? <CloudOff className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                         </div>
                         <AlertDialogTitle className="text-2xl font-black text-center text-white">Identity Verification</AlertDialogTitle>
                     </AlertDialogHeader>
@@ -431,8 +428,9 @@ export default function SettingsPage() {
                             )}
                             {securityMode === 'destroy' && (
                                 <div className="space-y-4">
-                                    <Input placeholder="Type DELETE" value={confirmInput} onChange={(e) => setConfirmInput(e.target.value)} className="h-14 text-center font-black" />
-                                    <Button className="w-full h-14 rounded-2xl bg-red-500 font-black" onClick={handlePermanentDestroy} disabled={confirmInput !== 'DELETE' || isDestroying}>Confirm Destruction</Button>
+                                    <p className="text-xs text-zinc-400 text-center mb-4">Type <span className="text-white font-bold">DELETE</span> to clear your cloud backups.</p>
+                                    <Input placeholder="DELETE" value={confirmInput} onChange={(e) => setConfirmInput(e.target.value.toUpperCase())} className="h-14 text-center font-black" />
+                                    <Button className="w-full h-14 rounded-2xl bg-red-500 font-black" onClick={handlePermanentDestroy} disabled={confirmInput !== 'DELETE' || isDestroying}>Confirm Deletion</Button>
                                 </div>
                             )}
                         </div>
@@ -441,7 +439,6 @@ export default function SettingsPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* NEW GLOBAL CURRENCY SELECTOR */}
             <Sheet open={isCurrencySheetOpen} onOpenChange={setIsCurrencySheetOpen}>
                 <SheetContent side="bottom" className="bg-[#0a0a0c] border-t border-primary/20 rounded-t-[3.5rem] h-[85vh] p-0 overflow-hidden shadow-2xl flex flex-col">
                     <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto my-4 shrink-0" />
@@ -452,7 +449,6 @@ export default function SettingsPage() {
                         </SheetDescription>
                     </SheetHeader>
 
-                    {/* SEARCH NODE */}
                     <div className="px-6 mb-6 shrink-0">
                         <div className="relative group">
                             <div className="absolute -inset-0.5 bg-primary/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
@@ -482,12 +478,9 @@ export default function SettingsPage() {
                                     )}
                                 >
                                     <div className="flex items-center gap-4">
-                                        {/* SYMBOL NODE */}
                                         <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                                             <span className="text-xl font-black text-primary">{currency.symbol}</span>
                                         </div>
-                                        
-                                        {/* FLAG & NAME NODE */}
                                         <div className="flex flex-col">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xl leading-none">{currency.flag}</span>
@@ -500,7 +493,6 @@ export default function SettingsPage() {
                                             </span>
                                         </div>
                                     </div>
-                                    
                                     {selectedCurrency === currency.code && (
                                         <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
                                             <CheckCircle2 className="w-4 h-4 text-primary" />
@@ -508,16 +500,6 @@ export default function SettingsPage() {
                                     )}
                                 </button>
                             ))}
-                            
-                            {filteredCurrencies.length === 0 && (
-                                <div className="py-24 flex flex-col items-center justify-center text-center space-y-4 opacity-20">
-                                    <Globe className="w-12 h-12 text-white" />
-                                    <div className="space-y-1">
-                                        <p className="text-xs font-black uppercase tracking-widest text-white">No nodes detected</p>
-                                        <p className="text-[9px] font-medium leading-relaxed">Try searching for a different regional code.</p>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </ScrollArea>
                 </SheetContent>

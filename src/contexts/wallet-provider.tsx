@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -64,7 +63,6 @@ interface WalletContextType {
   syncDiagnostic: SyncDiagnostic;
   runCloudDiagnostic: (force?: boolean) => Promise<void>;
   dismissSyncCard: () => void;
-  // NEW NOTIFICATION REGISTRY
   notifications: Notification[];
   setNotifications: (notifications: Notification[] | ((prev: Notification[]) => Notification[])) => void;
   isNotificationsLoaded: boolean;
@@ -97,7 +95,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
-  // NOTIFICATION STATE & CACHE
   const [notifications, setNotificationsState] = useState<Notification[]>([]);
   const [isNotificationsLoaded, setIsNotificationsLoaded] = useState(false);
 
@@ -245,7 +242,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setWallets(derived);
     setAccountNumber(targetAcc);
-    localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    localStorage.setItem(`account-number-${user.id}`, targetAcc);
     localStorage.removeItem(`ss-audit-completed-${user.id}`);
     
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
@@ -271,7 +268,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     setWallets(derived);
     setAccountNumber(targetAcc);
-    localStorage.setItem(`account_number_${user.id}`, targetAcc);
+    localStorage.setItem(`account-number-${user.id}`, targetAcc);
     localStorage.removeItem(`ss-audit-completed-${user.id}`);
     
     const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
@@ -314,12 +311,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const fingerprint = `${mnemonic.length}:${mnemonic.slice(0, 15)}`;
         const targetAcc = profile.account_number || `835${Math.floor(Math.random() * 9000000 + 1000000)}`;
         await registryDb.saveVault({ id: fingerprint, wallets: derived, accountNumber: targetAcc, timestamp: Date.now() });
-        localStorage.setItem(`account_number_${user.id}`, targetAcc);
+        localStorage.setItem(`account-number-${user.id}`, targetAcc);
         setWallets(derived);
         setAccountNumber(targetAcc);
       } else if (profile.account_number) {
         setAccountNumber(profile.account_number);
-        localStorage.setItem(`account_number_${user.id}`, profile.account_number);
+        localStorage.setItem(`account-number-${user.id}`, profile.account_number);
       }
       
       localStorage.removeItem(`ss-audit-completed-${user.id}`);
@@ -336,18 +333,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [user, profile, toast, runCloudDiagnostic]);
 
   const logout = useCallback(async () => {
+    // Standard Logout: Only invalidate the auth session.
+    // Wallet data in local storage and cloud backups are preserved.
+    if (signOut) await signOut();
+    window.location.href = '/auth/login';
+  }, [signOut]);
+
+  const deleteWallet = useCallback(() => {
+    // Delete from Normal Storage: Remove from device only.
     if (user) { 
         registryDb.purgeAll(); 
         purgeLocalWalletCache(user.id); 
         localStorage.removeItem(`ss-audit-completed-${user.id}`);
-        localStorage.removeItem(`ss-notifications-cache-${user.id}`);
     }
     setWallets(null); setBalances({}); setAccountNumber(null);
     setNotificationsState([]);
-    hasRunAuditRef.current = false;
-    if (signOut) await signOut();
-    window.location.href = '/auth/login';
-  }, [signOut, user]);
+    router.replace('/wallet-session');
+  }, [user, router]);
+
+  const deleteWalletPermanently = useCallback(async () => {
+    // Delete from Cloud: Remove backups stored in cloud registry.
+    if (!user) return;
+    try {
+      const { error } = await supabase.from('profiles').update({ 
+        vault_phrase: null, 
+        iv: null,
+        vault_infura_key: null,
+        infura_iv: null
+      }).eq('id', user.id);
+      
+      if (error) throw error;
+
+      toast({ 
+        title: "Cloud Registry Cleared", 
+        description: "Encrypted backups have been removed from the cloud node." 
+      });
+      
+      // Refresh profile to update UI states (e.g. Cloud Recovery button)
+      await refreshProfile();
+    } catch (e: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Cloud Deletion Failed",
+        description: e.message 
+      });
+    }
+  }, [user, toast, refreshProfile]);
 
   useEffect(() => {
     if (!authSettled) return;
@@ -358,10 +389,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const uid = user.id;
         const savedInfura = localStorage.getItem(`ss-infura-key-${uid}`);
         if (savedInfura) setInfuraApiKeyState(savedInfura);
-        const savedAcc = localStorage.getItem(`account_number_${uid}`);
+        const savedAcc = localStorage.getItem(`account-number-${uid}`);
         if (savedAcc) setAccountNumber(savedAcc);
         
-        // Hydrate Notifications from Cache
         const savedNotifications = localStorage.getItem(`ss-notifications-cache-${uid}`);
         if (savedNotifications) {
           try {
@@ -387,10 +417,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const cachedBalances = localStorage.getItem(`ss-wallet-balances-${uid}`);
         if (cachedBalances) { try { const { data } = JSON.parse(cachedBalances); setBalances(data); } catch (e) {} }
         
-        const hidden = localStorage.getItem(`hidden_tokens_${uid}`);
+        const hidden = localStorage.getItem(`hidden-tokens-${uid}`);
         if (hidden) setHiddenTokenKeys(new Set(JSON.parse(hidden)));
 
-        const custom = localStorage.getItem(`custom_tokens_${uid}`);
+        const custom = localStorage.getItem(`custom-tokens-${uid}`);
         if (custom) setUserAddedTokens(JSON.parse(custom));
 
         setIsInitialized(true);
@@ -411,7 +441,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [isInitialized, wallets, user, refresh, runCloudDiagnostic, chainsWithLogos, accountNumber]);
 
   const contextValue = useMemo(() => ({
-    isInitialized, isWalletLoading, unreadCount, setUnreadCount, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active_network_id_${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet: () => { if (user) { registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } }, deleteWalletPermanently: async () => { if (!user) return; try { await supabase.from('profiles').update({ vault_phrase: null, iv: null, account_number: null, onboarding_completed: false }).eq('id', user.id); registryDb.purgeAll(); purgeLocalWalletCache(user.id); setWallets(null); setAccountNumber(null); router.replace('/wallet-session'); } catch (e) {} }, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden_tokens_${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom_tokens_${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, 
+    isInitialized, isWalletLoading, unreadCount, setUnreadCount, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active-network-id-${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden-tokens-${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom-tokens-${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, 
     getAvailableAssetsForChain: (cid: number) => {
         const base = getInitialAssets(cid);
         const custom = userAddedTokens.filter(t => t.chainId === cid);
@@ -423,7 +453,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, 
     isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard,
     notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded
-  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, logout, registerCustomTokens, dismissSyncCard, notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded]);
+  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, registerCustomTokens, dismissSyncCard, notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }
