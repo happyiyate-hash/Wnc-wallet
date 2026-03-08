@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Bell, Loader2, X, CheckCircle2, ChevronRight, Zap, ArrowDownLeft, ArrowUpRight, QrCode, Workflow, TrendingUp, HandCoins } from 'lucide-react';
+import { Bell, Loader2, X, CheckCircle2, Zap, ArrowDownLeft, ArrowUpRight, QrCode, Workflow, HandCoins } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -13,79 +13,40 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import type { Notification } from '@/lib/types';
 
+/**
+ * INSTITUTIONAL NOTIFICATION CENTER (VIEW NODE)
+ * Version: 9.0.0 (Zero-Latency UI)
+ * 
+ * Uses the global notifications state from WalletProvider for instant rendering.
+ * Handlers trigger background "Mark as Read" handshakes.
+ */
 export default function NotificationCenter() {
-  const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount } = useWallet();
+  const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount, notifications, setNotifications, isNotificationsLoaded } = useWallet();
   const { user } = useUser();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
+  const hasMarkedReadRef = useRef(false);
 
+  // Mark all as read when opening
   useEffect(() => {
-    if (!supabase || !user || !isNotificationsOpen) return;
+    if (isNotificationsOpen && user && supabase && notifications.length > 0) {
+      const markAsRead = async () => {
+        const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+        if (unreadIds.length === 0) return;
 
-    const fetchNotifications = async () => {
-      setLoading(true);
-      try {
-        let { data, error } = await supabase
-          .from('notifications')
-          .select(`
-            *,
-            sender:from_user_id (
-              name,
-              photo_url
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(25);
+        // 1. Local Optimistic Update
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        setUnreadCount(0);
 
-        if (error || !data) {
-          const rawFetch = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(25);
-          
-          if (!rawFetch.error && rawFetch.data) {
-            data = rawFetch.data as any;
-          }
+        // 2. Persistent Registry Handshake
+        try {
+          await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
+        } catch (e) {
+          console.warn("[REGISTRY] Mark as read failed.");
         }
+      };
 
-        if (data) {
-          setNotifications(data as Notification[]);
-          setUnreadCount(0);
-          
-          const unreadIds = data.filter(n => !n.read).map(n => n.id);
-          if (unreadIds.length > 0) {
-            await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
-          }
-        }
-      } catch (e) {
-        console.error("[REGISTRY_FETCH_FAIL]", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNotifications();
-
-    const channel = supabase
-      .channel(`notifications-ui-sync-${user.id}`)
-      .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
-      }, (payload) => {
-          const newNode = payload.new as Notification;
-          setNotifications((prev) => [newNode, ...prev].slice(0, 25));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isNotificationsOpen, user, setUnreadCount]);
+      markAsRead();
+    }
+  }, [isNotificationsOpen, user, notifications, setNotifications, setUnreadCount]);
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -155,7 +116,7 @@ export default function NotificationCenter() {
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-2 pb-24">
-              {loading && notifications.length === 0 ? (
+              {!isNotificationsLoaded && notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-40">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
                   <p className="text-[10px] font-black uppercase tracking-widest text-white">Auditing Ledger...</p>
@@ -180,8 +141,8 @@ export default function NotificationCenter() {
                       transition={{ delay: i * 0.03 }}
                       whileHover={{ scale: 1.01 }}
                       className={cn(
-                        "group relative overflow-hidden rounded-[1.8rem] border p-0.5 transition-all duration-300",
-                        n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30 shadow-lg"
+                        "group relative overflow-hidden rounded-[1.8rem] border p-0.5 transition-all duration-300 shadow-2xl",
+                        n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30"
                       )}
                     >
                       <div className={cn(

@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { AssetRow, ChainConfig, WalletWithMetadata } from '@/lib/types';
+import type { AssetRow, ChainConfig, WalletWithMetadata, Notification } from '@/lib/types';
 import { useNetworkLogos } from '@/hooks/useNetworkLogos';
 import { useUser } from './user-provider';
 import { useMarket } from './market-provider';
@@ -64,6 +64,11 @@ interface WalletContextType {
   syncDiagnostic: SyncDiagnostic;
   runCloudDiagnostic: (force?: boolean) => Promise<void>;
   dismissSyncCard: () => void;
+  // NEW NOTIFICATION REGISTRY
+  notifications: Notification[];
+  setNotifications: (notifications: Notification[] | ((prev: Notification[]) => Notification[])) => void;
+  isNotificationsLoaded: boolean;
+  setIsNotificationsLoaded: (val: boolean) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -92,6 +97,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null);
 
+  // NOTIFICATION STATE & CACHE
+  const [notifications, setNotificationsState] = useState<Notification[]>([]);
+  const [isNotificationsLoaded, setIsNotificationsLoaded] = useState(false);
+
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnostic>({
     status: 'idle',
     chain: null,
@@ -102,6 +111,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const hasRunAuditRef = useRef(false);
   const isAuditAbortedRef = useRef(false);
+
+  const setNotifications = useCallback((update: Notification[] | ((prev: Notification[]) => Notification[])) => {
+    setNotificationsState(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      if (user) {
+        localStorage.setItem(`ss-notifications-cache-${user.id}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  }, [user]);
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -321,8 +340,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         registryDb.purgeAll(); 
         purgeLocalWalletCache(user.id); 
         localStorage.removeItem(`ss-audit-completed-${user.id}`);
+        localStorage.removeItem(`ss-notifications-cache-${user.id}`);
     }
     setWallets(null); setBalances({}); setAccountNumber(null);
+    setNotificationsState([]);
     hasRunAuditRef.current = false;
     if (signOut) await signOut();
     window.location.href = '/auth/login';
@@ -340,6 +361,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const savedAcc = localStorage.getItem(`account_number_${uid}`);
         if (savedAcc) setAccountNumber(savedAcc);
         
+        // Hydrate Notifications from Cache
+        const savedNotifications = localStorage.getItem(`ss-notifications-cache-${uid}`);
+        if (savedNotifications) {
+          try {
+            setNotificationsState(JSON.parse(savedNotifications));
+            setIsNotificationsLoaded(true);
+          } catch (e) {}
+        }
+
         const savedMnemonic = localStorage.getItem(`ss-mnemonic-${uid}`);
         if (savedMnemonic) {
           const fingerprint = `${savedMnemonic.length}:${savedMnemonic.slice(0, 15)}`;
@@ -391,8 +421,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             return acc;
         }, [] as any[]).map(a => ({ ...a, balance: '0' } as AssetRow));
     }, 
-    isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard
-  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, logout, registerCustomTokens, dismissSyncCard]);
+    isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard,
+    notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded
+  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, logout, registerCustomTokens, dismissSyncCard, notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }
