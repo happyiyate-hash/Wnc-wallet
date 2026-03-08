@@ -11,12 +11,12 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 17.0.0 (The Professional Handshake)
+ * Version: 18.0.0 (SmarterSeller Sync Protocol)
  * 
- * Implements the Triple-Trigger logic:
- * 1. Realtime Listeners (INSERT/UPDATE)
- * 2. Periodic Refresh (5s Heartbeat via UserProvider)
- * 3. App Lifecycle (Visibility Change)
+ * Implements the SmarterSeller "Instant-Sync" architecture:
+ * 1. Global postgres_changes listener for 'notifications'
+ * 2. Immediate UI Toast broadcast
+ * 3. Automatic balance revalidation for financial events
  */
 export default function RealtimeNotificationListener() {
   const { user, refreshProfile } = useUser();
@@ -28,7 +28,7 @@ export default function RealtimeNotificationListener() {
   /**
    * ATOMIC REGISTRY REVALIDATION
    * Fetches the latest state for both notifications and the balance profile.
-   * Triggered on Boot and App Resume.
+   * Triggered on Boot, App Resume, and Financial Notification Events.
    */
   const revalidateRegistryNodes = useCallback(async () => {
     if (!user || !supabase) return;
@@ -36,7 +36,7 @@ export default function RealtimeNotificationListener() {
     console.log("[SENTINEL] Syncing global registry nodes...");
     
     try {
-      // 1. Fetch Notification Batch
+      // 1. Fetch Notification Batch with Profile Join
       const { data, error } = await supabase
         .from('notifications')
         .select('*, sender:profiles!from_user_id(name, photo_url)')
@@ -49,10 +49,10 @@ export default function RealtimeNotificationListener() {
         setUnreadCount(data.filter(n => !n.read).length);
       }
 
-      // 2. Refresh Profile Balance (WNC)
+      // 2. Refresh Profile (WNC Balance)
       await refreshProfile();
 
-      // 3. Sync Wallets (Blockchain RPCs)
+      // 3. Sync Blockchain Wallets (RPCs)
       await refresh();
 
     } catch (e) {
@@ -87,15 +87,15 @@ export default function RealtimeNotificationListener() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [user, revalidateRegistryNodes, setIsNotificationsLoaded]);
 
-  // 2. GLOBAL REAL-TIME CHANNELS
+  // 2. SMARTERSELLER REAL-TIME LISTENER
   useEffect(() => {
     if (!user || !supabase) return;
 
-    console.log("[SENTINEL] Initializing real-time monitor for node:", user.id);
+    console.log("[SENTINEL] Initializing SmarterSeller Real-time Node:", user.id);
 
-    // CHANNEL A: Notification Alerts (INSERT)
-    const notificationChannel = supabase
-      .channel(`realtime-notifications-${user.id}`)
+    // CHANNEL: Notification Alerts (INSERT)
+    const channel = supabase
+      .channel(`user-alerts-${user.id}`)
       .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
@@ -104,29 +104,25 @@ export default function RealtimeNotificationListener() {
       }, async (payload) => {
           console.log("[SENTINEL] Live notification node detected.");
           
-          // Enrich data with identity join
+          const newRawNotif = payload.new as Notification;
+
+          // Enrich data with identity join for better UI
           const { data: enriched } = await supabase
             .from('notifications')
             .select('*, sender:profiles!from_user_id(name, photo_url)')
-            .eq('id', payload.new.id)
+            .eq('id', newRawNotif.id)
             .single();
 
-          const newNode = (enriched || payload.new) as Notification;
+          const newNode = (enriched || newRawNotif) as Notification;
 
-          // Update local state & badge counter
+          // A. Update Local Registry State
           setNotifications(prev => [newNode, ...prev].slice(0, 30));
           setUnreadCount(prev => prev + 1);
           
-          // Logic trigger: If money came in, refresh balance instantly
-          if (newNode.type === 'TRANSFER_IN' || newNode.type === 'REWARD') {
-            refreshProfile();
-          }
-          
-          // Broadcast Visual Handshake
-          const type = newNode.type;
-          const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
-                       type === 'TRANSFER_OUT' ? ArrowUpRight : 
-                       type === 'REQUEST' ? HandCoins : Zap;
+          // B. Broadast UI Toast
+          const Icon = newNode.type === 'TRANSFER_IN' || newNode.type === 'REWARD' ? ArrowDownLeft : 
+                       newNode.type === 'TRANSFER_OUT' ? ArrowUpRight : 
+                       newNode.type === 'REQUEST' ? HandCoins : Zap;
           
           toast({
               title: newNode.title || "Registry Alert",
@@ -137,42 +133,18 @@ export default function RealtimeNotificationListener() {
                 </div>
               )
           });
-      })
-      .subscribe();
 
-    // CHANNEL B: Balance Node Monitor (UPDATE on Profiles)
-    // Ensures balance updates instantly even without notification
-    const balanceChannel = supabase
-      .channel(`realtime-balance-${user.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles',
-        filter: `id=eq.${user.id}`
-      }, () => {
-        console.log("[SENTINEL] Live balance update detected via profile node.");
-        refreshProfile();
-      })
-      .subscribe();
-
-    // CHANNEL C: Direct Ledger Monitor (INSERT on Transfers)
-    const ledgerChannel = supabase
-      .channel(`realtime-ledger-${user.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'wnc_transfers',
-        filter: `receiver_id=eq.${user.id}`
-      }, () => {
-        console.log("[SENTINEL] Incoming WNC detected via direct ledger.");
-        refreshProfile();
+          // C. Financial Event Trigger: Refresh balance immediately
+          const financialTypes = ['TRANSFER_IN', 'TRANSFER_OUT', 'REWARD', 'BALANCE_DEDUCTION', 'REQUEST'];
+          if (financialTypes.includes(newNode.type)) {
+            console.log("[SENTINEL] Financial event detected. Synchronizing balance node...");
+            refreshProfile();
+          }
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(notificationChannel);
-      supabase.removeChannel(balanceChannel);
-      supabase.removeChannel(ledgerChannel);
+      supabase.removeChannel(channel);
     };
   }, [user, setNotifications, setUnreadCount, refreshProfile, toast]);
 

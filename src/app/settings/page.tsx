@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -152,6 +153,12 @@ export default function SettingsPage() {
         if (!user || isAvailable === false || !supabase) return;
         setIsSavingProfile(true);
         try {
+            // STEP 1: Update Auth Metadata (UI changes instantly across app)
+            await supabase.auth.updateUser({
+                data: { name: username, photo_url: photoUrl }
+            });
+
+            // STEP 2: Persist to Registry Node
             const { error: dbError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -162,7 +169,7 @@ export default function SettingsPage() {
                 }, { onConflict: 'id' });
 
             if (dbError) throw dbError;
-            toast({ title: "Profile Secured", description: "Identity node synchronized." });
+            toast({ title: "Profile Secured", description: "Identity node synchronized instantly." });
         } catch (error: any) {
             console.error("[SAVE_PROFILE_FAIL]", error);
             toast({ 
