@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -11,10 +10,7 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 8.0.0 (Global Independent Listener)
- * 
- * This component handles the background synchronization of the notification registry.
- * It operates independently of the UI panels to ensure constant real-time connectivity.
+ * Version: 9.0.0 (Hardened Handshake Sentinel)
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
@@ -22,43 +18,41 @@ export default function RealtimeNotificationListener() {
   const { toast } = useToast();
   const hasInitializedRef = useRef(false);
 
-  // 1. INITIAL REGISTRY HANDSHAKE
   useEffect(() => {
     if (!user || !supabase || hasInitializedRef.current) return;
     hasInitializedRef.current = true;
 
     const fetchInitialBatch = async () => {
+      // 5-second hard limit for registry handshake
+      const timeout = setTimeout(() => {
+        setIsNotificationsLoaded(true);
+      }, 5000);
+
       try {
         const { data, error } = await supabase
           .from('notifications')
-          .select(`
-            *,
-            sender:from_user_id (
-              name,
-              photo_url
-            )
-          `)
+          .select('*, sender:from_user_id(name, photo_url)')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(25);
 
+        clearTimeout(timeout);
+
         if (!error && data) {
           setNotifications(data as Notification[]);
-          setIsNotificationsLoaded(true);
-          
-          // Calculate unread count from fetched batch
           const unread = data.filter(n => !n.read).length;
           setUnreadCount(unread);
         }
       } catch (e) {
-        console.warn("[SENTINEL] Initial handshake deferred.");
+        console.warn("[SENTINEL] Registry handshake deferred.");
+      } finally {
+        setIsNotificationsLoaded(true);
       }
     };
 
     fetchInitialBatch();
   }, [user, setNotifications, setIsNotificationsLoaded, setUnreadCount]);
 
-  // 2. PERSISTENT REAL-TIME SUBSCRIPTION
   useEffect(() => {
     if (!user || !supabase) return;
 
@@ -70,9 +64,7 @@ export default function RealtimeNotificationListener() {
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
       }, async (payload) => {
-          console.log("[SENTINEL] New identity event detected:", payload.new);
-          
-          // Enrich the notification with sender details (Silent Fetch)
+          // Enrich the notification node silently
           const { data: enriched } = await supabase
             .from('notifications')
             .select('*, sender:from_user_id(name, photo_url)')
@@ -81,30 +73,24 @@ export default function RealtimeNotificationListener() {
 
           const newNode = (enriched || payload.new) as Notification;
 
-          // 1. Atomic UI State Update (Global Prepend)
           setNotifications(prev => [newNode, ...prev].slice(0, 25));
-          
-          // 2. Increment Numerical Counter
           setUnreadCount(prev => prev + 1);
           
-          // 3. Map Visual Meta for Toast
           const type = newNode.type;
           const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
                        type === 'TRANSFER_OUT' ? ArrowUpRight : 
                        type === 'REQUEST' ? HandCoins : Zap;
           
-          // 4. Dispatch High-Fidelity Toast
           toast({
               title: newNode.title || "Registry Alert",
               description: newNode.message,
               action: (
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-[0_0_15px_rgba(139,92,246,0.3)] border border-primary/20">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-lg border border-primary/20">
                   <Icon className="w-5 h-5" />
                 </div>
               )
           });
           
-          // 5. Trigger Ledger Balance Revalidation
           refresh(); 
       })
       .subscribe();

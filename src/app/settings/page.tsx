@@ -177,24 +177,31 @@ export default function SettingsPage() {
 
     const handleVerifyPassword = async () => {
         if (!user?.email || !passwordInput) return;
+        
         setIsVerifying(true);
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('HANDSHAKE_TIMEOUT')), 8000)
+        );
+
         try {
-            const { error } = await supabase!.auth.signInWithPassword({
-                email: user.email,
-                password: passwordInput
-            });
-            
-            if (error) throw error;
+            // Institutional Password Handshake with Timeout Protection
+            await Promise.race([
+                supabase!.auth.signInWithPassword({
+                    email: user.email,
+                    password: passwordInput
+                }).then(({ error }) => { if (error) throw error; }),
+                timeoutPromise
+            ]);
 
             const saved = localStorage.getItem(`ss-mnemonic-${user.id}`);
             setMnemonic(saved);
             setIsVerified(true);
         } catch (e: any) {
-            toast({ 
-                title: "Verification Failed", 
-                description: "Invalid password standard.",
-                variant: "destructive" 
-            });
+            const msg = e.message === 'HANDSHAKE_TIMEOUT' 
+                ? 'Network Timeout: Registry not responding.' 
+                : 'Verification Failed: Invalid credentials.';
+            
+            toast({ title: "Security Advisory", description: msg, variant: "destructive" });
             setPasswordInput('');
         } finally {
             setIsVerifying(false);

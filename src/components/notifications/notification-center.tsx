@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -15,28 +14,23 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER (VIEW NODE)
- * Version: 9.0.0 (Zero-Latency UI)
+ * Version: 10.0.0 (Zero-Latency Neymar Aesthetic)
  * 
- * Uses the global notifications state from WalletProvider for instant rendering.
- * Handlers trigger background "Mark as Read" handshakes.
+ * Optimized for frosted glass effects and instant cache rendering.
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount, notifications, setNotifications, isNotificationsLoaded } = useWallet();
   const { user } = useUser();
-  const hasMarkedReadRef = useRef(false);
 
-  // Mark all as read when opening
   useEffect(() => {
     if (isNotificationsOpen && user && supabase && notifications.length > 0) {
       const markAsRead = async () => {
         const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
         if (unreadIds.length === 0) return;
 
-        // 1. Local Optimistic Update
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
 
-        // 2. Persistent Registry Handshake
         try {
           await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
         } catch (e) {
@@ -52,29 +46,29 @@ export default function NotificationCenter() {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return <ArrowDownLeft className="w-5 h-5" />;
+        return <ArrowDownLeft className="w-4 h-4" />;
       case 'TRANSFER_OUT':
-        return <ArrowUpRight className="w-5 h-5" />;
+        return <ArrowUpRight className="w-4 h-4" />;
       case 'QR_SCAN':
-        return <QrCode className="w-5 h-5" />;
+        return <QrCode className="w-4 h-4" />;
       case 'CROSS_CHAIN':
-        return <Workflow className="w-5 h-5" />;
+        return <Workflow className="w-4 h-4" />;
       case 'REQUEST':
-        return <HandCoins className="w-5 h-5" />;
+        return <HandCoins className="w-4 h-4" />;
       default:
-        return <Zap className="w-5 h-5" />;
+        return <Zap className="w-4 h-4" />;
     }
   };
 
-  const getIconColor = (type: string) => {
+  const getStatusColor = (type: string) => {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return 'bg-green-500/20 text-green-400 border-green-500/30';
+        return 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.4)]';
       case 'TRANSFER_OUT':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
+        return 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]';
       default:
-        return 'bg-primary/20 text-primary border-primary/30';
+        return 'bg-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.4)]';
     }
   };
 
@@ -96,124 +90,99 @@ export default function NotificationCenter() {
           animate={{ y: 0 }}
           exit={{ y: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/90 backdrop-blur-3xl border-b border-white/10 rounded-b-[2.5rem] shadow-2xl h-[80vh] flex flex-col overflow-hidden"
+          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[3rem] shadow-2xl h-[85vh] flex flex-col overflow-hidden"
         >
-          {/* SLIM HEADER NODE */}
-          <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-black/40">
+          {/* SLIM HEADER */}
+          <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/40">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                <Bell className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                <Bell className="w-4 h-4" />
               </div>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Registry Handshakes</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Registry Nodes</h3>
             </div>
             <button 
               onClick={() => setIsNotificationsOpen(false)}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
             >
-              <X className="w-5 h-5 text-muted-foreground" />
+              <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-2 pb-24">
               {!isNotificationsLoaded && notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-40">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-[10px] font-black uppercase tracking-widest text-white">Auditing Ledger...</p>
+                <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Auditing Handshakes...</p>
                 </div>
               ) : notifications.length > 0 ? (
                 notifications.map((n, i) => {
                   const isPositive = n.type === 'TRANSFER_IN' || n.type === 'REWARD';
-                  
                   const formattedAmount = n.amount 
                     ? n.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
                     : null;
                   
-                  const cleanMessage = n.message 
-                    ? n.message.replace(/\d+\.?\d*\s*WNC/g, '').replace(/\s+/g, ' ').trim()
-                    : 'System update received.';
-                  
                   return (
                     <motion.div 
                       key={n.id}
-                      initial={{ opacity: 0, x: -20, scale: 0.98 }}
-                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      whileHover={{ scale: 1.01 }}
                       className={cn(
-                        "group relative overflow-hidden rounded-[1.8rem] border p-0.5 transition-all duration-300 shadow-2xl",
+                        "group relative overflow-hidden rounded-2xl border p-3 transition-all duration-300 shadow-xl",
                         n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30"
                       )}
                     >
-                      <div className={cn(
-                        "relative flex gap-3 p-3 rounded-[1.6rem] bg-black/40 backdrop-blur-xl transition-colors group-hover:bg-black/20",
-                        !n.read && "border-l-2 border-l-primary"
-                      )}>
-                        {/* SLIM ICON NODE */}
-                        <div className="relative shrink-0">
-                          <div className={cn(
-                            "w-11 h-11 rounded-2xl flex items-center justify-center border shadow-md transition-transform group-hover:scale-105",
-                            getIconColor(n.type)
-                          )}>
-                            {getIcon(n.type)}
-                          </div>
-
-                          {n.sender && (
-                            <div className="absolute -bottom-0.5 -right-0.5 border border-[#0a0a0c] rounded-full shadow-md">
-                              <Avatar className="w-5 h-5">
-                                <AvatarImage src={n.sender.photo_url} />
-                                <AvatarFallback className="bg-zinc-900 text-[7px] font-black">{n.sender.name?.[0] || '?'}</AvatarFallback>
-                              </Avatar>
-                            </div>
-                          )}
+                      <div className="flex items-center gap-3">
+                        {/* ICON NODE */}
+                        <div className={cn(
+                          "w-10 h-10 rounded-[1.2rem] flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
+                          isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+                        )}>
+                          {getIcon(n.type)}
                         </div>
                         
-                        {/* STRETCHED CONTENT NODE */}
-                        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 pb-4">
+                        {/* CONTENT NODE */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{n.title}</p>
                             {n.sender && (
                               <span className="text-[9px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">@{n.sender.name}</span>
                             )}
                           </div>
-                          <p className="text-[9px] text-muted-foreground leading-tight font-medium line-clamp-1">
-                            {cleanMessage}
-                          </p>
-                          <span className="text-[7px] font-black text-white/20 uppercase tracking-widest mt-0.5">
-                            {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
-                          </span>
-                        </div>
-
-                        {/* BOTTOM-LEFT AMOUNT PILL */}
-                        {formattedAmount && (
-                          <div className={cn(
-                            "absolute bottom-2 left-[60px] px-2.5 py-0.5 rounded-full text-[9px] font-black tabular-nums border shadow-xl z-20",
-                            isPositive ? "bg-green-500 text-white border-green-400" : "bg-red-500 text-white border-red-400"
-                          )}>
-                            {isPositive ? '+' : '-'}{formattedAmount}
+                          <div className="flex items-center justify-between">
+                            <p className="text-[9px] text-muted-foreground font-medium truncate opacity-60">
+                              {n.message?.replace(/\d+\.?\d*\s*WNC/g, '').trim()}
+                            </p>
+                            <span className="text-[7px] font-black text-white/20 uppercase tracking-widest shrink-0">
+                              {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
+                            </span>
                           </div>
-                        )}
+                        </div>
                       </div>
+
+                      {/* BOTTOM-LEFT AMOUNT BADGE */}
+                      {formattedAmount && (
+                        <div className="mt-2 pl-13 flex">
+                          <div className={cn(
+                            "px-2.5 py-0.5 rounded-full text-[9px] font-black tabular-nums border",
+                            getStatusColor(n.type)
+                          )}>
+                            {isPositive ? '+' : '-'}{formattedAmount} WNC
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   );
                 })
               ) : (
                 <div className="py-32 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
-                  <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-black uppercase tracking-widest text-white">Registry Nominal</p>
-                    <p className="text-[9px] font-medium leading-relaxed max-w-[200px]">
-                      No identity events detected.
-                    </p>
-                  </div>
+                  <CheckCircle2 className="w-10 h-10 text-white/20" />
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Registry Nominal</p>
                 </div>
               )}
             </div>
           </ScrollArea>
-
-          <div className="h-1 w-10 bg-white/10 rounded-full mx-auto mb-4 shrink-0" />
         </motion.div>
       </div>
     </AnimatePresence>

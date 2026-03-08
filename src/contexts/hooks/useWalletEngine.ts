@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useRef, useCallback } from 'react';
@@ -7,7 +6,9 @@ import { fetchBalancesForChain } from '@/lib/wallets/services/balance-service';
 
 /**
  * INSTITUTIONAL DATA REFRESH ENGINE (FAIL-FAST)
- * Version: 4.5.0 (8s Safety Sentinel)
+ * Version: 5.1.0 (8s Unified Safety Lifecycle)
+ * 
+ * Ensures that the main UI is never locked behind a slow RPC.
  */
 export function useWalletEngine({
   wallets,
@@ -37,7 +38,10 @@ export function useWalletEngine({
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const executeRevalidation = useCallback(async () => {
-    if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRefreshingRef.current) return;
+    if (!wallets || wallets.length === 0 || !viewingNetwork || !user || isRefreshingRef.current) {
+      if (!wallets || wallets.length === 0) setHasFetchedInitialData(true);
+      return;
+    }
     
     if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
@@ -46,14 +50,14 @@ export function useWalletEngine({
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     
-    // SAFETY TIMEOUT: Force-release loading barrier after 8 seconds
+    // SAFETY TIMEOUT: Hard barrier release after 8 seconds
+    // Prevents "Establishing Terminal" from spinning forever if an RPC node is slow.
     const safetyTimer = setTimeout(() => {
-        console.log("[DATA_ENGINE] Safety Sentinel triggered. Dropping barrier.");
         setHasFetchedInitialData(true);
     }, 8000);
     
     try {
-      // PHASE 1: Active Node Handshake
+      // PHASE 1: Active Network Handshake (Priority)
       const activeBalances = await fetchBalancesForChain(
         viewingNetwork, 
         wallets, 
@@ -66,11 +70,11 @@ export function useWalletEngine({
       setBalances(prev => ({ ...prev, [viewingNetwork.chainId]: activeBalances }));
       lastSyncTimestampRef.current[viewingNetwork.chainId] = Date.now();
       
-      // ACTIVE NODE VERIFIED
+      // Release barrier immediately after first network sync or timeout
       clearTimeout(safetyTimer);
       setHasFetchedInitialData(true);
 
-      // PHASE 2: Background Registry Sequence
+      // PHASE 2: Background Registry Sequence (Non-Blocking)
       const otherChains = chainsWithLogos.filter(c => c.chainId !== viewingNetwork.chainId);
       
       for (const chain of otherChains) {
@@ -88,9 +92,10 @@ export function useWalletEngine({
         await sleep(400); 
       }
     } catch (e) {
-      clearTimeout(safetyTimer);
-      setHasFetchedInitialData(true); 
+      // Handshake deferred, but we must release the barrier
     } finally { 
+      setHasFetchedInitialData(true);
+      clearTimeout(safetyTimer);
       setIsRefreshing(false); 
       isRefreshingRef.current = false;
     }
