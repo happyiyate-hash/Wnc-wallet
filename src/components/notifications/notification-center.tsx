@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Bell, Loader2, X, CheckCircle2, Zap, ArrowDownLeft, ArrowUpRight, QrCode, Workflow, HandCoins } from 'lucide-react';
+import { Bell, Loader2, X, CheckCircle2, Zap, ArrowDownLeft, ArrowUpRight, HandCoins } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@/contexts/wallet-provider';
@@ -13,7 +13,7 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER (VIEW NODE)
- * Version: 11.0.0 (Zero-Latency Neymar Aesthetic)
+ * Version: 13.0.0 (Neymar Slim + Precision Decimals)
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount, notifications, setNotifications, isNotificationsLoaded } = useWallet();
@@ -44,13 +44,13 @@ export default function NotificationCenter() {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return <ArrowDownLeft className="w-4 h-4" />;
+        return <ArrowDownLeft className="w-3 h-3" />;
       case 'TRANSFER_OUT':
-        return <ArrowUpRight className="w-4 h-4" />;
+        return <ArrowUpRight className="w-3 h-3" />;
       case 'REQUEST':
-        return <HandCoins className="w-4 h-4" />;
+        return <HandCoins className="w-3 h-3" />;
       default:
-        return <Zap className="w-4 h-4" />;
+        return <Zap className="w-3 h-3" />;
     }
   };
 
@@ -58,11 +58,11 @@ export default function NotificationCenter() {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]';
+        return 'bg-green-500/20 text-green-400 border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.3)]';
       case 'TRANSFER_OUT':
-        return 'bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]';
+        return 'bg-red-500/20 text-red-400 border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)]';
       default:
-        return 'bg-primary/10 text-primary border-primary/20 shadow-[0_0_15px_rgba(139,92,246,0.2)]';
+        return 'bg-primary/20 text-primary border-primary/30 shadow-[0_0_15px_rgba(139,92,246,0.3)]';
     }
   };
 
@@ -84,26 +84,26 @@ export default function NotificationCenter() {
           animate={{ y: 0 }}
           exit={{ y: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[3rem] shadow-2xl h-[80vh] flex flex-col overflow-hidden"
+          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[2.5rem] shadow-2xl h-[75vh] flex flex-col overflow-hidden"
         >
           {/* SLIM NEYMAR HEADER */}
-          <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/40">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                <Bell className="w-4 h-4" />
+          <div className="px-6 h-12 border-b border-white/5 flex items-center justify-between bg-black/40 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                <Bell className="w-3.5 h-3.5" />
               </div>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Registry Nodes</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Registry</h3>
             </div>
             <button 
               onClick={() => setIsNotificationsOpen(false)}
               className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
             >
-              <X className="w-4 h-4 text-muted-foreground" />
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="p-4 space-y-2 pb-24">
+            <div className="p-3 space-y-1.5 pb-20">
               {!isNotificationsLoaded ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -112,53 +112,60 @@ export default function NotificationCenter() {
               ) : notifications.length > 0 ? (
                 notifications.map((n, i) => {
                   const isPositive = n.type === 'TRANSFER_IN' || n.type === 'REWARD';
-                  const formattedAmount = n.amount 
-                    ? n.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+                  
+                  // PRECISION DECIMAL HANDSHAKE: Ensure non-zero decimals are visible
+                  const val = Number(n.amount);
+                  const formattedAmount = !isNaN(val) 
+                    ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
                     : null;
                   
+                  // Peer Identity Resolution
+                  const peerName = n.sender?.name || 'External Node';
+
                   return (
                     <motion.div 
                       key={n.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.03 }}
+                      transition={{ delay: i * 0.02 }}
                       className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-3 transition-all duration-300 shadow-xl",
+                        "group relative overflow-hidden rounded-2xl border p-2.5 transition-all duration-300 shadow-xl",
                         n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30"
                       )}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center justify-between gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* SLIM ICON */}
                           <div className={cn(
-                            "w-9 h-9 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
+                            "w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
                             isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
                           )}>
                             {getIcon(n.type)}
                           </div>
                           
                           {/* SLIM CONTENT */}
-                          <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{n.title}</p>
-                            <p className="text-[8px] text-muted-foreground font-medium truncate opacity-60">
-                              {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
-                            </p>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+                            <div className="flex items-baseline justify-between w-full">
+                                <p className="text-[10px] font-black text-white uppercase tracking-wider truncate mr-2">{n.title}</p>
+                                {/* PEER IDENTITY (FAR RIGHT) */}
+                                <span className="text-[8px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">
+                                    @{peerName}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <p className="text-[8px] text-muted-foreground font-medium truncate opacity-60">
+                                    {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
+                                </p>
+                            </div>
                           </div>
                         </div>
-
-                        {/* PEER IDENTITY (FAR RIGHT) */}
-                        {n.sender && (
-                          <span className="text-[9px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">
-                            @{n.sender.name}
-                          </span>
-                        )}
                       </div>
 
-                      {/* BOTTOM-LEFT AMOUNT PILL */}
+                      {/* BOTTOM-LEFT AMOUNT PILL (Slim Placement) */}
                       {formattedAmount && (
-                        <div className="mt-2 flex">
+                        <div className="mt-1.5 flex pl-11">
                           <div className={cn(
-                            "px-2.5 py-0.5 rounded-full text-[9px] font-black tabular-nums border",
+                            "px-2 py-0.5 rounded-lg text-[9px] font-black tabular-nums border",
                             getStatusColor(n.type)
                           )}>
                             {isPositive ? '+' : '-'}{formattedAmount} WNC

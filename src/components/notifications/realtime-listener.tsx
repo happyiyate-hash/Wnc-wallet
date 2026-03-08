@@ -10,7 +10,7 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 12.0.0 (Robust Handshake Protocol)
+ * Version: 13.0.0 (Hardened Identity Join)
  * 
  * Implements a two-layer synchronization:
  * 1. Initial Registry Fetch (Layer 1): Guaranteed retrieval of historical alerts.
@@ -36,17 +36,18 @@ export default function RealtimeNotificationListener() {
       console.log("[SENTINEL] Syncing notification registry for node:", user.id);
       
       try {
-        // Attempt high-fidelity fetch with identity metadata
+        // Attempt high-fidelity fetch with explicit identity metadata join
+        // Using profiles!from_user_id to ensure the correct foreign key is targeted
         const { data, error } = await supabase
           .from('notifications')
-          .select('*, sender:from_user_id(name, photo_url)')
+          .select('*, sender:profiles!from_user_id(name, photo_url)')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(25);
 
         if (error) {
           console.warn("[SENTINEL] Join handshake deferred, attempting raw fallback...");
-          // FALLBACK: Raw fetch without profile joins (prevents empty screens on join failures)
+          // FALLBACK: Raw fetch without profile joins
           const { data: rawData, error: rawError } = await supabase
             .from('notifications')
             .select('*')
@@ -65,7 +66,6 @@ export default function RealtimeNotificationListener() {
       } catch (e) {
         console.error("[SENTINEL] Registry fetch interrupted.");
       } finally {
-        // GUARANTEED FINALITY: Release loading spinner regardless of result
         setIsNotificationsLoaded(true);
       }
     };
@@ -92,7 +92,7 @@ export default function RealtimeNotificationListener() {
           // Attempt to enrich node metadata for the UI
           const { data: enriched } = await supabase
             .from('notifications')
-            .select('*, sender:from_user_id(name, photo_url)')
+            .select('*, sender:profiles!from_user_id(name, photo_url)')
             .eq('id', payload.new.id)
             .single();
 
@@ -118,7 +118,6 @@ export default function RealtimeNotificationListener() {
               )
           });
           
-          // Force balance revalidation
           refresh(); 
       })
       .subscribe((status) => {
