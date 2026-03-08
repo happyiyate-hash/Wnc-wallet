@@ -11,8 +11,10 @@ import React from 'react';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL
- * Version: 5.0.0 (Supabase Postgres Listener)
- * Monitors the 'notifications' table for institutional identity events.
+ * Version: 6.0.0 (Strict Identity Handshake)
+ * 
+ * Focus: Event capture and UI Alert triggering.
+ * Monitors only the current user's notification node.
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
@@ -22,7 +24,7 @@ export default function RealtimeNotificationListener() {
   useEffect(() => {
     if (!user || !supabase) return;
 
-    // Establishing the high-fidelity real-time tunnel
+    // 1. Establish the filtered real-time channel
     const channel = supabase
       .channel(`registry-handshakes-${user.id}`)
       .on('postgres_changes', { 
@@ -31,18 +33,18 @@ export default function RealtimeNotificationListener() {
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
       }, (payload) => {
-          console.log("[REGISTRY_ALERT] New notification received:", payload.new);
+          console.log("[SENTINEL] New identity event detected:", payload.new);
           
-          // 1. Alert the navigation node
+          // 2. Alert the navigation node (triggers the purple dot)
           setHasNewNotifications(true);
           
-          // 2. Map visual icon based on handshake type
+          // 3. Map visual icon based on event type
           const type = payload.new.type;
           const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
                        type === 'TRANSFER_OUT' ? ArrowUpRight : 
                        type === 'REQUEST' ? HandCoins : Zap;
           
-          // 3. Dispatch Visual Toast
+          // 4. Dispatch Visual Toast
           toast({
               title: payload.new.title || "Registry Alert",
               description: payload.new.message,
@@ -53,7 +55,7 @@ export default function RealtimeNotificationListener() {
               )
           });
           
-          // 4. Force Silent Registry Refresh
+          // 5. Force Silent Ledger Refresh
           refresh(); 
       })
       .subscribe();

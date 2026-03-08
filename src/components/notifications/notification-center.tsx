@@ -15,7 +15,10 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER
- * Version: 6.0.0 (Reactive Supabase Real-Time)
+ * Version: 7.0.0 (Strict Identity Filtering)
+ * 
+ * Focus: UI Fetch & Display Logic.
+ * Ensures the terminal only shows alerts relevant to the active node.
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setHasNewNotifications } = useWallet();
@@ -26,6 +29,7 @@ export default function NotificationCenter() {
   useEffect(() => {
     if (!supabase || !user || !isNotificationsOpen) return;
 
+    // 1. REGISTRY FETCH: Query only notifications for the current identity node
     const fetchNotifications = async () => {
       setLoading(true);
       try {
@@ -46,13 +50,14 @@ export default function NotificationCenter() {
           setNotifications(data as Notification[]);
           setHasNewNotifications(false);
           
+          // ATOMIC READ STATE SYNC
           const unreadIds = data.filter(n => !n.read).map(n => n.id);
           if (unreadIds.length > 0) {
             await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
           }
         }
       } catch (e) {
-        console.error("Notifications fetch error", e);
+        console.warn("[REGISTRY_FETCH_ADVISORY] Failed to load alerts.");
       } finally {
         setLoading(false);
       }
@@ -60,7 +65,8 @@ export default function NotificationCenter() {
 
     fetchNotifications();
 
-    // REAL-TIME REACTIVE REGISTRY
+    // 2. REAL-TIME REACTIVE REGISTRY
+    // Subscribes only to changes relevant to THIS user's identity
     const channel = supabase
       .channel(`notifications-ui-sync-${user.id}`)
       .on('postgres_changes', { 
@@ -133,8 +139,8 @@ export default function NotificationCenter() {
                 <Bell className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Registry Handshakes</h3>
-                <p className="text-[9px] font-black uppercase text-primary opacity-60">Reactive Sync v6.0</p>
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">Identity Alerts</h3>
+                <p className="text-[9px] font-black uppercase text-primary opacity-60">Verified Registry Log</p>
               </div>
             </div>
             <button 
@@ -179,7 +185,7 @@ export default function NotificationCenter() {
                         <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full">
                           <Avatar className="w-5 h-5">
                             <AvatarImage src={n.sender.photo_url} />
-                            <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name[0]}</AvatarFallback>
+                            <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name?.[0]}</AvatarFallback>
                           </Avatar>
                         </div>
                       )}
@@ -212,9 +218,9 @@ export default function NotificationCenter() {
                     <CheckCircle2 className="w-10 h-10 text-white" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-black uppercase tracking-widest text-white">Registry Nominal</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-white">Log Nominal</p>
                     <p className="text-[10px] font-medium leading-relaxed max-w-[200px]">
-                      No inbound or outbound handshakes detected in this cycle.
+                      No identity events detected in this epoch.
                     </p>
                   </div>
                 </div>
