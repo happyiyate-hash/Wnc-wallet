@@ -19,9 +19,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 /**
  * INSTITUTIONAL USER & IDENTITY PROVIDER
- * Version: 10.0.0 (Live Lifecycle & Heartbeat logic)
- * 
- * Implements 5-second polling for WNC balance and App-Resume revalidation.
+ * Version: 11.0.0 (The Professional Handshake)
  */
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -133,33 +131,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile]);
 
   /**
-   * INSTITUTIONAL LIFECYCLE SENTINELS
-   * Version 10.0: Heartbeat + Visibility Triggers
+   * PROFESSIONAL HEARTBEAT (Backup Trigger)
+   * Fetches the latest WNC balance every 5 seconds to ensure accuracy.
    */
   useEffect(() => {
     if (!user) return;
 
-    // A. 5-SECOND WNC HEARTBEAT (Safety Layer)
-    // Constantly polls the profile for internal balance changes
     const heartbeat = setInterval(() => {
       refreshProfile();
     }, 5000);
 
-    // B. APP RESUME SYNCHRONIZATION
-    // Revalidates immediately when user returns to app/tab
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("[LIFECYCLE] App resumed - Syncing Node Balance...");
-        refreshProfile();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => clearInterval(heartbeat);
   }, [user, refreshProfile]);
 
   const signOut = async () => {
