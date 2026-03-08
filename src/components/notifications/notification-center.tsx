@@ -165,7 +165,16 @@ export default function NotificationCenter() {
               ) : notifications.length > 0 ? (
                 notifications.map((n, i) => {
                   const isPositive = n.type === 'TRANSFER_IN' || n.type === 'REWARD';
-                  const formattedAmount = n.amount ? n.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+                  
+                  // Institutional Precision: Show exactly 2 decimals from the raw amount
+                  const formattedAmount = n.amount 
+                    ? n.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+                    : null;
+                  
+                  // Neymar Protocol: Clean message text by removing redundant long decimals
+                  const cleanMessage = n.message 
+                    ? n.message.replace(/\d+\.?\d*\s*WNC/g, '').replace(/\s+/g, ' ').trim()
+                    : 'System update received.';
                   
                   return (
                     <motion.div 
@@ -206,7 +215,7 @@ export default function NotificationCenter() {
                         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                           <p className="text-xs font-black text-white uppercase tracking-wider">{n.title}</p>
                           <p className="text-[10px] text-muted-foreground leading-relaxed font-medium line-clamp-2">
-                            {n.message}
+                            {cleanMessage}
                           </p>
                           <span className="text-[8px] font-black text-white/20 uppercase tracking-[0.2em] mt-1">
                             {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
@@ -223,10 +232,10 @@ export default function NotificationCenter() {
                           </div>
                         )}
 
-                        {/* AMOUNT BADGE (BOTTOM LEFT OF CARD) */}
+                        {/* AMOUNT BADGE (DOWN RIGHT SIDE - REPOSITIONED) */}
                         {formattedAmount && (
                           <div className={cn(
-                            "absolute bottom-3 left-5 px-2 py-0.5 rounded-lg text-[9px] font-black tabular-nums border shadow-2xl z-20 animate-in slide-in-from-bottom-1",
+                            "absolute bottom-3 right-5 px-3 py-1 rounded-full text-[10px] font-black tabular-nums border shadow-2xl z-20 animate-in slide-in-from-right-1",
                             isPositive ? "bg-green-500 text-white border-green-400 shadow-green-500/40" : "bg-red-500 text-white border-red-400 shadow-red-500/40"
                           )}>
                             {isPositive ? '+' : '-'}{formattedAmount}

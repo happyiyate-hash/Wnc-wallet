@@ -293,7 +293,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
         const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
           p_receiver_id: requester.id, 
           p_destination_type: 'user',
-          p_amount: Math.floor(request.amount),
+          p_amount: request.amount, // Removed Math.floor to preserve decimals
           p_reference: `Request Fulfillment: ${request.id}`
         });
         if (rpcError) throw new Error(rpcError.message);
@@ -309,7 +309,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
             from_user_id: currentUserProfile.id,
             transaction_id: finalTxHash,
             type: 'TRANSFER_IN',
-            amount: Math.floor(request.amount),
+            amount: request.amount,
             token: 'WNC',
             title: 'Request Fulfilled',
             message: `@${currentUserProfile.name} fulfilled your request for ${request.amount} WNC`
@@ -319,7 +319,7 @@ export function RequestReviewMoment({ requestId, onClose }: { requestId: string,
             from_user_id: requester.id,
             transaction_id: finalTxHash,
             type: 'TRANSFER_OUT',
-            amount: Math.floor(request.amount),
+            amount: request.amount,
             token: 'WNC',
             title: 'Payment Dispatched',
             message: `You fulfilled a request from @${requester.name} for ${request.amount} WNC`

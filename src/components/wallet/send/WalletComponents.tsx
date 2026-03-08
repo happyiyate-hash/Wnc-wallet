@@ -173,7 +173,7 @@ export async function performTransactionDispatch(params: {
     const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
       p_receiver_id: recipientProfile.id, 
       p_destination_type: 'user',
-      p_amount: Math.floor(amountNum),
+      p_amount: amountNum, // Removed Math.floor to preserve decimals in registry
       p_reference: `Institutional P2P Transfer: ${amount} WNC`
     });
     if (rpcError) throw new Error(rpcError.message);
@@ -188,7 +188,7 @@ export async function performTransactionDispatch(params: {
         from_user_id: profile.id,
         transaction_id: txHash,
         type: 'TRANSFER_IN',
-        amount: Math.floor(amountNum),
+        amount: amountNum,
         token: 'WNC',
         title: 'WNC Received',
         message: `You received ${amountNum} WNC from @${profile.name}`
@@ -198,7 +198,7 @@ export async function performTransactionDispatch(params: {
         from_user_id: recipientProfile.id,
         transaction_id: txHash,
         type: 'TRANSFER_OUT',
-        amount: Math.floor(amountNum),
+        amount: amountNum,
         token: 'WNC',
         title: 'WNC Dispatched',
         message: `You sent ${amountNum} WNC to @${recipientProfile.name}`
