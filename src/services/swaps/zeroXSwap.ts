@@ -6,8 +6,10 @@
  * Only add functions for fetching quotes and executing swaps.
  * 
  * 0X PROTOCOL SWAP ENGINE
- * Version: 3.0.0 (Hardcoded Key & Robust Handshake)
- * Handles same-chain EVM swaps via the 0x Aggregator Proxy.
+ * Version: 4.0.0 (Institutional Handshake & Proxy Sync)
+ * 
+ * Handles same-chain EVM swaps via the server-side 0x Aggregator Proxy.
+ * Implements high-precision math and Method A (Integrator Fee) interpretation.
  */
 
 import { zeroXService } from '@/lib/services/zerox-service';
@@ -15,16 +17,8 @@ import { ethers } from 'ethers';
 import BigNumber from 'bignumber.js';
 import type { AssetRow } from '@/lib/types';
 
-// -----------------------------
-// 0x API Key (hardcoded)
-// -----------------------------
-const ZEROX_API_KEY = '5eebaf6f-e024-41d2-a18f-e05c241129c3';
-
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
-
-// Admin fee in percent (e.g., 1% fee)
-const ADMIN_FEE_PERCENT = 1;
 
 /**
  * Executes an async function with institutional retry logic.
@@ -53,8 +47,8 @@ export interface ZeroXQuoteResult {
 
 /**
  * Fetches an indicative price from the 0x protocol.
- * Note: The 1.00% platform fee is applied server-side by the proxy.
- * This function also applies local BigNumber math for precision validation.
+ * Note: The 1.00% platform fee is applied server-side by the proxy (Method A).
+ * The buyAmount returned is already adjusted for the platform fee.
  */
 export async function fetchZeroXQuote(params: {
   chainId: number;
@@ -87,13 +81,12 @@ export async function fetchZeroXQuote(params: {
       };
     }
 
-    // High-precision fee analysis using BigNumber
+    // High-precision output analysis
+    // Note: p.buyAmount is the amount the taker receives AFTER the 1% fee deduction.
     const buyAmountBN = new BigNumber(p.buyAmount);
-    // Note: The proxy already deducts 1%, so p.buyAmount is the net amount.
-    // We return this as the finalAmount for record-keeping.
     const finalAmountStr = buyAmountBN.toFixed(0);
 
-    // Calculate estimated network cost
+    // Calculate estimated network gas cost
     const gasCostEth = (parseFloat(p.estimatedGas || '21000') * parseFloat(p.gasPrice || '1000000000')) / 1e18;
     const gasCostUsd = gasCostEth * params.ethPrice;
 
@@ -118,6 +111,7 @@ export async function fetchZeroXQuote(params: {
 
 /**
  * Executes a 0x swap by signing and broadcasting the transaction.
+ * The transaction returned by the proxy includes the integrator fee logic.
  */
 export async function executeZeroXSwap(params: {
   chainId: number;

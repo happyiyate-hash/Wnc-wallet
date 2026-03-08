@@ -4,10 +4,10 @@ import { getFeeRecipient } from "../wallets/services/fee-recipients";
 
 /**
  * INSTITUTIONAL FEE & VALIDATION ENGINE
- * Version: 4.0.0 (Revenue Update)
+ * Version: 5.0.0 (Professional Integrator Standard)
  * 
- * Implements real-time gas discovery with a $0.10 volatility buffer
- * and an increased 1.00% (100 BPS) institutional system fee.
+ * Standardizes fee calculations across the terminal.
+ * Platform Fee: 1.00% (100 BPS) - Collected via Integrator Fee (Method A) for EVM.
  */
 
 const MIN_SWAP_USD_HIGH = 2.00; 
@@ -70,7 +70,7 @@ export async function calculateSendFees(amountUsd: number, chain: string) {
 
 /**
  * Calculate system and network fees for a swap.
- * Version 4.0: Standardized at 1.00% (100 BPS).
+ * Version 5.0: Platform Standard 1.00% (100 BPS).
  */
 export async function calculateSwapFees(
   rawAmountUsd: number,

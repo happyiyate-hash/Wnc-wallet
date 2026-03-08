@@ -3,14 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * INSTITUTIONAL 0X PROTOCOL PROXY
- * Version: 5.0.0 (Key Hardening & Handshake Finality)
+ * Version: 6.0.0 (Integrator Fee Enforcement - Method A)
  * 
  * Safely handles indicative price and execution quote requests.
- * Enforces the 1.00% (100 BPS) platform fee on the server side.
- * Uses strictly formatted, unquoted API keys to prevent handshake errors.
+ * Enforces the 1.00% (100 BPS) platform fee on the server side using
+ * the 0x Protocol's native Integrator Fee parameters.
+ * 
+ * Target: 0x v1 API
  */
 
 const ZEROX_API_KEY = '5eebaf6f-e024-41d2-a18f-e05c241129c3';
+const FEE_RECIPIENT = '0x7f3f4206017C0aACF7A94C9eF7B80563984aD288';
 
 const BASE_URLS: { [key: string]: string } = {
   '1': 'https://api.0x.org',
@@ -47,12 +50,13 @@ export async function GET(req: NextRequest) {
   });
 
   /**
-   * REVENUE ENFORCEMENT (1.00%)
-   * Applied on the server to prevent frontend manipulation.
-   * 0.01 represents 1% in the 0x Protocol decimal standard.
+   * REVENUE ENFORCEMENT (1.00%) - METHOD A (Integrator Fee)
+   * We set buyTokenPercentageFee to 0.01 (1%).
+   * 0x will calculate the output amount and include code in the 
+   * transaction to send 1% of the bought tokens to our feeRecipient.
    */
   params.set('buyTokenPercentageFee', '0.01');
-  params.set('feeRecipient', '0x7f3f4206017C0aACF7A94C9eF7B80563984aD288');
+  params.set('feeRecipient', FEE_RECIPIENT);
 
   try {
     const targetUrl = `${baseUrl}/swap/v1/${mode}?${params.toString()}`;
@@ -78,7 +82,6 @@ export async function GET(req: NextRequest) {
     if (!response.ok) {
       console.warn('[0X_HANDSHAKE_FAIL]', chainId, mode, data);
       
-      // Map specific 0x error reasons for the institutional terminal
       let errorMessage = '0x Protocol Handshake Failed';
       if (data.reason) errorMessage = `0x Node: ${data.reason}`;
       if (data.validationErrors && data.validationErrors.length > 0) {
