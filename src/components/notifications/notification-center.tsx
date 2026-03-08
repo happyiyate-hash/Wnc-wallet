@@ -183,7 +183,7 @@ export default function NotificationCenter() {
                         "relative flex gap-4 p-5 rounded-[2.2rem] bg-black/40 backdrop-blur-xl transition-colors group-hover:bg-black/20",
                         !n.read && "border-l-4 border-l-primary"
                       )}>
-                        {/* ICON & AMOUNT OVERLAY (NEYMAR STYLE) */}
+                        {/* ICON NODE */}
                         <div className="relative shrink-0">
                           <div className={cn(
                             "w-14 h-14 rounded-2xl flex items-center justify-center border shadow-xl transition-transform group-hover:scale-110",
@@ -191,15 +191,6 @@ export default function NotificationCenter() {
                           )}>
                             {getIcon(n.type)}
                           </div>
-                          
-                          {formattedAmount && (
-                            <div className={cn(
-                              "absolute -top-3 -left-3 px-2 py-1 rounded-xl text-[10px] font-black tabular-nums border shadow-2xl z-20 animate-in zoom-in-50",
-                              isPositive ? "bg-green-500 text-white border-green-400 shadow-green-500/40" : "bg-red-500 text-white border-red-400 shadow-red-500/40"
-                            )}>
-                              {isPositive ? '+' : '-'}{formattedAmount}
-                            </div>
-                          )}
 
                           {n.sender && (
                             <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full shadow-lg">
@@ -229,6 +220,16 @@ export default function NotificationCenter() {
                               <span className="text-[8px] font-black text-primary uppercase tracking-widest opacity-40">NODE</span>
                               <span className="text-[10px] font-black text-white tracking-tight">@{n.sender.name}</span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* AMOUNT BADGE (BOTTOM LEFT OF CARD) */}
+                        {formattedAmount && (
+                          <div className={cn(
+                            "absolute bottom-3 left-5 px-2 py-0.5 rounded-lg text-[9px] font-black tabular-nums border shadow-2xl z-20 animate-in slide-in-from-bottom-1",
+                            isPositive ? "bg-green-500 text-white border-green-400 shadow-green-500/40" : "bg-red-500 text-white border-red-400 shadow-red-500/40"
+                          )}>
+                            {isPositive ? '+' : '-'}{formattedAmount}
                           </div>
                         )}
                       </div>
