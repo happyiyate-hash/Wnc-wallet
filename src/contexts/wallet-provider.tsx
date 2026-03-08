@@ -109,15 +109,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const hasRunAuditRef = useRef(false);
   const isAuditAbortedRef = useRef(false);
 
+  // Stabilize setNotifications to avoid triggering effect loops in the listener
   const setNotifications = useCallback((update: Notification[] | ((prev: Notification[]) => Notification[])) => {
     setNotificationsState(prev => {
       const next = typeof update === 'function' ? update(prev) : update;
+      // Background cache synchronization
       if (user) {
         localStorage.setItem(`ss-notifications-cache-${user.id}`, JSON.stringify(next));
       }
       return next;
     });
-  }, [user]);
+  }, [user?.id]); // Only depend on ID, not full user object
 
   const effectiveViewingNetwork = useMemo(() => {
     return viewingNetwork || (chainsWithLogos[0] || { chainId: 1, name: 'Ethereum', symbol: 'ETH', rpcUrl: 'https://mainnet.infura.io/v3/{API_KEY}', type: 'evm' } as ChainConfig);
@@ -180,7 +182,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (user) localStorage.setItem(`ss-wallet-balances-${user.id}`, JSON.stringify({ data: next, timestamp: Date.now() }));
       return next;
     });
-  }, [user]);
+  }, [user?.id]);
 
   const { refresh } = useWalletEngine({ 
     wallets, 
@@ -223,7 +225,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       },
       () => isAuditAbortedRef.current
     );
-  }, [user, wallets, profile, accountNumber, chainsWithLogos]);
+  }, [user?.id, wallets, profile, accountNumber, chainsWithLogos]);
 
   useEffect(() => {
     const handleDblClick = () => { if (syncDiagnostic.status !== 'idle') dismissSyncCard(); };
@@ -255,7 +257,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setTimeout(() => runCloudDiagnostic(true), 1000);
     
     return mnemonic;
-  }, [user, profile, runCloudDiagnostic]);
+  }, [user?.id, profile, runCloudDiagnostic]);
 
   const importWallet = useCallback(async (mnemonic: string) => {
     if (!user) throw new Error("Auth required");
@@ -279,7 +281,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     hasRunAuditRef.current = false;
     setTimeout(() => runCloudDiagnostic(true), 1000);
-  }, [user, profile, runCloudDiagnostic]);
+  }, [user?.id, profile, runCloudDiagnostic]);
 
   const restoreFromCloud = useCallback(async (onStatusUpdate?: (status: string) => void) => {
     if (!user || (!profile?.vault_phrase && !profile?.account_number)) throw new Error("Registry node missing.");
@@ -330,17 +332,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIsInitialized(true);
       throw new Error(e.message || "Institutional recovery failed."); 
     }
-  }, [user, profile, toast, runCloudDiagnostic]);
+  }, [user?.id, profile, toast, runCloudDiagnostic]);
 
   const logout = useCallback(async () => {
-    // Standard Logout: Only invalidate the auth session.
-    // Wallet data in local storage and cloud backups are preserved.
     if (signOut) await signOut();
     window.location.href = '/auth/login';
   }, [signOut]);
 
   const deleteWallet = useCallback(() => {
-    // Delete from Normal Storage: Remove from device only.
     if (user) { 
         registryDb.purgeAll(); 
         purgeLocalWalletCache(user.id); 
@@ -349,10 +348,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallets(null); setBalances({}); setAccountNumber(null);
     setNotificationsState([]);
     router.replace('/wallet-session');
-  }, [user, router]);
+  }, [user?.id, router]);
 
   const deleteWalletPermanently = useCallback(async () => {
-    // Delete from Cloud: Remove backups stored in cloud registry.
     if (!user) return;
     try {
       const { error } = await supabase.from('profiles').update({ 
@@ -363,22 +361,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }).eq('id', user.id);
       
       if (error) throw error;
-
-      toast({ 
-        title: "Cloud Registry Cleared", 
-        description: "Encrypted backups have been removed from the cloud node." 
-      });
-      
-      // Refresh profile to update UI states (e.g. Cloud Recovery button)
+      toast({ title: "Cloud Registry Cleared", description: "Encrypted backups have been removed from the cloud node." });
       await refreshProfile();
     } catch (e: any) {
-      toast({ 
-        variant: "destructive", 
-        title: "Cloud Deletion Failed",
-        description: e.message 
-      });
+      toast({ variant: "destructive", title: "Cloud Deletion Failed", description: e.message });
     }
-  }, [user, toast, refreshProfile]);
+  }, [user?.id, toast, refreshProfile]);
 
   useEffect(() => {
     if (!authSettled) return;
@@ -438,7 +426,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       refresh();
       setTimeout(() => runCloudDiagnostic(false), 2000);
     }
-  }, [isInitialized, wallets, user, refresh, runCloudDiagnostic, chainsWithLogos, accountNumber]);
+  }, [isInitialized, wallets, user?.id, refresh, runCloudDiagnostic, chainsWithLogos, accountNumber]);
 
   const contextValue = useMemo(() => ({
     isInitialized, isWalletLoading, unreadCount, setUnreadCount, viewingNetwork: effectiveViewingNetwork, setNetwork: (n: any) => { setViewingNetwork(n); if (user) localStorage.setItem(`active-network-id-${user.id}`, n.chainId.toString()); }, allAssets, allChains: chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, prices, refresh, generateWallet, importWallet, saveToVault: () => saveVaultToCloud(user!.id, localStorage.getItem(`ss-mnemonic-${user!.id}`)!), restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, getAddressForChain: (c: any, w: any) => getAddressForChainUtil(c, w), infuraApiKey, setInfuraApiKey: (k: any) => { if (user) { setInfuraApiKeyState(k); localStorage.setItem(`ss-infura-key-${user.id}`, k || ''); if (k) saveInfuraToCloud(user.id, k); } }, hiddenTokenKeys, toggleTokenVisibility: (cid: number, sym: string) => { setHiddenTokenKeys(prev => { const n = new Set(prev); const k = `${cid}:${sym}`; if (n.has(k)) n.delete(k); else n.add(k); if (user) localStorage.setItem(`hidden-tokens-${user.id}`, JSON.stringify(Array.from(n))); return n; }); }, userAddedTokens, addUserToken: (t: any) => { setUserAddedTokens(prev => { const next = [...prev, t]; if (user) localStorage.setItem(`custom-tokens-${user.id}`, JSON.stringify(next)); registerCustomTokens(next); return next; }); }, 
@@ -453,7 +441,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, 
     isRequestOverlayOpen, setIsRequestOverlayOpen, isNotificationsOpen, setIsNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, dismissSyncCard,
     notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded
-  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, registerCustomTokens, dismissSyncCard, notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded]);
+  }), [isInitialized, isWalletLoading, unreadCount, effectiveViewingNetwork, allAssets, chainsWithLogos, allChainsMap, isRefreshing, wallets, balances, accountNumber, infuraApiKey, prices, hiddenTokenKeys, userAddedTokens, isRequestOverlayOpen, isNotificationsOpen, activeFulfillmentId, setActiveFulfillmentId, hasFetchedInitialData, syncDiagnostic, runCloudDiagnostic, user?.id, profile, router, refresh, generateWallet, importWallet, restoreFromCloud, deleteWallet, deleteWalletPermanently, logout, registerCustomTokens, dismissSyncCard, notifications, setNotifications, isNotificationsLoaded, setIsNotificationsLoaded]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }
