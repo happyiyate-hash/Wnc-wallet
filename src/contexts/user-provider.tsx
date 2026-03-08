@@ -19,7 +19,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 /**
  * INSTITUTIONAL USER & IDENTITY PROVIDER
- * Version: 9.0.0 (Lifecycle & Heartbeat Logic)
+ * Version: 10.0.0 (Live Lifecycle & Heartbeat logic)
  * 
  * Implements 5-second polling for WNC balance and App-Resume revalidation.
  */
@@ -134,12 +134,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   /**
    * INSTITUTIONAL LIFECYCLE SENTINELS
-   * Version 9.0: Heartbeat + Visibility Triggers
+   * Version 10.0: Heartbeat + Visibility Triggers
    */
   useEffect(() => {
     if (!user) return;
 
-    // A. 5-SECOND WNC HEARTBEAT
+    // A. 5-SECOND WNC HEARTBEAT (Safety Layer)
     // Constantly polls the profile for internal balance changes
     const heartbeat = setInterval(() => {
       refreshProfile();

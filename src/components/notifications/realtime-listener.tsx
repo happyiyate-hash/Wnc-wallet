@@ -11,10 +11,10 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 15.0.0 (Lifecycle Integration & Balance Cross-Trigger)
+ * Version: 16.0.0 (Unified Realtime + Lifecycle Integration)
  * 
- * Ensures notifications are fetched on app start and resume.
- * Triggers WNC balance refresh upon relevant incoming events.
+ * Ensures notifications and balances are synchronized instantly.
+ * Implements triple-trigger logic: Mount, Resume, and DB-Event.
  */
 export default function RealtimeNotificationListener() {
   const { user, refreshProfile } = useUser();
@@ -24,7 +24,7 @@ export default function RealtimeNotificationListener() {
   const lastUserIdRef = useRef<string | null>(null);
 
   /**
-   * REGISTRY HANDSHAKE (Initial & Resume Fetch)
+   * REGISTRY HANDSHAKE (Fetch Latest State)
    */
   const fetchInitialBatch = useCallback(async () => {
     if (!user || !supabase) return;
@@ -76,7 +76,7 @@ export default function RealtimeNotificationListener() {
     }
   }, [user, setNotifications, setIsNotificationsLoaded, setUnreadCount]);
 
-  // 1. BOOT SYNC
+  // 1. BOOT SYNC (Mount / User Identity Change)
   useEffect(() => {
     if (!user || !supabase || lastUserIdRef.current === user.id) {
       if (!user) setIsNotificationsLoaded(true);
@@ -86,28 +86,31 @@ export default function RealtimeNotificationListener() {
     fetchInitialBatch();
   }, [user, fetchInitialBatch, setIsNotificationsLoaded]);
 
-  // 2. RESUME SYNC (App returned to foreground)
+  // 2. RESUME SYNC (App returned to foreground / Tab switch)
   useEffect(() => {
     if (!user) return;
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log("[SENTINEL] App resumed - Revalidating alerts...");
+        console.log("[SENTINEL] App resumed - Syncing notifications & profile...");
         fetchInitialBatch();
+        refreshProfile();
+        refresh(); // Also refresh blockchain balances for consistency
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user, fetchInitialBatch]);
+  }, [user, fetchInitialBatch, refreshProfile, refresh]);
 
-  // 3. PERSISTENT SENTINEL STREAM (Filtered Subscription)
+  // 3. PERSISTENT SENTINEL STREAM (Real-time DB Listeners)
   useEffect(() => {
     if (!user || !supabase) return;
 
-    console.log("[SENTINEL] Establishing live registry channel for node:", user.id);
+    console.log("[SENTINEL] Establishing live registry channels for node:", user.id);
 
-    const channel = supabase
+    // CHANNEL A: Notification Alerts (INSERT)
+    const alertChannel = supabase
       .channel(`registry-alerts-${user.id}`)
       .on('postgres_changes', { 
           event: 'INSERT', 
@@ -115,7 +118,7 @@ export default function RealtimeNotificationListener() {
           table: 'notifications', 
           filter: `user_id=eq.${user.id}` 
       }, async (payload) => {
-          console.log("[SENTINEL] Live ledger event detected.");
+          console.log("[SENTINEL] Live notification event detected.");
           
           // Enrich data with identity join
           const { data: enriched } = await supabase
@@ -130,9 +133,9 @@ export default function RealtimeNotificationListener() {
           setNotifications(prev => [newNode, ...prev].slice(0, 30));
           setUnreadCount(prev => prev + 1);
           
-          // CROSS-NODE TRIGGER: If it's a transfer in or reward, refresh WNC balance instantly
+          // CROSS-NODE TRIGGER: If it's incoming funds, refresh balance instantly
           if (newNode.type === 'TRANSFER_IN' || newNode.type === 'REWARD') {
-            console.log("[SENTINEL] Incoming credits detected - Forcing balance re-sync.");
+            console.log("[SENTINEL] Incoming credits detected - Syncing balance node.");
             refreshProfile();
           }
           
@@ -156,8 +159,24 @@ export default function RealtimeNotificationListener() {
       })
       .subscribe();
 
+    // CHANNEL B: Direct Ledger Monitor (WNC Transfers)
+    // Ensures balance updates even if notification fails to insert
+    const ledgerChannel = supabase
+      .channel(`ledger-sync-${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'wnc_transfers',
+        filter: `receiver_id=eq.${user.id}`
+      }, () => {
+        console.log("[SENTINEL] WNC incoming detected via ledger - Force syncing profile.");
+        refreshProfile();
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(alertChannel);
+      supabase.removeChannel(ledgerChannel);
     };
   }, [user, setUnreadCount, refresh, toast, setNotifications, refreshProfile]);
 
