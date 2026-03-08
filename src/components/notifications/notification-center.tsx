@@ -13,7 +13,7 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER (VIEW NODE)
- * Version: 13.0.0 (Neymar Slim + Precision Decimals)
+ * Version: 14.0.0 (Ultra-Slim Neymar + Bottom-Left Precision)
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount, notifications, setNotifications, isNotificationsLoaded } = useWallet();
@@ -25,7 +25,6 @@ export default function NotificationCenter() {
         const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
         if (unreadIds.length === 0) return;
 
-        // Optimistic UI Handshake
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
 
@@ -44,13 +43,13 @@ export default function NotificationCenter() {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return <ArrowDownLeft className="w-3 h-3" />;
+        return <ArrowDownLeft className="w-3.5 h-3.5" />;
       case 'TRANSFER_OUT':
-        return <ArrowUpRight className="w-3 h-3" />;
+        return <ArrowUpRight className="w-3.5 h-3.5" />;
       case 'REQUEST':
-        return <HandCoins className="w-3 h-3" />;
+        return <HandCoins className="w-3.5 h-3.5" />;
       default:
-        return <Zap className="w-3 h-3" />;
+        return <Zap className="w-3.5 h-3.5" />;
     }
   };
 
@@ -84,43 +83,41 @@ export default function NotificationCenter() {
           animate={{ y: 0 }}
           exit={{ y: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[2.5rem] shadow-2xl h-[75vh] flex flex-col overflow-hidden"
+          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[2rem] shadow-2xl h-[70vh] flex flex-col overflow-hidden"
         >
-          {/* SLIM NEYMAR HEADER */}
-          <div className="px-6 h-12 border-b border-white/5 flex items-center justify-between bg-black/40 shrink-0">
+          {/* ULTRA-SLIM NEYMAR HEADER */}
+          <div className="px-6 h-10 border-b border-white/5 flex items-center justify-between bg-black/40 shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                <Bell className="w-3.5 h-3.5" />
+              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                <Bell className="w-3 h-3" />
               </div>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-white">Registry</h3>
+              <h3 className="text-[9px] font-black uppercase tracking-[0.25em] text-white">Registry Nodes</h3>
             </div>
             <button 
               onClick={() => setIsNotificationsOpen(false)}
-              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+              className="p-1 rounded-lg hover:bg-white/5 transition-colors"
             >
-              <X className="w-3.5 h-3.5 text-muted-foreground" />
+              <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="p-3 space-y-1.5 pb-20">
+            <div className="p-2.5 space-y-1.5 pb-20">
               {!isNotificationsLoaded ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Auditing Ledger...</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Synchronizing Registry...</p>
                 </div>
               ) : notifications.length > 0 ? (
                 notifications.map((n, i) => {
                   const isPositive = n.type === 'TRANSFER_IN' || n.type === 'REWARD';
-                  
-                  // PRECISION DECIMAL HANDSHAKE: Ensure non-zero decimals are visible
                   const val = Number(n.amount);
                   const formattedAmount = !isNaN(val) 
                     ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
                     : null;
                   
-                  // Peer Identity Resolution
-                  const peerName = n.sender?.name || 'External Node';
+                  // Peer Identity Node
+                  const peerName = n.sender?.name || 'Node';
 
                   return (
                     <motion.div 
@@ -129,49 +126,46 @@ export default function NotificationCenter() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.02 }}
                       className={cn(
-                        "group relative overflow-hidden rounded-2xl border p-2.5 transition-all duration-300 shadow-xl",
+                        "group relative overflow-hidden rounded-xl border p-2 transition-all duration-300 shadow-xl active:scale-[0.99]",
                         n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30"
                       )}
                     >
-                      <div className="flex items-center justify-between gap-3 min-w-0">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {/* SLIM ICON */}
-                          <div className={cn(
-                            "w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
-                            isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
-                          )}>
-                            {getIcon(n.type)}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        {/* SLIM ICON */}
+                        <div className={cn(
+                          "w-9 h-9 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
+                          isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+                        )}>
+                          {getIcon(n.type)}
+                        </div>
+                        
+                        {/* SLIM STRETCHED CONTENT */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-between min-h-[36px]">
+                          <div className="flex items-baseline justify-between w-full">
+                              <p className="text-[10px] font-black text-white uppercase tracking-tight truncate mr-2">{n.title}</p>
+                              {/* ANCHORED IDENTITY (FAR RIGHT) */}
+                              <span className="text-[9px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-80">
+                                  @{peerName}
+                              </span>
                           </div>
                           
-                          {/* SLIM CONTENT */}
-                          <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-                            <div className="flex items-baseline justify-between w-full">
-                                <p className="text-[10px] font-black text-white uppercase tracking-wider truncate mr-2">{n.title}</p>
-                                {/* PEER IDENTITY (FAR RIGHT) */}
-                                <span className="text-[8px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">
-                                    @{peerName}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <p className="text-[8px] text-muted-foreground font-medium truncate opacity-60">
-                                    {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
-                                </p>
-                            </div>
+                          <div className="flex items-end justify-between w-full mt-auto">
+                              {/* PRECISION AMOUNT BADGE (BOTTOM-LEFT) */}
+                              {formattedAmount && (
+                                <div className={cn(
+                                  "px-1.5 py-0.5 rounded-lg text-[9px] font-black tabular-nums border leading-none",
+                                  getStatusColor(n.type)
+                                )}>
+                                  {isPositive ? '+' : '-'}{formattedAmount} WNC
+                                </div>
+                              )}
+                              
+                              <p className="text-[7px] text-muted-foreground font-bold truncate opacity-40 uppercase tracking-widest">
+                                  {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
+                              </p>
                           </div>
                         </div>
                       </div>
-
-                      {/* BOTTOM-LEFT AMOUNT PILL (Slim Placement) */}
-                      {formattedAmount && (
-                        <div className="mt-1.5 flex pl-11">
-                          <div className={cn(
-                            "px-2 py-0.5 rounded-lg text-[9px] font-black tabular-nums border",
-                            getStatusColor(n.type)
-                          )}>
-                            {isPositive ? '+' : '-'}{formattedAmount} WNC
-                          </div>
-                        </div>
-                      )}
                     </motion.div>
                   );
                 })

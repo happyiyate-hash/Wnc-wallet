@@ -10,11 +10,7 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 13.0.0 (Hardened Identity Join)
- * 
- * Implements a two-layer synchronization:
- * 1. Initial Registry Fetch (Layer 1): Guaranteed retrieval of historical alerts.
- * 2. Sentinel Stream (Layer 2): Persistent real-time channel for live events.
+ * Version: 14.0.0 (Hardened Identity Join & Decimal Lock)
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
@@ -37,27 +33,39 @@ export default function RealtimeNotificationListener() {
       
       try {
         // Attempt high-fidelity fetch with explicit identity metadata join
-        // Using profiles!from_user_id to ensure the correct foreign key is targeted
+        // We use a broader select to allow Supabase to resolve the relationship automatically
         const { data, error } = await supabase
           .from('notifications')
           .select('*, sender:profiles!from_user_id(name, photo_url)')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(25);
+          .limit(30);
 
         if (error) {
-          console.warn("[SENTINEL] Join handshake deferred, attempting raw fallback...");
-          // FALLBACK: Raw fetch without profile joins
-          const { data: rawData, error: rawError } = await supabase
+          console.warn("[SENTINEL] Join handshake deferred, attempting simpler join...");
+          // Try join without the explicit foreign key hint if standard fails
+          const { data: simpleJoin } = await supabase
             .from('notifications')
-            .select('*')
+            .select('*, sender:profiles(name, photo_url)')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(25);
+            .limit(30);
           
-          if (rawData) {
-            setNotifications(rawData as Notification[]);
-            setUnreadCount(rawData.filter(n => !n.read).length);
+          if (simpleJoin) {
+            setNotifications(simpleJoin as any[]);
+            setUnreadCount(simpleJoin.filter((n: any) => !n.read).length);
+          } else {
+            // Raw fallback if all joins fail
+            const { data: rawData } = await supabase
+              .from('notifications')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(30);
+            if (rawData) {
+              setNotifications(rawData as Notification[]);
+              setUnreadCount(rawData.filter(n => !n.read).length);
+            }
           }
         } else if (data) {
           setNotifications(data as Notification[]);
@@ -89,7 +97,7 @@ export default function RealtimeNotificationListener() {
       }, async (payload) => {
           console.log("[SENTINEL] New ledger event detected:", payload.new.id);
           
-          // Attempt to enrich node metadata for the UI
+          // Re-fetch with join to ensure peer name is populated
           const { data: enriched } = await supabase
             .from('notifications')
             .select('*, sender:profiles!from_user_id(name, photo_url)')
@@ -99,7 +107,7 @@ export default function RealtimeNotificationListener() {
           const newNode = (enriched || payload.new) as Notification;
 
           // Atomic UI Update
-          setNotifications(prev => [newNode, ...prev].slice(0, 25));
+          setNotifications(prev => [newNode, ...prev].slice(0, 30));
           setUnreadCount(prev => prev + 1);
           
           // Visual Handshake
@@ -120,11 +128,7 @@ export default function RealtimeNotificationListener() {
           
           refresh(); 
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log("[SENTINEL] Real-time node status: ACTIVE");
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { ethers } from 'ethers';
@@ -23,7 +22,6 @@ export const detectAddressType = (input: string) => {
   // 2. HIGH PRIORITY POLKADOT
   if (clean.length >= 47 && !clean.includes('0x')) {
     try {
-        // Institutional Guard: Polkadot SDK check
         if (typeof checkAddress === 'function') {
             const [isValidPolkadot] = checkAddress(clean, 0);
             const [isValidKusama] = checkAddress(clean, 2);
@@ -143,7 +141,7 @@ export async function calculateTransactionFees(activeNetwork: any) {
 
 /**
  * PERFORM TRANSACTION DISPATCH (Core Logic)
- * Version: 5.1.0 (Full Schema Handshake)
+ * Version: 5.2.0 (Precision Decimal Sync & Join Patch)
  */
 export async function performTransactionDispatch(params: {
   wallets: any[];
@@ -170,18 +168,21 @@ export async function performTransactionDispatch(params: {
   // 1. INTERNAL REGISTRY TRANSFER (WNC)
   if (selectedToken.symbol === 'WNC') {
     if (!recipientProfile) throw new Error("Recipient identity required for WNC transfer.");
+    
+    // ATOMIC WNC SETTLEMENT (Strict Decimals - No Math.floor)
     const { data, error: rpcError } = await supabase!.rpc('transfer_wnc_universal', { 
       p_receiver_id: recipientProfile.id, 
       p_destination_type: 'user',
-      p_amount: amountNum, // Removed Math.floor to preserve decimals in registry
+      p_amount: amountNum,
       p_reference: `Institutional P2P Transfer: ${amount} WNC`
     });
+    
     if (rpcError) throw new Error(rpcError.message);
     if (!data?.success) throw new Error(data?.message || "Atomic settlement failed.");
     
     txHash = `int_${Math.random().toString(36).substring(7)}`;
 
-    // ATOMIC NOTIFICATION HANDSHAKE
+    // ATOMIC NOTIFICATION HANDSHAKE (Strict Decimals)
     await supabase!.from('notifications').insert([
       {
         user_id: recipientProfile.id,
