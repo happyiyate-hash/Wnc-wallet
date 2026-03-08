@@ -6,7 +6,7 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * KUSAMA (KSM) ADAPTER - HARDENED VERSION
- * Version: 4.6.0 (Resilient Socket Lifecycle)
+ * Version: 5.0.0 (Resilient Reconnect Protocol)
  */
 
 const KSM_ENDPOINTS = [
@@ -34,13 +34,16 @@ class KusamaAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                // 1. Establish Provider
-                provider = new WsProvider(url); 
+                // 1. Establish Provider with Auto-Reconnect
+                provider = new WsProvider(url, {
+                    timeout: 30000,
+                    reconnect: true
+                }); 
                 
-                // 2. WAIT FOR PROVIDER READY (Critical Fix)
+                // 2. Handshake Readiness Check
                 await Promise.race([
                     provider.isReady,
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 8000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 10000))
                 ]);
                 
                 // 3. Initialize API
@@ -51,13 +54,13 @@ class KusamaAdapter implements IWalletAdapter {
                         noInitWarn: true 
                     }),
                     new Promise<null>((_, reject) => 
-                        setTimeout(() => reject(new Error('KUSAMA_INIT_TIMEOUT')), 12000)
+                        setTimeout(() => reject(new Error('KUSAMA_INIT_TIMEOUT')), 15000)
                     )
                 ]) as ApiPromise;
 
                 if (!api) throw new Error("INIT_FAILED");
 
-                // 4. Final Readiness Check
+                // 4. Final Verification
                 await api.isReadyOrError;
 
                 const { data: balance } = await api.query.system.account(ownerAddress) as any;
@@ -74,8 +77,9 @@ class KusamaAdapter implements IWalletAdapter {
                 });
 
             } catch (error: any) {
-                if (!error.message?.includes('Normal Closure')) {
-                    console.warn(`[KSM_ADAPTER_ADVISORY] Endpoint ${url} deferred:`, error.message);
+                const isNormalClosure = error.message?.includes('1000') || error.message?.includes('Normal Closure');
+                if (!isNormalClosure) {
+                    console.warn(`[KSM_ADAPTER_RECOVERY] Node ${url} deferred:`, error.message);
                 }
                 continue;
             } finally {

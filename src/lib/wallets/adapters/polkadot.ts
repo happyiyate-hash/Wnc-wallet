@@ -6,10 +6,10 @@ import type { AssetRow, ChainConfig, IWalletAdapter } from '@/lib/types';
 
 /**
  * POLKADOT (DOT) ADAPTER - HARDENED VERSION
- * Version: 4.6.0 (Resilient Socket Lifecycle)
+ * Version: 5.0.0 (Resilient Reconnect Protocol)
  * 
- * Implements strict provider-ready checks before API initialization
- * to prevent "WebSocket is not connected" fatal errors.
+ * Implements strict provider-ready checks and auto-reconnect parameters
+ * to mitigate "1006:: Abnormal Closure" errors on public RPC nodes.
  */
 
 const DOT_ENDPOINTS = [
@@ -37,17 +37,19 @@ class PolkadotAdapter implements IWalletAdapter {
             let provider: WsProvider | null = null;
 
             try {
-                // 1. Establish Provider
-                provider = new WsProvider(url); 
+                // 1. Establish Provider with Auto-Reconnect & Long Timeout
+                provider = new WsProvider(url, {
+                    timeout: 30000,
+                    reconnect: true
+                }); 
                 
-                // 2. WAIT FOR PROVIDER READY (Critical Fix)
-                // This ensures the socket is OPEN before ApiPromise tries to getMetadata
+                // 2. WAIT FOR PROVIDER READY (Critical Handshake)
                 await Promise.race([
                     provider.isReady,
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 8000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 10000))
                 ]);
 
-                // 3. Initialize API
+                // 3. Initialize API with high-fidelity error boundaries
                 api = await Promise.race([
                     ApiPromise.create({ 
                         provider,
@@ -55,15 +57,16 @@ class PolkadotAdapter implements IWalletAdapter {
                         noInitWarn: true 
                     }),
                     new Promise<null>((_, reject) => 
-                        setTimeout(() => reject(new Error('POLKADOT_INIT_TIMEOUT')), 12000)
+                        setTimeout(() => reject(new Error('POLKADOT_INIT_TIMEOUT')), 15000)
                     )
                 ]) as ApiPromise;
 
                 if (!api) throw new Error("INIT_FAILED");
 
-                // 4. Final Readiness Check
+                // 4. Verification Handshake
                 await api.isReadyOrError;
 
+                // 5. Execute Storage Query (Safe-mode)
                 const { data: balance } = await api.query.system.account(ownerAddress) as any;
                 
                 // 1 DOT = 10^10 planck
@@ -78,13 +81,14 @@ class PolkadotAdapter implements IWalletAdapter {
                 });
 
             } catch (error: any) {
-                // Silencing the expected noise from "Normal Closure" events during workstation handshakes
-                if (!error.message?.includes('Normal Closure')) {
-                    console.warn(`[DOT_ADAPTER_ADVISORY] Endpoint ${url} deferred:`, error.message);
+                // Silencing expected socket closures to prevent UI noise
+                const isNormalClosure = error.message?.includes('1000') || error.message?.includes('Normal Closure');
+                if (!isNormalClosure) {
+                    console.warn(`[DOT_ADAPTER_RECOVERY] Node ${url} deferred:`, error.message);
                 }
-                continue; // Try next endpoint
+                continue; 
             } finally {
-                // 5. Clean Lifecycle termination
+                // 6. Clean Lifecycle Termination
                 try {
                     if (api) await api.disconnect();
                     if (provider) await provider.disconnect();
@@ -92,7 +96,6 @@ class PolkadotAdapter implements IWalletAdapter {
             }
         }
 
-        // Return zeros if all endpoints fail
         return assets.map(asset => ({ ...asset, balance: '0' }) as AssetRow);
     }
 }
