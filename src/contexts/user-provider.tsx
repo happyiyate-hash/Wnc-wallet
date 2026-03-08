@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
@@ -9,16 +10,22 @@ interface UserContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  isSettled: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+/**
+ * INSTITUTIONAL USER & IDENTITY PROVIDER
+ * Version: 8.0.0 (Strict Persistence & Fast-Boot Sentinel)
+ */
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSettled, setIsSettled] = useState(false);
   const hasInitializedRef = useRef(false);
 
   const fetchProfile = async (userId: string) => {
@@ -33,7 +40,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!error && data) {
         setProfile(data as UserProfile);
-        // SMART CACHE: Store profile for instant loading on next visit
         localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(data));
         return data as UserProfile;
       }
@@ -43,88 +49,78 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return null;
   };
 
-  /**
-   * INSTITUTIONAL AUTH BOOT SEQUENCE
-   * Hardened with a fail-fast safety timeout to prevent permanent hangs.
-   */
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
 
-    // 1. SAFETY SENTINEL: Fail-fast if session takes too long
     const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn("[AUTH_SENTINEL] Fail-safe triggered. Releasing terminal lock.");
-        setLoading(false);
-      }
-    }, 10000); // 10 second timeout
+      setLoading(false);
+      setIsSettled(true);
+    }, 12000);
 
-    // 2. Initial Cache Hydration (Zero-Latency UI)
+    // 1. FAST HYDRATION: Check local cache for immediate UI responsiveness
     if (typeof window !== 'undefined') {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith('profile_cache_')) {
-          try {
-            const cached = JSON.parse(localStorage.getItem(key)!);
-            setProfile(cached);
-            break;
-          } catch (e) { /* silent skip */ }
+      try {
+        const keys = Object.keys(localStorage);
+        const profileKey = keys.find(k => k.startsWith('profile_cache_'));
+        if (profileKey) {
+          const cached = JSON.parse(localStorage.getItem(profileKey)!);
+          if (cached) setProfile(cached);
         }
-      }
+      } catch (e) {}
     }
 
     if (!supabase) {
       setLoading(false);
+      setIsSettled(true);
       clearTimeout(safetyTimeout);
       return;
     }
 
-    // 3. CORE SESSION HANDSHAKE
-    const checkSession = async () => {
+    // 2. CORE SESSION RECOVERY
+    const initSession = async () => {
       try {
-        console.log("[AUTH_TERMINAL] Verifying identity session...");
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) throw sessionError;
 
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        
-        if (currentUser) {
-            // FIRE AND FORGET: Start profile fetch but don't block the auth loading flag
-            // This prevents "Verifying Identity" from hanging on profiles table latency.
-            fetchProfile(currentUser.id).finally(() => {
-              setLoading(false);
-              clearTimeout(safetyTimeout);
-            });
-        } else {
-          setLoading(false);
-          clearTimeout(safetyTimeout);
+        if (session?.user) {
+          setUser(session.user);
+          await fetchProfile(session.user.id);
         }
       } catch (e) {
-        console.error("[AUTH_TERMINAL_FAIL]", e);
+        console.warn("[AUTH_BOOT_FAIL] Identity recovery deferred.");
+      } finally {
         setLoading(false);
+        setIsSettled(true);
         clearTimeout(safetyTimeout);
       }
     };
 
-    checkSession();
+    initSession();
 
-    // 4. REAL-TIME SESSION LISTENER
+    // 3. REAL-TIME AUTHORITY LISTENER
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AUTH_EVENT] ${event}`);
+      console.log(`[AUTH_PROTOCOL_EVENT] ${event}`);
+      
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
       if (currentUser) {
-        fetchProfile(currentUser.id);
+        await fetchProfile(currentUser.id);
       } else if (event === 'SIGNED_OUT') {
         setProfile(null);
         setUser(null);
+        // Clear local caches on logout
+        if (typeof window !== 'undefined') {
+          Object.keys(localStorage).forEach(k => {
+            if (k.startsWith('profile_cache_')) localStorage.removeItem(k);
+          });
+        }
       }
       
       setLoading(false);
-      clearTimeout(safetyTimeout);
+      setIsSettled(true);
     });
 
     return () => {
@@ -132,31 +128,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       clearTimeout(safetyTimeout);
     };
   }, []);
-
-  /**
-   * REAL-TIME REGISTRY SYNC
-   */
-  useEffect(() => {
-    if (!supabase || !user) return;
-
-    const channel = supabase
-      .channel(`profile-sync-${user.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles',
-        filter: `id=eq.${user.id}`
-      }, (payload) => {
-        const updatedProfile = payload.new as UserProfile;
-        setProfile(updatedProfile);
-        localStorage.setItem(`profile_cache_${user.id}`, JSON.stringify(updatedProfile));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
 
   const signOut = async () => {
     if (supabase) {
@@ -175,6 +146,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         user, 
         profile, 
         loading, 
+        isSettled,
         signOut, 
         refreshProfile 
     }}>
