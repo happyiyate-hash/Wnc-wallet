@@ -10,28 +10,33 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL (SYNC ENGINE)
- * Version: 11.0.0 (Persistent Handshake Sentinel)
+ * Version: 12.0.0 (Robust Handshake Protocol)
  * 
- * Optimized to handle user session transitions without losing the subscription.
- * Implements tiered error handling for identity joins.
+ * Implements a two-layer synchronization:
+ * 1. Initial Registry Fetch (Layer 1): Guaranteed retrieval of historical alerts.
+ * 2. Sentinel Stream (Layer 2): Persistent real-time channel for live events.
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
   const { setUnreadCount, refresh, setNotifications, setIsNotificationsLoaded } = useWallet();
   const { toast } = useToast();
   
-  // Track current user ID to avoid redundant re-fetches if identity hasn't actually changed
   const lastUserIdRef = useRef<string | null>(null);
 
-  // 1. INITIAL REGISTRY FETCH
+  // 1. INSTITUTIONAL REGISTRY FETCH (Guaranteed Handshake)
   useEffect(() => {
-    if (!user || !supabase || lastUserIdRef.current === user.id) return;
+    if (!user || !supabase || lastUserIdRef.current === user.id) {
+      if (!user) setIsNotificationsLoaded(true);
+      return;
+    }
+    
     lastUserIdRef.current = user.id;
 
     const fetchInitialBatch = async () => {
       console.log("[SENTINEL] Syncing notification registry for node:", user.id);
       
       try {
+        // Attempt high-fidelity fetch with identity metadata
         const { data, error } = await supabase
           .from('notifications')
           .select('*, sender:from_user_id(name, photo_url)')
@@ -40,9 +45,9 @@ export default function RealtimeNotificationListener() {
           .limit(25);
 
         if (error) {
-          console.warn("[SENTINEL] Join handshake failed, retrying raw fetch...");
-          // Fallback to raw fetch without join if profile permissions are restricted
-          const { data: rawData } = await supabase
+          console.warn("[SENTINEL] Join handshake deferred, attempting raw fallback...");
+          // FALLBACK: Raw fetch without profile joins (prevents empty screens on join failures)
+          const { data: rawData, error: rawError } = await supabase
             .from('notifications')
             .select('*')
             .eq('user_id', user.id)
@@ -55,12 +60,12 @@ export default function RealtimeNotificationListener() {
           }
         } else if (data) {
           setNotifications(data as Notification[]);
-          const unread = data.filter(n => !n.read).length;
-          setUnreadCount(unread);
+          setUnreadCount(data.filter(n => !n.read).length);
         }
       } catch (e) {
-        console.warn("[SENTINEL] Registry handshake deferred.");
+        console.error("[SENTINEL] Registry fetch interrupted.");
       } finally {
+        // GUARANTEED FINALITY: Release loading spinner regardless of result
         setIsNotificationsLoaded(true);
       }
     };
@@ -68,7 +73,7 @@ export default function RealtimeNotificationListener() {
     fetchInitialBatch();
   }, [user, setNotifications, setIsNotificationsLoaded, setUnreadCount]);
 
-  // 2. PERSISTENT REAL-TIME SUBSCRIPTION
+  // 2. PERSISTENT SENTINEL STREAM (Filtered Subscription)
   useEffect(() => {
     if (!user || !supabase) return;
 
@@ -84,7 +89,7 @@ export default function RealtimeNotificationListener() {
       }, async (payload) => {
           console.log("[SENTINEL] New ledger event detected:", payload.new.id);
           
-          // Attempt to enrich the node with identity metadata
+          // Attempt to enrich node metadata for the UI
           const { data: enriched } = await supabase
             .from('notifications')
             .select('*, sender:from_user_id(name, photo_url)')
@@ -93,11 +98,11 @@ export default function RealtimeNotificationListener() {
 
           const newNode = (enriched || payload.new) as Notification;
 
-          // Atomic State Update
+          // Atomic UI Update
           setNotifications(prev => [newNode, ...prev].slice(0, 25));
           setUnreadCount(prev => prev + 1);
           
-          // Visual Handshake (Toast)
+          // Visual Handshake
           const type = newNode.type;
           const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
                        type === 'TRANSFER_OUT' ? ArrowUpRight : 
@@ -113,7 +118,7 @@ export default function RealtimeNotificationListener() {
               )
           });
           
-          // Refresh balances to reflect the new state
+          // Force balance revalidation
           refresh(); 
       })
       .subscribe((status) => {
@@ -123,7 +128,6 @@ export default function RealtimeNotificationListener() {
       });
 
     return () => {
-      console.log("[SENTINEL] Terminating channel for node:", user.id);
       supabase.removeChannel(channel);
     };
   }, [user, setUnreadCount, refresh, toast, setNotifications]);

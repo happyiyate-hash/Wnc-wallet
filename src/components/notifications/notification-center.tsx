@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Bell, Loader2, X, CheckCircle2, Zap, ArrowDownLeft, ArrowUpRight, QrCode, Workflow, HandCoins } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -9,14 +9,11 @@ import { useWallet } from '@/contexts/wallet-provider';
 import { useUser } from '@/contexts/user-provider';
 import { ScrollArea } from '../ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER (VIEW NODE)
- * Version: 10.0.0 (Zero-Latency Neymar Aesthetic)
- * 
- * Optimized for frosted glass effects and instant cache rendering.
+ * Version: 11.0.0 (Zero-Latency Neymar Aesthetic)
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setUnreadCount, notifications, setNotifications, isNotificationsLoaded } = useWallet();
@@ -28,13 +25,14 @@ export default function NotificationCenter() {
         const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
         if (unreadIds.length === 0) return;
 
+        // Optimistic UI Handshake
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
 
         try {
           await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
         } catch (e) {
-          console.warn("[REGISTRY] Mark as read failed.");
+          console.warn("[REGISTRY] Mark as read handshake deferred.");
         }
       };
 
@@ -49,10 +47,6 @@ export default function NotificationCenter() {
         return <ArrowDownLeft className="w-4 h-4" />;
       case 'TRANSFER_OUT':
         return <ArrowUpRight className="w-4 h-4" />;
-      case 'QR_SCAN':
-        return <QrCode className="w-4 h-4" />;
-      case 'CROSS_CHAIN':
-        return <Workflow className="w-4 h-4" />;
       case 'REQUEST':
         return <HandCoins className="w-4 h-4" />;
       default:
@@ -64,11 +58,11 @@ export default function NotificationCenter() {
     switch (type) {
       case 'TRANSFER_IN':
       case 'REWARD':
-        return 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.4)]';
+        return 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.2)]';
       case 'TRANSFER_OUT':
-        return 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]';
+        return 'bg-red-500/10 text-red-400 border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]';
       default:
-        return 'bg-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.4)]';
+        return 'bg-primary/10 text-primary border-primary/20 shadow-[0_0_15px_rgba(139,92,246,0.2)]';
     }
   };
 
@@ -90,9 +84,9 @@ export default function NotificationCenter() {
           animate={{ y: 0 }}
           exit={{ y: '-100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[3rem] shadow-2xl h-[85vh] flex flex-col overflow-hidden"
+          className="absolute top-0 inset-x-0 bg-[#0a0a0c]/80 backdrop-blur-3xl border-b border-white/10 rounded-b-[3rem] shadow-2xl h-[80vh] flex flex-col overflow-hidden"
         >
-          {/* SLIM HEADER */}
+          {/* SLIM NEYMAR HEADER */}
           <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-black/40">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
@@ -110,10 +104,10 @@ export default function NotificationCenter() {
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-2 pb-24">
-              {!isNotificationsLoaded && notifications.length === 0 ? (
+              {!isNotificationsLoaded ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-40">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Auditing Handshakes...</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white">Auditing Ledger...</p>
                 </div>
               ) : notifications.length > 0 ? (
                 notifications.map((n, i) => {
@@ -133,37 +127,36 @@ export default function NotificationCenter() {
                         n.read ? "bg-white/[0.02] border-white/5" : "bg-primary/[0.05] border-primary/30"
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        {/* ICON NODE */}
-                        <div className={cn(
-                          "w-10 h-10 rounded-[1.2rem] flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
-                          isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
-                        )}>
-                          {getIcon(n.type)}
-                        </div>
-                        
-                        {/* CONTENT NODE */}
-                        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-                          <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* SLIM ICON */}
+                          <div className={cn(
+                            "w-9 h-9 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105",
+                            isPositive ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-red-500/10 border-red-500/20 text-red-400"
+                          )}>
+                            {getIcon(n.type)}
+                          </div>
+                          
+                          {/* SLIM CONTENT */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
                             <p className="text-[10px] font-black text-white uppercase tracking-wider truncate">{n.title}</p>
-                            {n.sender && (
-                              <span className="text-[9px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">@{n.sender.name}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p className="text-[9px] text-muted-foreground font-medium truncate opacity-60">
-                              {n.message?.replace(/\d+\.?\d*\s*WNC/g, '').trim()}
-                            </p>
-                            <span className="text-[7px] font-black text-white/20 uppercase tracking-widest shrink-0">
+                            <p className="text-[8px] text-muted-foreground font-medium truncate opacity-60">
                               {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : 'Just now'}
-                            </span>
+                            </p>
                           </div>
                         </div>
+
+                        {/* PEER IDENTITY (FAR RIGHT) */}
+                        {n.sender && (
+                          <span className="text-[9px] font-black text-primary uppercase tracking-tighter shrink-0 opacity-60">
+                            @{n.sender.name}
+                          </span>
+                        )}
                       </div>
 
-                      {/* BOTTOM-LEFT AMOUNT BADGE */}
+                      {/* BOTTOM-LEFT AMOUNT PILL */}
                       {formattedAmount && (
-                        <div className="mt-2 pl-13 flex">
+                        <div className="mt-2 flex">
                           <div className={cn(
                             "px-2.5 py-0.5 rounded-full text-[9px] font-black tabular-nums border",
                             getStatusColor(n.type)
