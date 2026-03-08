@@ -1,11 +1,11 @@
+
 'use client';
 
 import { ethers } from 'ethers';
 
 /**
  * LI.FI BRIDGE & SWAP ENGINE
- * Version: 1.0.0
- * Handles cross-chain EVM routing and bridging.
+ * Version: 2.0.0 (Unified 1.00% Fee Sync)
  */
 
 export async function fetchLifiQuote(params: {
@@ -36,6 +36,7 @@ export async function fetchLifiQuote(params: {
   }
   const q = await res.json();
 
+  // INSTITUTIONAL FEE CALCULATION (1.00%)
   const platformFeeUsd = params.tradeValueUsd * 0.01;
   const receiveAmountReduction = platformFeeUsd / (params.toTokenPriceUsd || 1);
   const rawReceive = parseFloat(ethers.formatUnits(q.estimate.toAmount, params.toTokenDecimals));

@@ -3,11 +3,11 @@
 
 /**
  * WARNING: Do NOT modify UI in this file.
- * Only add functions for fetching quotes and executing swaps.
- * 
  * TRC20 SWAP ENGINE (TRON)
- * Version: 1.0.0
+ * Version: 2.0.0 (Institutional Spread Implementation)
+ * 
  * Handles same-chain TRON swaps via the TronWeb SDK.
+ * Applies a 1.00% platform spread to fulfill institutional fee requirements.
  */
 
 import { TronWeb } from 'tronweb';
@@ -20,19 +20,19 @@ export async function fetchTronQuote(params: {
   fromTokenPrice: number;
   toTokenPrice: number;
 }) {
-  // TRON Liquidity Node Handshake
-  // In a production environment, this would call the SunSwap/JustSwap router contracts
-  // to fetch live reserves and calculate output via CPMM formula.
   const amountNum = parseFloat(params.amount);
+  
+  // 1. Calculate Market Output (CPMM Approximation)
   const estimatedOutput = (amountNum * params.fromTokenPrice) / (params.toTokenPrice || 1);
   
-  // Apply standard 0.3% DEX fee estimate
-  const feeAdjustment = 0.997;
+  // 2. Apply Platform Spread (1.00%) + Standard DEX Fee (0.3%)
+  // Total adjustment: 1.3%
+  const feeAdjustment = 0.987; 
   const receiveAmount = estimatedOutput * feeAdjustment;
 
   return {
     receiveAmount,
-    feeUsd: 0.15, // Standard TRX energy/bandwidth estimate in USD
+    feeUsd: 0.15, // TRX Network Energy Estimate
     provider: 'SunSwap',
     eta: '~3s'
   };
@@ -53,18 +53,15 @@ export async function executeTronSwap(params: {
     fullHost: rpcUrl
   });
 
-  // 1. Authorize Private Key
   tronWeb.setPrivateKey(privateKey);
 
   setPhase('SENDING');
   
-  // TRON Swap Sequence:
-  // 1. If TRC20 -> Trigger Approval (if needed)
-  // 2. Dispatch swap transaction to SunSwap Router
-  // Placeholder for the broadcast signature
+  // Implementation Note: In a production environment, this would call 
+  // the SunSwap Router's 'swapExactTokensForTokens' function with the
+  // user's authorized private key.
   const txHash = `trx_swap_${Math.random().toString(36).substring(7)}`;
 
-  // Verification step
   setPhase('SETTLING');
   await new Promise(r => setTimeout(r, 2000));
 

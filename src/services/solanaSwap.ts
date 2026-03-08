@@ -7,17 +7,20 @@ import axios from 'axios';
 /**
  * WARNING: Do NOT modify UI in this file.
  * INSTITUTIONAL SOLANA JUPITER SWAP SERVICE
- * Version: 2.0.0 (Robust Handshake & Caching)
+ * Version: 3.0.0 (Fee-Aware Handshake)
  * 
  * Handles quote fetching, transaction building, and signing for Solana assets.
- * Implements retries, timeouts, and in-memory caching for zero-latency performance.
+ * Implements the 1.00% (100 BPS) platform fee standard.
  */
 
 const JUP_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
 const JUP_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 500;
-const QUOTE_CACHE_TTL = 10000; // 10 seconds
+const QUOTE_CACHE_TTL = 10000;
+
+// INSTITUTIONAL FEE TARGET
+const FEE_ACCOUNT = 'BUNZrkGLBM13BaFEovCsmbS12hPEjVpxCCLWwiy2dKXd';
 
 // Simple in-memory cache node
 const quoteCache: Record<string, { data: any; timestamp: number }> = {};
@@ -36,7 +39,7 @@ async function fetchWithRetry(url: string, params: any, retries = MAX_RETRIES): 
     try {
       const res = await axios.get(url, { 
         params, 
-        timeout: 8000 // 8s institutional timeout
+        timeout: 8000 
       });
       if (res.data) return res.data;
     } catch (err: any) {
@@ -47,7 +50,7 @@ async function fetchWithRetry(url: string, params: any, retries = MAX_RETRIES): 
 }
 
 /**
- * Fetches a swap quote from Jupiter with caching and retries.
+ * Fetches a swap quote from Jupiter with 1% platform fee inclusion.
  */
 export async function getSolanaSwapQuote(
   inputMint: string, 
@@ -68,6 +71,7 @@ export async function getSolanaSwapQuote(
       outputMint,
       amount,
       slippageBps,
+      platformFeeBps: 100, // 1.00% Institutional Fee
       onlyDirectRoutes: false,
     };
 
@@ -93,6 +97,7 @@ export async function buildSolanaSwapTransaction(quoteResponse: any, userPublicK
     const res = await axios.post(JUP_SWAP_API, {
       quoteResponse,
       userPublicKey,
+      feeAccount: FEE_ACCOUNT, // Target for the 100 BPS fee
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
       prioritizationFeeLamports: 'auto'
@@ -109,27 +114,22 @@ export async function buildSolanaSwapTransaction(quoteResponse: any, userPublicK
 }
 
 /**
- * Deserializes, signs, and broadcasts the transaction to the Solana network.
+ * signing, and broadcasting handshake.
  */
 export async function executeSolanaSwap(swapTransaction: string, privateKeyHex: string, rpcUrl: string): Promise<string> {
   const connection = new Connection(rpcUrl, 'confirmed');
   
   try {
-    // 1. Restore Transaction Node
     const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
     const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-    
-    // 2. Authorize via Private Key Node
     const signer = Keypair.fromSecretKey(new Uint8Array(Buffer.from(privateKeyHex, 'hex')));
     
-    // 3. Sign & Broadcast Handshake
     transaction.sign([signer]);
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: true,
       maxRetries: 3,
     });
     
-    // 4. Verification Cycle
     const latestBlockHash = await connection.getLatestBlockhash();
     await connection.confirmTransaction({
       blockhash: latestBlockHash.blockhash,
