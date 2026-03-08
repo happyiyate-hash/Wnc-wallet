@@ -11,20 +11,16 @@ import React from 'react';
 
 /**
  * INSTITUTIONAL REAL-TIME SENTINEL
- * Version: 6.0.0 (Strict Identity Handshake)
- * 
- * Focus: Event capture and UI Alert triggering.
- * Monitors only the current user's notification node.
+ * Version: 7.0.0 (Reactive Counting Sync)
  */
 export default function RealtimeNotificationListener() {
   const { user } = useUser();
-  const { setHasNewNotifications, refresh } = useWallet();
+  const { setUnreadCount, refresh } = useWallet();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!user || !supabase) return;
 
-    // 1. Establish the filtered real-time channel
     const channel = supabase
       .channel(`registry-handshakes-${user.id}`)
       .on('postgres_changes', { 
@@ -35,27 +31,27 @@ export default function RealtimeNotificationListener() {
       }, (payload) => {
           console.log("[SENTINEL] New identity event detected:", payload.new);
           
-          // 2. Alert the navigation node (triggers the purple dot)
-          setHasNewNotifications(true);
+          // 1. Increment Numerical Counter
+          setUnreadCount(prev => prev + 1);
           
-          // 3. Map visual icon based on event type
+          // 2. Map Visual Meta
           const type = payload.new.type;
           const Icon = type === 'TRANSFER_IN' || type === 'REWARD' ? ArrowDownLeft : 
                        type === 'TRANSFER_OUT' ? ArrowUpRight : 
                        type === 'REQUEST' ? HandCoins : Zap;
           
-          // 4. Dispatch Visual Toast
+          // 3. Dispatch High-Fidelity Toast
           toast({
               title: payload.new.title || "Registry Alert",
               description: payload.new.message,
               action: (
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-lg border border-primary/20">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-[0_0_15px_rgba(139,92,246,0.3)] border border-primary/20">
                   <Icon className="w-5 h-5" />
                 </div>
               )
           });
           
-          // 5. Force Silent Ledger Refresh
+          // 4. Ledger Synchronization
           refresh(); 
       })
       .subscribe();
@@ -63,7 +59,7 @@ export default function RealtimeNotificationListener() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, setHasNewNotifications, refresh, toast]);
+  }, [user, setUnreadCount, refresh, toast]);
 
   return null;
 }

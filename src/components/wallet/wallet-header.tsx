@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,6 +11,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useUser } from '@/contexts/user-provider';
 import NetworkSelector from './network-selector';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function WalletHeader({ 
     isCollapsed,
@@ -20,14 +22,13 @@ export default function WalletHeader({
   const [isCopied, copy] = useCopyToClipboard();
   const [hasMounted, setHasMounted] = useState(false);
 
-  const { viewingNetwork, wallets, hasNewNotifications, getAddressForChain, setIsNotificationsOpen } = useWallet();
+  const { viewingNetwork, wallets, unreadCount, getAddressForChain, setIsNotificationsOpen } = useWallet();
   const { profile } = useUser();
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
 
-  // Resolve the native address for the current viewing network (XRP, DOT, EVM, etc.)
   const address = wallets ? getAddressForChain(viewingNetwork, wallets) : null;
   const username = profile?.name || 'User';
 
@@ -92,11 +93,24 @@ export default function WalletHeader({
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 text-gray-400 relative"
+              className="h-8 w-8 text-gray-400 relative group"
               onClick={() => setIsNotificationsOpen(true)}
             >
-              <Bell className="h-4 w-4" />
-              {hasNewNotifications && <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-primary animate-pulse"/>}
+              <Bell className={cn("h-4 w-4 transition-transform", unreadCount > 0 && "animate-bounce")} />
+              <AnimatePresence>
+                {unreadCount > 0 && (
+                  <motion.div 
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-primary rounded-full border border-black flex items-center justify-center px-1 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
+                  >
+                    <span className="text-[8px] font-black text-white leading-none">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <span className="sr-only">Notifications</span>
             </Button>
           </div>
