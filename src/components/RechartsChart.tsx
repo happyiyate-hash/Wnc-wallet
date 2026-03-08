@@ -1,4 +1,3 @@
-
 'use client';
 import React, { memo, useMemo } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -6,6 +5,7 @@ import { fetchChartData } from '@/lib/coingecko';
 import { Skeleton } from './ui/skeleton';
 import { AlertCircle } from 'lucide-react';
 import { useCurrency } from '@/contexts/currency-provider';
+import { registryDb } from '@/lib/storage/registry-db';
 
 interface RechartsChartProps {
     coingeckoId?: string | null;
@@ -18,7 +18,7 @@ interface RechartsChartProps {
 
 /**
  * RECHART TERMINAL COMPONENT
- * Version: 3.2.0 (Forex-Aware Analytics)
+ * Version: 4.0.0 (IndexedDB Caching & Drawing Animation)
  */
 const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAddress, currentPrice }: RechartsChartProps) => {
     const [historicalData, setHistoricalData] = React.useState<any[]>([]);
@@ -33,22 +33,37 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
             if (!coingeckoId && !contractAddress) return;
 
             const currentSignature = `${coingeckoId}:${contractAddress}:${days}`;
+            const cacheKey = `chart:${coingeckoId || contractAddress}:${days}`;
             
-            if (historicalData.length === 0 || lastSignatureRef.current !== currentSignature) {
+            // 1. TRY L1/L2 CACHE FIRST (Instant Load)
+            if (historicalData.length === 0) {
+                const cached = await registryDb.getChart(cacheKey);
+                if (cached && cached.length > 0) {
+                    setHistoricalData(cached);
+                    lastSignatureRef.current = currentSignature;
+                } else {
+                    setLoading(true);
+                }
+            } else if (lastSignatureRef.current !== currentSignature) {
                 setLoading(true);
             }
             
             setError(false);
 
             try {
+                // 2. NETWORK HANDSHAKE (Silent Update)
                 const res = await fetchChartData(coingeckoId || '', days, currentPrice, chainId, contractAddress);
+                
                 if (!res || res.length === 0) {
                     if (historicalData.length === 0) setError(true);
                 } else {
                     setHistoricalData(res);
                     lastSignatureRef.current = currentSignature;
+                    // Persist to L2 cache
+                    await registryDb.saveChart(cacheKey, res);
                 }
             } catch (e) {
+                // FALLBACK: If network fails, historicalData remains populated from cache
                 if (historicalData.length === 0) setError(true);
             } finally {
                 setLoading(false);
@@ -57,7 +72,7 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
 
         resolveAndFetch();
         
-        const interval = setInterval(resolveAndFetch, 300000);
+        const interval = setInterval(resolveAndFetch, 300000); // Refresh every 5m
         return () => clearInterval(interval);
     }, [coingeckoId, days, chainId, contractAddress, currentPrice, historicalData.length]);
 
@@ -123,7 +138,6 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
                     labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}
                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: '900' }}
                     labelFormatter={(label) => new Date(label).toLocaleString()}
-                    // INSTITUTIONAL CONVERSION NODE
                     formatter={(value: any) => [formatFiat(value), 'Price']}
                 />
                 <Area
@@ -133,7 +147,11 @@ const RechartsChart = memo(({ coingeckoId, days, isNegative, chainId, contractAd
                     fill="url(#chart-fill)"
                     strokeWidth={2.5}
                     dot={false}
-                    isAnimationActive={false}
+                    // DRAWING ANIMATION
+                    isAnimationActive={true}
+                    animationDuration={1500}
+                    animationBegin={0}
+                    animationEasing="ease-in-out"
                 />
                 <XAxis dataKey="time" hide />
                 <YAxis domain={['auto', 'auto']} hide />

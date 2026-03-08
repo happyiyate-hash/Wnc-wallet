@@ -1,16 +1,17 @@
 /**
  * INSTITUTIONAL REGISTRY DATABASE (IndexedDB)
- * Version: 1.3.0 (Tiered Memory + Persistent Cache)
+ * Version: 1.4.0 (Chart Data persistence added)
  * 
- * Provides high-speed storage for identity nodes and asset branding.
+ * Provides high-speed storage for identity nodes, asset branding, and market history.
  * Includes an L1 Memory Cache to eliminate UI flicker during component mounting.
  */
 
 const DB_NAME = 'wevina_registry_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for chart_data store
 
 // L1 MEMORY CACHE: Synchronous lookup for active session
 const MEMORY_LOGO_CACHE = new Map<string, string>();
+const MEMORY_CHART_CACHE = new Map<string, any[]>();
 
 export interface CachedWallet {
   id: string; // mnemonic fingerprint
@@ -22,6 +23,12 @@ export interface CachedWallet {
 export interface CachedLogo {
   id: string; // identifier slug
   url: string;
+  timestamp: number;
+}
+
+export interface CachedChart {
+  id: string; // tokenIdentifier:range (e.g., ethereum:1D)
+  data: any[];
   timestamp: number;
 }
 
@@ -41,6 +48,9 @@ class RegistryDB {
         }
         if (!db.objectStoreNames.contains('logo_registry')) {
           db.createObjectStore('logo_registry', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('chart_data')) {
+          db.createObjectStore('chart_data', { keyPath: 'id' });
         }
       };
 
@@ -74,14 +84,10 @@ class RegistryDB {
     });
   }
 
-  // TIRED LOGO LOOKUP (L1 Memory -> L2 DB)
+  // TIERED LOGO LOOKUP (L1 Memory -> L2 DB)
   async getLogo(id: string): Promise<string | null> {
-    // 1. Check L1 Memory (Synchronous)
-    if (MEMORY_LOGO_CACHE.has(id)) {
-      return MEMORY_LOGO_CACHE.get(id)!;
-    }
+    if (MEMORY_LOGO_CACHE.has(id)) return MEMORY_LOGO_CACHE.get(id)!;
 
-    // 2. Check L2 IndexedDB (Asynchronous)
     try {
       const db = await this.init();
       return new Promise((resolve) => {
@@ -91,7 +97,6 @@ class RegistryDB {
         request.onsuccess = () => {
           const result = request.result;
           if (result && result.url) {
-            // Update L1 for next synchronous access
             MEMORY_LOGO_CACHE.set(id, result.url);
             resolve(result.url);
           } else {
@@ -106,10 +111,7 @@ class RegistryDB {
   }
 
   async saveLogo(id: string, url: string) {
-    // Update L1
     MEMORY_LOGO_CACHE.set(id, url);
-
-    // Update L2
     try {
       const db = await this.init();
       return new Promise((resolve) => {
@@ -123,13 +125,56 @@ class RegistryDB {
     }
   }
 
-  async purgeAll() {
-    MEMORY_LOGO_CACHE.clear();
+  // CHART DATA PERSISTENCE
+  async getChart(id: string): Promise<any[] | null> {
+    if (MEMORY_CHART_CACHE.has(id)) return MEMORY_CHART_CACHE.get(id)!;
+
     try {
       const db = await this.init();
-      const transaction = db.transaction(['vault_cache', 'logo_registry'], 'readwrite');
+      return new Promise((resolve) => {
+        const transaction = db.transaction('chart_data', 'readonly');
+        const store = transaction.objectStore('chart_data');
+        const request = store.get(id);
+        request.onsuccess = () => {
+          const result = request.result;
+          if (result && result.data) {
+            MEMORY_CHART_CACHE.set(id, result.data);
+            resolve(result.data);
+          } else {
+            resolve(null);
+          }
+        };
+        request.onerror = () => resolve(null);
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async saveChart(id: string, data: any[]) {
+    MEMORY_CHART_CACHE.set(id, data);
+    try {
+      const db = await this.init();
+      return new Promise((resolve) => {
+        const transaction = db.transaction('chart_data', 'readwrite');
+        const store = transaction.objectStore('chart_data');
+        store.put({ id, data, timestamp: Date.now() });
+        transaction.oncomplete = () => resolve(true);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async purgeAll() {
+    MEMORY_LOGO_CACHE.clear();
+    MEMORY_CHART_CACHE.clear();
+    try {
+      const db = await this.init();
+      const transaction = db.transaction(['vault_cache', 'logo_registry', 'chart_data'], 'readwrite');
       transaction.objectStore('vault_cache').clear();
       transaction.objectStore('logo_registry').clear();
+      transaction.objectStore('chart_data').clear();
       return new Promise((resolve) => {
         transaction.oncomplete = () => resolve(true);
       });

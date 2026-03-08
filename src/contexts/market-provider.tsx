@@ -8,6 +8,7 @@ import evmNetworks from '@/lib/evmNetworks.json';
 import { registryDb } from '@/lib/storage/registry-db';
 import { getDirectLogoUrl } from '@/lib/getTokenLogo';
 import { getInitialAssets } from '@/lib/wallets/balances';
+import { fetchChartData } from '@/lib/coingecko';
 
 interface MarketContextType {
   prices: PriceResult;
@@ -23,10 +24,7 @@ const PRICE_CACHE_KEY = 'ss-price-cache-global';
 
 /**
  * INSTITUTIONAL INDEPENDENT MARKET ENGINE
- * Version: 9.0.0 (Zero-Latency Pre-fetcher)
- * 
- * Operates independently of Auth state to ensure early hydration.
- * Populates the tiered logo registry in the background to eliminate UI flicker.
+ * Version: 10.0.0 (Background Chart Prefetcher added)
  */
 export function MarketProvider({ children }: { children: ReactNode }) {
   const { rates } = useCurrency();
@@ -35,6 +33,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   
   const customTokensRef = useRef<AssetRow[]>([]);
   const hasInitializedLogosRef = useRef(false);
+  const hasPrefetchedChartsRef = useRef(false);
 
   const registerCustomTokens = useCallback((tokens: AssetRow[]) => {
     customTokensRef.current = tokens;
@@ -42,8 +41,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
   /**
    * CENTRALIZED LOGO PRE-FETCH WORKER
-   * Iterates through all whitelisted assets across all 39 chains.
-   * Eliminates the "black flicker" in selectors by populating the hardware cache early.
    */
   const prefetchLogos = useCallback(async (chains: ChainConfig[]) => {
     if (hasInitializedLogosRef.current) return;
@@ -51,10 +48,8 @@ export function MarketProvider({ children }: { children: ReactNode }) {
 
     console.log("[MARKET_ENGINE] Initializing logo pre-fetch worker...");
     
-    // Process chains sequentially to manage network load
     for (const chain of chains) {
       try {
-        // 1. Sync Network Branding
         const chainCacheId = `logo_v12_${chain.name.replace(/\s+/g, '_').toLowerCase()}_${chain.symbol.toLowerCase()}`;
         const chainCached = await registryDb.getLogo(chainCacheId);
         if (!chainCached) {
@@ -62,7 +57,6 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           if (url) await registryDb.saveLogo(chainCacheId, url);
         }
 
-        // 2. Sync Asset Registry
         const assets = getInitialAssets(chain.chainId);
         for (const asset of assets) {
           const assetCacheId = `logo_v12_${asset.name.replace(/\s+/g, '_').toLowerCase()}_${asset.symbol.toLowerCase()}`;
@@ -75,11 +69,41 @@ export function MarketProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (e) {}
-      
-      // Institutional Breather
       await new Promise(r => setTimeout(r, 100));
     }
     console.log("[MARKET_ENGINE] Asset registry synchronized.");
+  }, []);
+
+  /**
+   * BACKGROUND CHART PREFETCH WORKER
+   * Fetches 1D chart data for common assets to ensure instant loading in Detail Page.
+   */
+  const prefetchCharts = useCallback(async (chains: ChainConfig[]) => {
+    if (hasPrefetchedChartsRef.current) return;
+    hasPrefetchedChartsRef.current = true;
+
+    console.log("[MARKET_ENGINE] Initializing background chart prefetcher...");
+
+    for (const chain of chains) {
+      const assets = getInitialAssets(chain.chainId);
+      for (const asset of assets) {
+        const coingeckoId = asset.coingeckoId;
+        if (!coingeckoId) continue;
+
+        const cacheId = `chart:${coingeckoId}:1D`;
+        try {
+          const cached = await registryDb.getChart(cacheId);
+          if (!cached) {
+            const data = await fetchChartData(coingeckoId, '1D');
+            if (data && data.length > 0) {
+              await registryDb.saveChart(cacheId, data);
+            }
+          }
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 500)); // Be gentle with CG API
+      }
+    }
+    console.log("[MARKET_ENGINE] Chart registry synchronized.");
   }, []);
 
   const updatePrices = useCallback((newPrices: PriceResult) => {
@@ -101,14 +125,14 @@ export function MarketProvider({ children }: { children: ReactNode }) {
       const newPrices = await fetchGlobalMarketData(allChains, customTokensRef.current, rates);
       updatePrices(newPrices);
       
-      // Trigger background pre-fetcher once price handshake is stable
       prefetchLogos(allChains);
+      prefetchCharts(allChains);
     } catch (e) {
       console.warn("[MARKET_ENGINE_ADVISORY] Market handshake deferred.");
     } finally {
       setIsMarketLoading(false);
     }
-  }, [rates, updatePrices, prefetchLogos]);
+  }, [rates, updatePrices, prefetchLogos, prefetchCharts]);
 
   // INITIAL HYDRATION
   useEffect(() => {
