@@ -15,10 +15,10 @@ import type { Notification } from '@/lib/types';
 
 /**
  * INSTITUTIONAL NOTIFICATION CENTER
- * Version: 7.0.0 (Strict Identity Filtering)
+ * Version: 8.0.0 (Resilient Fetch Node)
  * 
- * Focus: UI Fetch & Display Logic.
- * Ensures the terminal only shows alerts relevant to the active node.
+ * Implements a fail-safe strategy for identity joins to prevent empty lists
+ * caused by RLS restrictions or missing database relationships.
  */
 export default function NotificationCenter() {
   const { isNotificationsOpen, setIsNotificationsOpen, setHasNewNotifications } = useWallet();
@@ -29,11 +29,11 @@ export default function NotificationCenter() {
   useEffect(() => {
     if (!supabase || !user || !isNotificationsOpen) return;
 
-    // 1. REGISTRY FETCH: Query only notifications for the current identity node
     const fetchNotifications = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        // 1. TIERED HANDSHAKE: Attempt join with profiles
+        let { data, error } = await supabase
           .from('notifications')
           .select(`
             *,
@@ -46,18 +46,32 @@ export default function NotificationCenter() {
           .order('created_at', { ascending: false })
           .limit(25);
 
-        if (!error && data) {
+        // 2. FALLBACK NODE: If join fails (e.g. no FK or RLS on profiles), fetch raw data
+        if (error || !data) {
+          console.warn("[NOTIFICATION_FETCH] Join deferred, attempting raw fetch:", error?.message);
+          const rawFetch = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(25);
+          
+          if (!rawFetch.error && rawFetch.data) {
+            data = rawFetch.data as any;
+          }
+        }
+
+        if (data) {
           setNotifications(data as Notification[]);
           setHasNewNotifications(false);
           
-          // ATOMIC READ STATE SYNC
           const unreadIds = data.filter(n => !n.read).map(n => n.id);
           if (unreadIds.length > 0) {
             await supabase.from('notifications').update({ read: true }).in('id', unreadIds);
           }
         }
       } catch (e) {
-        console.warn("[REGISTRY_FETCH_ADVISORY] Failed to load alerts.");
+        console.error("[REGISTRY_FETCH_FAIL]", e);
       } finally {
         setLoading(false);
       }
@@ -65,8 +79,6 @@ export default function NotificationCenter() {
 
     fetchNotifications();
 
-    // 2. REAL-TIME REACTIVE REGISTRY
-    // Subscribes only to changes relevant to THIS user's identity
     const channel = supabase
       .channel(`notifications-ui-sync-${user.id}`)
       .on('postgres_changes', { 
@@ -185,7 +197,7 @@ export default function NotificationCenter() {
                         <div className="absolute -bottom-1 -right-1 border-2 border-[#0a0a0c] rounded-full">
                           <Avatar className="w-5 h-5">
                             <AvatarImage src={n.sender.photo_url} />
-                            <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name?.[0]}</AvatarFallback>
+                            <AvatarFallback className="bg-zinc-900 text-[6px] font-black">{n.sender.name?.[0] || '?'}</AvatarFallback>
                           </Avatar>
                         </div>
                       )}
